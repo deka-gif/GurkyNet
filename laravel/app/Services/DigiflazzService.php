@@ -1,0 +1,168 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class DigiflazzService
+{
+    protected string $username;
+    protected string $apiKey;
+    protected string $baseUrl;
+
+    public function __construct()
+    {
+        $this->username = env('DIGIFLAZZ_USERNAME', 'dummy_username');
+        $this->apiKey = env('DIGIFLAZZ_API_KEY', 'dummy_api_key');
+        $this->baseUrl = rtrim(env('DIGIFLAZZ_BASE_URL', 'https://api.digiflazz.com/v1'), '/');
+    }
+
+    /**
+     * Generate MD5 Signature for Digiflazz requests.
+     */
+    public function sign(string $refId): string
+    {
+        return md5($this->username . $this->apiKey . $refId);
+    }
+
+    /**
+     * Call Digiflazz Inquiry.
+     */
+    public function inquiry(string $sku, string $customerNo, string $refId): array
+    {
+        $payload = [
+            'username' => $this->username,
+            'buyer_sku_code' => $sku,
+            'customer_no' => $customerNo,
+            'ref_id' => $refId,
+            'sign' => $this->sign($refId),
+        ];
+
+        return $this->postRequest('/transaction', $payload);
+    }
+
+    /**
+     * Buy prepaid product.
+     */
+    public function buy(string $sku, string $customerNo, string $refId): array
+    {
+        $payload = [
+            'username' => $this->username,
+            'buyer_sku_code' => $sku,
+            'customer_no' => $customerNo,
+            'ref_id' => $refId,
+            'sign' => $this->sign($refId),
+        ];
+
+        return $this->postRequest('/transaction', $payload);
+    }
+
+    /**
+     * Check transaction status.
+     */
+    public function checkStatus(string $sku, string $customerNo, string $refId): array
+    {
+        $payload = [
+            'username' => $this->username,
+            'buyer_sku_code' => $sku,
+            'customer_no' => $customerNo,
+            'ref_id' => $refId,
+            'cmd' => 'status',
+            'sign' => $this->sign($refId),
+        ];
+
+        return $this->postRequest('/transaction', $payload);
+    }
+
+    /**
+     * Fetch pricelist (prepaid or postpaid).
+     */
+    public function fetchPriceList(string $cmd = 'prepaid'): array
+    {
+        $payload = [
+            'cmd' => $cmd,
+            'username' => $this->username,
+            'sign' => $this->sign('pricelist'),
+        ];
+
+        return $this->postRequest('/price-list', $payload);
+    }
+
+    /**
+     * Perform HTTP POST request to Digiflazz with exponential backoff retry and precise logging.
+     */
+    protected function postRequest(string $endpoint, array $payload, int $maxRetries = 3): array
+    {
+        $url = $this->baseUrl . $endpoint;
+        $attempt = 0;
+        $delay = 1000; // millisecond delay start
+
+        while (true) {
+            $attempt++;
+            $startTime = microtime(true);
+
+            try {
+                Log::info("Digiflazz API Request Attempt {$attempt}", [
+                    'url' => $url,
+                    'payload' => array_merge($payload, ['sign' => '***hidden***']),
+                ]);
+
+                $response = Http::timeout(10)
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->post($url, $payload);
+
+                $latency = microtime(true) - $startTime;
+
+                Log::info("Digiflazz API Response Attempt {$attempt}", [
+                    'status' => $response->status(),
+                    'body' => $response->json(),
+                    'latency' => $latency,
+                    'provider_reference' => $payload['ref_id'] ?? null,
+                ]);
+
+                if ($response->successful()) {
+                    return $response->json() ?? [];
+                }
+
+                // If 5xx Server Error or Rate Limit, try retry
+                if (($response->serverError() || $response->status() === 429) && $attempt < $maxRetries) {
+                    usleep($delay * 1000);
+                    $delay *= 2;
+                    continue;
+                }
+
+                throw new \Exception("Digiflazz API error (" . $response->status() . "): " . $response->body());
+
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $latency = microtime(true) - $startTime;
+                Log::error("Digiflazz API Connection Exception Attempt {$attempt}", [
+                    'message' => $e->getMessage(),
+                    'latency' => $latency,
+                    'provider_reference' => $payload['ref_id'] ?? null,
+                ]);
+
+                if ($attempt < $maxRetries) {
+                    usleep($delay * 1000);
+                    $delay *= 2;
+                    continue;
+                }
+                throw $e;
+            } catch (\Exception $e) {
+                $latency = microtime(true) - $startTime;
+                Log::error("Digiflazz API Unexpected Exception Attempt {$attempt}", [
+                    'message' => $e->getMessage(),
+                    'latency' => $latency,
+                    'provider_reference' => $payload['ref_id'] ?? null,
+                ]);
+
+                if ($attempt < $maxRetries) {
+                    usleep($delay * 1000);
+                    $delay *= 2;
+                    continue;
+                }
+                throw $e;
+            }
+        }
+    }
+}

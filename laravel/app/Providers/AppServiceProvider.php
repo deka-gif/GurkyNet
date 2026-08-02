@@ -1,0 +1,217 @@
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use App\Repositories\Contracts\UserRepositoryInterface;
+use App\Repositories\Eloquent\UserRepository;
+use App\Repositories\Contracts\OtpRepositoryInterface;
+use App\Repositories\Eloquent\OtpRepository;
+use App\Repositories\Contracts\WalletRepositoryInterface;
+use App\Repositories\Eloquent\WalletRepository;
+use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
+use App\Repositories\Eloquent\WalletHistoryRepository;
+use App\Repositories\Contracts\CategoryRepositoryInterface;
+use App\Repositories\Eloquent\CategoryRepository;
+use App\Repositories\Contracts\ProviderRepositoryInterface;
+use App\Repositories\Eloquent\ProviderRepository;
+use App\Repositories\Contracts\ProductRepositoryInterface;
+use App\Repositories\Eloquent\ProductRepository;
+use App\Repositories\Contracts\TransactionRepositoryInterface;
+use App\Repositories\Eloquent\TransactionRepository;
+use App\Repositories\Contracts\TransactionItemRepositoryInterface;
+use App\Repositories\Eloquent\TransactionItemRepository;
+use App\Repositories\Contracts\FinanceRepositoryInterface;
+use App\Repositories\Eloquent\FinanceRepository;
+use App\Repositories\Contracts\OperationsRepositoryInterface;
+use App\Repositories\Eloquent\OperationsRepository;
+use App\Repositories\Contracts\MarketingRepositoryInterface;
+use App\Repositories\Eloquent\MarketingRepository;
+use App\Repositories\Contracts\CustomerSupportRepositoryInterface;
+use App\Repositories\Eloquent\CustomerSupportRepository;
+use App\Repositories\Contracts\OwnerRepositoryInterface;
+use App\Repositories\Eloquent\OwnerRepository;
+use App\Repositories\Contracts\ProfileRepositoryInterface;
+use App\Repositories\Eloquent\ProfileRepository;
+use App\Repositories\Contracts\WebsiteSettingRepositoryInterface;
+use App\Repositories\Eloquent\WebsiteSettingRepository;
+use App\Repositories\Contracts\HomepageSectionRepositoryInterface;
+use App\Repositories\Eloquent\HomepageSectionRepository;
+use App\Repositories\Contracts\WebsiteMenuRepositoryInterface;
+use App\Repositories\Eloquent\WebsiteMenuRepository;
+use App\Repositories\Contracts\StaticPageRepositoryInterface;
+use App\Repositories\Eloquent\StaticPageRepository;
+
+use App\Repositories\Contracts\SystemSettingRepositoryInterface;
+use App\Repositories\Eloquent\SystemSettingRepository;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
+        $this->app->bind(OtpRepositoryInterface::class, OtpRepository::class);
+        $this->app->bind(WalletRepositoryInterface::class, WalletRepository::class);
+        $this->app->bind(WalletHistoryRepositoryInterface::class, WalletHistoryRepository::class);
+        $this->app->bind(CategoryRepositoryInterface::class, CategoryRepository::class);
+        $this->app->bind(ProviderRepositoryInterface::class, ProviderRepository::class);
+        $this->app->bind(ProductRepositoryInterface::class, ProductRepository::class);
+        $this->app->bind(TransactionRepositoryInterface::class, TransactionRepository::class);
+        $this->app->bind(TransactionItemRepositoryInterface::class, TransactionItemRepository::class);
+        $this->app->bind(FinanceRepositoryInterface::class, FinanceRepository::class);
+        $this->app->bind(OperationsRepositoryInterface::class, OperationsRepository::class);
+        $this->app->bind(MarketingRepositoryInterface::class, MarketingRepository::class);
+        $this->app->bind(CustomerSupportRepositoryInterface::class, CustomerSupportRepository::class);
+        $this->app->bind(OwnerRepositoryInterface::class, OwnerRepository::class);
+        $this->app->bind(ProfileRepositoryInterface::class, ProfileRepository::class);
+        $this->app->bind(WebsiteSettingRepositoryInterface::class, WebsiteSettingRepository::class);
+        $this->app->bind(HomepageSectionRepositoryInterface::class, HomepageSectionRepository::class);
+        $this->app->bind(WebsiteMenuRepositoryInterface::class, WebsiteMenuRepository::class);
+        $this->app->bind(StaticPageRepositoryInterface::class, StaticPageRepository::class);
+        $this->app->bind(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        // Define Authorization Gates for RBAC
+        \Illuminate\Support\Facades\Gate::before(function (\App\Models\User $user, $ability) {
+            if ($user->isSuperAdmin()) {
+                return true;
+            }
+        });
+
+        \Illuminate\Support\Facades\Gate::define('access-owner', function (\App\Models\User $user) {
+            return $user->isOwner();
+        });
+
+        \Illuminate\Support\Facades\Gate::define('access-finance', function (\App\Models\User $user) {
+            return $user->isFinance() || $user->isOwner();
+        });
+
+        \Illuminate\Support\Facades\Gate::define('access-operations', function (\App\Models\User $user) {
+            return $user->isOperations() || $user->isOwner();
+        });
+
+        \Illuminate\Support\Facades\Gate::define('access-marketing', function (\App\Models\User $user) {
+            return $user->isMarketing() || $user->isOwner();
+        });
+
+        \Illuminate\Support\Facades\Gate::define('access-customer-support', function (\App\Models\User $user) {
+            return $user->isCustomerSupport() || $user->isOwner();
+        });
+
+        // Register Event driven layer mappings
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionCreated::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionCreated::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionCreated::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionCreated::class,
+            \App\Listeners\AnalyticsCollector::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionProcessing::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionProcessing::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionProcessing::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            \App\Listeners\AnalyticsCollector::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionFailed::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionFailed::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionFailed::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionFailed::class,
+            \App\Listeners\AnalyticsCollector::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletCredited::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletCredited::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletCredited::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletDebited::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletDebited::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletDebited::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PaymentSettled::class,
+            \App\Listeners\SendNotification::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PaymentSettled::class,
+            \App\Listeners\WriteAuditLog::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PaymentSettled::class,
+            \App\Listeners\BroadcastEvent::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PaymentSettled::class,
+            \App\Listeners\AnalyticsCollector::class
+        );
+    }
+}

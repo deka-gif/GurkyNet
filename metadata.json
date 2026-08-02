@@ -1,0 +1,6 @@
+{
+  "name": "GurkyNet Official Website",
+  "description": "Official company profile and professional landing page for GurkyNet PPOB platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,304 @@
+<?php
+
+namespace App\Http\Controllers\Api\v1\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Traits\ApiResponseTrait;
+use App\Actions\Admin\Marketing\MarketingDashboardAction;
+use App\Actions\Admin\Marketing\MarketingBannerAction;
+use App\Actions\Admin\Marketing\MarketingPromotionAction;
+use App\Actions\Admin\Marketing\MarketingVoucherAction;
+use App\Actions\Admin\Marketing\MarketingAnnouncementAction;
+use App\Http\Requests\Admin\Marketing\MarketingFilterRequest;
+use App\Http\Requests\Admin\Marketing\CreateBannerRequest;
+use App\Http\Requests\Admin\Marketing\UpdateBannerRequest;
+use App\Http\Requests\Admin\Marketing\CreatePromotionRequest;
+use App\Http\Requests\Admin\Marketing\UpdatePromotionRequest;
+use App\Http\Requests\Admin\Marketing\CreateVoucherRequest;
+use App\Http\Requests\Admin\Marketing\UpdateVoucherRequest;
+use App\Http\Requests\Admin\Marketing\CreateAnnouncementRequest;
+use App\Http\Requests\Admin\Marketing\UpdateAnnouncementRequest;
+use App\Http\Resources\BannerResource;
+use App\Http\Resources\PromotionResource;
+use App\Http\Resources\VoucherResource;
+use App\Http\Resources\AnnouncementResource;
+use Illuminate\Http\JsonResponse;
+
+class MarketingController extends Controller
+{
+    use ApiResponseTrait;
+
+    /**
+     * Get Marketing Dashboard.
+     * GET /api/v1/admin/marketing/dashboard
+     */
+    public function dashboard(MarketingDashboardAction $action): JsonResponse
+    {
+        $data = $action->execute();
+        return $this->successResponse('Data dashboard pemasaran berhasil dimuat.', $data);
+    }
+
+    /**
+     * Get Paginated Banners.
+     * GET /api/v1/admin/marketing/banners
+     */
+    public function banners(MarketingFilterRequest $request, MarketingBannerAction $action): JsonResponse
+    {
+        $filters = $request->validated();
+        $paginator = $action->list($filters);
+
+        return $this->paginatedResponse(
+            'Daftar banner berhasil dimuat.',
+            BannerResource::collection($paginator->items()),
+            [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ]
+        );
+    }
+
+    /**
+     * Create Banner.
+     * POST /api/v1/admin/marketing/banners
+     */
+    public function storeBanner(CreateBannerRequest $request, MarketingBannerAction $action): JsonResponse
+    {
+        $data = $request->validated();
+        $banner = $action->create($data);
+
+        return $this->successResponse('Banner berhasil dibuat.', new BannerResource($banner), 201);
+    }
+
+    /**
+     * Update Banner.
+     * PUT /api/v1/admin/marketing/banners/{id}
+     */
+    public function updateBanner(string|int $id, UpdateBannerRequest $request, MarketingBannerAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validated();
+            $banner = $action->update($id, $data);
+            return $this->successResponse('Banner berhasil diperbarui.', new BannerResource($banner));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Banner tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Soft Delete Banner.
+     * DELETE /api/v1/admin/marketing/banners/{id}
+     */
+    public function destroyBanner(string|int $id, MarketingBannerAction $action): JsonResponse
+    {
+        try {
+            $action->delete($id);
+            return $this->successResponse('Banner berhasil dihapus.');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Banner tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get Paginated Promotions.
+     * GET /api/v1/admin/marketing/promotions
+     */
+    public function promotions(MarketingFilterRequest $request, MarketingPromotionAction $action): JsonResponse
+    {
+        $filters = $request->validated();
+        $paginator = $action->list($filters);
+
+        return $this->paginatedResponse(
+            'Daftar promosi berhasil dimuat.',
+            PromotionResource::collection($paginator->items()),
+            [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ]
+        );
+    }
+
+    /**
+     * Create Promotion.
+     * POST /api/v1/admin/marketing/promotions
+     */
+    public function storePromotion(CreatePromotionRequest $request, MarketingPromotionAction $action): JsonResponse
+    {
+        $data = $request->validated();
+        $promotion = $action->create($data);
+
+        return $this->successResponse('Promosi berhasil dibuat.', new PromotionResource($promotion), 201);
+    }
+
+    /**
+     * Update Promotion.
+     * PUT /api/v1/admin/marketing/promotions/{id}
+     */
+    public function updatePromotion(string|int $id, UpdatePromotionRequest $request, MarketingPromotionAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validated();
+            $promotion = $action->update($id, $data);
+            return $this->successResponse('Promosi berhasil diperbarui.', new PromotionResource($promotion));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Promosi tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Soft Delete Promotion.
+     * DELETE /api/v1/admin/marketing/promotions/{id}
+     */
+    public function destroyPromotion(string|int $id, MarketingPromotionAction $action): JsonResponse
+    {
+        try {
+            $action->delete($id);
+            return $this->successResponse('Promosi berhasil dihapus.');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Promosi tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get Paginated Vouchers.
+     * GET /api/v1/admin/marketing/vouchers
+     */
+    public function vouchers(MarketingFilterRequest $request, MarketingVoucherAction $action): JsonResponse
+    {
+        $filters = $request->validated();
+        $paginator = $action->list($filters);
+
+        return $this->paginatedResponse(
+            'Daftar voucher berhasil dimuat.',
+            VoucherResource::collection($paginator->items()),
+            [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ]
+        );
+    }
+
+    /**
+     * Create Voucher.
+     * POST /api/v1/admin/marketing/vouchers
+     */
+    public function storeVoucher(CreateVoucherRequest $request, MarketingVoucherAction $action): JsonResponse
+    {
+        $data = $request->validated();
+        $voucher = $action->create($data);
+
+        return $this->successResponse('Voucher berhasil dibuat.', new VoucherResource($voucher), 201);
+    }
+
+    /**
+     * Update Voucher.
+     * PUT /api/v1/admin/marketing/vouchers/{id}
+     */
+    public function updateVoucher(string|int $id, UpdateVoucherRequest $request, MarketingVoucherAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validated();
+            $voucher = $action->update($id, $data);
+            return $this->successResponse('Voucher berhasil diperbarui.', new VoucherResource($voucher));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Voucher tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Soft Delete Voucher.
+     * DELETE /api/v1/admin/marketing/vouchers/{id}
+     */
+    public function destroyVoucher(string|int $id, MarketingVoucherAction $action): JsonResponse
+    {
+        try {
+            $action->delete($id);
+            return $this->successResponse('Voucher berhasil dihapus.');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Voucher tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get Paginated Announcements.
+     * GET /api/v1/admin/marketing/announcements
+     */
+    public function announcements(MarketingFilterRequest $request, MarketingAnnouncementAction $action): JsonResponse
+    {
+        $filters = $request->validated();
+        $paginator = $action->list($filters);
+
+        return $this->paginatedResponse(
+            'Daftar pengumuman berhasil dimuat.',
+            AnnouncementResource::collection($paginator->items()),
+            [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ]
+        );
+    }
+
+    /**
+     * Create Announcement.
+     * POST /api/v1/admin/marketing/announcements
+     */
+    public function storeAnnouncement(CreateAnnouncementRequest $request, MarketingAnnouncementAction $action): JsonResponse
+    {
+        $data = $request->validated();
+        $announcement = $action->create($data);
+
+        return $this->successResponse('Pengumuman berhasil dibuat.', new AnnouncementResource($announcement), 201);
+    }
+
+    /**
+     * Update Announcement.
+     * PUT /api/v1/admin/marketing/announcements/{id}
+     */
+    public function updateAnnouncement(string|int $id, UpdateAnnouncementRequest $request, MarketingAnnouncementAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validated();
+            $announcement = $action->update($id, $data);
+            return $this->successResponse('Pengumuman berhasil diperbarui.', new AnnouncementResource($announcement));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Pengumuman tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Soft Delete Announcement.
+     * DELETE /api/v1/admin/marketing/announcements/{id}
+     */
+    public function destroyAnnouncement(string|int $id, MarketingAnnouncementAction $action): JsonResponse
+    {
+        try {
+            $action->delete($id);
+            return $this->successResponse('Pengumuman berhasil dihapus.');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Pengumuman tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+}

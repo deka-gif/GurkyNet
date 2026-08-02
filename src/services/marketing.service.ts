@@ -1,0 +1,83 @@
+import { apiClient } from './api';
+import { ApiResponse } from '../types';
+
+export const marketingService = {
+  // Dashboard
+  async getDashboard(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/dashboard');
+    return res.data;
+  },
+
+  // Banners
+  async getBanners(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/banners', { params });
+    return res.data;
+  },
+  async createBanner(data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/marketing/banners', data);
+    return res.data;
+  },
+  async updateBanner(id: string | number, data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/marketing/banners/${id}`, data);
+    return res.data;
+  },
+  async deleteBanner(id: string | number): Promise<ApiResponse<any>> {
+    const res = await apiClient.delete<ApiResponse<any>>(`/admin/marketing/banners/${id}`);
+    return res.data;
+  },
+
+  // Promotions / Campaigns
+  async getPromotions(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/promotions', { params });
+    return res.data;
+  },
+  async createPromotion(data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/marketing/promotions', data);
+    return res.data;
+  },
+  async updatePromotion(id: string | number, data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/marketing/promotions/${id}`, data);
+    return res.data;
+  },
+  async deletePromotion(id: string | number): Promise<ApiResponse<any>> {
+    const res = await apiClient.delete<ApiResponse<any>>(`/admin/marketing/promotions/${id}`);
+    return res.data;
+  },
+
+  // Vouchers
+  async getVouchers(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/vouchers', { params });
+    return res.data;
+  },
+  async createVoucher(data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/marketing/vouchers', data);
+    return res.data;
+  },
+  async updateVoucher(id: string | number, data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/marketing/vouchers/${id}`, data);
+    return res.data;
+  },
+  async deleteVoucher(id: string | number): Promise<ApiResponse<any>> {
+    const res = await apiClient.delete<ApiResponse<any>>(`/admin/marketing/vouchers/${id}`);
+    return res.data;
+  },
+
+  // Announcements
+  async getAnnouncements(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/announcements', { params });
+    return res.data;
+  },
+  async createAnnouncement(data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/marketing/announcements', data);
+    return res.data;
+  },
+  async updateAnnouncement(id: string | number, data: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/marketing/announcements/${id}`, data);
+    return res.data;
+  },
+  async deleteAnnouncement(id: string | number): Promise<ApiResponse<any>> {
+    const res = await apiClient.delete<ApiResponse<any>>(`/admin/marketing/announcements/${id}`);
+    return res.data;
+  },
+};
+
