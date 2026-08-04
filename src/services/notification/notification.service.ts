@@ -38,7 +38,7 @@ export const notificationService = {
   },
 
   markAllAsRead: async (): Promise<ApiResponse<null>> => {
-    const response = await apiClient.post<ApiResponse<null>>('/notifications/read-all');
+    const response = await apiClient.put<ApiResponse<null>>('/notifications/read-all');
     return response.data;
   },
 };

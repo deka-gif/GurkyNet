@@ -13,6 +13,22 @@ class LoginRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $identifier = $this->input('phone_or_email') 
+            ?? $this->input('email') 
+            ?? $this->input('phone') 
+            ?? $this->input('phone_number') 
+            ?? $this->input('identity') 
+            ?? $this->input('username');
+
+        if ($identifier !== null) {
+            $this->merge([
+                'phone_or_email' => (string) $identifier,
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
@@ -25,7 +41,7 @@ class LoginRequest extends FormRequest
     {
         throw new HttpResponseException(response()->json([
             'success' => false,
-            'message' => 'Data yang dikirimkan tidak valid.',
+            'message' => 'Data login yang dikirimkan tidak valid.',
             'errors' => $validator->errors(),
         ], 422));
     }

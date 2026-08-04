@@ -21,6 +21,9 @@ class CreateHomepageSectionRequest extends FormRequest
             'visible' => 'nullable|boolean',
             'status' => 'nullable|string|max:50',
             'description' => 'nullable|string',
+            'hero_background_media_id' => 'nullable|integer|exists:media,id',
+            'hero_illustration_media_id' => 'nullable|integer|exists:media,id',
+            'hero_mobile_image_media_id' => 'nullable|integer|exists:media,id',
         ];
     }
 }

@@ -16,6 +16,7 @@ class WebsiteSettingResource extends JsonResource
             'logo' => $this->logoMedia ? new MediaResource($this->logoMedia) : $this->logo,
             'logoDark' => $this->logoDarkMedia ? new MediaResource($this->logoDarkMedia) : $this->logo_dark,
             'favicon' => $this->faviconMedia ? new MediaResource($this->faviconMedia) : $this->favicon,
+            'apkUrl' => $this->apk_url,
             'logoMediaId' => $this->logo_media_id,
             'logoDarkMediaId' => $this->logo_dark_media_id,
             'faviconMediaId' => $this->favicon_media_id,

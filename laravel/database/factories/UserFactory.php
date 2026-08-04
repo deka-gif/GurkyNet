@@ -13,12 +13,17 @@ class UserFactory extends Factory
 
     public function definition(): array
     {
+        $faker = $this->faker ?? (function_exists('fake') ? fake() : null);
+        $name = $faker ? $faker->name() : ('User ' . Str::random(6));
+        $email = $faker ? $faker->unique()->safeEmail() : ('user_' . Str::random(8) . '@gurkynet.com');
+        $phone = $faker ? ('08' . $faker->unique()->numerify('##########')) : ('08' . mt_rand(1000000000, 9999999999));
+
         return [
-            'name' => $this->faker->name(),
-            'email' => $this->faker->unique()->safeEmail(),
+            'name' => $name,
+            'email' => $email,
             'email_verified_at' => now(),
             'password' => Hash::make('password123'),
-            'phone_number' => '08' . $this->faker->unique()->numerify('##########'),
+            'phone_number' => $phone,
             'role' => \App\Enums\UserRole::USER,
             'transaction_pin' => Hash::make('123456'),
             'remember_token' => Str::random(10),

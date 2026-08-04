@@ -45,6 +45,7 @@ import { storageService } from '../services/storage.service';
 import { useWalletStore } from '../store/wallet.store';
 import { useNotificationStore } from '../store/notification.store';
 import { useAuthStore } from '../store/auth.store';
+import { useWebsiteStore } from '../store/website.store';
 import { UserRole } from '../constants/auth';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 
@@ -56,7 +57,8 @@ export const DashboardLayout = () => {
   const navigate = useNavigate();
 
   const { wallet, fetchWallet } = useWalletStore();
-  const { unreadCount, fetchNotifications } = useNotificationStore();
+  const { settings, fetchSettings } = useWebsiteStore();
+  const { unreadCount, notifications, fetchNotifications, markAllAsRead, markAsRead } = useNotificationStore();
   const { logout } = useAuthStore();
 
   const currentUser = (storageService.getUser() as {
@@ -76,7 +78,8 @@ export const DashboardLayout = () => {
   useEffect(() => {
     fetchWallet();
     fetchNotifications();
-  }, [fetchWallet, fetchNotifications]);
+    fetchSettings();
+  }, [fetchWallet, fetchNotifications, fetchSettings]);
 
   // Redirect if session is cleared manually
   useEffect(() => {
@@ -292,9 +295,18 @@ export const DashboardLayout = () => {
         {/* Sidebar Header Logo */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-gray-50">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-500/25 shrink-0">
-              G
-            </div>
+            {settings?.logo ? (
+              <img
+                src={typeof settings.logo === 'string' ? settings.logo : settings.logo?.url}
+                alt={settings.websiteName || 'GurkyNet'}
+                className="w-9 h-9 object-contain rounded-xl shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-500/25 shrink-0">
+                {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
+              </div>
+            )}
             {!isSidebarCollapsed && (
               <motion.span 
                 initial={{ opacity: 0 }}
@@ -338,14 +350,14 @@ export const DashboardLayout = () => {
                 )}
 
                 {/* Badge for notification count */}
-                {item.badge && !isSidebarCollapsed && (
+                {Boolean(item.badge && item.badge > 0) && !isSidebarCollapsed && (
                   <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
                     {item.badge}
                   </span>
                 )}
 
                 {/* Badge indicator on collapsed sidebar */}
-                {item.badge && isSidebarCollapsed && (
+                {Boolean(item.badge && item.badge > 0) && isSidebarCollapsed && (
                   <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full"></span>
                 )}
 
@@ -398,9 +410,18 @@ export const DashboardLayout = () => {
           <div className="flex items-center gap-4 flex-1">
             {/* Mobile Brand Logo */}
             <div className="flex md:hidden items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary-500/25">
-                G
-              </div>
+              {settings?.logo ? (
+                <img
+                  src={typeof settings.logo === 'string' ? settings.logo : settings.logo?.url}
+                  alt={settings.websiteName || 'GurkyNet'}
+                  className="w-8 h-8 object-contain rounded-lg shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary-500/25">
+                  {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
+                </div>
+              )}
               <span className="font-extrabold text-base text-gray-900 tracking-tight">
                 Gurky<span className="text-primary-600">Net</span>
               </span>
@@ -438,44 +459,68 @@ export const DashboardLayout = () => {
               <button 
                 onClick={() => setIsNotificationOpen(!isNotificationOpen)}
                 className="w-10 h-10 rounded-2xl bg-gray-50 hover:bg-gray-100 border border-gray-100 flex items-center justify-center text-gray-600 transition-colors relative"
+                aria-label="Notifikasi"
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full"></span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </button>
 
-              {/* Notification Dropdown Simulation */}
+              {/* Notification Dropdown */}
               <AnimatePresence>
                 {isNotificationOpen && (
                   <motion.div 
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-3 w-80 bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-50 text-gray-700"
+                    className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-50 text-gray-700 max-h-[420px] flex flex-col"
                   >
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
-                      <span className="font-extrabold text-gray-900 text-sm">Notifikasi</span>
-                      <button 
-                        onClick={() => setIsNotificationOpen(false)}
-                        className="text-[10px] font-bold text-primary-600 hover:underline"
-                      >
-                        Tandai Semua Dibaca
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-gray-900 text-sm">Notifikasi</span>
+                        {unreadCount > 0 && (
+                          <span className="bg-primary-50 text-primary-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {unreadCount} Baru
+                          </span>
+                        )}
+                      </div>
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={() => markAllAsRead()}
+                          className="text-[11px] font-bold text-primary-600 hover:underline cursor-pointer"
+                        >
+                          Tandai Semua Dibaca
+                        </button>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <div className="p-2.5 bg-primary-50/50 rounded-xl border border-primary-50 flex items-start gap-2.5">
-                        <div className="w-2 h-2 bg-primary-600 rounded-full mt-1.5 shrink-0"></div>
-                        <div>
-                          <div className="text-xs font-bold text-gray-900">Top Up Sukses!</div>
-                          <div className="text-[10px] text-gray-500 mt-0.5">Saldo Rp 500.000 berhasil ditambahkan ke dompet digital Anda.</div>
+                    <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+                      {Array.isArray(notifications) && notifications.length > 0 ? (
+                        notifications.slice(0, 6).map((item) => (
+                          <div 
+                            key={item.id} 
+                            onClick={() => !item.isRead && markAsRead(item.id)}
+                            className={`p-3 rounded-2xl transition-all cursor-pointer border ${item.isRead ? 'bg-white border-gray-100 hover:bg-gray-50' : 'bg-primary-50/40 border-primary-100/60 hover:bg-primary-50/70'}`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${item.isRead ? 'bg-gray-300' : 'bg-primary-600'}`}></span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold text-gray-900 truncate">{item.title}</div>
+                                <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{item.message}</div>
+                                <div className="text-[10px] text-gray-400 mt-1">
+                                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Baru saja'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-8 text-center text-gray-400 text-xs font-medium">
+                          Belum ada notifikasi baru.
                         </div>
-                      </div>
-                      <div className="p-2.5 hover:bg-gray-50 rounded-xl flex items-start gap-2.5">
-                        <div className="w-2 h-2 bg-transparent rounded-full mt-1.5 shrink-0"></div>
-                        <div>
-                          <div className="text-xs font-bold text-gray-900">Promo Menarik Menanti</div>
-                          <div className="text-[10px] text-gray-500 mt-0.5">Diskon token PLN hingga Rp 10.000 menanti Anda. Pakai kode PLNMERDEKA.</div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -520,7 +565,7 @@ export const DashboardLayout = () => {
             >
               <div className={`p-1.5 rounded-xl transition-all relative ${active ? 'bg-primary-50 text-primary-600 scale-105' : 'hover:bg-gray-50'}`}>
                 <IconComponent className="w-5 h-5 shrink-0" />
-                {item.badge && (
+                {Boolean(item.badge && item.badge > 0) && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center">
                     {item.badge}
                   </span>

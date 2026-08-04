@@ -22,15 +22,23 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const response = await notificationService.getNotifications();
-      if (response.success) {
-        const unread = response.data.filter((n) => !n.isRead).length;
+      if (response && response.success !== false) {
+        const raw = response.data;
+        const list = Array.isArray(raw) 
+          ? raw 
+          : Array.isArray(raw?.data) 
+            ? raw.data 
+            : Array.isArray(raw?.items) 
+              ? raw.items 
+              : [];
+        const unread = list.filter((n: any) => !n.isRead && !n.is_read).length;
         set({
-          notifications: response.data,
+          notifications: list,
           unreadCount: unread,
           loading: false,
         });
       } else {
-        set({ error: response.message, loading: false });
+        set({ error: response?.message || 'Gagal memuat notifikasi.', loading: false });
       }
     } catch (err: any) {
       set({ error: err.message || 'Gagal memuat notifikasi.', loading: false });

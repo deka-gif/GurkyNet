@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -12,17 +12,20 @@ import {
 } from 'recharts';
 import { TrendingUp, BarChart3, RotateCcw } from 'lucide-react';
 import { useFinanceStore } from '../../store/finance.store';
+import { ChartErrorBoundary } from '../common/ChartErrorBoundary';
 
 const formatCurrencyMillions = (value: number) => {
-  if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `Rp ${(value / 1000).toFixed(0)}k`;
-  return `Rp ${value}`;
+  const num = Number(value) || 0;
+  if (num >= 1000000) return `Rp ${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `Rp ${(num / 1000).toFixed(0)}k`;
+  return `Rp ${num}`;
 };
 
 const formatCurrencyThousands = (value: number) => {
-  if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `Rp ${(value / 1000).toFixed(0)}k`;
-  return `Rp ${value}`;
+  const num = Number(value) || 0;
+  if (num >= 1000000) return `Rp ${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `Rp ${(num / 1000).toFixed(0)}k`;
+  return `Rp ${num}`;
 };
 
 interface FinancialReportChartsProps {
@@ -38,20 +41,29 @@ export const FinancialReportCharts: React.FC<FinancialReportChartsProps> = ({
 }) => {
   const { dashboardData, reports } = useFinanceStore();
 
-  const revData = revenueChart || dashboardData?.revenueChart || dashboardData?.chart || reports?.map((r: any) => ({
-    day: r.date || r.created_at || 'Period',
-    revenue: typeof r.total_amount === 'number' ? r.total_amount : Number(r.amount || r.gross_amount || 0),
-  })) || [];
+  const revData = useMemo(() => {
+    const raw = revenueChart || dashboardData?.revenueChart || dashboardData?.chart || (Array.isArray(reports) ? reports.map((r: any) => ({
+      day: String(r?.date || r?.created_at || 'Period'),
+      revenue: typeof r?.total_amount === 'number' ? r.total_amount : Number(r?.amount || r?.gross_amount || 0),
+    })) : []);
+    return Array.isArray(raw) ? raw : [];
+  }, [revenueChart, dashboardData, reports]);
 
-  const trxData = transactionChart || dashboardData?.transactionChart || reports?.map((r: any) => ({
-    day: r.date || r.created_at || 'Period',
-    count: typeof r.total_transactions === 'number' ? r.total_transactions : Number(r.transaction_count || 1),
-  })) || [];
+  const trxData = useMemo(() => {
+    const raw = transactionChart || dashboardData?.transactionChart || (Array.isArray(reports) ? reports.map((r: any) => ({
+      day: String(r?.date || r?.created_at || 'Period'),
+      count: typeof r?.total_transactions === 'number' ? r.total_transactions : Number(r?.transaction_count || 1),
+    })) : []);
+    return Array.isArray(raw) ? raw : [];
+  }, [transactionChart, dashboardData, reports]);
 
-  const refData = refundChart || dashboardData?.refundChart || reports?.map((r: any) => ({
-    day: r.date || r.created_at || 'Period',
-    refund: typeof r.refund_amount === 'number' ? r.refund_amount : Number(r.refunds || 0),
-  })) || [];
+  const refData = useMemo(() => {
+    const raw = refundChart || dashboardData?.refundChart || (Array.isArray(reports) ? reports.map((r: any) => ({
+      day: String(r?.date || r?.created_at || 'Period'),
+      refund: typeof r?.refund_amount === 'number' ? r.refund_amount : Number(r?.refunds || 0),
+    })) : []);
+    return Array.isArray(raw) ? raw : [];
+  }, [refundChart, dashboardData, reports]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -78,24 +90,26 @@ export const FinancialReportCharts: React.FC<FinancialReportChartsProps> = ({
               Tidak ada data grafik pendapatan
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="repRevGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
-                <YAxis tickLine={false} axisLine={false} tickFormatter={formatCurrencyMillions} tick={{ fill: '#64748b', fontSize: 9 }} />
-                <Tooltip
-                  formatter={(val: any) => [`Rp ${Number(val).toLocaleString('id-ID')}`, 'Revenue']}
-                  contentStyle={{ borderRadius: '12px', fontSize: '11px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }}
-                />
-                <Area type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2.5} fillOpacity={1} fill="url(#repRevGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <ChartErrorBoundary height={192} fallbackTitle="Gagal memuat grafik pendapatan">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="repRevGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <YAxis tickLine={false} axisLine={false} tickFormatter={formatCurrencyMillions} tick={{ fill: '#64748b', fontSize: 9 }} />
+                  <Tooltip
+                    formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`, 'Revenue']}
+                    contentStyle={{ borderRadius: '12px', fontSize: '11px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2.5} fillOpacity={1} fill="url(#repRevGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartErrorBoundary>
           )}
         </div>
       </div>
@@ -123,18 +137,20 @@ export const FinancialReportCharts: React.FC<FinancialReportChartsProps> = ({
               Tidak ada data volume transaksi
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trxData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 9 }} />
-                <Tooltip
-                  formatter={(val: any) => [`${val} Transaksi`, 'Volume']}
-                  contentStyle={{ borderRadius: '12px', fontSize: '11px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }}
-                />
-                <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChartErrorBoundary height={192} fallbackTitle="Gagal memuat grafik transaksi">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trxData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 9 }} />
+                  <Tooltip
+                    formatter={(val: any) => [`${Number(val || 0)} Transaksi`, 'Volume']}
+                    contentStyle={{ borderRadius: '12px', fontSize: '11px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }}
+                  />
+                  <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartErrorBoundary>
           )}
         </div>
       </div>
@@ -162,28 +178,29 @@ export const FinancialReportCharts: React.FC<FinancialReportChartsProps> = ({
               Tidak ada data pengembalian dana
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={refData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="repRefGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#9333ea" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#9333ea" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
-                <YAxis tickLine={false} axisLine={false} tickFormatter={formatCurrencyThousands} tick={{ fill: '#64748b', fontSize: 9 }} />
-                <Tooltip
-                  formatter={(val: any) => [`Rp ${Number(val).toLocaleString('id-ID')}`, 'Refund']}
-                  contentStyle={{ borderRadius: '12px', fontSize: '11px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }}
-                />
-                <Area type="monotone" dataKey="refund" stroke="#7e22ce" strokeWidth={2.5} fillOpacity={1} fill="url(#repRefGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <ChartErrorBoundary height={192} fallbackTitle="Gagal memuat grafik pengembalian dana">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={refData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="repRefGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#9333ea" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#9333ea" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <YAxis tickLine={false} axisLine={false} tickFormatter={formatCurrencyThousands} tick={{ fill: '#64748b', fontSize: 9 }} />
+                  <Tooltip
+                    formatter={(val: any) => [`Rp ${Number(val || 0).toLocaleString('id-ID')}`, 'Refund']}
+                    contentStyle={{ borderRadius: '12px', fontSize: '11px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }}
+                  />
+                  <Area type="monotone" dataKey="refund" stroke="#7e22ce" strokeWidth={2.5} fillOpacity={1} fill="url(#repRefGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartErrorBoundary>
           )}
         </div>
       </div>
     </div>
   );
 };
-

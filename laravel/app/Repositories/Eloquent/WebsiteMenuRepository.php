@@ -11,6 +11,8 @@ class WebsiteMenuRepository implements WebsiteMenuRepositoryInterface
 {
     public function getPaginated(array $filters = []): LengthAwarePaginator
     {
+        $this->ensureDefaults();
+
         $query = WebsiteMenu::query()->with('parent');
 
         if (isset($filters['visible'])) {
@@ -31,6 +33,8 @@ class WebsiteMenuRepository implements WebsiteMenuRepositoryInterface
 
     public function all(): Collection
     {
+        $this->ensureDefaults();
+
         return WebsiteMenu::with('children')->whereNull('parent_id')->orderBy('display_order', 'asc')->get();
     }
 
@@ -55,8 +59,26 @@ class WebsiteMenuRepository implements WebsiteMenuRepositoryInterface
     {
         $menu = WebsiteMenu::find($id);
         if ($menu) {
-            return $menu->delete();
+            return (bool) $menu->delete();
         }
         return false;
+    }
+
+    public function ensureDefaults(): void
+    {
+        if (WebsiteMenu::count() === 0) {
+            $menus = [
+                ['title' => 'Beranda', 'slug' => 'beranda', 'url' => '/', 'icon' => 'home', 'display_order' => 1, 'visible' => true, 'open_in_new_tab' => false],
+                ['title' => 'Layanan', 'slug' => 'layanan', 'url' => '#services', 'icon' => 'grid', 'display_order' => 2, 'visible' => true, 'open_in_new_tab' => false],
+                ['title' => 'Fitur', 'slug' => 'fitur', 'url' => '#features', 'icon' => 'sparkles', 'display_order' => 3, 'visible' => true, 'open_in_new_tab' => false],
+                ['title' => 'Tentang Kami', 'slug' => 'tentang', 'url' => '#about', 'icon' => 'info', 'display_order' => 4, 'visible' => true, 'open_in_new_tab' => false],
+                ['title' => 'FAQ', 'slug' => 'faq', 'url' => '#faq', 'icon' => 'help-circle', 'display_order' => 5, 'visible' => true, 'open_in_new_tab' => false],
+                ['title' => 'Kontak', 'slug' => 'kontak', 'url' => '#contact', 'icon' => 'phone', 'display_order' => 6, 'visible' => true, 'open_in_new_tab' => false],
+            ];
+
+            foreach ($menus as $menu) {
+                WebsiteMenu::firstOrCreate(['slug' => $menu['slug']], $menu);
+            }
+        }
     }
 }

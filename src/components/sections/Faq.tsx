@@ -112,6 +112,8 @@ export const Faq = () => {
                 <button
                   onClick={() => setOpenIndex(isOpen ? null : index)}
                   className="w-full text-left px-6 py-5 flex items-center justify-between focus:outline-none"
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-answer-${index}`}
                 >
                   <h3 className={`text-lg font-semibold transition-colors ${isOpen ? 'text-primary-600' : 'text-gray-900'}`}>
                     {faq.question}
@@ -123,6 +125,7 @@ export const Faq = () => {
                 <AnimatePresence>
                   {isOpen && (
                     <motion.div
+                      id={`faq-answer-${index}`}
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}

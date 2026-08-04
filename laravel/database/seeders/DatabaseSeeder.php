@@ -14,7 +14,9 @@ use App\Models\WebsiteMenu;
 use App\Models\StaticPage;
 use App\Models\Faq;
 use App\Models\Setting;
+use App\Models\SystemSetting;
 use App\Models\Provider;
+use App\Models\Media;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -22,349 +24,91 @@ use Illuminate\Support\Str;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database.
+     * Seed the application's database idempotently.
      */
     public function run(): void
     {
-        // 1. Roles & Permissions seeding (Simulating Spatie Permission setup)
-        // In Spatie, we usually do Role::create(['name' => 'owner']) etc.
-        // We will seed the role strings inside the users table as defined in migration.
+        // 1. MEDIA PLACEHOLDERS (Must seed early for foreign key relations)
+        $this->command?->info('Seeding Media library...');
+        $mediaLogo = Media::updateOrCreate(
+            ['filename' => 'gurkynet-logo.png'],
+            [
+                'original_name' => 'gurkynet-logo.png',
+                'mime_type' => 'image/png',
+                'extension' => 'png',
+                'size' => 12450,
+                'width' => 512,
+                'height' => 512,
+                'alt_text' => 'GurkyNet Official Logo',
+                'folder' => 'logo',
+                'storage_disk' => 'public',
+                'url' => '/assets/logo.png',
+                'uploaded_by' => 'system',
+            ]
+        );
 
-        $this->command->info('Seeding Roles & Default Users...');
+        $mediaLogoDark = Media::updateOrCreate(
+            ['filename' => 'gurkynet-logo-dark.png'],
+            [
+                'original_name' => 'gurkynet-logo-dark.png',
+                'mime_type' => 'image/png',
+                'extension' => 'png',
+                'size' => 13120,
+                'width' => 512,
+                'height' => 512,
+                'alt_text' => 'GurkyNet Dark Logo',
+                'folder' => 'logo',
+                'storage_disk' => 'public',
+                'url' => '/assets/logo-dark.png',
+                'uploaded_by' => 'system',
+            ]
+        );
 
-        // 1. SUPER ADMIN
-        $superAdmin = User::create([
-            'name' => 'Root System Master (Super Admin)',
-            'email' => 'admin@gurkypay.com',
-            'phone_number' => '080000000000',
-            'password' => Hash::make('admin123'),
-            'role' => \App\Enums\UserRole::SUPER_ADMIN,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $superAdmin->id,
-            'wallet_number' => '104288880000',
-            'balance' => 999999999.00,
-            'status' => 'active',
-        ]);
+        $mediaFavicon = Media::updateOrCreate(
+            ['filename' => 'gurkynet-favicon.ico'],
+            [
+                'original_name' => 'favicon.ico',
+                'mime_type' => 'image/x-icon',
+                'extension' => 'ico',
+                'size' => 4500,
+                'width' => 64,
+                'height' => 64,
+                'alt_text' => 'GurkyNet Favicon',
+                'folder' => 'favicon',
+                'storage_disk' => 'public',
+                'url' => '/favicon.ico',
+                'uploaded_by' => 'system',
+            ]
+        );
 
-        // 2. OWNER
-        $owner = User::create([
-            'name' => 'Gurky Adipati (Owner)',
-            'email' => 'owner@gurkypay.com',
-            'phone_number' => '081111111111',
-            'password' => Hash::make('owner123'),
-            'role' => \App\Enums\UserRole::OWNER,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $owner->id,
-            'wallet_number' => '104288880001',
-            'balance' => 99999999.00,
-            'status' => 'active',
-        ]);
+        $mediaHero = Media::updateOrCreate(
+            ['filename' => 'hero-banner-illustration.png'],
+            [
+                'original_name' => 'hero-banner-illustration.png',
+                'mime_type' => 'image/png',
+                'extension' => 'png',
+                'size' => 45020,
+                'width' => 1200,
+                'height' => 600,
+                'alt_text' => 'Hero Banner Illustration GurkyNet',
+                'folder' => 'banner',
+                'storage_disk' => 'public',
+                'url' => 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&q=80',
+                'uploaded_by' => 'system',
+            ]
+        );
 
-        // 3. FINANCE
-        $finance = User::create([
-            'name' => 'Siti Nurhaliza (Finance)',
-            'email' => 'finance@gurkypay.com',
-            'phone_number' => '082222222222',
-            'password' => Hash::make('finance123'),
-            'role' => \App\Enums\UserRole::FINANCE,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $finance->id,
-            'wallet_number' => '104288880002',
-            'balance' => 50000000.00,
-            'status' => 'active',
-        ]);
-
-        // 4. OPERATIONS
-        $operations = User::create([
-            'name' => 'Bambang Tri (Operations)',
-            'email' => 'operations@gurkypay.com',
-            'phone_number' => '083333333333',
-            'password' => Hash::make('ops123'),
-            'role' => \App\Enums\UserRole::OPERATIONS,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $operations->id,
-            'wallet_number' => '104288880003',
-            'balance' => 10000000.00,
-            'status' => 'active',
-        ]);
-
-        // 5. MARKETING
-        $marketing = User::create([
-            'name' => 'Dewi Lestari (Marketing)',
-            'email' => 'marketing@gurkypay.com',
-            'phone_number' => '084444444444',
-            'password' => Hash::make('mkt123'),
-            'role' => \App\Enums\UserRole::MARKETING,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $marketing->id,
-            'wallet_number' => '104288880004',
-            'balance' => 5000000.00,
-            'status' => 'active',
-        ]);
-
-        // 6. CUSTOMER SUPPORT
-        $cs = User::create([
-            'name' => 'Anisa Rahma (Customer Support)',
-            'email' => 'cs@gurkypay.com',
-            'phone_number' => '085555555555',
-            'password' => Hash::make('cs123'),
-            'role' => \App\Enums\UserRole::CUSTOMER_SUPPORT,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $cs->id,
-            'wallet_number' => '104288880005',
-            'balance' => 2000000.00,
-            'status' => 'active',
-        ]);
-
-        // 7. REGULAR USER
-        $user = User::create([
-            'name' => 'Budi Setiawan (Regular User)',
-            'email' => 'user@gurkypay.com',
-            'phone_number' => '088888888888',
-            'password' => Hash::make('user123'),
-            'role' => \App\Enums\UserRole::USER,
-            'transaction_pin' => Hash::make('123456'),
-        ]);
-        Wallet::create([
-            'user_id' => $user->id,
-            'wallet_number' => '104230009182',
-            'balance' => 250000.00,
-            'status' => 'active',
-        ]);
-
-        // Seed 10 more random customer dummies using User and Wallet Factories
-        User::factory(10)->create()->each(function ($user) {
-            Wallet::create([
-                'user_id' => $user->id,
-                'wallet_number' => '1042' . mt_rand(1000000000, 9999999999),
-                'balance' => mt_rand(5000, 1500000),
-                'status' => 'active',
-            ]);
-        });
-
-
-        // 1.5 Providers seeding
-        $this->command->info('Seeding Providers...');
-        $providerNames = ['Telkomsel', 'Indosat', 'XL', 'Axis', 'Tri', 'Smartfren', 'PLN', 'PDAM', 'BPJS', 'Steam', 'Google Play'];
-        $providerModels = [];
-        foreach ($providerNames as $name) {
-            $providerModels[strtolower($name)] = Provider::create([
-                'name' => $name,
-                'logo' => strtolower(str_replace(' ', '_', $name)) . '.png',
-                'is_active' => true,
-            ]);
-        }
-
-        // 2. Product Categories seeding
-        $this->command->info('Seeding Product Categories...');
-        $categories = [
-            ['name' => 'Pulsa Seluler', 'slug' => 'pulsa-seluler', 'icon' => 'phone-call'],
-            ['name' => 'Paket Data', 'slug' => 'paket-data', 'icon' => 'wifi'],
-            ['name' => 'Token PLN', 'slug' => 'token-pln', 'icon' => 'zap'],
-            ['name' => 'Voucher Belanja', 'slug' => 'voucher-belanja', 'icon' => 'shopping-bag'],
-            ['name' => 'Tagihan Bulanan', 'slug' => 'tagihan-bulanan', 'icon' => 'credit-card'],
-        ];
-
-        $categoryModels = [];
-        foreach ($categories as $cat) {
-            $categoryModels[$cat['slug']] = ProductCategory::create($cat);
-        }
-
-
-        // 3. Products Dummy seeding
-        $this->command->info('Seeding Products...');
-        
-        // Pulsa products
-        $pulsaNominals = [5000, 10000, 20000, 50000, 100000];
-        foreach ($pulsaNominals as $nominal) {
-            Product::create([
-                'product_category_id' => $categoryModels['pulsa-seluler']->id,
-                'provider_id' => $providerModels['telkomsel']->id,
-                'sku_code' => 'PULSA-TSEL-' . $nominal,
-                'name' => 'Telkomsel Pulsa Rp ' . number_format($nominal, 0, ',', '.'),
-                'base_price' => $nominal,
-                'sell_price' => $nominal + 1500,
-                'admin_fee' => 0,
-                'status' => true,
-            ]);
-            Product::create([
-                'product_category_id' => $categoryModels['pulsa-seluler']->id,
-                'provider_id' => $providerModels['indosat']->id,
-                'sku_code' => 'PULSA-ISAT-' . $nominal,
-                'name' => 'Indosat Ooredoo Pulsa Rp ' . number_format($nominal, 0, ',', '.'),
-                'base_price' => $nominal,
-                'sell_price' => $nominal + 1200,
-                'admin_fee' => 0,
-                'status' => true,
-            ]);
-        }
-
-        // Token PLN products
-        $plnNominals = [20000, 50000, 100000, 200000, 500000];
-        foreach ($plnNominals as $nominal) {
-            Product::create([
-                'product_category_id' => $categoryModels['token-pln']->id,
-                'provider_id' => $providerModels['pln']->id,
-                'sku_code' => 'PLNPRE-' . $nominal,
-                'name' => 'PLN Prepaid Rp ' . number_format($nominal, 0, ',', '.'),
-                'base_price' => $nominal,
-                'sell_price' => $nominal,
-                'admin_fee' => 2500,
-                'status' => true,
-            ]);
-        }
-
-        // Voucher Belanja products
-        Product::create([
-            'product_category_id' => $categoryModels['voucher-belanja']->id,
-            'provider_id' => $providerModels['google play']->id ?? null,
-            'sku_code' => 'VCH-ALFA-50K',
-            'name' => 'Voucher Alfamart Digital Rp 50.000',
-            'base_price' => 48500,
-            'sell_price' => 49500,
-            'admin_fee' => 0,
-            'status' => true,
-        ]);
-        Product::create([
-            'product_category_id' => $categoryModels['voucher-belanja']->id,
-            'provider_id' => $providerModels['steam']->id ?? null,
-            'sku_code' => 'VCH-INDOM-100K',
-            'name' => 'Voucher Indomaret Fisik Rp 100.000',
-            'base_price' => 97000,
-            'sell_price' => 98500,
-            'admin_fee' => 0,
-            'status' => true,
-        ]);
-
-
-        // 4. Banner, Promotions, and Vouchers seeding
-        $this->command->info('Seeding Banners, Promotions, and Vouchers...');
-        // Banners
-        BannerPromotion::create([
-            'type' => 'banner',
-            'title' => 'Promo Cashback Akhir Bulan 10%',
-            'image_url' => 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&q=80',
-            'redirect_url' => '/promo/cashback',
-            'is_active' => true,
-        ]);
-        BannerPromotion::create([
-            'type' => 'banner',
-            'title' => 'Nikmati Bebas Biaya Admin Token Listrik PLN',
-            'image_url' => 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=1200&q=80',
-            'redirect_url' => '/layanan/token-pln',
-            'is_active' => true,
-        ]);
-        BannerPromotion::create([
-            'type' => 'banner',
-            'title' => 'Top Up Diamond Game Instan 24 Jam Nonstop',
-            'image_url' => 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1200&q=80',
-            'redirect_url' => '/layanan/voucher-game',
-            'is_active' => true,
-        ]);
-
-        // Promotions
-        BannerPromotion::create([
-            'type' => 'promotion',
-            'title' => 'Flash Sale Paket Data Telkomsel & Indosat',
-            'code' => 'FLASHDATA',
-            'description' => 'Potongan harga Rp 5.000 untuk pembelian paket data minimal 50GB.',
-            'discount_amount' => 5000,
-            'discount_type' => 'fixed',
-            'min_transaction' => 50000,
-            'quota' => 500,
-            'used_count' => 32,
-            'image_url' => 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=1200&q=80',
-            'redirect_url' => '/promo/flash-data',
-            'is_active' => true,
-        ]);
-        BannerPromotion::create([
-            'type' => 'promotion',
-            'title' => 'Diskon Spesial Tagihan BPJS & PDAM',
-            'code' => 'HEMATTAGIHAN',
-            'description' => 'Cashback 5% hingga Rp 10.000 untuk pembayaran tagihan bulanan keluarga.',
-            'discount_amount' => 10000,
-            'discount_type' => 'fixed',
-            'min_transaction' => 100000,
-            'quota' => 250,
-            'used_count' => 14,
-            'image_url' => 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=1200&q=80',
-            'redirect_url' => '/promo/tagihan-bulanan',
-            'is_active' => true,
-        ]);
-
-        // Vouchers
-        BannerPromotion::create([
-            'type' => 'voucher',
-            'title' => 'Voucher Pengguna Baru GurkyNet',
-            'code' => 'GURKYBARU',
-            'description' => 'Klaim saldo bonus Rp 10.000 untuk transaksi pertama setelah verifikasi akun.',
-            'discount_amount' => 10000,
-            'discount_type' => 'fixed',
-            'min_transaction' => 25000,
-            'quota' => 1000,
-            'used_count' => 128,
-            'image_url' => 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&q=80',
-            'redirect_url' => '/voucher/pengguna-baru',
-            'is_active' => true,
-        ]);
-        BannerPromotion::create([
-            'type' => 'voucher',
-            'title' => 'Voucher Weekend Seru Top Up Game',
-            'code' => 'GURKYGAME',
-            'description' => 'Diskon 15% maksimal Rp 15.000 untuk top up Mobile Legends dan Free Fire setiap Sabtu-Minggu.',
-            'discount_amount' => 15000,
-            'discount_type' => 'percentage',
-            'min_transaction' => 30000,
-            'quota' => 300,
-            'used_count' => 45,
-            'image_url' => 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1200&q=80',
-            'redirect_url' => '/voucher/weekend-game',
-            'is_active' => true,
-        ]);
-
-
-        // 5. Notifications (Announcement Center) seeding
-        $this->command->info('Seeding Notifications & Announcements...');
-        Notification::create([
-            'title' => 'Peningkatan Sistem & Keamanan Server GurkyNet',
-            'message' => 'Sistem pembayaran GurkyNet kini telah dioptimalkan dengan sertifikasi keamanan end-to-end terkini untuk menjamin kenyamanan transaksi Anda.',
-            'type' => 'broadcast',
-            'is_active' => true,
-        ]);
-        Notification::create([
-            'title' => 'Jadwal Pemeliharaan Rutin Bank BCA & Mandiri',
-            'message' => 'Layanan Virtual Account Bank BCA dan Mandiri beroperasi normal 24 jam. Segala transaksi otomatis terkonfirmasi dalam hitungan detik.',
-            'type' => 'announcement',
-            'is_active' => true,
-        ]);
-        Notification::create([
-            'title' => 'Dukungan Metode Pembayaran QRIS Nasional',
-            'message' => 'Sekarang Anda dapat melakukan isi ulang saldo dompet digital GurkyNet secara instan melalui QRIS semua bank dan e-wallet.',
-            'type' => 'promo',
-            'is_active' => true,
-        ]);
-
-
-        // 6. Website Settings seeding
-        $this->command->info('Seeding Website Settings...');
-        WebsiteSetting::create([
+        // 2. WEBSITE SETTINGS (Critical for public API endpoints)
+        $this->command?->info('Seeding Website Settings...');
+        $websiteSettingData = [
             'website_name' => 'GurkyNet',
             'tagline' => 'Platform PPOB & Solusi Pembayaran Digital Tercepat di Indonesia',
             'logo' => '/assets/logo.png',
             'logo_dark' => '/assets/logo-dark.png',
             'favicon' => '/favicon.ico',
+            'logo_media_id' => $mediaLogo?->id,
+            'logo_dark_media_id' => $mediaLogoDark?->id,
+            'favicon_media_id' => $mediaFavicon?->id,
             'support_email' => 'support@gurkynet.com',
             'support_phone' => '+62 812-3456-7890',
             'whatsapp' => '6281234567890',
@@ -380,11 +124,17 @@ class DatabaseSeeder extends Seeder
             'timezone' => 'Asia/Jakarta',
             'currency' => 'IDR',
             'language' => 'id',
-        ]);
+        ];
 
+        $existingSetting = WebsiteSetting::first();
+        if ($existingSetting) {
+            $existingSetting->update($websiteSettingData);
+        } else {
+            WebsiteSetting::create($websiteSettingData);
+        }
 
-        // 7. Homepage Sections seeding
-        $this->command->info('Seeding Homepage Sections...');
+        // 3. HOMEPAGE SECTIONS
+        $this->command?->info('Seeding Homepage Sections...');
         $sections = [
             [
                 'title' => 'Hero Banner Utama',
@@ -394,6 +144,8 @@ class DatabaseSeeder extends Seeder
                 'visible' => true,
                 'status' => 'active',
                 'description' => 'Headline utama selamat datang dan ajakan bertransaksi di GurkyNet.',
+                'hero_background_media_id' => $mediaHero?->id,
+                'hero_illustration_media_id' => $mediaHero?->id,
             ],
             [
                 'title' => 'Tentang GurkyNet',
@@ -452,12 +204,14 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($sections as $section) {
-            HomepageSection::create($section);
+            HomepageSection::updateOrCreate(
+                ['slug' => $section['slug']],
+                $section
+            );
         }
 
-
-        // 8. Website Navigation Menus seeding
-        $this->command->info('Seeding Website Menus...');
+        // 4. WEBSITE MENUS
+        $this->command?->info('Seeding Website Menus...');
         $menus = [
             ['title' => 'Beranda', 'slug' => 'beranda', 'url' => '/', 'icon' => 'home', 'display_order' => 1, 'visible' => true, 'open_in_new_tab' => false],
             ['title' => 'Layanan', 'slug' => 'layanan', 'url' => '#services', 'icon' => 'grid', 'display_order' => 2, 'visible' => true, 'open_in_new_tab' => false],
@@ -468,12 +222,14 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($menus as $menu) {
-            WebsiteMenu::create($menu);
+            WebsiteMenu::updateOrCreate(
+                ['slug' => $menu['slug']],
+                $menu
+            );
         }
 
-
-        // 9. Static Pages seeding
-        $this->command->info('Seeding Static Pages...');
+        // 5. STATIC PAGES
+        $this->command?->info('Seeding Static Pages...');
         $staticPages = [
             [
                 'title' => 'Tentang Kami',
@@ -514,42 +270,497 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($staticPages as $page) {
-            StaticPage::create($page);
+            StaticPage::updateOrCreate(
+                ['slug' => $page['slug']],
+                $page
+            );
         }
 
+        // 6. FAQ
+        $this->command?->info('Seeding FAQ list...');
+        $faqs = [
+            [
+                'question' => 'Bagaimana cara mengisi saldo (top up) dompet GurkyNet?',
+                'answer' => 'Anda dapat mengisi saldo melalui transfer bank virtual account (BCA, Mandiri, BRI, BNI), QRIS instan, atau melalui gerai Alfamart/Indomaret terdekat menggunakan sistem pembayaran otomatis Midtrans.',
+                'order' => 1,
+            ],
+            [
+                'question' => 'Berapa lama waktu proses transaksi produk digital di GurkyNet?',
+                'answer' => 'Transaksi pulsa, paket data, dan token PLN diproses secara instan otomatis oleh server kami dalam hitungan 1-5 detik setelah pembayaran terkonfirmasi.',
+                'order' => 2,
+            ],
+            [
+                'question' => 'Bagaimana jika transaksi saya gagal atau salah nomor tujuan?',
+                'answer' => 'Jika transaksi gagal diproses oleh sistem provider, saldo Anda akan otomatis direfund 100% kembali ke saldo dompet GurkyNet. Pastikan nomor tujuan selalu dicek kembali sebelum konfirmasi pembayaran.',
+                'order' => 3,
+            ],
+            [
+                'question' => 'Apakah GurkyNet menyediakan layanan bantuan Customer Support 24 jam?',
+                'answer' => 'Ya, tim Customer Support kami siap membantu Anda 24 jam sehari, 7 hari seminggu melalui live chat WhatsApp dan sistem tiket bantuan di dalam dashboard.',
+                'order' => 4,
+            ],
+        ];
 
-        // 10. FAQ seeding
-        $this->command->info('Seeding FAQ list...');
-        Faq::create([
-            'question' => 'Bagaimana cara mengisi saldo (top up) dompet GurkyNet?',
-            'answer' => 'Anda dapat mengisi saldo melalui transfer bank virtual account (BCA, Mandiri, BRI, BNI), QRIS instan, atau melalui gerai Alfamart/Indomaret terdekat menggunakan sistem pembayaran otomatis Midtrans.',
-            'order' => 1,
-        ]);
-        Faq::create([
-            'question' => 'Berapa lama waktu proses transaksi produk digital di GurkyNet?',
-            'answer' => 'Transaksi pulsa, paket data, dan token PLN diproses secara instan otomatis oleh server kami dalam hitungan 1-5 detik setelah pembayaran terkonfirmasi.',
-            'order' => 2,
-        ]);
-        Faq::create([
-            'question' => 'Bagaimana jika transaksi saya gagal atau salah nomor tujuan?',
-            'answer' => 'Jika transaksi gagal diproses oleh sistem provider, saldo Anda akan otomatis direfund 100% kembali ke saldo dompet GurkyNet. Pastikan nomor tujuan selalu dicek kembali sebelum konfirmasi pembayaran.',
-            'order' => 3,
-        ]);
-        Faq::create([
-            'question' => 'Apakah GurkyNet menyediakan layanan bantuan Customer Support 24 jam?',
-            'answer' => 'Ya, tim Customer Support kami siap membantu Anda 24 jam sehari, 7 hari seminggu melalui live chat WhatsApp dan sistem tiket bantuan di dalam dashboard.',
-            'order' => 4,
-        ]);
+        foreach ($faqs as $faq) {
+            Faq::updateOrCreate(
+                ['question' => $faq['question']],
+                $faq
+            );
+        }
 
+        // 7. BANNERS, PROMOTIONS, & VOUCHERS
+        $this->command?->info('Seeding Banners, Promotions, and Vouchers...');
+        $banners = [
+            [
+                'type' => 'banner',
+                'title' => 'Flash Sale Spesial PPOB GurkyNet',
+                'description' => 'Dapatkan diskon potongan harga langsung hingga 50% untuk transaksi pulsa dan token listrik setiap hari!',
+                'code' => 'FLASHSALE',
+                'discount_amount' => 5000,
+                'discount_type' => 'fixed',
+                'image_url' => 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&q=80',
+                'redirect_url' => '/promo/flash-sale',
+                'is_active' => true,
+                'image_media_id' => $mediaHero?->id,
+            ],
+            [
+                'type' => 'banner',
+                'title' => 'Cashback 20% Top Up Game Terpopuler',
+                'description' => 'Top up diamond Mobile Legends dan Free Fire makin hemat dengan cashback saldo dompet instan.',
+                'code' => 'GAMEHEMAT',
+                'discount_amount' => 20,
+                'discount_type' => 'percentage',
+                'image_url' => 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200&q=80',
+                'redirect_url' => '/promo/topup-game',
+                'is_active' => true,
+                'image_media_id' => $mediaHero?->id,
+            ],
+            [
+                'type' => 'promotion',
+                'title' => 'Diskon Tagihan Bulanan PLN & BPJS',
+                'description' => 'Bayar semua tagihan rutin keluarga tepat waktu dengan biaya admin Rp 0 rupiah.',
+                'code' => 'BEBASADMIN',
+                'discount_amount' => 2500,
+                'discount_type' => 'fixed',
+                'min_transaction' => 50000,
+                'quota' => 250,
+                'used_count' => 14,
+                'image_url' => 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=1200&q=80',
+                'redirect_url' => '/promo/tagihan-bulanan',
+                'is_active' => true,
+            ],
+            [
+                'type' => 'voucher',
+                'title' => 'Voucher Pengguna Baru GurkyNet',
+                'description' => 'Klaim saldo bonus Rp 10.000 untuk transaksi pertama setelah verifikasi akun.',
+                'code' => 'GURKYBARU',
+                'discount_amount' => 10000,
+                'discount_type' => 'fixed',
+                'min_transaction' => 25000,
+                'quota' => 1000,
+                'used_count' => 128,
+                'image_url' => 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&q=80',
+                'redirect_url' => '/voucher/pengguna-baru',
+                'is_active' => true,
+            ],
+            [
+                'type' => 'voucher',
+                'title' => 'Voucher Weekend Seru Top Up Game',
+                'description' => 'Diskon 15% maksimal Rp 15.000 untuk top up Mobile Legends dan Free Fire setiap Sabtu-Minggu.',
+                'code' => 'GURKYGAME',
+                'discount_amount' => 15000,
+                'discount_type' => 'percentage',
+                'min_transaction' => 30000,
+                'quota' => 300,
+                'used_count' => 45,
+                'image_url' => 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1200&q=80',
+                'redirect_url' => '/voucher/weekend-game',
+                'is_active' => true,
+            ],
+        ];
 
-        // 11. Settings Default seeding
-        $this->command->info('Seeding Global Settings...');
-        Setting::create(['key' => 'app_name', 'value' => 'GurkyNet']);
-        Setting::create(['key' => 'app_logo', 'value' => '/assets/logo.png']);
-        Setting::create(['key' => 'maintenance_mode', 'value' => 'false']);
-        Setting::create(['key' => 'digiflazz_username', 'value' => 'gurkynet_production']);
-        Setting::create(['key' => 'midtrans_merchant_id', 'value' => 'M104283948']);
+        foreach ($banners as $b) {
+            $banner = BannerPromotion::withTrashed()
+                ->where('title', $b['title'])
+                ->orWhere('code', $b['code'] ?? null)
+                ->first();
 
-        $this->command->info('Database seeding completed successfully!');
+            if ($banner) {
+                if ($banner->trashed()) {
+                    $banner->restore();
+                }
+                $banner->update($b);
+            } else {
+                BannerPromotion::create($b);
+            }
+        }
+
+        // 8. NOTIFICATIONS & ANNOUNCEMENTS
+        $this->command?->info('Seeding Notifications & Announcements...');
+        $notifications = [
+            [
+                'title' => 'Peningkatan Sistem & Keamanan Server GurkyNet',
+                'message' => 'Sistem pembayaran GurkyNet kini telah dioptimalkan dengan sertifikasi keamanan end-to-end terkini untuk menjamin kenyamanan transaksi Anda.',
+                'type' => 'broadcast',
+                'is_active' => true,
+            ],
+            [
+                'title' => 'Jadwal Pemeliharaan Rutin Bank BCA & Mandiri',
+                'message' => 'Layanan Virtual Account Bank BCA dan Mandiri beroperasi normal 24 jam. Segala transaksi otomatis terkonfirmasi dalam hitungan detik.',
+                'type' => 'announcement',
+                'is_active' => true,
+            ],
+            [
+                'title' => 'Dukungan Metode Pembayaran QRIS Nasional',
+                'message' => 'Sekarang Anda dapat melakukan isi ulang saldo dompet digital GurkyNet secara instan melalui QRIS semua bank dan e-wallet.',
+                'type' => 'promo',
+                'is_active' => true,
+            ],
+        ];
+
+        foreach ($notifications as $n) {
+            $notif = Notification::withTrashed()->where('title', $n['title'])->first();
+            if ($notif) {
+                if ($notif->trashed()) {
+                    $notif->restore();
+                }
+                $notif->update($n);
+            } else {
+                Notification::create($n);
+            }
+        }
+
+        // 9. PROVIDERS
+        $this->command?->info('Seeding Providers...');
+        $providers = [
+            ['name' => 'Telkomsel', 'key' => 'TELKOMSEL', 'logo' => 'https://assets.gurkynet.com/providers/telkomsel.png'],
+            ['name' => 'Indosat Ooredoo', 'key' => 'INDOSAT', 'logo' => 'https://assets.gurkynet.com/providers/indosat.png'],
+            ['name' => 'XL Axiata', 'key' => 'XL', 'logo' => 'https://assets.gurkynet.com/providers/xl.png'],
+            ['name' => 'Tri (3)', 'key' => 'TRI', 'logo' => 'https://assets.gurkynet.com/providers/tri.png'],
+            ['name' => 'Smartfren', 'key' => 'SMARTFREN', 'logo' => 'https://assets.gurkynet.com/providers/smartfren.png'],
+            ['name' => 'PLN Prepaid & Postpaid', 'key' => 'PLN', 'logo' => 'https://assets.gurkynet.com/providers/pln.png'],
+            ['name' => 'Mobile Legends: Bang Bang', 'key' => 'MLBB', 'logo' => 'https://assets.gurkynet.com/providers/mlbb.png'],
+            ['name' => 'Free Fire', 'key' => 'FF', 'logo' => 'https://assets.gurkynet.com/providers/ff.png'],
+            ['name' => 'PUBG Mobile', 'key' => 'PUBGM', 'logo' => 'https://assets.gurkynet.com/providers/pubgm.png'],
+            ['name' => 'Genshin Impact', 'key' => 'GENSHIN', 'logo' => 'https://assets.gurkynet.com/providers/genshin.png'],
+            ['name' => 'GoPay', 'key' => 'GOPAY', 'logo' => 'https://assets.gurkynet.com/providers/gopay.png'],
+            ['name' => 'OVO', 'key' => 'OVO', 'logo' => 'https://assets.gurkynet.com/providers/ovo.png'],
+            ['name' => 'DANA', 'key' => 'DANA', 'logo' => 'https://assets.gurkynet.com/providers/dana.png'],
+            ['name' => 'ShopeePay', 'key' => 'SHOPEEPAY', 'logo' => 'https://assets.gurkynet.com/providers/shopeepay.png'],
+            ['name' => 'LinkAja', 'key' => 'LINKAJA', 'logo' => 'https://assets.gurkynet.com/providers/linkaja.png'],
+            ['name' => 'BPJS Kesehatan', 'key' => 'BPJS', 'logo' => 'https://assets.gurkynet.com/providers/bpjs.png'],
+            ['name' => 'PDAM Nusantara', 'key' => 'PDAM', 'logo' => 'https://assets.gurkynet.com/providers/pdam.png'],
+        ];
+
+        $providerMap = [];
+        foreach ($providers as $p) {
+            $provider = Provider::withTrashed()->where('name', $p['name'])->first();
+            if ($provider) {
+                if ($provider->trashed()) {
+                    $provider->restore();
+                }
+                $provider->update([
+                    'name' => $p['name'],
+                    'logo' => $p['logo'],
+                    'is_active' => true,
+                ]);
+            } else {
+                $provider = Provider::create([
+                    'name' => $p['name'],
+                    'logo' => $p['logo'],
+                    'is_active' => true,
+                ]);
+            }
+            $providerMap[$p['key']] = $provider->id;
+        }
+
+        // 10. PRODUCT CATEGORIES
+        $this->command?->info('Seeding Product Categories...');
+        $categories = [
+            ['name' => 'Pulsa Reguler', 'slug' => 'pulsa', 'icon' => 'smartphone'],
+            ['name' => 'Paket Data Internet', 'slug' => 'data', 'icon' => 'wifi'],
+            ['name' => 'Token Listrik PLN', 'slug' => 'pln', 'icon' => 'zap'],
+            ['name' => 'Top Up E-Wallet', 'slug' => 'ewallet', 'icon' => 'credit-card'],
+            ['name' => 'Voucher Game Online', 'slug' => 'game', 'icon' => 'gamepad-2'],
+            ['name' => 'Voucher Digital', 'slug' => 'voucher', 'icon' => 'ticket'],
+            ['name' => 'Transfer Uang Bank', 'slug' => 'transfer', 'icon' => 'send'],
+            ['name' => 'Tagihan Pascabayar & PPOB', 'slug' => 'tagihan', 'icon' => 'receipt'],
+        ];
+
+        $categoryMap = [];
+        foreach ($categories as $c) {
+            $category = ProductCategory::withTrashed()->where('slug', $c['slug'])->first();
+            if ($category) {
+                if ($category->trashed()) {
+                    $category->restore();
+                }
+                $category->update([
+                    'name' => $c['name'],
+                    'slug' => $c['slug'],
+                    'icon' => $c['icon'],
+                ]);
+            } else {
+                $category = ProductCategory::create([
+                    'name' => $c['name'],
+                    'slug' => $c['slug'],
+                    'icon' => $c['icon'],
+                ]);
+            }
+            $categoryMap[$c['slug']] = $category->id;
+        }
+
+        // 11. PRODUCTS
+        $this->command?->info('Seeding Products...');
+        $products = [
+            // Telkomsel Pulsa
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 5.000', 'sku_code' => 'TSEL5000', 'base_price' => 5300, 'sell_price' => 6000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 10.000', 'sku_code' => 'TSEL10000', 'base_price' => 10250, 'sell_price' => 11000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 25.000', 'sku_code' => 'TSEL25000', 'base_price' => 24900, 'sell_price' => 26000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 50.000', 'sku_code' => 'TSEL50000', 'base_price' => 49400, 'sell_price' => 50500, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 100.000', 'sku_code' => 'TSEL100000', 'base_price' => 97800, 'sell_price' => 99000, 'admin_fee' => 0, 'status' => true],
+
+            // Indosat Pulsa
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 5.000', 'sku_code' => 'ISAT5000', 'base_price' => 5400, 'sell_price' => 6000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 10.000', 'sku_code' => 'ISAT10000', 'base_price' => 10300, 'sell_price' => 11000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 25.000', 'sku_code' => 'ISAT25000', 'base_price' => 24800, 'sell_price' => 25800, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 50.000', 'sku_code' => 'ISAT50000', 'base_price' => 49200, 'sell_price' => 50500, 'admin_fee' => 0, 'status' => true],
+
+            // XL Pulsa
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 5.000', 'sku_code' => 'XL5000', 'base_price' => 5450, 'sell_price' => 6000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 10.000', 'sku_code' => 'XL10000', 'base_price' => 10350, 'sell_price' => 11000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 25.000', 'sku_code' => 'XL25000', 'base_price' => 24850, 'sell_price' => 25900, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 50.000', 'sku_code' => 'XL50000', 'base_price' => 49300, 'sell_price' => 50500, 'admin_fee' => 0, 'status' => true],
+
+            // Data Telkomsel
+            ['product_category_id' => $categoryMap['data'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Data Max 3GB 30 Hari', 'sku_code' => 'TSELDATA3GB', 'base_price' => 24000, 'sell_price' => 26500, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['data'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Data Max 10GB 30 Hari', 'sku_code' => 'TSELDATA10GB', 'base_price' => 52000, 'sell_price' => 55000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['data'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Data Max 25GB 30 Hari', 'sku_code' => 'TSELDATA25GB', 'base_price' => 98000, 'sell_price' => 102000, 'admin_fee' => 0, 'status' => true],
+
+            // PLN Token
+            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 20.000', 'sku_code' => 'PLN20000', 'base_price' => 20100, 'sell_price' => 21500, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 50.000', 'sku_code' => 'PLN50000', 'base_price' => 50100, 'sell_price' => 51500, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 100.000', 'sku_code' => 'PLN100000', 'base_price' => 100100, 'sell_price' => 101500, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 200.000', 'sku_code' => 'PLN200000', 'base_price' => 200100, 'sell_price' => 201500, 'admin_fee' => 0, 'status' => true],
+
+            // Mobile Legends Diamonds
+            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB 86 Diamonds', 'sku_code' => 'MLBB86', 'base_price' => 18500, 'sell_price' => 20000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB 172 Diamonds', 'sku_code' => 'MLBB172', 'base_price' => 36500, 'sell_price' => 39500, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB 257 Diamonds', 'sku_code' => 'MLBB257', 'base_price' => 54500, 'sell_price' => 59000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB Weekly Diamond Pass', 'sku_code' => 'MLBBWDP', 'base_price' => 26800, 'sell_price' => 29000, 'admin_fee' => 0, 'status' => true],
+
+            // Free Fire Diamonds
+            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['FF'], 'name' => 'Free Fire 100 Diamonds', 'sku_code' => 'FF100', 'base_price' => 13500, 'sell_price' => 15000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['FF'], 'name' => 'Free Fire 310 Diamonds', 'sku_code' => 'FF310', 'base_price' => 40500, 'sell_price' => 44000, 'admin_fee' => 0, 'status' => true],
+
+            // E-Wallet DANA
+            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['DANA'], 'name' => 'Saldo DANA 20.000', 'sku_code' => 'DANA20000', 'base_price' => 20250, 'sell_price' => 21000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['DANA'], 'name' => 'Saldo DANA 50.000', 'sku_code' => 'DANA50000', 'base_price' => 50250, 'sell_price' => 51000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['DANA'], 'name' => 'Saldo DANA 100.000', 'sku_code' => 'DANA100000', 'base_price' => 100250, 'sell_price' => 101000, 'admin_fee' => 0, 'status' => true],
+
+            // E-Wallet GoPay
+            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['GOPAY'], 'name' => 'Saldo GoPay 25.000', 'sku_code' => 'GOPAY25000', 'base_price' => 25300, 'sell_price' => 26000, 'admin_fee' => 0, 'status' => true],
+            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['GOPAY'], 'name' => 'Saldo GoPay 50.000', 'sku_code' => 'GOPAY50000', 'base_price' => 50300, 'sell_price' => 51000, 'admin_fee' => 0, 'status' => true],
+        ];
+
+        foreach ($products as $pr) {
+            $product = Product::withTrashed()->where('sku_code', $pr['sku_code'])->first();
+            if ($product) {
+                if ($product->trashed()) {
+                    $product->restore();
+                }
+                $product->update($pr);
+            } else {
+                Product::create($pr);
+            }
+        }
+
+        // 12. DEFAULT USERS & WALLETS (Idempotent & Conflict-Safe)
+        $this->command?->info('Seeding Roles & Default Users...');
+        $usersData = [
+            [
+                'email' => 'admin@gurkypay.com',
+                'name' => 'Root System Master (Super Admin)',
+                'phone_number' => '080000000000',
+                'password' => Hash::make('admin123'),
+                'role' => \App\Enums\UserRole::SUPER_ADMIN,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104288880000',
+                'balance' => 999999999.00,
+            ],
+            [
+                'email' => 'owner@gurkypay.com',
+                'name' => 'Gurky Adipati (Owner)',
+                'phone_number' => '081111111111',
+                'password' => Hash::make('owner123'),
+                'role' => \App\Enums\UserRole::OWNER,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104288880001',
+                'balance' => 99999999.00,
+            ],
+            [
+                'email' => 'finance@gurkypay.com',
+                'name' => 'Siti Nurhaliza (Finance)',
+                'phone_number' => '082222222222',
+                'password' => Hash::make('finance123'),
+                'role' => \App\Enums\UserRole::FINANCE,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104288880002',
+                'balance' => 50000000.00,
+            ],
+            [
+                'email' => 'operations@gurkypay.com',
+                'name' => 'Bambang Tri (Operations)',
+                'phone_number' => '083333333333',
+                'password' => Hash::make('ops123'),
+                'role' => \App\Enums\UserRole::OPERATIONS,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104288880003',
+                'balance' => 10000000.00,
+            ],
+            [
+                'email' => 'marketing@gurkypay.com',
+                'name' => 'Dewi Lestari (Marketing)',
+                'phone_number' => '084444444444',
+                'password' => Hash::make('mkt123'),
+                'role' => \App\Enums\UserRole::MARKETING,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104288880004',
+                'balance' => 5000000.00,
+            ],
+            [
+                'email' => 'cs@gurkypay.com',
+                'name' => 'Anisa Rahma (Customer Support)',
+                'phone_number' => '085555555555',
+                'password' => Hash::make('cs123456'),
+                'role' => \App\Enums\UserRole::CUSTOMER_SUPPORT,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104288880005',
+                'balance' => 2000000.00,
+            ],
+            [
+                'email' => 'budi@gurkypay.com',
+                'name' => 'Budi Santoso (Member / Customer)',
+                'phone_number' => '081234567890',
+                'password' => Hash::make('password123'),
+                'role' => \App\Enums\UserRole::USER,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104211111111',
+                'balance' => 500000.00,
+            ],
+            [
+                'email' => 'demo@gurkypay.com',
+                'name' => 'Demo User GurkyPay',
+                'phone_number' => '089999999999',
+                'password' => Hash::make('demo123456'),
+                'role' => \App\Enums\UserRole::USER,
+                'transaction_pin' => Hash::make('123456'),
+                'wallet_number' => '104299999999',
+                'balance' => 1000000.00,
+            ],
+        ];
+
+        foreach ($usersData as $u) {
+            try {
+                $user = User::withTrashed()->where('email', $u['email'])->first();
+
+                if ($user) {
+                    if ($user->trashed()) {
+                        $user->restore();
+                    }
+                    $updateData = [
+                        'name' => $u['name'],
+                        'password' => $u['password'],
+                        'role' => $u['role'],
+                        'transaction_pin' => $u['transaction_pin'],
+                    ];
+
+                    $phoneConflict = User::withTrashed()
+                        ->where('phone_number', $u['phone_number'])
+                        ->where('id', '!=', $user->id)
+                        ->exists();
+
+                    if (!$phoneConflict) {
+                        $updateData['phone_number'] = $u['phone_number'];
+                    }
+
+                    $user->update($updateData);
+                } else {
+                    $existingPhoneUser = User::withTrashed()->where('phone_number', $u['phone_number'])->first();
+                    $phoneNumberToUse = $existingPhoneUser ? '08' . mt_rand(1000000000, 9999999999) : $u['phone_number'];
+
+                    $user = User::create([
+                        'email' => $u['email'],
+                        'name' => $u['name'],
+                        'phone_number' => $phoneNumberToUse,
+                        'password' => $u['password'],
+                        'role' => $u['role'],
+                        'transaction_pin' => $u['transaction_pin'],
+                    ]);
+                }
+
+                $wallet = Wallet::withTrashed()->where('user_id', $user->id)->first();
+                if ($wallet) {
+                    if ($wallet->trashed()) {
+                        $wallet->restore();
+                    }
+                    $wallet->update([
+                        'status' => 'active',
+                    ]);
+                } else {
+                    $walletConflict = Wallet::withTrashed()->where('wallet_number', $u['wallet_number'])->exists();
+                    $walletNumberToUse = $walletConflict ? '1042' . mt_rand(10000000, 99999999) : $u['wallet_number'];
+
+                    Wallet::create([
+                        'user_id' => $user->id,
+                        'wallet_number' => $walletNumberToUse,
+                        'balance' => $u['balance'],
+                        'status' => 'active',
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                $this->command?->warn("User {$u['email']} notice: " . $e->getMessage());
+            }
+        }
+
+        // 13. SETTINGS & SYSTEM SETTINGS
+        $this->command?->info('Seeding System Settings...');
+        $defaultSettings = [
+            'app_name' => 'GurkyNet',
+            'app_logo' => '/assets/logo.png',
+            'maintenance_mode' => 'false',
+            'digiflazz_username' => 'gurkynet_production',
+            'midtrans_merchant_id' => 'M104283948',
+        ];
+        foreach ($defaultSettings as $k => $v) {
+            Setting::updateOrCreate(['key' => $k], ['value' => $v]);
+        }
+
+        $defaultSystemSettings = [
+            'app_name' => 'GurkyNet',
+            'app_environment' => 'production',
+            'app_debug' => 'false',
+            'app_url' => config('app.url', 'https://api.gurkynet.my.id'),
+            'payment_midtrans_server_key' => env('MIDTRANS_SERVER_KEY', ''),
+            'payment_midtrans_client_key' => env('MIDTRANS_CLIENT_KEY', ''),
+            'payment_midtrans_is_production' => env('MIDTRANS_IS_PRODUCTION', 'false'),
+            'ppob_digiflazz_username' => env('DIGIFLAZZ_USERNAME', ''),
+            'ppob_digiflazz_api_key' => env('DIGIFLAZZ_API_KEY', ''),
+            'ppob_digiflazz_webhook_secret' => env('DIGIFLAZZ_SECRET', ''),
+            'ppob_vip_merchant_id' => env('VIP_MERCHANT_ID', ''),
+            'ppob_vip_api_key' => env('VIP_API_KEY', ''),
+            'ppob_vip_signature' => env('VIP_SIGNATURE', ''),
+            'email_smtp_host' => env('MAIL_HOST', 'smtp.mailgun.org'),
+            'email_smtp_port' => env('MAIL_PORT', '587'),
+            'email_smtp_username' => env('MAIL_USERNAME', ''),
+            'email_smtp_password' => env('MAIL_PASSWORD', ''),
+            'email_smtp_encryption' => env('MAIL_ENCRYPTION', 'tls'),
+            'email_from_address' => env('MAIL_FROM_ADDRESS', 'noreply@gurkynet.com'),
+            'email_from_name' => env('MAIL_FROM_NAME', 'GurkyNet'),
+        ];
+        foreach ($defaultSystemSettings as $key => $value) {
+            SystemSetting::updateOrCreate(['key' => $key], ['value' => $value]);
+        }
+
+        $this->command?->info('Database seeding completed successfully!');
     }
 }

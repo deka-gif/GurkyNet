@@ -11,6 +11,8 @@ class StaticPageRepository implements StaticPageRepositoryInterface
 {
     public function getPaginated(array $filters = []): LengthAwarePaginator
     {
+        $this->ensureDefaults();
+
         $query = StaticPage::query();
 
         if (!empty($filters['status'])) {
@@ -30,6 +32,8 @@ class StaticPageRepository implements StaticPageRepositoryInterface
 
     public function all(): Collection
     {
+        $this->ensureDefaults();
+
         return StaticPage::all();
     }
 
@@ -59,8 +63,56 @@ class StaticPageRepository implements StaticPageRepositoryInterface
     {
         $page = StaticPage::find($id);
         if ($page) {
-            return $page->delete();
+            return (bool) $page->delete();
         }
         return false;
+    }
+
+    public function ensureDefaults(): void
+    {
+        if (StaticPage::count() === 0) {
+            $staticPages = [
+                [
+                    'title' => 'Tentang Kami',
+                    'slug' => 'about-us',
+                    'seo_title' => 'Tentang GurkyNet - Platform PPOB & Top Up Game Terpercaya',
+                    'seo_description' => 'Pelajari lebih lanjut tentang GurkyNet, visi, misi, dan komitmen kami dalam memberikan layanan transaksi digital terbaik di Indonesia.',
+                    'content' => '<h3>Selamat Datang di GurkyNet</h3><p>GurkyNet adalah platform agregator layanan PPOB (Payment Point Online Bank) dan produk digital terdepan di Indonesia. Kami hadir untuk memudahkan masyarakat dan pelaku UMKM dalam melakukan transaksi kebutuhan digital harian seperti pulsa seluler, paket data internet, token PLN, voucher game, hingga pembayaran tagihan bulanan BPJS, PDAM, dan multifinance secara instan, aman, dan dengan harga termurah.</p>',
+                    'status' => 'published',
+                    'published_at' => now(),
+                ],
+                [
+                    'title' => 'Kebijakan Privasi',
+                    'slug' => 'privacy-policy',
+                    'seo_title' => 'Kebijakan Privasi - GurkyNet',
+                    'seo_description' => 'Informasi mengenai bagaimana GurkyNet mengumpulkan, menggunakan, dan melindungi data pribadi Anda.',
+                    'content' => '<h3>Kebijakan Privasi GurkyNet</h3><p>PT Gurky Solusi Digital ("GurkyNet") berkomitmen penuh untuk melindungi privasi dan keamanan data pribadi setiap pengguna layanan kami. Kebijakan Privasi ini menjelaskan bagaimana data Anda dikumpulkan, disimpan, diproses, dan dilindungi saat menggunakan situs web dan aplikasi GurkyNet.</p>',
+                    'status' => 'published',
+                    'published_at' => now(),
+                ],
+                [
+                    'title' => 'Syarat dan Ketentuan',
+                    'slug' => 'terms-conditions',
+                    'seo_title' => 'Syarat dan Ketentuan Layanan - GurkyNet',
+                    'seo_description' => 'Syarat dan ketentuan umum penggunaan aplikasi dan situs web GurkyNet.',
+                    'content' => '<h3>Syarat & Ketentuan Layanan GurkyNet</h3><p>Dengan mendaftar, mengakses, atau menggunakan layanan GurkyNet, Anda menyatakan bahwa Anda telah membaca, memahami, dan menyetujui untuk terikat oleh Syarat dan Ketentuan ini.</p>',
+                    'status' => 'published',
+                    'published_at' => now(),
+                ],
+                [
+                    'title' => 'Kebijakan Pengembalian Dana (Refund)',
+                    'slug' => 'refund-policy',
+                    'seo_title' => 'Kebijakan Refund dan Pengembalian Dana - GurkyNet',
+                    'seo_description' => 'Panduan lengkap mengenai kebijakan dan prosedur pengembalian dana transaksi di GurkyNet.',
+                    'content' => '<h3>Kebijakan Pengembalian Dana (Refund)</h3><p>Kepuasan dan kenyamanan pengguna adalah prioritas utama GurkyNet. Kami menjamin perlindungan saldo untuk seluruh transaksi yang dilakukan melalui platform kami.</p>',
+                    'status' => 'published',
+                    'published_at' => now(),
+                ],
+            ];
+
+            foreach ($staticPages as $page) {
+                StaticPage::firstOrCreate(['slug' => $page['slug']], $page);
+            }
+        }
     }
 }

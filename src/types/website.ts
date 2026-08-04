@@ -4,9 +4,9 @@ export interface WebsiteSetting {
   id: number;
   websiteName: string;
   tagline?: string;
-  logo?: string;
-  logoDark?: string;
-  favicon?: string;
+  logo?: string | Media;
+  logoDark?: string | Media;
+  favicon?: string | Media;
   logoMediaId?: number;
   logoDarkMediaId?: number;
   faviconMediaId?: number;

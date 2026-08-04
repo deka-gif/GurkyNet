@@ -1,7 +1,9 @@
 import { motion } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
 
 export const AppPreview = () => {
+  const navigate = useNavigate();
   const { settings, sections, banners } = useWebsiteStore();
   const bannerSection = sections.find((s) => s.componentType === 'banner');
   const appName = settings?.websiteName || 'GurkyNet';
@@ -70,9 +72,9 @@ export const AppPreview = () => {
                   onClick={() => {
                     if (banner.redirectUrl && banner.redirectUrl !== '#') {
                       if (banner.redirectUrl.startsWith('http')) {
-                        window.open(banner.redirectUrl, '_blank');
+                        window.open(banner.redirectUrl, '_blank', 'noopener,noreferrer');
                       } else {
-                        window.location.href = banner.redirectUrl;
+                        navigate(banner.redirectUrl);
                       }
                     }
                   }}

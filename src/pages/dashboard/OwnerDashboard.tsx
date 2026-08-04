@@ -763,10 +763,10 @@ export const OwnerDashboard: React.FC = () => {
               <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
                 {auditLogs.map((log: any, idx: number) => {
                   const logId = log.id || idx;
-                  const timestamp = log.created_at || log.date || log.time || '-';
-                  const operator = log.operator || log.user || log.user_name || 'System';
+                  const timestamp = log.created_at || log.date || log.time || log.createdAt || '-';
+                  const operator = log.operator || log.user?.name || (typeof log.user === 'string' ? log.user : null) || log.user_name || 'System';
                   const moduleName = log.module || log.category || 'General';
-                  const action = log.action || log.description || log.message || '-';
+                  const action = log.action || log.activity || log.description || log.message || '-';
                   const ip = log.ip_address || log.ip || '-';
 
                   return (

@@ -54,7 +54,7 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
 
   // Active articles source
   const activeKbList: KBArticle[] = useMemo(() => {
-    if (kbArticles && kbArticles.length > 0) return kbArticles;
+    if (Array.isArray(kbArticles) && kbArticles.length > 0) return kbArticles;
     return [
       {
         id: 'SOP-001',
@@ -87,15 +87,25 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
 
   // Filtered Articles List
   const filteredArticles = useMemo(() => {
+    const q = (searchQuery ?? '').toLowerCase().trim();
     return activeKbList.filter((art) => {
-      const matchCategory = selectedCategory === 'All' || art.category === selectedCategory;
-      const matchSearch =
-        art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        art.shortDescription.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        art.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (art.tags && art.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())));
+      const category = (art.category ?? 'General').toString();
+      const matchCategory = selectedCategory === 'All' || category.toLowerCase() === selectedCategory.toLowerCase();
 
-      return matchCategory && matchSearch;
+      if (!matchCategory) return false;
+      if (!q) return true;
+
+      const title = (art.title ?? art.question ?? '').toString().toLowerCase();
+      const shortDescription = (art.shortDescription ?? art.content ?? art.answer ?? '').toString().toLowerCase();
+      const id = (art.id ?? '').toString().toLowerCase();
+      const matchTags = Array.isArray(art.tags) && art.tags.some((t: any) => (t ?? '').toString().toLowerCase().includes(q));
+
+      return (
+        title.includes(q) ||
+        shortDescription.includes(q) ||
+        id.includes(q) ||
+        matchTags
+      );
     });
   }, [activeKbList, searchQuery, selectedCategory]);
 
@@ -220,19 +230,19 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
               <ArrowLeft className="w-3.5 h-3.5" /> Knowledge Base
             </button>
             <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-gray-400">{activeArticle.category}</span>
+            <span className="text-gray-400">{activeArticle.category || 'General'}</span>
             <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-            <span className="font-mono font-bold text-gray-800">{activeArticle.id}</span>
+            <span className="font-mono font-bold text-gray-800">{activeArticle.id ? String(activeArticle.id) : ''}</span>
           </div>
 
           {/* Article Header */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
-                {activeArticle.category}
+                {activeArticle.category || 'General'}
               </span>
               <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-mono font-bold">
-                {activeArticle.id}
+                {activeArticle.id ? String(activeArticle.id) : ''}
               </span>
               {activeArticle.isPinned && (
                 <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold flex items-center gap-1 border border-amber-200">
@@ -241,37 +251,39 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
               )}
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-snug">{activeArticle.title}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-snug">
+              {activeArticle.title || activeArticle.question || 'Artikel Knowledge Base'}
+            </h1>
 
             {/* Metadata Ribbon */}
             <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 pt-2 border-t border-gray-100">
               <div className="flex items-center gap-1.5">
                 <User className="w-4 h-4 text-gray-400" />
-                <span>Penulis: <strong className="text-gray-800">{activeArticle.author}</strong></span>
+                <span>Penulis: <strong className="text-gray-800">{activeArticle.author || 'Tim CS GurkyNet'}</strong></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-gray-400" />
-                <span>Waktu Baca: <strong className="text-gray-800">{activeArticle.readingTime}</strong></span>
+                <span>Waktu Baca: <strong className="text-gray-800">{activeArticle.readingTime || '2m'}</strong></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <RefreshCw className="w-4 h-4 text-gray-400" />
-                <span>Terakhir Diperbarui: <strong className="text-gray-800">{activeArticle.lastUpdated}</strong></span>
+                <span>Terakhir Diperbarui: <strong className="text-gray-800">{activeArticle.lastUpdated || activeArticle.updated_at || 'Terbaru'}</strong></span>
               </div>
             </div>
           </div>
 
           {/* Article Content Box */}
           <div className="p-5 sm:p-6 bg-gray-50/70 rounded-2xl border border-gray-100 text-xs sm:text-sm text-gray-800 leading-relaxed space-y-4 whitespace-pre-line font-sans">
-            {activeArticle.content}
+            {activeArticle.content || activeArticle.answer || activeArticle.shortDescription || '-'}
           </div>
 
           {/* Article Tags */}
-          {activeArticle.tags && activeArticle.tags.length > 0 && (
+          {Array.isArray(activeArticle.tags) && activeArticle.tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-2">
               <span className="text-xs font-bold text-gray-400 uppercase">Tags:</span>
-              {activeArticle.tags.map((tag) => (
-                <span key={tag} className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-mono">
-                  #{tag}
+              {activeArticle.tags.map((tag: any) => (
+                <span key={String(tag)} className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-mono">
+                  #{String(tag)}
                 </span>
               ))}
             </div>
@@ -315,7 +327,7 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
                 </button>
 
                 {categories.map((cat) => {
-                  const count = activeKbList.filter((a) => a.category === cat).length;
+                  const count = activeKbList.filter((a) => (a.category ?? 'General').toString().toLowerCase() === cat.toLowerCase()).length;
                   const isSelected = selectedCategory === cat;
 
                   return (
@@ -352,16 +364,16 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
               <div className="space-y-2">
                 {pinnedArticles.map((art) => (
                   <button
-                    key={art.id}
+                    key={String(art.id)}
                     onClick={() => setActiveArticle(art)}
                     className="w-full text-left p-2.5 bg-gray-50 hover:bg-amber-50/60 rounded-xl border border-gray-100 space-y-1 transition group"
                   >
                     <div className="text-xs font-bold text-gray-900 group-hover:text-amber-900 line-clamp-2">
-                      {art.title}
+                      {art.title || art.question || 'Artikel SOP'}
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-gray-400">
-                      <span>{art.category}</span>
-                      <span className="font-mono">{art.readingTime}</span>
+                      <span>{art.category || 'General'}</span>
+                      <span className="font-mono">{art.readingTime || '2m'}</span>
                     </div>
                   </button>
                 ))}
@@ -378,16 +390,16 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
               <div className="space-y-2">
                 {recentlyUpdatedArticles.map((art) => (
                   <button
-                    key={art.id}
+                    key={String(art.id)}
                     onClick={() => setActiveArticle(art)}
                     className="w-full text-left p-2.5 bg-gray-50 hover:bg-blue-50/60 rounded-xl border border-gray-100 space-y-1 transition group"
                   >
                     <div className="text-xs font-bold text-gray-900 group-hover:text-blue-700 line-clamp-1">
-                      {art.title}
+                      {art.title || art.question || 'Artikel SOP'}
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-gray-400">
-                      <span>{art.category}</span>
-                      <span className="font-mono">{art.lastUpdated}</span>
+                      <span>{art.category || 'General'}</span>
+                      <span className="font-mono">{art.lastUpdated || art.updated_at || 'Terbaru'}</span>
                     </div>
                   </button>
                 ))}
@@ -417,36 +429,36 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
                 {filteredArticles.length > 0 ? (
                   filteredArticles.map((art) => (
                     <div
-                      key={art.id}
+                      key={String(art.id)}
                       onClick={() => setActiveArticle(art)}
                       className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 hover:border-blue-300 hover:shadow-md transition cursor-pointer flex flex-col justify-between space-y-3 group"
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="px-2.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100">
-                            {art.category}
+                            {art.category || 'General'}
                           </span>
-                          <span className="text-[10px] font-mono text-gray-400">{art.id}</span>
+                          <span className="text-[10px] font-mono text-gray-400">{art.id ? String(art.id) : ''}</span>
                         </div>
 
                         <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition leading-snug line-clamp-2">
-                          {art.title}
+                          {art.title || art.question || 'Artikel Knowledge Base'}
                         </h3>
 
                         <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">
-                          {art.shortDescription}
+                          {art.shortDescription || art.content || art.answer || '-'}
                         </p>
                       </div>
 
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
                         <div className="flex items-center gap-1">
                           <User className="w-3.5 h-3.5" />
-                          <span className="truncate max-w-[100px] sm:max-w-[120px]">{art.author}</span>
+                          <span className="truncate max-w-[100px] sm:max-w-[120px]">{art.author || 'Tim CS GurkyNet'}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono">{art.readingTime}</span>
+                          <span className="font-mono">{art.readingTime || '2m'}</span>
                           <span>•</span>
-                          <span>{art.lastUpdated}</span>
+                          <span>{art.lastUpdated || art.updated_at || 'Terbaru'}</span>
                         </div>
                       </div>
                     </div>

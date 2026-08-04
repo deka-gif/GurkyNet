@@ -6,3 +6,4 @@ export * from './DataTableCard';
 export * from './SectionCard';
 export * from './EmptyState';
 export * from './MediaChooserModal';
+export * from './ChartErrorBoundary';

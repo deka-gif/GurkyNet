@@ -20,17 +20,17 @@ import { LoginPayload, RegisterPayload, ForgotPasswordPayload } from '../service
 function normalizeRole(role: string | undefined | null): string {
   if (!role) return 'User';
   const map: Record<string, string> = {
-    'super_admin':      'Super Admin',
-    'super admin':      'Super Admin',
-    'superadmin':       'Super Admin',
-    'owner':            'Owner',
-    'finance':          'Finance',
-    'operations':       'Operations',
-    'marketing':        'Marketing',
+    'super_admin': 'Super Admin',
+    'super admin': 'Super Admin',
+    'superadmin': 'Super Admin',
+    'owner': 'Owner',
+    'finance': 'Finance',
+    'operations': 'Operations',
+    'marketing': 'Marketing',
     'customer_support': 'Customer Support',
     'customer support': 'Customer Support',
-    'customersupport':  'Customer Support',
-    'user':             'User',
+    'customersupport': 'Customer Support',
+    'user': 'User',
   };
   return map[role.toLowerCase()] ?? role;
 }
@@ -41,7 +41,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   validationErrors: Record<string, string[]> | null;
-  login: (payload: LoginPayload) => Promise<boolean>;
+  login: (payload: LoginPayload, remember?: boolean) => Promise<boolean>;
   register: (payload: RegisterPayload) => Promise<boolean>;
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
   validationErrors: null,
 
-  login: async (payload) => {
+  login: async (payload, remember = true) => {
     set({ loading: true, error: null, validationErrors: null });
     try {
       const response = await authService.login(payload);
@@ -71,8 +71,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         const { token, user } = response.data;
         // Normalize role from API format ("finance") to frontend format ("Finance")
         const normalizedUser: User = { ...user, role: normalizeRole(user.role) };
-        storageService.setToken(token);
-        storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
+        storageService.setToken(token, remember);
+        storageService.setUser(normalizedUser as unknown as Record<string, unknown>, remember);
+        if (remember) {
+          storageService.setRememberedIdentity(payload.identity);
+        } else {
+          storageService.setRememberedIdentity('');
+        }
         set({ token, user: normalizedUser, loading: false });
         return true;
       } else {
@@ -80,11 +85,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         return false;
       }
     } catch (err: any) {
+
       set({
         error: err.message || 'Gagal login. Cek koneksi Anda.',
         validationErrors: err.errors || null,
         loading: false,
       });
+
       return false;
     }
   },

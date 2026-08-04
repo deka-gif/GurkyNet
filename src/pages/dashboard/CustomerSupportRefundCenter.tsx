@@ -49,7 +49,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
   const [selectedRefundId, setSelectedRefundId] = useState<string | null>(null);
 
   const activeRefundList: RefundItem[] = useMemo(() => {
-    if (refunds && refunds.length > 0) return refunds;
+    if (Array.isArray(refunds) && refunds.length > 0) return refunds;
     return [
       {
         requestId: 'REF-2026-001',

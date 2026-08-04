@@ -1,19 +1,38 @@
+import { useEffect } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { CheckCircle } from 'lucide-react';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
+import { useWebsiteStore } from '../store/website.store';
 
 export const AuthLayout = () => {
+  const { settings, fetchSettings } = useWebsiteStore();
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between selection:bg-primary-200 selection:text-primary-900 font-sans">
       <NetworkStatusAndLoader />
       {/* Header */}
       <header className="p-6 md:p-8 flex items-center justify-between container mx-auto max-w-7xl">
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-primary-500/30">
-            G
-          </div>
-          <span className="font-bold text-2xl tracking-tight text-gray-900">GurkyNet</span>
+          {settings?.logo ? (
+            <img
+              src={typeof settings.logo === 'string' ? settings.logo : settings.logo?.url}
+              alt={settings.websiteName || 'GurkyNet'}
+              className="w-10 h-10 object-contain rounded-xl"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-primary-500/30">
+              {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
+            </div>
+          )}
+          <span className="font-bold text-2xl tracking-tight text-gray-900">
+            {settings?.websiteName || 'GurkyNet'}
+          </span>
         </Link>
         <Link 
           to="/" 

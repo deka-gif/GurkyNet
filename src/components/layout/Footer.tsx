@@ -12,7 +12,7 @@ export const Footer = () => {
   }, []);
 
   // Filter some common static pages to display at the very bottom, others in the "Perusahaan / Informasi" column
-  const bottomPages = pages.filter(p => 
+  const bottomPages = pages.filter(p =>
     p.slug.includes('privacy') || p.slug.includes('terms') || p.slug.includes('refund') || p.slug.includes('syarat') || p.slug.includes('kebijakan')
   );
 
@@ -22,14 +22,18 @@ export const Footer = () => {
     <footer className="bg-white border-t border-gray-100 pt-16 pb-8" id="website-footer">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
-          
+
           {/* Brand Info */}
           <div className="col-span-1 md:col-span-2 lg:col-span-1 space-y-6">
             <Link to="/" className="flex items-center gap-2">
               {settings?.logo ? (
-                <img 
-                  src={settings.logo} 
-                  alt={settings.websiteName || 'GurkyNet'} 
+                <img
+                  src={
+                    typeof settings.logo === 'string'
+                      ? settings.logo
+                      : settings.logo?.url
+                  }
+                  alt={settings.websiteName || 'GurkyNet'}
                   className="w-8 h-8 object-contain rounded-lg"
                   referrerPolicy="no-referrer"
                 />
@@ -42,18 +46,18 @@ export const Footer = () => {
                 {settings?.websiteName || 'GurkyNet'}
               </span>
             </Link>
-            
+
             <p className="text-gray-600 leading-relaxed text-sm">
               {settings?.tagline || 'Platform PPOB modern untuk semua kebutuhan transaksi digital Anda. Cepat, aman, dan terpercaya.'}
             </p>
-            
+
             {/* Social Media Links */}
             <div className="flex items-center gap-3">
               {settings?.facebook && (
-                <a 
-                  href={settings.facebook} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={settings.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-primary-50 hover:text-primary-600 transition-colors"
                   title="Facebook"
                 >
@@ -61,10 +65,10 @@ export const Footer = () => {
                 </a>
               )}
               {settings?.instagram && (
-                <a 
-                  href={settings.instagram} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={settings.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-primary-50 hover:text-primary-600 transition-colors"
                   title="Instagram"
                 >
@@ -72,10 +76,10 @@ export const Footer = () => {
                 </a>
               )}
               {settings?.twitter && (
-                <a 
-                  href={settings.twitter} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={settings.twitter}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-primary-50 hover:text-primary-600 transition-colors"
                   title="Twitter / X"
                 >
@@ -83,10 +87,10 @@ export const Footer = () => {
                 </a>
               )}
               {settings?.youtube && (
-                <a 
-                  href={settings.youtube} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={settings.youtube}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-primary-50 hover:text-primary-600 transition-colors"
                   title="YouTube"
                 >
@@ -95,7 +99,7 @@ export const Footer = () => {
               )}
             </div>
           </div>
-          
+
           {/* Product Shortcuts */}
           <div>
             <h4 className="font-extrabold text-sm text-gray-900 uppercase tracking-wider mb-6">Layanan PPOB</h4>
@@ -106,7 +110,7 @@ export const Footer = () => {
               <li><Link to="/dashboard/tagihan" className="text-gray-600 hover:text-primary-600 transition-colors">Bayar Tagihan Bulanan</Link></li>
             </ul>
           </div>
-          
+
           {/* Dynamic Static Pages list */}
           <div>
             <h4 className="font-extrabold text-sm text-gray-900 uppercase tracking-wider mb-6">Informasi & Bantuan</h4>
@@ -128,7 +132,7 @@ export const Footer = () => {
               )}
             </ul>
           </div>
-          
+
           {/* Support Contacts */}
           <div>
             <h4 className="font-extrabold text-sm text-gray-900 uppercase tracking-wider mb-6">Hubungi CS</h4>
@@ -152,10 +156,10 @@ export const Footer = () => {
               {settings?.whatsapp && (
                 <li className="flex items-start gap-2.5">
                   <span className="text-green-500 font-extrabold shrink-0 mt-0.5 text-xs">WA</span>
-                  <a 
-                    href={`https://wa.me/${settings.whatsapp.replace(/[^0-9]/g, '')}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
+                  <a
+                    href={`https://wa.me/${settings.whatsapp.replace(/[^0-9]/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="hover:text-primary-600 transition-colors"
                   >
                     {settings.whatsapp}
@@ -172,15 +176,15 @@ export const Footer = () => {
               )}
             </ul>
           </div>
-          
+
         </div>
-        
+
         {/* Footer Bottom */}
         <div className="border-t border-gray-100 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-gray-500 text-xs text-center md:text-left">
             {settings?.copyright || `© ${new Date().getFullYear()} PT GurkyNet Digital Nusantara. Hak Cipta Dilindungi.`}
           </p>
-          
+
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-gray-500">
             {bottomPages.length > 0 ? (
               bottomPages.map((page) => (

@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Notification;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 class NotificationFactory extends Factory
 {
@@ -11,10 +12,15 @@ class NotificationFactory extends Factory
 
     public function definition(): array
     {
+        $faker = $this->faker ?? (function_exists('fake') ? fake() : null);
+        $title = $faker ? $faker->sentence(4) : ('Notification ' . Str::random(8));
+        $message = $faker ? $faker->paragraph(2) : 'Pemberitahuan sistem informasi transaksi akun Anda.';
+        $type = $faker ? $faker->randomElement(['broadcast', 'transaction', 'system']) : 'broadcast';
+
         return [
-            'title' => $this->faker->sentence(4),
-            'message' => $this->faker->paragraph(2),
-            'type' => $this->faker->randomElement(['broadcast', 'transaction', 'system']),
+            'title' => $title,
+            'message' => $message,
+            'type' => $type,
         ];
     }
 }

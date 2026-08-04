@@ -18,6 +18,31 @@ export interface ForgotPasswordPayload {
   identity: string;
 }
 
+export interface RequestOtpPayload {
+  phone_number: string;
+  action: 'registration' | 'pin_reset' | 'password_reset' | 'verification';
+}
+
+export interface RequestOtpResponse {
+  phone_number: string;
+  action: string;
+  dummy_sent_code?: string;
+  expires_at: string;
+}
+
+export interface ResetPasswordPayload {
+  phone_number: string;
+  otp_code: string;
+  password: string;
+  password_confirmation: string;
+}
+
+export interface VerifyOtpPayload {
+  phone_number: string;
+  code: string;
+  action: 'registration' | 'pin_reset' | 'password_reset' | 'verification';
+}
+
 export const authService = {
   // Authentication Specific Methods
   login: async (
@@ -33,14 +58,29 @@ export const authService = {
     return response.data;
   },
 
-  register: async (payload: RegisterPayload): Promise<ApiResponse<null>> => {
-    const response = await apiClient.post<ApiResponse<null>>('/auth/register', {
+  register: async (payload: RegisterPayload): Promise<ApiResponse<{ user: User }>> => {
+    const response = await apiClient.post<ApiResponse<{ user: User }>>('/auth/register', {
       name: payload.fullName,
       email: payload.email,
       phone_number: payload.phone,
       password: payload.password,
       password_confirmation: payload.passwordConfirmation,
     });
+    return response.data;
+  },
+
+  requestOtp: async (payload: RequestOtpPayload): Promise<ApiResponse<RequestOtpResponse>> => {
+    const response = await apiClient.post<ApiResponse<RequestOtpResponse>>('/auth/otp/request', payload);
+    return response.data;
+  },
+
+  verifyOtp: async (payload: VerifyOtpPayload): Promise<ApiResponse<{ verified: boolean }>> => {
+    const response = await apiClient.post<ApiResponse<{ verified: boolean }>>('/auth/otp/verify', payload);
+    return response.data;
+  },
+
+  resetPassword: async (payload: ResetPasswordPayload): Promise<ApiResponse<null>> => {
+    const response = await apiClient.post<ApiResponse<null>>('/auth/password/reset', payload);
     return response.data;
   },
 

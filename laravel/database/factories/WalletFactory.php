@@ -12,10 +12,14 @@ class WalletFactory extends Factory
 
     public function definition(): array
     {
+        $faker = $this->faker ?? (function_exists('fake') ? fake() : null);
+        $walletNumber = $faker ? $faker->unique()->numerify('1042##########') : ('1042' . mt_rand(1000000000, 9999999999));
+        $balance = $faker ? $faker->randomFloat(2, 50000, 5000000) : (mt_rand(500, 50000) * 100);
+
         return [
             'user_id' => User::factory(),
-            'wallet_number' => $this->faker->unique()->numerify('1042##########'),
-            'balance' => $this->faker->randomFloat(2, 50000, 5000000), // Random balance between 50k and 5 million
+            'wallet_number' => $walletNumber,
+            'balance' => $balance,
             'status' => 'active',
         ];
     }

@@ -81,18 +81,7 @@ class ProductController extends Controller
         return $this->paginatedResponse(
             'Daftar produk berhasil didapatkan.',
             $resourceCollection,
-            [
-                'current_page' => $paginatedProducts->currentPage(),
-                'last_page' => $paginatedProducts->lastPage(),
-                'per_page' => $paginatedProducts->perPage(),
-                'total' => $paginatedProducts->total(),
-            ],
-            [
-                'first' => $paginatedProducts->url(1),
-                'last' => $paginatedProducts->url($paginatedProducts->lastPage()),
-                'prev' => $paginatedProducts->previousPageUrl(),
-                'next' => $paginatedProducts->nextPageUrl(),
-            ]
+            $paginatedProducts
         );
     }
 

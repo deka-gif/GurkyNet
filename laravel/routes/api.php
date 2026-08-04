@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\v1\Admin\WebsiteSettingController;
 use App\Http\Controllers\Api\v1\Admin\HomepageSectionController;
 use App\Http\Controllers\Api\v1\Admin\WebsiteMenuController;
 use App\Http\Controllers\Api\v1\Admin\StaticPageController;
+use App\Http\Controllers\Api\v1\Admin\MediaController;
 use App\Http\Controllers\Api\v1\ProfileController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
 use App\Http\Middleware\EnsureRole;
@@ -222,6 +223,15 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/static-pages/{id}', [StaticPageController::class, 'show']);
             Route::put('/static-pages/{id}', [StaticPageController::class, 'update']);
             Route::delete('/static-pages/{id}', [StaticPageController::class, 'destroy']);
+        });
+
+        // Media Library (admin: marketing, owner)
+        Route::prefix('admin/media')->middleware([EnsureRole::class . ':marketing,owner'])->group(function () {
+            Route::get('/', [MediaController::class, 'index']);
+            Route::post('/', [MediaController::class, 'store']);
+            Route::get('/{id}', [MediaController::class, 'show']);
+            Route::put('/{id}', [MediaController::class, 'update']);
+            Route::delete('/{id}', [MediaController::class, 'destroy']);
         });
 
     });

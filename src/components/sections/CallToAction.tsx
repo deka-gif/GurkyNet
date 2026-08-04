@@ -10,7 +10,7 @@ export const CallToAction = () => {
   return (
     <section className="py-20 bg-white">
       <div className="container mx-auto px-4 md:px-8 max-w-5xl">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -22,7 +22,7 @@ export const CallToAction = () => {
             <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1"/>
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" />
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
@@ -37,14 +37,20 @@ export const CallToAction = () => {
             <p className="text-lg md:text-xl text-primary-100 mb-10 max-w-2xl mx-auto">
               Nikmati pengalaman transaksi PPOB yang cepat, aman, dan modern dalam satu aplikasi.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button variant="secondary" className="w-full sm:w-auto px-8 py-4 font-bold text-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-                <Download className="w-6 h-6" />
-                Download APK
-              </Button>
+              <a
+                href="#download-app"
+                onClick={(e) => { e.preventDefault(); document.getElementById('download-app')?.scrollIntoView({ behavior: 'smooth' }); }}
+                className="w-full sm:w-auto"
+              >
+                <Button variant="secondary" className="w-full px-8 py-4 font-bold text-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                  <Download className="w-6 h-6" />
+                  Download APK
+                </Button>
+              </a>
             </div>
-            
+
             <div className="mt-8 text-primary-200 text-sm font-medium">
               Gratis • Aman • Terpercaya
             </div>

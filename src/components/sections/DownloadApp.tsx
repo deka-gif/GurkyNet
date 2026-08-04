@@ -19,12 +19,12 @@ export const DownloadApp = () => {
   const appName = settings?.websiteName || 'GurkyNet';
 
   return (
-    <section className="py-20 md:py-32 bg-white relative overflow-hidden">
+    <section id="download-app" className="py-20 md:py-32 bg-white relative overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          
+
           {/* Content Area */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
@@ -37,7 +37,7 @@ export const DownloadApp = () => {
               </span>
               Belum tersedia di Google Play Store
             </div>
-            
+
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
               {bannerSection?.title ? (
                 bannerSection.title
@@ -50,7 +50,7 @@ export const DownloadApp = () => {
                 `Dapatkan pengalaman bertransaksi yang lebih cepat dan lancar dengan menginstal aplikasi resmi ${appName}. Silakan unduh APK resmi secara aman melalui website ini.`
               )}
             </p>
-            
+
             <div className="grid grid-cols-2 gap-6 mb-10">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-600">
@@ -90,8 +90,8 @@ export const DownloadApp = () => {
               </div>
             </div>
 
-            <Button 
-              variant="primary" 
+            <Button
+              variant="primary"
               className={`w-full sm:w-auto px-8 py-4 ${!appInfo.isAvailable ? 'opacity-80 cursor-not-allowed hover:scale-100 hover:bg-primary-600' : ''}`}
               disabled={!appInfo.isAvailable}
             >
@@ -106,7 +106,7 @@ export const DownloadApp = () => {
           </motion.div>
 
           {/* Download Visual / Decoration */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
@@ -123,7 +123,7 @@ export const DownloadApp = () => {
                   <h3 className="text-2xl font-bold text-gray-900 mb-2">{appName}.apk</h3>
                   <p className="text-gray-500">Official Android Application</p>
                 </div>
-                
+
                 {/* Progress bar simulation */}
                 <div className="w-full space-y-2 mt-4">
                   <div className="flex justify-between text-xs font-medium text-gray-500">

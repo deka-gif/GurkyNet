@@ -339,7 +339,7 @@ export const WalletPage = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {walletHistory.slice(0, 5).map((trx) => (
+                      {(Array.isArray(walletHistory) ? walletHistory : []).slice(0, 5).map((trx) => (
                         <div key={trx.id} className="p-4 rounded-2xl border border-gray-100 hover:border-gray-200 flex items-center justify-between transition-all">
                           <div className="flex items-center gap-3.5">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
