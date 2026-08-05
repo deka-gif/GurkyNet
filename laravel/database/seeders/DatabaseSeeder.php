@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\ProductCategory;
-use App\Models\Product;
 use App\Models\BannerPromotion;
 use App\Models\Notification;
 use App\Models\WebsiteSetting;
@@ -15,11 +14,9 @@ use App\Models\StaticPage;
 use App\Models\Faq;
 use App\Models\Setting;
 use App\Models\SystemSetting;
-use App\Models\Provider;
 use App\Models\Media;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
@@ -430,52 +427,8 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // 9. PROVIDERS
-        $this->command?->info('Seeding Providers...');
-        $providers = [
-            ['name' => 'Telkomsel', 'key' => 'TELKOMSEL', 'logo' => 'https://assets.gurkynet.com/providers/telkomsel.png'],
-            ['name' => 'Indosat Ooredoo', 'key' => 'INDOSAT', 'logo' => 'https://assets.gurkynet.com/providers/indosat.png'],
-            ['name' => 'XL Axiata', 'key' => 'XL', 'logo' => 'https://assets.gurkynet.com/providers/xl.png'],
-            ['name' => 'Tri (3)', 'key' => 'TRI', 'logo' => 'https://assets.gurkynet.com/providers/tri.png'],
-            ['name' => 'Smartfren', 'key' => 'SMARTFREN', 'logo' => 'https://assets.gurkynet.com/providers/smartfren.png'],
-            ['name' => 'PLN Prepaid & Postpaid', 'key' => 'PLN', 'logo' => 'https://assets.gurkynet.com/providers/pln.png'],
-            ['name' => 'Mobile Legends: Bang Bang', 'key' => 'MLBB', 'logo' => 'https://assets.gurkynet.com/providers/mlbb.png'],
-            ['name' => 'Free Fire', 'key' => 'FF', 'logo' => 'https://assets.gurkynet.com/providers/ff.png'],
-            ['name' => 'PUBG Mobile', 'key' => 'PUBGM', 'logo' => 'https://assets.gurkynet.com/providers/pubgm.png'],
-            ['name' => 'Genshin Impact', 'key' => 'GENSHIN', 'logo' => 'https://assets.gurkynet.com/providers/genshin.png'],
-            ['name' => 'GoPay', 'key' => 'GOPAY', 'logo' => 'https://assets.gurkynet.com/providers/gopay.png'],
-            ['name' => 'OVO', 'key' => 'OVO', 'logo' => 'https://assets.gurkynet.com/providers/ovo.png'],
-            ['name' => 'DANA', 'key' => 'DANA', 'logo' => 'https://assets.gurkynet.com/providers/dana.png'],
-            ['name' => 'ShopeePay', 'key' => 'SHOPEEPAY', 'logo' => 'https://assets.gurkynet.com/providers/shopeepay.png'],
-            ['name' => 'LinkAja', 'key' => 'LINKAJA', 'logo' => 'https://assets.gurkynet.com/providers/linkaja.png'],
-            ['name' => 'BPJS Kesehatan', 'key' => 'BPJS', 'logo' => 'https://assets.gurkynet.com/providers/bpjs.png'],
-            ['name' => 'PDAM Nusantara', 'key' => 'PDAM', 'logo' => 'https://assets.gurkynet.com/providers/pdam.png'],
-        ];
-
-        $providerMap = [];
-        foreach ($providers as $p) {
-            $provider = Provider::withTrashed()->where('name', $p['name'])->first();
-            if ($provider) {
-                if ($provider->trashed()) {
-                    $provider->restore();
-                }
-                $provider->update([
-                    'name' => $p['name'],
-                    'logo' => $p['logo'],
-                    'is_active' => true,
-                ]);
-            } else {
-                $provider = Provider::create([
-                    'name' => $p['name'],
-                    'logo' => $p['logo'],
-                    'is_active' => true,
-                ]);
-            }
-            $providerMap[$p['key']] = $provider->id;
-        }
-
-        // 10. PRODUCT CATEGORIES
-        $this->command?->info('Seeding Product Categories...');
+        // 9. PRODUCT CATEGORIES (stable slugs used by frontend filters; Digiflazz sync upserts more)
+        $this->command?->info('Seeding Product Categories scaffolding...');
         $categories = [
             ['name' => 'Pulsa Reguler', 'slug' => 'pulsa', 'icon' => 'smartphone'],
             ['name' => 'Paket Data Internet', 'slug' => 'data', 'icon' => 'wifi'],
@@ -487,7 +440,6 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Tagihan Pascabayar & PPOB', 'slug' => 'tagihan', 'icon' => 'receipt'],
         ];
 
-        $categoryMap = [];
         foreach ($categories as $c) {
             $category = ProductCategory::withTrashed()->where('slug', $c['slug'])->first();
             if ($category) {
@@ -500,81 +452,19 @@ class DatabaseSeeder extends Seeder
                     'icon' => $c['icon'],
                 ]);
             } else {
-                $category = ProductCategory::create([
+                ProductCategory::create([
                     'name' => $c['name'],
                     'slug' => $c['slug'],
                     'icon' => $c['icon'],
                 ]);
             }
-            $categoryMap[$c['slug']] = $category->id;
         }
 
-        // 11. PRODUCTS
-        $this->command?->info('Seeding Products...');
-        $products = [
-            // Telkomsel Pulsa
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 5.000', 'sku_code' => 'TSEL5000', 'base_price' => 5300, 'sell_price' => 6000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 10.000', 'sku_code' => 'TSEL10000', 'base_price' => 10250, 'sell_price' => 11000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 25.000', 'sku_code' => 'TSEL25000', 'base_price' => 24900, 'sell_price' => 26000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 50.000', 'sku_code' => 'TSEL50000', 'base_price' => 49400, 'sell_price' => 50500, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Pulsa 100.000', 'sku_code' => 'TSEL100000', 'base_price' => 97800, 'sell_price' => 99000, 'admin_fee' => 0, 'status' => true],
+        // Master product catalog is Digiflazz-driven. Do NOT seed static demo products.
+        // Run: php artisan digiflazz:sync
+        $this->command?->info('Skipping static product/provider seed — catalog comes from Digiflazz sync (php artisan digiflazz:sync).');
 
-            // Indosat Pulsa
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 5.000', 'sku_code' => 'ISAT5000', 'base_price' => 5400, 'sell_price' => 6000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 10.000', 'sku_code' => 'ISAT10000', 'base_price' => 10300, 'sell_price' => 11000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 25.000', 'sku_code' => 'ISAT25000', 'base_price' => 24800, 'sell_price' => 25800, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['INDOSAT'], 'name' => 'Indosat Pulsa 50.000', 'sku_code' => 'ISAT50000', 'base_price' => 49200, 'sell_price' => 50500, 'admin_fee' => 0, 'status' => true],
-
-            // XL Pulsa
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 5.000', 'sku_code' => 'XL5000', 'base_price' => 5450, 'sell_price' => 6000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 10.000', 'sku_code' => 'XL10000', 'base_price' => 10350, 'sell_price' => 11000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 25.000', 'sku_code' => 'XL25000', 'base_price' => 24850, 'sell_price' => 25900, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pulsa'], 'provider_id' => $providerMap['XL'], 'name' => 'XL Pulsa 50.000', 'sku_code' => 'XL50000', 'base_price' => 49300, 'sell_price' => 50500, 'admin_fee' => 0, 'status' => true],
-
-            // Data Telkomsel
-            ['product_category_id' => $categoryMap['data'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Data Max 3GB 30 Hari', 'sku_code' => 'TSELDATA3GB', 'base_price' => 24000, 'sell_price' => 26500, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['data'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Data Max 10GB 30 Hari', 'sku_code' => 'TSELDATA10GB', 'base_price' => 52000, 'sell_price' => 55000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['data'], 'provider_id' => $providerMap['TELKOMSEL'], 'name' => 'Telkomsel Data Max 25GB 30 Hari', 'sku_code' => 'TSELDATA25GB', 'base_price' => 98000, 'sell_price' => 102000, 'admin_fee' => 0, 'status' => true],
-
-            // PLN Token
-            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 20.000', 'sku_code' => 'PLN20000', 'base_price' => 20100, 'sell_price' => 21500, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 50.000', 'sku_code' => 'PLN50000', 'base_price' => 50100, 'sell_price' => 51500, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 100.000', 'sku_code' => 'PLN100000', 'base_price' => 100100, 'sell_price' => 101500, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['pln'], 'provider_id' => $providerMap['PLN'], 'name' => 'PLN Token Rp 200.000', 'sku_code' => 'PLN200000', 'base_price' => 200100, 'sell_price' => 201500, 'admin_fee' => 0, 'status' => true],
-
-            // Mobile Legends Diamonds
-            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB 86 Diamonds', 'sku_code' => 'MLBB86', 'base_price' => 18500, 'sell_price' => 20000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB 172 Diamonds', 'sku_code' => 'MLBB172', 'base_price' => 36500, 'sell_price' => 39500, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB 257 Diamonds', 'sku_code' => 'MLBB257', 'base_price' => 54500, 'sell_price' => 59000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['MLBB'], 'name' => 'MLBB Weekly Diamond Pass', 'sku_code' => 'MLBBWDP', 'base_price' => 26800, 'sell_price' => 29000, 'admin_fee' => 0, 'status' => true],
-
-            // Free Fire Diamonds
-            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['FF'], 'name' => 'Free Fire 100 Diamonds', 'sku_code' => 'FF100', 'base_price' => 13500, 'sell_price' => 15000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['game'], 'provider_id' => $providerMap['FF'], 'name' => 'Free Fire 310 Diamonds', 'sku_code' => 'FF310', 'base_price' => 40500, 'sell_price' => 44000, 'admin_fee' => 0, 'status' => true],
-
-            // E-Wallet DANA
-            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['DANA'], 'name' => 'Saldo DANA 20.000', 'sku_code' => 'DANA20000', 'base_price' => 20250, 'sell_price' => 21000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['DANA'], 'name' => 'Saldo DANA 50.000', 'sku_code' => 'DANA50000', 'base_price' => 50250, 'sell_price' => 51000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['DANA'], 'name' => 'Saldo DANA 100.000', 'sku_code' => 'DANA100000', 'base_price' => 100250, 'sell_price' => 101000, 'admin_fee' => 0, 'status' => true],
-
-            // E-Wallet GoPay
-            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['GOPAY'], 'name' => 'Saldo GoPay 25.000', 'sku_code' => 'GOPAY25000', 'base_price' => 25300, 'sell_price' => 26000, 'admin_fee' => 0, 'status' => true],
-            ['product_category_id' => $categoryMap['ewallet'], 'provider_id' => $providerMap['GOPAY'], 'name' => 'Saldo GoPay 50.000', 'sku_code' => 'GOPAY50000', 'base_price' => 50300, 'sell_price' => 51000, 'admin_fee' => 0, 'status' => true],
-        ];
-
-        foreach ($products as $pr) {
-            $product = Product::withTrashed()->where('sku_code', $pr['sku_code'])->first();
-            if ($product) {
-                if ($product->trashed()) {
-                    $product->restore();
-                }
-                $product->update($pr);
-            } else {
-                Product::create($pr);
-            }
-        }
-
-        // 12. DEFAULT USERS & WALLETS (Idempotent & Conflict-Safe)
+        // 10. DEFAULT USERS & WALLETS (Idempotent & Conflict-Safe)
         $this->command?->info('Seeding Roles & Default Users...');
         $usersData = [
             [
@@ -722,12 +612,13 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // 13. SETTINGS & SYSTEM SETTINGS
+        // 11. SETTINGS & SYSTEM SETTINGS
         $this->command?->info('Seeding System Settings...');
         $defaultSettings = [
             'app_name' => 'GurkyNet',
             'app_logo' => '/assets/logo.png',
             'maintenance_mode' => 'false',
+            'default_margin' => '1500',
             'digiflazz_username' => 'gurkynet_production',
             'midtrans_merchant_id' => 'M104283948',
         ];

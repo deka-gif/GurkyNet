@@ -138,6 +138,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/monitoring', [OperationsController::class, 'monitoring']);
             Route::get('/pricing', [OperationsController::class, 'pricing']);
             Route::put('/pricing', [OperationsController::class, 'updatePricing']);
+            Route::post('/sync', [OperationsController::class, 'syncCatalog']);
+            Route::get('/sync-status', [OperationsController::class, 'syncStatus']);
         });
 
         // Marketing Administration Module

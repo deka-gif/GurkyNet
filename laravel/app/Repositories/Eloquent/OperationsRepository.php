@@ -8,6 +8,7 @@ use App\Models\Provider;
 use App\Models\Setting;
 use App\Models\ActivityLog;
 use App\Models\DigiflazzTransaction;
+use App\Models\DigiflazzProduct;
 use App\Models\MidtransTransaction;
 use App\Services\PricingService;
 use App\Services\AvailabilityService;
@@ -31,19 +32,54 @@ class OperationsRepository implements OperationsRepositoryInterface
         $maintenanceProducts = Product::where('status', true)->where('sku_code', 'like', '%MAINTENANCE%')->count();
         $activeProducts = max(0, $totalProducts - $inactiveProducts - $maintenanceProducts);
 
-        $providers = Provider::select('id', 'name', 'logo', 'is_active')->get();
+        $providers = Provider::withCount('products')->select('id', 'name', 'logo', 'is_active', 'updated_at')->get();
         $totalProviders = $providers->count();
         $activeProviders = $providers->where('is_active', true)->count();
         $inactiveProviders = $providers->where('is_active', false)->count();
 
         $recentOperationLogs = ActivityLog::with('user:id,name,email')
-            ->where('activity', 'like', '%OPERATIONS%')
-            ->orWhere('activity', 'like', '%PRODUCT%')
-            ->orWhere('activity', 'like', '%PROVIDER%')
-            ->orWhere('activity', 'like', '%PRICING%')
+            ->where(function ($q) {
+                $q->where('activity', 'like', '%OPERATIONS%')
+                    ->orWhere('activity', 'like', '%PRODUCT%')
+                    ->orWhere('activity', 'like', '%PROVIDER%')
+                    ->orWhere('activity', 'like', '%PRICING%')
+                    ->orWhere('activity', 'like', '%DIGIFLAZZ%');
+            })
             ->latest()
             ->take(10)
             ->get();
+
+        $sync = $this->getDigiflazzSyncStatus();
+        $digiflazzLive = $this->getLiveDigiflazzProviderStatus();
+
+        $providerStatus = $providers->map(function (Provider $provider) use ($sync) {
+            return [
+                'id' => $provider->id,
+                'name' => $provider->name,
+                'logo' => $provider->logo,
+                'is_active' => $provider->is_active,
+                'status' => $provider->is_active ? 'active' : 'inactive',
+                'products_count' => $provider->products_count,
+                'last_sync' => $sync['last_sync_at'],
+                'lastSync' => $sync['last_sync_at'],
+                'updated_at' => optional($provider->updated_at)?->toIso8601String(),
+            ];
+        });
+
+        $stats = [
+            'totalActiveProducts' => $activeProducts,
+            'total_products' => $totalProducts,
+            'activeProviders' => $activeProviders,
+            'total_providers' => $totalProviders,
+            'productsUnderMaintenance' => $maintenanceProducts,
+            'maintenance_products' => $maintenanceProducts,
+            'providerIssues' => $inactiveProviders,
+            'provider_issues' => $inactiveProviders,
+            'liveProductCount' => $totalProducts,
+            'syncStatus' => $sync['status'],
+            'failedSync' => $sync['failed_count'],
+            'lastSync' => $sync['last_sync_at'],
+        ];
 
         return [
             'product_summary' => [
@@ -57,9 +93,76 @@ class OperationsRepository implements OperationsRepositoryInterface
                 'active_providers' => $activeProviders,
                 'inactive_providers' => $inactiveProviders,
                 'health_status' => $inactiveProviders === 0 ? 'HEALTHY' : ($activeProviders > 0 ? 'DEGRADED' : 'CRITICAL'),
+                'digiflazz_status' => $digiflazzLive['status'],
+                'digiflazz_balance' => $digiflazzLive['balance'],
             ],
-            'provider_status' => $providers,
+            'provider_status' => $providerStatus,
+            'providers' => $providerStatus,
+            'digiflazz_sync' => $sync,
+            'digiflazz_provider' => $digiflazzLive,
+            'stats' => $stats,
+            'summary' => $stats,
             'recent_operation_logs' => $recentOperationLogs,
+            'logs' => $recentOperationLogs,
+        ];
+    }
+
+    /**
+     * Read Digiflazz sync metadata persisted by SyncDigiflazzCatalogAction.
+     */
+    public function getDigiflazzSyncStatus(): array
+    {
+        $settings = Setting::whereIn('key', [
+            'digiflazz_last_sync_at',
+            'digiflazz_last_sync_status',
+            'digiflazz_last_sync_count',
+            'digiflazz_last_sync_failed',
+            'digiflazz_last_sync_message',
+            'digiflazz_failed_sync_total',
+        ])->pluck('value', 'key');
+
+        return [
+            'last_sync_at' => $settings['digiflazz_last_sync_at'] ?? null,
+            'status' => $settings['digiflazz_last_sync_status'] ?? 'never',
+            'synced_count' => (int) ($settings['digiflazz_last_sync_count'] ?? 0),
+            'failed_count' => (int) ($settings['digiflazz_last_sync_failed'] ?? 0),
+            'failed_sync_total' => (int) ($settings['digiflazz_failed_sync_total'] ?? 0),
+            'message' => $settings['digiflazz_last_sync_message'] ?? null,
+            'live_product_count' => Product::count(),
+            'digiflazz_product_count' => DigiflazzProduct::count(),
+        ];
+    }
+
+    /**
+     * Live Digiflazz connectivity + deposit balance for Operations / Owner.
+     */
+    protected function getLiveDigiflazzProviderStatus(): array
+    {
+        $service = app(\App\Services\DigiflazzService::class);
+
+        if (!$service->isConfigured()) {
+            return [
+                'name' => 'Digiflazz',
+                'configured' => false,
+                'status' => 'Not Configured',
+                'balance' => null,
+            ];
+        }
+
+        $balance = \Illuminate\Support\Facades\Cache::remember(
+            'digiflazz_balance',
+            60,
+            fn () => $service->checkBalance()
+        );
+
+        return [
+            'name' => 'Digiflazz',
+            'configured' => true,
+            'status' => $balance !== null ? 'Online' : 'Unreachable',
+            'balance' => $balance,
+            'balance_formatted' => $balance !== null
+                ? 'Rp ' . number_format($balance, 0, ',', '.')
+                : null,
         ];
     }
 
@@ -152,7 +255,18 @@ class OperationsRepository implements OperationsRepositoryInterface
             $query->where('is_active', $isActive);
         }
 
-        return $query->latest()->paginate($perPage);
+        $paginator = $query->latest()->paginate($perPage);
+        $sync = $this->getDigiflazzSyncStatus();
+
+        $paginator->getCollection()->transform(function (Provider $provider) use ($sync) {
+            $provider->setAttribute('last_sync', $sync['last_sync_at']);
+            $provider->setAttribute('lastSync', $sync['last_sync_at']);
+            $provider->setAttribute('sync_status', $sync['status']);
+            $provider->setAttribute('status', $provider->is_active ? 'active' : 'inactive');
+            return $provider;
+        });
+
+        return $paginator;
     }
 
     /**
@@ -357,12 +471,39 @@ class OperationsRepository implements OperationsRepositoryInterface
         $categoryMargins = json_decode(Setting::where('key', 'category_margins')->value('value') ?? '[]', true);
         $providerMargins = json_decode(Setting::where('key', 'provider_margins')->value('value') ?? '[]', true);
 
+        // Master products drive cost / margin / selling price for Pricing UI
+        $masterProducts = Product::with(['category:id,name,slug', 'provider:id,name'])
+            ->orderByDesc('updated_at')
+            ->limit(50)
+            ->get()
+            ->map(function (Product $product) {
+                $pricing = $this->pricingService->calculateForProduct($product);
+                return [
+                    'id' => $product->id,
+                    'sku_code' => $product->sku_code,
+                    'name' => $product->name,
+                    'category' => $product->category?->name,
+                    'provider' => $product->provider?->name,
+                    'provider_cost' => $pricing['provider_cost'],
+                    'base_price' => $pricing['base_price'],
+                    'margin' => $pricing['margin'],
+                    'admin_fee' => $pricing['admin_fee'],
+                    'selling_price' => $pricing['selling_price'],
+                    'sell_price' => $pricing['sell_price'],
+                    'status' => $product->status,
+                ];
+            })
+            ->values()
+            ->all();
+
         return [
             'margin_rules' => [
                 'default_margin' => (float) $defaultMargin,
                 'category_margin' => $categoryMargins ?: [],
                 'provider_margin' => $providerMargins ?: [],
             ],
+            'products' => $masterProducts,
+            'master_products' => $masterProducts,
         ];
     }
 

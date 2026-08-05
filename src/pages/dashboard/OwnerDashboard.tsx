@@ -175,7 +175,8 @@ export const OwnerDashboard: React.FC = () => {
     const summary = d.summary || d.operations || {};
 
     return {
-      activeProviders: d.activeProviders ?? d.active_providers ?? summary.active_providers ?? 'Online',
+      activeProviders: d.provider_health ?? d.activeProviders ?? d.active_providers ?? summary.active_providers ?? 'Online',
+      providerBalance: d.provider_balance_formatted ?? d.digiflazz_balance ?? summary.provider_balance_formatted ?? null,
       productsOnline: d.productsOnline ?? d.products_online ?? summary.products_online ?? '0 SKU',
       openTickets: d.openSupportTickets ?? d.open_tickets ?? summary.open_tickets ?? 0,
       pendingRefunds: d.pendingRefunds ?? d.pending_refunds ?? summary.pending_refunds ?? 0,
@@ -377,16 +378,20 @@ export const OwnerDashboard: React.FC = () => {
       <div className="space-y-2">
         <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider">Business Operations Overview</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Active Providers */}
+          {/* Active Providers / Digiflazz Health */}
           <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-gray-500 uppercase">
-              <span>Active Providers</span>
+              <span>Provider Health</span>
               <Server className="w-4 h-4 text-purple-600" />
             </div>
             <div className="text-2xl font-black text-gray-900">
               {dashboardLoading ? <Loader2 className="w-5 h-5 animate-spin text-gray-400" /> : String(opsSummary.activeProviders)}
             </div>
-            <div className="text-[11px] text-purple-700 font-bold">Koneksi provider terhubung</div>
+            <div className="text-[11px] text-purple-700 font-bold">
+              {opsSummary.providerBalance
+                ? `Digiflazz Balance: ${opsSummary.providerBalance}`
+                : 'Live Digiflazz provider status'}
+            </div>
           </div>
 
           {/* Products Online */}

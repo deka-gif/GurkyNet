@@ -47,4 +47,9 @@ interface OperationsRepositoryInterface
      * Update pricing margin rules configuration.
      */
     public function updatePricing(array $data): array;
+
+    /**
+     * Digiflazz catalog sync status metadata.
+     */
+    public function getDigiflazzSyncStatus(): array;
 }

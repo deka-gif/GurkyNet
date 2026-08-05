@@ -28,7 +28,9 @@ export const OperationsProviderManagement: React.FC = () => {
     providersLoading,
     providersError,
     fetchProviders,
-    updateProvider
+    updateProvider,
+    syncCatalog,
+    syncLoading,
   } = useOperationsStore();
 
   const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
@@ -164,6 +166,21 @@ export const OperationsProviderManagement: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={async () => {
+                const result = await syncCatalog();
+                setActionMessage({
+                  type: result.success ? 'success' : 'error',
+                  text: result.message || (result.success ? 'Sinkronisasi Digiflazz berhasil.' : 'Sinkronisasi gagal.'),
+                });
+                if (result.success) loadData();
+              }}
+              disabled={syncLoading || providersLoading}
+              className="px-4 py-2.5 bg-emerald-500 text-white rounded-2xl font-extrabold text-xs shadow-md hover:bg-emerald-400 transition flex items-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+              <span>{syncLoading ? 'Syncing...' : 'Sync Digiflazz'}</span>
+            </button>
             <button
               onClick={() => loadData()}
               disabled={providersLoading}

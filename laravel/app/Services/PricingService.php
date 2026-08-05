@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Models\Setting;
 
 class PricingService
 {
@@ -23,19 +24,18 @@ class PricingService
 
     /**
      * Calculate pricing specifically for a product model.
+     * Master product sell_price / base_price are authoritative; fallback margin comes from settings.
      */
     public function calculateForProduct(Product $product): array
     {
         $basePrice = (float) $product->base_price;
         $adminFee = (float) $product->admin_fee;
-        
-        // If sell_price is already in DB, the margin is sell_price - base_price - admin_fee
-        // Otherwise, default margin to 1500
+
         if ($product->sell_price > 0) {
             $sellPrice = (float) $product->sell_price;
             $margin = $sellPrice - $basePrice - $adminFee;
         } else {
-            $margin = 1500.00;
+            $margin = $this->defaultMargin();
             $sellPrice = $basePrice + $margin + $adminFee;
         }
 
@@ -44,6 +44,16 @@ class PricingService
             'margin' => $margin,
             'admin_fee' => $adminFee,
             'sell_price' => $sellPrice,
+            'provider_cost' => $basePrice,
+            'selling_price' => $sellPrice,
         ];
+    }
+
+    /**
+     * Default margin from Operations pricing settings.
+     */
+    public function defaultMargin(): float
+    {
+        return (float) (Setting::where('key', 'default_margin')->value('value') ?? 1500);
     }
 }

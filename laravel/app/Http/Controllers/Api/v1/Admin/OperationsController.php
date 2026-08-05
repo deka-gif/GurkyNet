@@ -9,6 +9,8 @@ use App\Actions\Admin\Operations\OperationsProductsAction;
 use App\Actions\Admin\Operations\OperationsProvidersAction;
 use App\Actions\Admin\Operations\OperationsPricingAction;
 use App\Actions\Admin\Operations\OperationsMonitoringAction;
+use App\Actions\Admin\Operations\SyncDigiflazzCatalogAction;
+use App\Jobs\SyncDigiflazzCatalogJob;
 use App\Http\Requests\Admin\Operations\ProductFilterRequest;
 use App\Http\Requests\Admin\Operations\UpdateProductRequest;
 use App\Http\Requests\Admin\Operations\ProviderFilterRequest;
@@ -133,5 +135,45 @@ return $this->paginatedResponse(
         $data = $request->validated();
         $updated = $action->update($data);
         return $this->successResponse('Aturan harga dan margin berhasil diperbarui.', $updated);
+    }
+
+    /**
+     * Synchronize Digiflazz product catalog into master products.
+     * POST /api/v1/admin/operations/sync
+     */
+    public function syncCatalog(Request $request, SyncDigiflazzCatalogAction $action): JsonResponse
+    {
+        $queue = filter_var($request->input('queue', false), FILTER_VALIDATE_BOOLEAN);
+        $cmds = $request->input('cmd', ['prepaid', 'pasca']);
+        if (!is_array($cmds)) {
+            $cmds = [$cmds];
+        }
+
+        try {
+            if ($queue) {
+                SyncDigiflazzCatalogJob::dispatch(['cmd' => $cmds]);
+                return $this->successResponse('Sinkronisasi Digiflazz dijadwalkan di antrean.', [
+                    'queued' => true,
+                    'cmd' => $cmds,
+                ]);
+            }
+
+            $result = $action->execute(['cmd' => $cmds]);
+            return $this->successResponse($result['message'] ?? 'Sinkronisasi Digiflazz berhasil.', $result);
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        }
+    }
+
+    /**
+     * Get Digiflazz sync status metadata.
+     * GET /api/v1/admin/operations/sync-status
+     */
+    public function syncStatus(\App\Repositories\Contracts\OperationsRepositoryInterface $repository): JsonResponse
+    {
+        return $this->successResponse(
+            'Status sinkronisasi Digiflazz berhasil dimuat.',
+            $repository->getDigiflazzSyncStatus()
+        );
     }
 }

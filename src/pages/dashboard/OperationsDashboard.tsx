@@ -24,7 +24,9 @@ export const OperationsDashboard: React.FC = () => {
     dashboardData,
     dashboardLoading,
     dashboardError,
-    fetchDashboard
+    fetchDashboard,
+    syncCatalog,
+    syncLoading,
   } = useOperationsStore();
 
   useEffect(() => {
@@ -32,6 +34,12 @@ export const OperationsDashboard: React.FC = () => {
   }, [fetchDashboard]);
 
   const stats = dashboardData?.stats || dashboardData?.kpis || dashboardData?.summary || {};
+  const sync = dashboardData?.digiflazz_sync || {};
+  const digiflazzProvider = dashboardData?.digiflazz_provider || {};
+
+  const handleSyncNow = async () => {
+    await syncCatalog();
+  };
   
   const serviceStatusList: any[] = 
     dashboardData?.services ||
@@ -132,6 +140,14 @@ export const OperationsDashboard: React.FC = () => {
 
           <div className="flex items-center gap-2 shrink-0">
             <button
+              onClick={handleSyncNow}
+              disabled={syncLoading || dashboardLoading}
+              className="px-4 py-2.5 bg-emerald-500 text-white rounded-2xl font-extrabold text-xs shadow-md hover:bg-emerald-400 transition flex items-center gap-2 disabled:opacity-50"
+            >
+              <Database className={`w-4 h-4 ${syncLoading ? 'animate-pulse' : ''}`} />
+              <span>{syncLoading ? 'Syncing Digiflazz...' : 'Sync Digiflazz Now'}</span>
+            </button>
+            <button
               onClick={() => fetchDashboard()}
               disabled={dashboardLoading}
               className="px-4 py-2.5 bg-white text-slate-900 rounded-2xl font-extrabold text-xs shadow-md hover:bg-slate-100 transition flex items-center gap-2 disabled:opacity-50"
@@ -162,39 +178,63 @@ export const OperationsDashboard: React.FC = () => {
       {/* TOP SUMMARY CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Active Products"
-          value={stats.totalActiveProducts !== undefined ? `${stats.totalActiveProducts} Produk` : stats.total_products !== undefined ? `${stats.total_products} Produk` : '-'}
-          change={stats.productsSubtext || 'PPOB, Telco, E-Wallet & Game'}
+          title="Live Product Count"
+          value={
+            sync.live_product_count !== undefined
+              ? `${sync.live_product_count} SKU`
+              : stats.liveProductCount !== undefined
+              ? `${stats.liveProductCount} SKU`
+              : stats.totalActiveProducts !== undefined
+              ? `${stats.totalActiveProducts} Produk`
+              : stats.total_products !== undefined
+              ? `${stats.total_products} Produk`
+              : '-'
+          }
+          change={
+            digiflazzProvider.balance_formatted
+              ? `Digiflazz ${digiflazzProvider.status || '-'} · ${digiflazzProvider.balance_formatted}`
+              : stats.productsSubtext || 'Master catalog from Digiflazz'
+          }
           icon={Layers}
           iconBg="bg-emerald-50"
           iconColor="text-emerald-600"
         />
 
         <StatCard
-          title="Active Providers"
-          value={stats.activeProviders !== undefined ? `${stats.activeProviders} Provider` : stats.total_providers !== undefined ? `${stats.total_providers} Provider` : '-'}
-          change={stats.providersSubtext || 'Integrasi Biller Provider'}
+          title="Sync Status"
+          value={String(sync.status || stats.syncStatus || 'never').toUpperCase()}
+          change={sync.message || stats.providersSubtext || 'Catalog sync pipeline'}
           icon={Server}
           iconBg="bg-blue-50"
           iconColor="text-blue-600"
         />
 
         <StatCard
-          title="Products Under Maint."
-          value={stats.productsUnderMaintenance !== undefined ? `${stats.productsUnderMaintenance} Produk` : stats.maintenance_products !== undefined ? `${stats.maintenance_products} Produk` : '-'}
-          change={stats.maintenanceSubtext || 'Pemeliharaan Biller H2H'}
-          icon={Wrench}
-          iconBg="bg-amber-50"
-          iconColor="text-amber-600"
-        />
-
-        <StatCard
-          title="Provider Issues"
-          value={stats.providerIssues !== undefined ? `${stats.providerIssues} Issue` : stats.provider_issues !== undefined ? `${stats.provider_issues} Issue` : '-'}
-          change={stats.issuesSubtext || 'Monitoring Latensi & Error'}
+          title="Failed Sync"
+          value={
+            sync.failed_sync_total !== undefined
+              ? `${sync.failed_sync_total}`
+              : stats.failedSync !== undefined
+              ? `${stats.failedSync}`
+              : '0'
+          }
+          change={`Last batch failures: ${sync.failed_count ?? stats.failedSync ?? 0}`}
           icon={AlertOctagon}
           iconBg="bg-purple-50"
           iconColor="text-purple-600"
+        />
+
+        <StatCard
+          title="Last Sync"
+          value={
+            sync.last_sync_at || stats.lastSync
+              ? new Date(sync.last_sync_at || stats.lastSync).toLocaleString('id-ID')
+              : 'Never'
+          }
+          change={`Synced SKUs: ${sync.synced_count ?? 0}`}
+          icon={RefreshCw}
+          iconBg="bg-amber-50"
+          iconColor="text-amber-600"
         />
       </div>
 

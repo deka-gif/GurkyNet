@@ -22,9 +22,11 @@ class ProductResource extends JsonResource
             'code' => $this->sku_code,
             'name' => $this->name,
             'basePrice' => (float) $pricingDetails['base_price'],
+            'providerCost' => (float) ($pricingDetails['provider_cost'] ?? $pricingDetails['base_price']),
             'margin' => (float) $pricingDetails['margin'],
             'adminFee' => (float) $pricingDetails['admin_fee'],
             'price' => (float) $pricingDetails['sell_price'],
+            'sellingPrice' => (float) ($pricingDetails['selling_price'] ?? $pricingDetails['sell_price']),
             'status' => $this->status ? 'tersedia' : 'gangguan', // Frontend expected enum string
             'isActive' => (bool) $this->status, // Raw boolean status
             'availabilityStatus' => $availabilityStatus, // Engine calculated: active, inactive, maintenance

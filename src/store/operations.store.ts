@@ -58,6 +58,10 @@ export interface OperationsState {
   monitoringLoading: boolean;
   monitoringError: string | null;
 
+  syncLoading: boolean;
+  syncError: string | null;
+  syncResult: any | null;
+
   fetchDashboard: () => Promise<void>;
   fetchProducts: (params?: Record<string, any>) => Promise<void>;
   updateProduct: (id: string | number, data: any) => Promise<{ success: boolean; message?: string; errors?: any }>;
@@ -66,6 +70,7 @@ export interface OperationsState {
   fetchPricing: (params?: Record<string, any>) => Promise<void>;
   updatePricing: (data: any, id?: string | number) => Promise<{ success: boolean; message?: string; errors?: any }>;
   fetchMonitoring: (params?: Record<string, any>) => Promise<void>;
+  syncCatalog: (payload?: { queue?: boolean; cmd?: string[] }) => Promise<{ success: boolean; message?: string; data?: any }>;
 }
 
 export const useOperationsStore = create<OperationsState>((set, get) => ({
@@ -91,6 +96,10 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
   monitoringData: null,
   monitoringLoading: false,
   monitoringError: null,
+
+  syncLoading: false,
+  syncError: null,
+  syncResult: null,
 
   fetchDashboard: async () => {
     set({ dashboardLoading: true, dashboardError: null });
@@ -190,12 +199,25 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
     try {
       const response = await operationsService.getPricing(params);
       if (response && response.success !== false) {
-        const { items, pagination } = extractListAndPagination(response);
-        set({
-          pricingProducts: items,
-          pricingPagination: pagination,
-          pricingLoading: false,
-        });
+        const payload = response.data || response;
+        const master =
+          (Array.isArray(payload?.products) && payload.products) ||
+          (Array.isArray(payload?.master_products) && payload.master_products) ||
+          null;
+        if (master) {
+          set({
+            pricingProducts: master,
+            pricingPagination: null,
+            pricingLoading: false,
+          });
+        } else {
+          const { items, pagination } = extractListAndPagination(response);
+          set({
+            pricingProducts: items,
+            pricingPagination: pagination,
+            pricingLoading: false,
+          });
+        }
       } else {
         set({ pricingError: response?.message || 'Gagal memuat data harga.', pricingLoading: false });
       }
@@ -237,6 +259,34 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
         monitoringError: err?.message || 'Terjadi kesalahan saat memuat data monitoring.',
         monitoringLoading: false,
       });
+    }
+  },
+
+  syncCatalog: async (payload) => {
+    set({ syncLoading: true, syncError: null });
+    try {
+      const response = await operationsService.syncCatalog(payload);
+      if (response && response.success !== false) {
+        set({
+          syncResult: response.data || response,
+          syncLoading: false,
+        });
+        await get().fetchDashboard();
+        return {
+          success: true,
+          message: response.message || 'Sinkronisasi Digiflazz berhasil.',
+          data: response.data || response,
+        };
+      }
+      set({
+        syncError: response?.message || 'Gagal menyinkronkan katalog Digiflazz.',
+        syncLoading: false,
+      });
+      return { success: false, message: response?.message || 'Gagal menyinkronkan katalog Digiflazz.' };
+    } catch (err: any) {
+      const msg = err?.message || 'Gagal menyinkronkan katalog Digiflazz.';
+      set({ syncError: msg, syncLoading: false });
+      return { success: false, message: msg };
     }
   },
 }));

@@ -64,12 +64,30 @@ class OwnerRepository implements OwnerRepositoryInterface
         // Wallet Balance
         $walletBalance = Wallet::sum('balance');
 
-        // Provider health derived from real provider activation state
+        // Provider health derived from Digiflazz live connectivity + brand activation
+        $digiflazzService = app(\App\Services\DigiflazzService::class);
+        $digiflazzBalance = null;
+        if ($digiflazzService->isConfigured()) {
+            $digiflazzBalance = \Illuminate\Support\Facades\Cache::remember(
+                'digiflazz_balance',
+                60,
+                fn () => $digiflazzService->checkBalance()
+            );
+        }
+
         $totalProviders = Provider::count();
         $inactiveProviders = Provider::where('is_active', false)->count();
-        $providerHealth = $totalProviders === 0
-            ? 'No Providers'
-            : ($inactiveProviders === 0 ? 'Normal' : "Degraded ({$inactiveProviders} inactive)");
+        if (!$digiflazzService->isConfigured()) {
+            $providerHealth = 'Digiflazz Not Configured';
+        } elseif ($digiflazzBalance === null) {
+            $providerHealth = 'Digiflazz Unreachable';
+        } elseif ($totalProviders === 0) {
+            $providerHealth = 'No Providers Synced';
+        } else {
+            $providerHealth = $inactiveProviders === 0
+                ? 'Normal'
+                : "Degraded ({$inactiveProviders} inactive)";
+        }
 
         // Queue status from the real jobs table when available
         $pendingJobs = $this->countPendingQueueJobs();
@@ -78,6 +96,9 @@ class OwnerRepository implements OwnerRepositoryInterface
         // System health from real failed-jobs / pending transaction signals
         $failedJobs = $this->countFailedQueueJobs();
         $systemHealth = ($failedJobs !== null && $failedJobs > 0) ? 'Degraded' : 'Healthy';
+
+        $syncStatus = \App\Models\Setting::where('key', 'digiflazz_last_sync_status')->value('value');
+        $lastSyncAt = \App\Models\Setting::where('key', 'digiflazz_last_sync_at')->value('value');
 
         return [
             'today_revenue' => (float) $todayRevenue,
@@ -89,6 +110,13 @@ class OwnerRepository implements OwnerRepositoryInterface
             'failed_rate' => $failedRate !== null ? $failedRate . '%' : null,
             'wallet_balance' => (float) $walletBalance,
             'provider_health' => $providerHealth,
+            'provider_balance' => $digiflazzBalance,
+            'provider_balance_formatted' => $digiflazzBalance !== null
+                ? 'Rp ' . number_format($digiflazzBalance, 0, ',', '.')
+                : null,
+            'digiflazz_balance' => $digiflazzBalance,
+            'digiflazz_sync_status' => $syncStatus,
+            'digiflazz_last_sync_at' => $lastSyncAt,
             'queue_status' => $queueStatus,
             'system_health' => $systemHealth,
         ];
@@ -226,16 +254,19 @@ class OwnerRepository implements OwnerRepositoryInterface
     }
 
     /**
-     * Get system health metrics from live infrastructure and provider checks.
+     * Get system health metrics as a list for the Owner dashboard UI.
+     * Digiflazz status/balance are live provider values — never hardcoded.
      */
     public function getSystemHealth(): array
     {
         // Database connectivity
         try {
             DB::connection()->getPdo();
-            $databaseStatus = 'Connected';
+            $databaseStatus = 'Online';
+            $databaseNotes = 'Connected';
         } catch (\Throwable) {
-            $databaseStatus = 'Disconnected';
+            $databaseStatus = 'Offline';
+            $databaseNotes = 'Disconnected';
         }
 
         // Cache store round-trip using the actually configured driver
@@ -243,65 +274,131 @@ class OwnerRepository implements OwnerRepositoryInterface
         try {
             $probe = 'health_probe_' . now()->timestamp;
             \Illuminate\Support\Facades\Cache::put($probe, 'ok', 5);
-            $cacheStatus = \Illuminate\Support\Facades\Cache::get($probe) === 'ok'
-                ? "Connected ({$cacheDriver})"
-                : "Degraded ({$cacheDriver})";
+            $cacheOk = \Illuminate\Support\Facades\Cache::get($probe) === 'ok';
             \Illuminate\Support\Facades\Cache::forget($probe);
+            $cacheStatus = $cacheOk ? 'Online' : 'Warning';
+            $cacheNotes = ($cacheOk ? 'Connected' : 'Degraded') . " ({$cacheDriver})";
         } catch (\Throwable) {
-            $cacheStatus = "Disconnected ({$cacheDriver})";
+            $cacheStatus = 'Offline';
+            $cacheNotes = "Disconnected ({$cacheDriver})";
         }
 
         // Queue backlog from the real jobs table
         $pendingJobs = $this->countPendingQueueJobs();
         $failedJobs = $this->countFailedQueueJobs();
         if ($pendingJobs === null) {
-            $queueStatus = 'Unavailable (driver: ' . config('queue.default') . ')';
+            $queueStatus = 'Warning';
+            $queueNotes = 'Unavailable (driver: ' . config('queue.default') . ')';
         } else {
-            $queueStatus = ($pendingJobs === 0 ? 'Idle' : 'Active') . " ({$pendingJobs} pending"
+            $queueStatus = ($failedJobs && $failedJobs > 0) ? 'Warning' : 'Online';
+            $queueNotes = ($pendingJobs === 0 ? 'Idle' : 'Active') . " ({$pendingJobs} pending"
                 . ($failedJobs ? ", {$failedJobs} failed" : '') . ')';
         }
 
-        // Live Digiflazz deposit balance (cached briefly to avoid hammering the API)
+        // Live Digiflazz deposit balance
         $digiflazzService = app(\App\Services\DigiflazzService::class);
+        $digiflazzBalance = null;
         if (!$digiflazzService->isConfigured()) {
-            $digiflazzStatus = 'Not Configured';
+            $digiflazzStatus = 'Offline';
+            $digiflazzNotes = 'Not Configured';
         } else {
-            $balance = \Illuminate\Support\Facades\Cache::remember(
+            $digiflazzBalance = \Illuminate\Support\Facades\Cache::remember(
                 'digiflazz_balance',
                 60,
                 fn () => $digiflazzService->checkBalance()
             );
-            $digiflazzStatus = $balance !== null
-                ? 'Connected (Balance: Rp ' . number_format($balance, 0, ',', '.') . ')'
-                : 'Unreachable';
+            if ($digiflazzBalance !== null) {
+                $digiflazzStatus = 'Online';
+                $digiflazzNotes = 'Balance: Rp ' . number_format($digiflazzBalance, 0, ',', '.');
+            } else {
+                $digiflazzStatus = 'Warning';
+                $digiflazzNotes = 'Unreachable';
+            }
         }
 
-        // Midtrans configuration state (no lightweight ping endpoint exists)
+        $lastSyncAt = \App\Models\Setting::where('key', 'digiflazz_last_sync_at')->value('value');
+        $lastSyncStatus = \App\Models\Setting::where('key', 'digiflazz_last_sync_status')->value('value') ?? 'never';
+
+        // Midtrans configuration state
         $midtransServerKey = (string) config('services.midtrans.server_key', env('MIDTRANS_SERVER_KEY', ''));
-        $midtransStatus = ($midtransServerKey !== '' && $midtransServerKey !== 'dummy_server_key')
-            ? 'Configured'
-            : 'Not Configured';
+        $midtransConfigured = ($midtransServerKey !== '' && $midtransServerKey !== 'dummy_server_key');
+        $midtransStatus = $midtransConfigured ? 'Online' : 'Offline';
+        $midtransNotes = $midtransConfigured ? 'Configured' : 'Not Configured';
 
         // Real storage usage of the application disk
         try {
             $total = disk_total_space(storage_path());
             $free = disk_free_space(storage_path());
             $usedPercent = ($total > 0) ? round((($total - $free) / $total) * 100) : null;
-            $storageStatus = $usedPercent !== null
-                ? ($usedPercent >= 90 ? "Critical ({$usedPercent}% used)" : "Normal ({$usedPercent}% used)")
-                : 'Unavailable';
+            if ($usedPercent === null) {
+                $storageStatus = 'Warning';
+                $storageNotes = 'Unavailable';
+            } elseif ($usedPercent >= 90) {
+                $storageStatus = 'Warning';
+                $storageNotes = "Critical ({$usedPercent}% used)";
+            } else {
+                $storageStatus = 'Online';
+                $storageNotes = "Normal ({$usedPercent}% used)";
+            }
         } catch (\Throwable) {
-            $storageStatus = 'Unavailable';
+            $storageStatus = 'Warning';
+            $storageNotes = 'Unavailable';
         }
 
         return [
-            'application_status' => 'Up',
-            'database_status' => $databaseStatus,
-            'redis_status' => $cacheStatus,
-            'queue_status' => $queueStatus,
-            'digiflazz_status' => $digiflazzStatus,
-            'midtrans_status' => $midtransStatus,
-            'storage_status' => $storageStatus,
+            [
+                'service' => 'Application',
+                'type' => 'Core',
+                'status' => 'Online',
+                'notes' => 'Up',
+                'latency' => '-',
+            ],
+            [
+                'service' => 'Database',
+                'type' => 'Infrastructure',
+                'status' => $databaseStatus,
+                'notes' => $databaseNotes,
+                'latency' => '-',
+            ],
+            [
+                'service' => 'Cache',
+                'type' => 'Infrastructure',
+                'status' => $cacheStatus,
+                'notes' => $cacheNotes,
+                'latency' => '-',
+            ],
+            [
+                'service' => 'Queue',
+                'type' => 'Infrastructure',
+                'status' => $queueStatus,
+                'notes' => $queueNotes,
+                'latency' => '-',
+            ],
+            [
+                'service' => 'Digiflazz',
+                'type' => 'Provider',
+                'status' => $digiflazzStatus,
+                'notes' => $digiflazzNotes,
+                'latency' => '-',
+                'provider_balance' => $digiflazzBalance,
+                'provider_health' => $digiflazzStatus,
+                'last_sync' => $lastSyncAt,
+                'sync_status' => $lastSyncStatus,
+            ],
+            [
+                'service' => 'Midtrans',
+                'type' => 'Payment Gateway',
+                'status' => $midtransStatus,
+                'notes' => $midtransNotes,
+                'latency' => '-',
+            ],
+            [
+                'service' => 'Storage',
+                'type' => 'Infrastructure',
+                'status' => $storageStatus,
+                'notes' => $storageNotes,
+                'latency' => '-',
+            ],
         ];
     }
 

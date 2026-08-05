@@ -47,4 +47,14 @@ export const operationsService = {
       return res.data;
     }
   },
+
+  async syncCatalog(payload?: { queue?: boolean; cmd?: string[] }) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/operations/sync', payload || {});
+    return res.data;
+  },
+
+  async getSyncStatus() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/sync-status');
+    return res.data;
+  },
 };
