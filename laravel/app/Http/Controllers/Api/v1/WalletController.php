@@ -3,18 +3,19 @@
 namespace App\Http\Controllers\Api\v1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\v1\TopUpRequest;
-use App\Http\Requests\Api\v1\TransferRequest;
 use App\Actions\Wallet\GetWalletAction;
 use App\Actions\Wallet\GetWalletHistoryAction;
 use App\Actions\Wallet\TopUpWalletAction;
 use App\Actions\Wallet\TransferWalletAction;
+use App\Actions\Wallet\WithdrawWalletAction;
+use App\Http\Requests\Api\v1\TopUpRequest;
+use App\Http\Requests\Api\v1\TransferRequest;
+use App\Http\Requests\Api\v1\WithdrawRequest;
 use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Gate;
 
 class WalletController extends Controller
 {
@@ -24,6 +25,7 @@ class WalletController extends Controller
     protected GetWalletHistoryAction $getWalletHistoryAction;
     protected TopUpWalletAction $topUpWalletAction;
     protected TransferWalletAction $transferWalletAction;
+    protected WithdrawWalletAction $withdrawWalletAction;
     protected WalletRepositoryInterface $walletRepository;
 
     public function __construct(
@@ -31,12 +33,14 @@ class WalletController extends Controller
         GetWalletHistoryAction $getWalletHistoryAction,
         TopUpWalletAction $topUpWalletAction,
         TransferWalletAction $transferWalletAction,
+        WithdrawWalletAction $withdrawWalletAction,
         WalletRepositoryInterface $walletRepository
     ) {
         $this->getWalletAction = $getWalletAction;
         $this->getWalletHistoryAction = $getWalletHistoryAction;
         $this->topUpWalletAction = $topUpWalletAction;
         $this->transferWalletAction = $transferWalletAction;
+        $this->withdrawWalletAction = $withdrawWalletAction;
         $this->walletRepository = $walletRepository;
     }
 
@@ -154,6 +158,37 @@ class WalletController extends Controller
         } catch (\Exception $e) {
             Log::error('Wallet transfer failed: ' . $e->getMessage());
             return $this->errorResponse('Terjadi kesalahan saat memproses transfer.', 500);
+        }
+    }
+
+    /**
+     * Process wallet withdrawal to bank account.
+     */
+    public function withdraw(WithdrawRequest $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return $this->errorResponse('Sesi Anda tidak valid.', 401);
+            }
+
+            $transaction = $this->withdrawWalletAction->execute(
+                $user,
+                (float) $request->amount,
+                (string) $request->pin,
+                (string) $request->bank_name,
+                (string) $request->account_number,
+                (float) $request->input('admin_fee', 0)
+            );
+
+            return $this->successResponse('Permintaan penarikan dana berhasil diajukan.', [
+                'transaction' => $transaction,
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        } catch (\Exception $e) {
+            Log::error('Wallet withdraw failed: ' . $e->getMessage());
+            return $this->errorResponse('Terjadi kesalahan saat memproses penarikan.', 500);
         }
     }
 }

@@ -121,6 +121,31 @@ class TransferWalletAction
                 'reference_id' => $transaction->id,
             ]);
 
+            \App\Models\PaymentHistory::recordFor(
+                $transaction,
+                'wallet_transfer',
+                'success',
+                [
+                    'from_wallet' => $senderWalletLocked->wallet_number,
+                    'to_wallet' => $recipientWalletLocked->wallet_number,
+                ]
+            );
+
+            event(new \App\Events\WalletDebited(
+                $senderWalletLocked,
+                $totalDebit,
+                'Transfer ke ' . $recipientWalletLocked->wallet_number,
+                $transaction->id
+            ));
+            event(new \App\Events\WalletCredited(
+                $recipientWalletLocked,
+                $amount,
+                'Transfer masuk dari ' . $senderWalletLocked->wallet_number,
+                $transaction->id
+            ));
+            event(new \App\Events\TransactionCreated($transaction));
+            event(new \App\Events\TransactionSuccess($transaction));
+
             return $transaction;
         });
     }

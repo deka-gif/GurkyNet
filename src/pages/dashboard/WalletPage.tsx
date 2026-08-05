@@ -28,7 +28,7 @@ declare global {
 }
 
 export const WalletPage = () => {
-  const { wallet, loading, fetchWallet, topUp, transfer } = useWalletStore();
+  const { wallet, loading, fetchWallet, topUp, transfer, withdraw } = useWalletStore();
   const { transactions, fetchTransactions } = useTransactionStore();
 
   const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>('index');
@@ -48,6 +48,7 @@ export const WalletPage = () => {
   const [withdrawBank, setWithdrawBank] = useState<string>('BCA');
   const [withdrawAccount, setWithdrawAccount] = useState<string>('');
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [withdrawPin, setWithdrawPin] = useState<string>('');
 
   // Status Modals
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -143,7 +144,38 @@ export const WalletPage = () => {
 
   const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('Fitur penarikan dana (withdraw) belum tersedia melalui API.');
+    const amount = parseInt(withdrawAmount, 10);
+    if (isNaN(amount) || amount < 10000) {
+      setErrorMsg('Minimal penarikan adalah Rp 10.000');
+      return;
+    }
+    if (!withdrawAccount.trim()) {
+      setErrorMsg('Nomor rekening wajib diisi.');
+      return;
+    }
+    if (!/^\d{6}$/.test(withdrawPin)) {
+      setErrorMsg('PIN transaksi harus 6 digit angka.');
+      return;
+    }
+
+    const res = await withdraw({
+      amount,
+      pin: withdrawPin,
+      bank_name: withdrawBank,
+      account_number: withdrawAccount.trim(),
+      admin_fee: 5000,
+    });
+
+    if (res) {
+      setSuccessMsg(`Penarikan ${formatIDR(amount)} ke ${withdrawBank} ${withdrawAccount} sedang diproses.`);
+      setWithdrawAmount('');
+      setWithdrawAccount('');
+      setWithdrawPin('');
+      setActiveTab('index');
+      fetchTransactions();
+    } else {
+      setErrorMsg('Gagal memproses penarikan. Periksa PIN, saldo, dan nomor rekening.');
+    }
   };
 
   // Filter out only wallet/transfer/tarik transactions for history widget
@@ -627,12 +659,25 @@ export const WalletPage = () => {
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-extrabold text-gray-400">Rp</span>
                       <input 
                         type="number"
-                        placeholder="Minimal Rp 50.000"
+                        placeholder="Minimal Rp 10.000"
                         value={withdrawAmount}
                         onChange={(e) => setWithdrawAmount(e.target.value)}
                         className="w-full pl-11 pr-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700">PIN Transaksi</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="6 digit PIN"
+                      value={withdrawPin}
+                      onChange={(e) => setWithdrawPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all tracking-widest"
+                    />
                   </div>
 
                   <div className="p-3.5 bg-amber-50 border border-amber-100 rounded-xl space-y-1.5">

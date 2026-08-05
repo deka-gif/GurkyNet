@@ -28,4 +28,27 @@ class PaymentHistory extends Model
     {
         return $this->belongsTo(Transaction::class);
     }
+
+    /**
+     * Upsert a payment/settlement ledger row for a transaction (single source for Finance settlements).
+     */
+    public static function recordFor(
+        Transaction $transaction,
+        string $gateway,
+        string $status,
+        ?array $payload = null,
+        ?array $response = null,
+        ?string $paymentCode = null
+    ): self {
+        return self::updateOrCreate(
+            ['transaction_id' => $transaction->id],
+            [
+                'gateway' => $gateway,
+                'payment_code' => $paymentCode ?? $transaction->invoice_number,
+                'payload' => $payload,
+                'response' => $response,
+                'status' => strtolower($status),
+            ]
+        );
+    }
 }

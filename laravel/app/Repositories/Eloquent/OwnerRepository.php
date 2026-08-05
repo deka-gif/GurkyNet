@@ -15,6 +15,7 @@ use App\Models\MidtransTransaction;
 use App\Enums\UserRole;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class OwnerRepository implements OwnerRepositoryInterface
 {
@@ -32,14 +33,27 @@ class OwnerRepository implements OwnerRepositoryInterface
             ->whereDate('created_at', $todayStr)
             ->sum('total_payment');
 
+        $yesterdayRevenue = Transaction::where('status', 'success')
+            ->whereDate('created_at', now()->subDay()->toDateString())
+            ->sum('total_payment');
+
         // Monthly Revenue
         $monthlyRevenue = Transaction::where('status', 'success')
             ->whereMonth('created_at', $thisMonth)
             ->whereYear('created_at', $thisYear)
             ->sum('total_payment');
 
+        $lastMonth = now()->subMonth();
+        $lastMonthRevenue = Transaction::where('status', 'success')
+            ->whereMonth('created_at', $lastMonth->month)
+            ->whereYear('created_at', $lastMonth->year)
+            ->sum('total_payment');
+
         // Total Users
         $totalUsers = User::where('role', UserRole::USER)->count();
+        $usersYesterday = User::where('role', UserRole::USER)
+            ->whereDate('created_at', '<=', now()->subDay()->toDateString())
+            ->count();
 
         // Active Users (at least 1 transaction)
         $activeUsers = User::where('role', UserRole::USER)
@@ -48,6 +62,7 @@ class OwnerRepository implements OwnerRepositoryInterface
 
         // Total Transactions
         $totalTransactions = Transaction::count();
+        $todayTransactions = Transaction::whereDate('created_at', $todayStr)->count();
 
         // Success Rate & Failed Rate
         $successCount = Transaction::where('status', 'success')->count();
@@ -63,6 +78,21 @@ class OwnerRepository implements OwnerRepositoryInterface
 
         // Wallet Balance
         $walletBalance = Wallet::sum('balance');
+
+        $todayRevenueChange = $yesterdayRevenue > 0
+            ? (($todayRevenue - $yesterdayRevenue) >= 0 ? '+' : '')
+                . round((($todayRevenue - $yesterdayRevenue) / $yesterdayRevenue) * 100, 1) . '% vs kemarin'
+            : ($todayRevenue > 0 ? '+100% vs kemarin' : null);
+
+        $monthlyRevenueChange = $lastMonthRevenue > 0
+            ? (($monthlyRevenue - $lastMonthRevenue) >= 0 ? '+' : '')
+                . round((($monthlyRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 1) . '% vs bulan lalu'
+            : ($monthlyRevenue > 0 ? '+100% vs bulan lalu' : null);
+
+        $usersChange = $usersYesterday > 0
+            ? (($totalUsers - $usersYesterday) >= 0 ? '+' : '')
+                . ($totalUsers - $usersYesterday) . ' pengguna baru'
+            : ($totalUsers . ' pengguna terdaftar');
 
         // Provider health derived from Digiflazz live connectivity + brand activation
         $digiflazzService = app(\App\Services\DigiflazzService::class);
@@ -106,9 +136,13 @@ class OwnerRepository implements OwnerRepositoryInterface
             'total_users' => $totalUsers,
             'active_users' => $activeUsers,
             'total_transactions' => $totalTransactions,
+            'today_transactions' => $todayTransactions,
             'success_rate' => $successRate !== null ? $successRate . '%' : null,
             'failed_rate' => $failedRate !== null ? $failedRate . '%' : null,
             'wallet_balance' => (float) $walletBalance,
+            'today_revenue_change' => $todayRevenueChange,
+            'monthly_revenue_change' => $monthlyRevenueChange,
+            'users_change' => $usersChange,
             'provider_health' => $providerHealth,
             'provider_balance' => $digiflazzBalance,
             'provider_balance_formatted' => $digiflazzBalance !== null
@@ -159,38 +193,62 @@ class OwnerRepository implements OwnerRepositoryInterface
      */
     public function getFinancialOverview(): array
     {
-        $days = collect(range(6, 0))->map(fn($day) => now()->subDays($day)->toDateString());
+        $days = collect(range(29, 0))->map(fn ($day) => now()->subDays($day)->toDateString());
 
         $revenueTrend = [];
         $transactionTrend = [];
         $refundTrend = [];
         $settlementTrend = [];
+        $revenue30Days = [];
+        $transaction30Days = [];
 
         foreach ($days as $date) {
-            $dailySuccess = Transaction::where('status', 'success')->whereDate('created_at', $date);
-            $dailyFailed = Transaction::whereIn('status', ['failed', 'canceled'])->whereDate('created_at', $date);
+            $dailySuccessQuery = Transaction::where('status', 'success')->whereDate('created_at', $date);
+            $dailyFailedQuery = Transaction::whereIn('status', ['failed', 'canceled'])->whereDate('created_at', $date);
+
+            $revenue = (float) (clone $dailySuccessQuery)->sum('total_payment');
+            $successCount = (int) (clone $dailySuccessQuery)->count();
+            $failedCount = (int) (clone $dailyFailedQuery)->count();
+            $totalCount = (int) Transaction::whereDate('created_at', $date)->count();
+            $refundAmount = (float) (clone $dailyFailedQuery)->sum('total_payment');
+            $settlementAmount = (float) (clone $dailySuccessQuery)->sum('amount');
 
             $revenueTrend[] = [
                 'date' => $date,
-                'revenue' => (float) $dailySuccess->sum('total_payment'),
+                'revenue' => $revenue,
             ];
 
             $transactionTrend[] = [
                 'date' => $date,
-                'total' => (int) Transaction::whereDate('created_at', $date)->count(),
-                'success' => (int) $dailySuccess->count(),
-                'failed' => (int) $dailyFailed->count(),
+                'total' => $totalCount,
+                'success' => $successCount,
+                'failed' => $failedCount,
             ];
 
             $refundTrend[] = [
                 'date' => $date,
-                'amount' => (float) $dailyFailed->sum('total_payment'),
-                'count' => (int) $dailyFailed->count(),
+                'amount' => $refundAmount,
+                'count' => $failedCount,
             ];
 
             $settlementTrend[] = [
                 'date' => $date,
-                'amount' => (float) $dailySuccess->sum('amount'), // Base amount
+                'amount' => $settlementAmount,
+            ];
+
+            $revenue30Days[] = [
+                'date' => Carbon::parse($date)->format('d M'),
+                'day' => $date,
+                'revenue' => $revenue,
+                'amount' => $revenue,
+            ];
+
+            $transaction30Days[] = [
+                'date' => Carbon::parse($date)->format('d M'),
+                'day' => $date,
+                'total' => $totalCount,
+                'success' => $successCount,
+                'failed' => $failedCount,
             ];
         }
 
@@ -199,6 +257,12 @@ class OwnerRepository implements OwnerRepositoryInterface
             'transaction_trend' => $transactionTrend,
             'refund_trend' => $refundTrend,
             'settlement_trend' => $settlementTrend,
+            'revenue_30_days' => $revenue30Days,
+            'transaction_30_days' => $transaction30Days,
+            'revenueChart' => $revenue30Days,
+            'transactionChart' => $transaction30Days,
+            'wallet_balance' => (float) Wallet::sum('balance'),
+            'total_profit_estimate' => (float) Transaction::where('status', 'success')->sum('admin_fee'),
         ];
     }
 

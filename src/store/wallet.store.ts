@@ -10,6 +10,13 @@ interface WalletState {
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
   topUp: (amount: number, paymentMethod: string) => Promise<any | null>;
   transfer: (recipient_wallet_number: string, amount: number, pin?: string) => Promise<any | null>;
+  withdraw: (payload: {
+    amount: number;
+    pin: string;
+    bank_name: string;
+    account_number: string;
+    admin_fee?: number;
+  }) => Promise<any | null>;
   addBalance: (amount: number) => Promise<boolean>;
   deductBalance: (amount: number) => Promise<boolean>;
 }
@@ -82,6 +89,23 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       }
     } catch (err: any) {
       set({ error: err.message || 'Gagal melakukan transfer.', loading: false });
+      return null;
+    }
+  },
+
+  withdraw: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await walletService.withdraw(payload);
+      if (response.success && response.data) {
+        set({ loading: false });
+        await get().fetchWallet();
+        return response.data;
+      }
+      set({ error: response.message, loading: false });
+      return null;
+    } catch (err: any) {
+      set({ error: err.message || 'Gagal melakukan penarikan.', loading: false });
       return null;
     }
   },

@@ -18,6 +18,7 @@ export interface FinanceState {
 
   // Reports
   reports: any[];
+  reportsSummary: Record<string, any> | null;
   reportsPagination: Pagination | null;
   reportsLoading: boolean;
   reportsError: string | null;
@@ -50,6 +51,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   dashboardError: null,
 
   reports: [],
+  reportsSummary: null,
   reportsPagination: null,
   reportsLoading: false,
   reportsError: null,
@@ -86,10 +88,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     try {
       const response = await financeService.getReports(params);
       if (response && response.success !== false) {
-        const data = Array.isArray(response.data) ? response.data : (response.data?.data || response.data?.reports || []);
+        const payload = response.data;
+        const data = Array.isArray(payload)
+          ? payload
+          : (payload?.records || payload?.data || payload?.reports || []);
+        const reportsSummary = !Array.isArray(payload) && payload?.summary ? payload.summary : null;
         set({
           reports: data,
-          reportsPagination: response.pagination || response.data?.pagination || null,
+          reportsSummary,
+          reportsPagination: response.pagination || payload?.pagination || null,
           reportsLoading: false,
         });
       } else {

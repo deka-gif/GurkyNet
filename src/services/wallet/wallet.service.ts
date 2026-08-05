@@ -51,6 +51,17 @@ export const walletService = {
   transfer: async (recipient_wallet_number: string, amount: number, pin?: string): Promise<ApiResponse<any>> => {
     const response = await apiClient.post<ApiResponse<any>>('/wallet/transfer', { recipient_wallet_number, amount, pin });
     return response.data;
-  }
+  },
+
+  withdraw: async (payload: {
+    amount: number;
+    pin: string;
+    bank_name: string;
+    account_number: string;
+    admin_fee?: number;
+  }): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>('/wallet/withdraw', payload);
+    return response.data;
+  },
 };
 

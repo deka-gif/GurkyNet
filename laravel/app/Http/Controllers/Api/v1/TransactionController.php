@@ -268,6 +268,18 @@ class TransactionController extends Controller
                         'status' => \App\Enums\TransactionStatus::SUCCESS->value,
                         'notes' => 'Transaksi sukses. SN: ' . ($sn ?? '-'),
                     ]);
+
+                    \App\Models\PaymentHistory::recordFor(
+                        $transaction,
+                        'digiflazz',
+                        'success',
+                        $payload,
+                        $item,
+                        $transaction->invoice_number
+                    );
+
+                    event(new \App\Events\TransactionSuccess($transaction));
+                    event(new \App\Events\PaymentSettled($transaction, is_array($payload) ? $payload : []));
                 } elseif ($status === 'failed') {
                     \Illuminate\Support\Facades\DB::transaction(function () use ($transaction) {
                         $transaction->update([
@@ -287,8 +299,17 @@ class TransactionController extends Controller
                                 'description' => 'Refund Gagal Transaksi (Callback): ' . $transaction->invoice_number,
                                 'reference_id' => $transaction->id,
                             ]);
+
+                            event(new \App\Events\WalletCredited(
+                                $wallet,
+                                (float) $transaction->total_payment,
+                                'Refund Gagal Transaksi (Callback): ' . $transaction->invoice_number,
+                                $transaction->id
+                            ));
                         }
-                });
+                    });
+
+                    event(new \App\Events\TransactionFailed($transaction));
                 } else {
                     $transaction->update([
                         'status' => \App\Enums\TransactionStatus::PROCESSING->value,

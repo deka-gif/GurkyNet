@@ -13,7 +13,7 @@ class NotificationService
     /**
      * Send notification to multiple channels.
      */
-    public function send(User $user, string $title, string $message, string $type = 'info', array $channels = ['database', 'email', 'push', 'sms']): array
+    public function send(User $user, string $title, string $message, string $type = 'info', array $channels = ['database']): array
     {
         $results = [];
 

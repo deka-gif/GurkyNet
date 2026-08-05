@@ -25,6 +25,7 @@ import { DataTableCard, StatCard, EmptyState, StatusBadge } from '../../componen
 export const FinanceFinancialReport: React.FC = () => {
   const {
     reports,
+    reportsSummary,
     reportsPagination,
     reportsLoading,
     reportsError,
@@ -115,6 +116,16 @@ export const FinanceFinancialReport: React.FC = () => {
   };
 
   const summary = dashboardData?.summary || dashboardData || {};
+  const reportSummary = reportsSummary || {};
+  const formatRp = (value: number | undefined | null) =>
+    `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
+  const profitFormatted = summary.profitFormatted || formatRp(reportSummary.profit ?? summary.profit);
+  const marginFormatted = summary.marginFormatted || formatRp(reportSummary.margin ?? summary.margin);
+  const expensesFormatted = summary.expensesFormatted || formatRp(reportSummary.expenses ?? summary.expenses);
+  const providerCostFormatted = formatRp(reportSummary.provider_cost ?? summary.provider_cost);
+  const customerCount = reportSummary.customers ?? '—';
+  const providerCount = reportSummary.providers ?? '—';
+  const grossRevenueFormatted = formatRp(reportSummary.gross_revenue);
 
   return (
     <div className="space-y-6 pb-12">
@@ -199,8 +210,8 @@ export const FinanceFinancialReport: React.FC = () => {
 
         <StatCard
           title="Monthly Revenue"
-          value={summary.monthlyRevenueFormatted || (summary.monthlyRevenue ? `Rp ${Number(summary.monthlyRevenue).toLocaleString('id-ID')}` : 'Rp 0')}
-          change="Sistem Pembayaran"
+          value={summary.monthlyRevenueFormatted || (summary.monthlyRevenue || summary.monthly_revenue ? `Rp ${Number(summary.monthlyRevenue || summary.monthly_revenue).toLocaleString('id-ID')}` : 'Rp 0')}
+          change={summary.revenueGrowth || '0%'}
           changeType="neutral"
           icon={TrendingUp}
           iconBg="bg-blue-50"
@@ -209,8 +220,8 @@ export const FinanceFinancialReport: React.FC = () => {
 
         <StatCard
           title="Total Transactions"
-          value={`${(summary.todaysTransactions ?? summary.totalTransactions ?? reports.length).toLocaleString('id-ID')} TRX`}
-          change="Recorded"
+          value={`${(summary.totalTransactions ?? reports.length).toLocaleString('id-ID')} TRX`}
+          change={summary.autoSettlementRate ? `Settlement ${summary.autoSettlementRate}` : 'Recorded'}
           changeType="neutral"
           icon={CreditCard}
           iconBg="bg-indigo-50"
@@ -218,10 +229,10 @@ export const FinanceFinancialReport: React.FC = () => {
         />
 
         <StatCard
-          title="Total Refund"
-          value={summary.pendingRefundsValueFormatted || `Rp ${(summary.pendingRefundsValue || 0).toLocaleString('id-ID')}`}
-          change={`${summary.pendingRefundsCount || 0} Cases`}
-          changeType="neutral"
+          title="Profit"
+          value={profitFormatted}
+          change={`Margin ${marginFormatted}`}
+          changeType="positive"
           icon={RotateCcw}
           iconBg="bg-purple-50"
           iconColor="text-purple-600"
@@ -337,16 +348,16 @@ export const FinanceFinancialReport: React.FC = () => {
           </div>
           <div className="space-y-1.5 text-xs text-gray-700">
             <div className="flex justify-between">
-              <span className="text-gray-400">Total Volume:</span>
+              <span className="text-gray-400">Today Volume:</span>
               <span className="font-extrabold text-gray-900">{summary.todaysRevenueFormatted || 'Rp 0'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Monthly Volume:</span>
-              <span className="font-bold text-emerald-600">{summary.monthlyRevenueFormatted || 'Rp 0'}</span>
+              <span className="font-bold text-emerald-600">{summary.monthlyRevenueFormatted || formatRp(summary.monthlyRevenue || summary.monthly_revenue)}</span>
             </div>
             <div className="flex justify-between border-t border-gray-100 pt-1 text-emerald-700 font-extrabold">
-              <span>Status Audit:</span>
-              <span>Backend Synchronized</span>
+              <span>Report Gross:</span>
+              <span>{reportsSummary ? grossRevenueFormatted : 'Filter laporan'}</span>
             </div>
           </div>
         </div>
@@ -362,15 +373,15 @@ export const FinanceFinancialReport: React.FC = () => {
           <div className="space-y-1.5 text-xs text-gray-700">
             <div className="flex justify-between">
               <span className="text-gray-400">Total TRX Count:</span>
-              <span className="font-extrabold text-gray-900">{(summary.todaysTransactions ?? reports.length).toLocaleString('id-ID')} TRX</span>
+              <span className="font-extrabold text-gray-900">{(summary.totalTransactions ?? reports.length).toLocaleString('id-ID')} TRX</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Auto-Settlement Rate:</span>
-              <span className="font-bold text-emerald-600">{summary.autoSettlementRate || '99.8%'}</span>
+              <span className="font-bold text-emerald-600">{summary.autoSettlementRate || '0%'}</span>
             </div>
             <div className="flex justify-between border-t border-gray-100 pt-1 text-blue-700 font-extrabold">
-              <span>Status Real-time:</span>
-              <span>Active</span>
+              <span>Customers (filter):</span>
+              <span>{customerCount}</span>
             </div>
           </div>
         </div>
@@ -393,8 +404,8 @@ export const FinanceFinancialReport: React.FC = () => {
               <span className="font-bold text-amber-600">{summary.pendingRefundsValueFormatted || 'Rp 0'}</span>
             </div>
             <div className="flex justify-between border-t border-gray-100 pt-1 text-purple-900 font-extrabold">
-              <span>Approval Status:</span>
-              <span>Refund Center</span>
+              <span>Refund Expense:</span>
+              <span>{formatRp(reportSummary.refund_expense)}</span>
             </div>
           </div>
         </div>
@@ -405,7 +416,7 @@ export const FinanceFinancialReport: React.FC = () => {
               <Building className="w-4 h-4 text-indigo-600" />
               Settlement Summary
             </h3>
-            <span className="text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded font-bold">H+0 Kliring</span>
+            <span className="text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded font-bold">Live Ledger</span>
           </div>
           <div className="space-y-1.5 text-xs text-gray-700">
             <div className="flex justify-between">
@@ -414,11 +425,11 @@ export const FinanceFinancialReport: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Notes:</span>
-              <span className="font-bold text-gray-600">{summary.pendingSettlementNotes || 'H+0 Clearing'}</span>
+              <span className="font-bold text-gray-600">{summary.pendingSettlementNotes || '0 transaksi menunggu'}</span>
             </div>
             <div className="flex justify-between border-t border-gray-100 pt-1 text-indigo-700 font-extrabold">
-              <span>Rekonsiliasi:</span>
-              <span>Automated</span>
+              <span>Settlement Rows:</span>
+              <span>{summary.settlement_success_count ?? 0}</span>
             </div>
           </div>
         </div>
@@ -427,22 +438,22 @@ export const FinanceFinancialReport: React.FC = () => {
           <div className="flex items-center justify-between border-b border-gray-100 pb-2">
             <h3 className="font-extrabold text-xs text-gray-900 flex items-center gap-1.5">
               <PieChart className="w-4 h-4 text-amber-600" />
-              Payment Methods
+              Profit &amp; Margin
             </h3>
-            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-bold">Channel Share</span>
+            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-bold">Real Txn</span>
           </div>
           <div className="space-y-1.5 text-xs text-gray-700">
             <div className="flex justify-between">
-              <span className="text-gray-400">Virtual Account:</span>
-              <span className="font-extrabold text-gray-900">Active</span>
+              <span className="text-gray-400">Profit:</span>
+              <span className="font-extrabold text-gray-900">{profitFormatted}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">QRIS / E-Wallet:</span>
-              <span className="font-bold text-gray-800">Active</span>
+              <span className="text-gray-400">Margin:</span>
+              <span className="font-bold text-gray-800">{marginFormatted}</span>
             </div>
             <div className="flex justify-between border-t border-gray-100 pt-1 text-amber-800 font-extrabold">
-              <span>Gateways:</span>
-              <span>Multi-channel</span>
+              <span>Expenses:</span>
+              <span>{expensesFormatted}</span>
             </div>
           </div>
         </div>
@@ -451,22 +462,22 @@ export const FinanceFinancialReport: React.FC = () => {
           <div className="flex items-center justify-between border-b border-gray-100 pb-2">
             <h3 className="font-extrabold text-xs text-gray-900 flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-cyan-600" />
-              Providers
+              Providers &amp; Cost
             </h3>
-            <span className="text-[10px] text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded font-bold">Aggregator Share</span>
+            <span className="text-[10px] text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded font-bold">DB Aggregates</span>
           </div>
           <div className="space-y-1.5 text-xs text-gray-700">
             <div className="flex justify-between">
-              <span className="text-gray-400">Digiflazz & Alterra:</span>
-              <span className="font-extrabold text-gray-900">Connected</span>
+              <span className="text-gray-400">Provider Cost:</span>
+              <span className="font-extrabold text-gray-900">{providerCostFormatted}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Midtrans & Xendit:</span>
-              <span className="font-bold text-gray-800">Connected</span>
+              <span className="text-gray-400">Service Lines:</span>
+              <span className="font-bold text-gray-800">{providerCount}</span>
             </div>
             <div className="flex justify-between border-t border-gray-100 pt-1 text-cyan-800 font-extrabold">
-              <span>Integration Status:</span>
-              <span>100% Operational</span>
+              <span>Customers:</span>
+              <span>{customerCount}</span>
             </div>
           </div>
         </div>

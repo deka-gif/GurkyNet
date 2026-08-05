@@ -8,11 +8,14 @@ use App\Actions\Admin\Finance\FinanceDashboardAction;
 use App\Actions\Admin\Finance\FinanceReportAction;
 use App\Actions\Admin\Finance\FinanceRefundAction;
 use App\Actions\Admin\Finance\FinanceSettlementAction;
+use App\Actions\Wallet\AdjustWalletAction;
 use App\Http\Requests\Admin\Finance\FinanceReportRequest;
 use App\Http\Requests\Admin\Finance\FinanceRefundFilterRequest;
 use App\Http\Requests\Admin\Finance\FinanceRefundActionRequest;
 use App\Http\Requests\Admin\Finance\FinanceSettlementFilterRequest;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class FinanceController extends Controller
 {
@@ -111,5 +114,41 @@ class FinanceController extends Controller
                 'total' => $paginator->total(),
             ]
         );
+    }
+
+    /**
+     * Manual wallet adjustment (credit/debit) for Finance/Owner.
+     * POST /api/v1/admin/finance/wallet/adjust
+     */
+    public function adjustWallet(Request $request, AdjustWalletAction $action): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => 'required_without:email|integer|exists:users,id',
+            'email' => 'required_without:user_id|email|exists:users,email',
+            'amount' => 'required|numeric|min:1',
+            'direction' => 'required|in:credit,debit',
+            'reason' => 'required|string|max:255',
+        ]);
+
+        try {
+            $target = !empty($data['user_id'])
+                ? User::findOrFail($data['user_id'])
+                : User::where('email', $data['email'])->firstOrFail();
+
+            $transaction = $action->execute(
+                $target,
+                (float) $data['amount'],
+                $data['direction'],
+                $data['reason'],
+                $request->user()
+            );
+
+            return $this->successResponse('Penyesuaian saldo berhasil diproses.', $transaction);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        } catch (\Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 400;
+            return $this->errorResponse($e->getMessage(), $code);
+        }
     }
 }

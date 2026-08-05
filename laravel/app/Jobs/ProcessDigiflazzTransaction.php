@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\DigiflazzTransaction;
 use App\Models\Wallet;
 use App\Models\WalletHistory;
+use App\Models\PaymentHistory;
 use App\Services\DigiflazzService;
 use App\Enums\TransactionStatus;
 use App\Enums\WalletHistoryType;
@@ -97,6 +98,18 @@ class ProcessDigiflazzTransaction implements ShouldQueue
                     'status' => TransactionStatus::SUCCESS->value,
                     'notes' => 'Transaksi sukses. SN: ' . ($sn ?? '-'),
                 ]);
+
+                PaymentHistory::recordFor(
+                    $transaction,
+                    'digiflazz',
+                    'success',
+                    $response,
+                    $response,
+                    $transaction->invoice_number
+                );
+
+                event(new \App\Events\TransactionSuccess($transaction));
+                event(new \App\Events\PaymentSettled($transaction, is_array($response) ? $response : []));
             } elseif ($digiflazzStatus === 'failed') {
                 DB::transaction(function () use ($transaction) {
                     $transaction->update([
@@ -118,12 +131,21 @@ class ProcessDigiflazzTransaction implements ShouldQueue
                             'reference_id' => $transaction->id,
                         ]);
 
+                        event(new \App\Events\WalletCredited(
+                            $wallet,
+                            (float) $transaction->total_payment,
+                            'Refund Gagal Transaksi: ' . $transaction->invoice_number,
+                            $transaction->id
+                        ));
+
                         Log::info("Refund executed successfully for failed transaction", [
                             'transaction_id' => $transaction->id,
                             'amount' => $transaction->total_payment,
                         ]);
                     }
-                ]);
+                });
+
+                event(new \App\Events\TransactionFailed($transaction));
             } else {
                 // Pending/Processing
                 $transaction->update([

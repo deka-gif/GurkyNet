@@ -461,14 +461,28 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
                         'amount' => $refundAmount,
                         'type' => WalletHistoryType::CREDIT->value,
                         'description' => 'Refund Customer Support: ' . $transaction->invoice_number,
-                        'reference_id' => $transaction->invoice_number,
+                        'reference_id' => $transaction->id,
                     ]);
+
+                    event(new \App\Events\WalletCredited(
+                        $wallet,
+                        (float) $refundAmount,
+                        'Refund Customer Support: ' . $transaction->invoice_number,
+                        $transaction->id
+                    ));
                 }
             }
 
             $transaction->status = TransactionStatus::CANCELED->value;
             $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Disetujui CS: ' . ($note ?? 'Diproses oleh Customer Support'));
             $transaction->save();
+
+            \App\Models\PaymentHistory::recordFor(
+                $transaction,
+                'wallet_refund',
+                'refund',
+                ['approved_by' => 'customer_support', 'note' => $note]
+            );
 
             ActivityLog::create([
                 'user_id' => Auth::id(),

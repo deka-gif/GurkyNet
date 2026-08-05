@@ -152,8 +152,8 @@ export const OwnerDashboard: React.FC = () => {
     const todayTrx = d.todayTransactions ?? d.today_transactions ?? summary.today_transactions ?? 0;
     const successRate = d.successRate ?? d.success_rate ?? summary.success_rate ?? 100;
 
-    const todayRevChange = d.todayRevenueChange ?? d.today_revenue_change ?? summary.today_revenue_change ?? '+0% vs kemarin';
-    const monthlyRevChange = d.monthlyRevenueChange ?? d.monthly_revenue_change ?? summary.monthly_revenue_change ?? '+0% vs bulan lalu';
+    const todayRevChange = d.todayRevenueChange ?? d.today_revenue_change ?? summary.today_revenue_change ?? null;
+    const monthlyRevChange = d.monthlyRevenueChange ?? d.monthly_revenue_change ?? summary.monthly_revenue_change ?? null;
     const usersChange = d.usersChange ?? d.users_change ?? summary.users_change ?? 'pengguna terdaftar';
 
     return {

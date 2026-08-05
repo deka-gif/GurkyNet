@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\MidtransTransaction;
 use App\Models\Wallet;
 use App\Models\WalletHistory;
+use App\Models\PaymentHistory;
 use App\Enums\TransactionStatus;
 use App\Enums\WalletHistoryType;
 use Illuminate\Bus\Queueable;
@@ -137,6 +138,15 @@ class ProcessMidtransCallback implements ShouldQueue
                     'status' => TransactionStatus::SUCCESS->value,
                     'notes' => 'Pembayaran berhasil dikonfirmasi oleh Midtrans.',
                 ]);
+
+                PaymentHistory::recordFor(
+                    $transaction,
+                    'midtrans',
+                    $midtransStatus === 'capture' ? 'capture' : 'settlement',
+                    $this->payload,
+                    $this->payload,
+                    $transaction->invoice_number
+                );
 
                 event(new \App\Events\PaymentSettled($transaction, $this->payload));
                 event(new \App\Events\TransactionSuccess($transaction));

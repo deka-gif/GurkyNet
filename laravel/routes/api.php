@@ -110,6 +110,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/wallet/history', [WalletController::class, 'history']);
         Route::post('/wallet/topup', [WalletController::class, 'topUp']);
         Route::post('/wallet/transfer', [WalletController::class, 'transfer']);
+        Route::post('/wallet/withdraw', [WalletController::class, 'withdraw']);
 
         // Transaction Engine Module
         Route::get('/transactions', [TransactionController::class, 'index']);
@@ -126,6 +127,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/refunds/{id}/approve', [FinanceController::class, 'approveRefund']);
             Route::post('/refunds/{id}/reject', [FinanceController::class, 'rejectRefund']);
             Route::get('/settlements', [FinanceController::class, 'settlements']);
+            Route::post('/wallet/adjust', [FinanceController::class, 'adjustWallet']);
         });
 
         // Operations Administration Module
