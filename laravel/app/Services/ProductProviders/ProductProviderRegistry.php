@@ -3,6 +3,7 @@
 namespace App\Services\ProductProviders;
 
 use App\Models\ProductProvider;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 class ProductProviderRegistry
@@ -29,7 +30,14 @@ class ProductProviderRegistry
             throw new InvalidArgumentException("Unknown product provider adapter: {$code}");
         }
 
-        return $this->adapters[$code];
+        $adapter = $this->adapters[$code];
+
+        Log::info('EXEC TRACE — ProductProviderRegistry::get()', [
+            'requested_provider_code' => $code,
+            'adapter_class' => $adapter::class,
+        ]);
+
+        return $adapter;
     }
 
     public function has(string $code): bool

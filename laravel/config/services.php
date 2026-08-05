@@ -38,13 +38,19 @@ return [
     ],
 
     'vip' => [
-        // VIP Reseller / VIPAYMENT — https://vip-reseller.co.id/api
+        /*
+         | VIP Reseller (vip-reseller.co.id) credentials.
+         | Official dashboard fields: API ID + API Key.
+         | Request params: key = API Key, sign = md5(API ID + API Key).
+         | Production env maps API ID → VIP_MERCHANT_ID (canonical).
+         */
         'base_url' => env('VIP_BASE_URL', 'https://vip-reseller.co.id/api'),
-        // API ID (dashboard) — also accepted as VIP_MERCHANT_ID for backwards compatibility
+        // Canonical API ID (production)
+        'merchant_id' => env('VIP_MERCHANT_ID', env('VIP_USERNAME')),
+        // Alias kept for older .env samples; prefer VIP_MERCHANT_ID
         'username' => env('VIP_USERNAME', env('VIP_MERCHANT_ID')),
-        'merchant_id' => env('VIP_MERCHANT_ID'),
         'api_key' => env('VIP_API_KEY'),
-        // Optional; when empty sign = md5(VIP_USERNAME + VIP_API_KEY)
+        // Optional override; official formula is md5(API_ID + API_KEY)
         'signature' => env('VIP_SIGNATURE'),
     ],
 

@@ -18,7 +18,17 @@ class ProductProviderHealthService
      */
     public function check(ProductProvider $provider): ProductProvider
     {
+        Log::info('EXEC TRACE — HealthService::check() enter', [
+            'provider_code' => $provider->code,
+            'is_active' => $provider->is_active,
+            'api_status' => $provider->api_status,
+        ]);
+
         if (!$this->registry->has($provider->code)) {
+            Log::info('EXEC TRACE — HealthService early return: Adapter not found', [
+                'provider_code' => $provider->code,
+            ]);
+
             $provider->forceFill([
                 'api_status' => 'offline',
                 'health_color' => 'red',
@@ -33,8 +43,46 @@ class ProductProviderHealthService
             return $provider->fresh();
         }
 
-        // Disabled providers are marked offline for routing, but still surface a clear reason.
+        $adapter = $this->registry->get($provider->code);
+
+        Log::info('EXEC TRACE — HealthService: Adapter selected', [
+            'provider_code' => $provider->code,
+            'adapter_class' => $adapter::class,
+        ]);
+
+        // Credential / API probe first so missing config is NOT CONFIGURED (never OFFLINE).
+        $result = $adapter->healthCheck();
+        $probeStatus = (string) ($result['api_status'] ?? '');
+
+        if ($probeStatus === 'not_configured') {
+            Log::info('EXEC TRACE — HealthService early return: not_configured', [
+                'provider_code' => $provider->code,
+            ]);
+
+            $message = (string) ($result['message'] ?? 'NOT CONFIGURED');
+            $provider->forceFill([
+                'api_status' => 'not_configured',
+                'health_color' => 'red',
+                'last_health_check_at' => now(),
+                'last_error' => $message,
+                'avg_response_ms' => $result['latency_ms'] ?? $provider->avg_response_ms,
+            ])->save();
+
+            $this->log($provider, false, $result['latency_ms'] ?? null, $message, [
+                'api_status' => 'not_configured',
+                'missing' => $result['raw']['missing'] ?? null,
+            ]);
+
+            return $provider->fresh();
+        }
+
+        // Disabled providers are marked offline for routing only after config is present.
         if (!$provider->is_active) {
+            Log::info('EXEC TRACE — HealthService early return: Provider disabled', [
+                'provider_code' => $provider->code,
+                'is_active' => $provider->is_active,
+            ]);
+
             $provider->forceFill([
                 'api_status' => 'offline',
                 'health_color' => 'yellow',
@@ -48,9 +96,6 @@ class ProductProviderHealthService
 
             return $provider->fresh();
         }
-
-        $adapter = $this->registry->get($provider->code);
-        $result = $adapter->healthCheck();
 
         $latency = $result['latency_ms'] ?? null;
         $balance = $result['balance'] ?? null;

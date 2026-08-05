@@ -8,6 +8,7 @@ use App\Services\ProductProviders\ProductProviderControlService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Product Provider Control Center — Operations only.
@@ -37,6 +38,10 @@ class ProductProviderControlController extends Controller
 
     public function enable(int $id, ProductProviderControlService $service): JsonResponse
     {
+        Log::info('EXEC TRACE — ENTER enable controller', [
+            'provider_id' => $id,
+        ]);
+
         $provider = ProductProvider::findOrFail($id);
         $fresh = $service->enable($provider);
 
@@ -76,6 +81,10 @@ class ProductProviderControlController extends Controller
 
     public function healthCheck(int $id, ProductProviderControlService $service): JsonResponse
     {
+        Log::info('EXEC TRACE — ENTER health controller', [
+            'provider_id' => $id,
+        ]);
+
         $provider = ProductProvider::findOrFail($id);
         $card = $service->healthCheck($provider);
 

@@ -8,6 +8,7 @@ use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -44,13 +45,14 @@ class ProductProviderControlService
     public function toCard(ProductProvider $p): array
     {
         $api = strtolower((string) ($p->api_status ?? 'unknown'));
+        // not_configured must win over disabled/offline so missing env is never shown as OFFLINE.
         $statusLabel = match (true) {
+            $api === 'not_configured' => 'NOT_CONFIGURED',
             !$p->is_active => 'OFFLINE',
             $api === 'online' => 'ONLINE',
             $api === 'degraded' => 'DEGRADED',
             $api === 'auth_failed' => 'AUTH_FAILED',
             $api === 'timeout' => 'TIMEOUT',
-            $api === 'not_configured' => 'NOT_CONFIGURED',
             default => 'OFFLINE',
         };
         $isOnline = $p->is_active && in_array($api, ['online', 'degraded'], true);
@@ -83,12 +85,29 @@ class ProductProviderControlService
 
     public function enable(ProductProvider $provider): ProductProvider
     {
+        Log::info('EXEC TRACE — enable() before save', [
+            'provider_id' => $provider->id,
+            'current_is_active' => $provider->is_active,
+        ]);
+
         $provider->is_active = true;
         $provider->save();
 
+        Log::info('EXEC TRACE — enable() after save', [
+            'provider_id' => $provider->id,
+            'new_is_active' => $provider->is_active,
+        ]);
+
         $this->audit($provider, 'enable', true, 'Provider enabled');
 
-        return $provider->fresh();
+        $fresh = $provider->fresh();
+
+        Log::info('EXEC TRACE — enable() after fresh()', [
+            'provider_id' => $fresh?->id,
+            'fresh_is_active' => $fresh?->is_active,
+        ]);
+
+        return $fresh;
     }
 
     public function disable(ProductProvider $provider): ProductProvider

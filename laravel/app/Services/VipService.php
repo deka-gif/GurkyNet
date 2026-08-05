@@ -82,6 +82,8 @@ class VipService
      */
     public function profile(): array
     {
+        Log::info('EXEC TRACE — ENTER VipService profile');
+
         $cred = $this->credentialStatus();
         if (!$cred['ok']) {
             Log::warning('VIP RUNTIME AUDIT — REQUEST NEVER LEFT LARAVEL (Health Check)', [
@@ -198,6 +200,11 @@ class VipService
      */
     protected function request(string $path, array $params, string $logEvent): array
     {
+        Log::info('EXEC TRACE — VipService::request() HTTP request starting', [
+            'path' => $path,
+            'event' => $logEvent,
+        ]);
+
         $url = $this->baseUrl . '/' . ltrim($path, '/');
         $started = microtime(true);
         $provider = ProductProvider::vip();

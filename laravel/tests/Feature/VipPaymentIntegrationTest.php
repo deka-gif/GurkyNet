@@ -42,14 +42,32 @@ class VipPaymentIntegrationTest extends TestCase
     {
         config([
             'services.vip.base_url' => '',
+            'services.vip.merchant_id' => '',
             'services.vip.username' => '',
             'services.vip.api_key' => '',
         ]);
 
         $status = app(VipService::class)->credentialStatus();
         $this->assertFalse($status['ok']);
-        $this->assertContains('VIP_BASE_URL', $status['missing']);
+        $this->assertContains('VIP_MERCHANT_ID', $status['missing']);
+        $this->assertContains('VIP_API_KEY', $status['missing']);
+        $this->assertStringContainsString('NOT CONFIGURED', $status['message']);
         $this->assertStringContainsString('Missing:', $status['message']);
+    }
+
+    public function test_production_merchant_id_is_loaded_without_vip_username(): void
+    {
+        config([
+            'services.vip.base_url' => 'https://vip-reseller.co.id/api',
+            'services.vip.merchant_id' => 'prod-api-id',
+            'services.vip.username' => '',
+            'services.vip.api_key' => 'prod-api-key',
+            'services.vip.signature' => '',
+        ]);
+
+        $status = app(VipService::class)->credentialStatus();
+        $this->assertTrue($status['ok'], $status['message'] ?? 'should be configured');
+        $this->assertSame([], $status['missing']);
     }
 
     public function test_health_check_sets_online_on_success(): void
@@ -166,16 +184,29 @@ class VipPaymentIntegrationTest extends TestCase
             'vip-reseller.co.id/api/game-feature' => Http::response([
                 'result' => true,
                 'message' => 'OK',
-                'data' => [],
+                'data' => [
+                    [
+                        'code' => 'ZPT300000COINS-S16',
+                        'game' => 'Zepeto',
+                        'name' => '300.000 Coins',
+                        'price' => [
+                            'basic' => 812100,
+                            'premium' => 806686,
+                            'special' => 803979,
+                        ],
+                        'status' => 'available',
+                    ],
+                ],
             ], 200),
         ]);
 
         $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$vip->id}/sync");
         $res->assertOk();
         $payload = $res->json('data');
-        $this->assertGreaterThanOrEqual(2, (int) ($payload['imported'] ?? 0) + (int) ($payload['updated'] ?? 0));
+        $this->assertGreaterThanOrEqual(3, (int) ($payload['imported'] ?? 0) + (int) ($payload['updated'] ?? 0));
         $this->assertArrayHasKey('api_latency_ms', $payload);
         $this->assertArrayHasKey('api_response_status', $payload);
+        $this->assertNotNull($payload['first_sku_id'] ?? null);
 
         $digiProduct->refresh();
         $this->assertSame('flash1', $digiProduct->sku_code);
@@ -190,11 +221,23 @@ class VipPaymentIntegrationTest extends TestCase
             'sku_code' => 'VIP-flash1',
             'product_provider_id' => $vip->id,
         ]);
+        $this->assertDatabaseHas('products', [
+            'sku_code' => 'VIP-ZPT300000COINS-S16',
+            'product_provider_id' => $vip->id,
+            'base_price' => 812100,
+        ]);
 
         $this->assertDatabaseHas('product_provider_skus', [
             'product_provider_id' => $vip->id,
             'provider_sku' => 'TLK_FLASH_1GB',
             'provider_name' => 'Telkomsel Flash 1GB',
+            'provider_status' => 'available',
+        ]);
+        $this->assertDatabaseHas('product_provider_skus', [
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'ZPT300000COINS-S16',
+            'provider_name' => '300.000 Coins',
+            'provider_price' => 812100,
             'provider_status' => 'available',
         ]);
 

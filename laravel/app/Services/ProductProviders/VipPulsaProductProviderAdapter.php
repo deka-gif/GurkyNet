@@ -109,6 +109,8 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
      */
     public function healthCheck(): array
     {
+        Log::info('EXEC TRACE — ENTER Vip adapter');
+
         $result = $this->vip->profile();
 
         $apiStatus = (string) ($result['api_status'] ?? 'offline');
@@ -123,6 +125,7 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'api_status' => $apiStatus,
             'health_color' => (string) ($result['health_color'] ?? 'red'),
             'http_status' => $result['http_status'] ?? null,
+            'raw' => $result['raw'] ?? [],
         ];
     }
 }
