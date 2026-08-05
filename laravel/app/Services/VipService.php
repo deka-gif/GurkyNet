@@ -84,6 +84,19 @@ class VipService
     {
         $cred = $this->credentialStatus();
         if (!$cred['ok']) {
+            Log::warning('VIP RUNTIME AUDIT — REQUEST NEVER LEFT LARAVEL (Health Check)', [
+                'reason' => 'VipService::profile() credentialStatus() failed before Http::post',
+                'missing' => $cred['missing'],
+                'message' => $cred['message'],
+                'intended_method' => 'POST',
+                'intended_url' => rtrim($this->baseUrl !== '' ? $this->baseUrl : (string) config('services.vip.base_url', 'https://vip-reseller.co.id/api'), '/') . '/profile',
+                'REQUEST_URL' => null,
+                'REQUEST_BODY' => null,
+                'REQUEST_HEADERS' => null,
+                'RESPONSE_STATUS' => null,
+                'RESPONSE_BODY' => null,
+            ]);
+
             return [
                 'success' => false,
                 'api_status' => 'not_configured',
@@ -174,7 +187,6 @@ class VipService
             'data_no' => $customerNo,
         ];
         if ($refId) {
-            // Some VIP accounts accept custom ref via optional fields; keep for logging only if ignored.
             $params['reff_id'] = $refId;
         }
 
@@ -189,34 +201,53 @@ class VipService
         $url = $this->baseUrl . '/' . ltrim($path, '/');
         $started = microtime(true);
         $provider = ProductProvider::vip();
+        $headers = [
+            'Content-Type' => 'application/x-www-form-urlencoded',
+            'Accept' => 'application/json',
+        ];
 
-        $safePayload = array_merge($params, [
-            'key' => $this->mask($params['key'] ?? ''),
-            'sign' => '***',
+        $signSource = ((string) (config('services.vip.signature') ?: '') !== '')
+            ? 'VIP_SIGNATURE (precomputed)'
+            : 'md5(apiId + apiKey)';
+
+        $requestBodyForLog = array_merge($params, [
+            'key' => $this->mask((string) ($params['key'] ?? '')),
+            'sign' => $this->mask((string) ($params['sign'] ?? '')),
+            'sign_calculation' => $signSource,
         ]);
 
-        $this->writeLog($provider?->id, $logEvent === 'health_check' ? 'api_request' : 'api_request', [
+        $this->writeLog($provider?->id, 'api_request', [
             'url' => $url,
             'path' => $path,
-            'payload' => $safePayload,
+            'payload' => $requestBodyForLog,
             'event' => $logEvent,
         ]);
 
-        Log::info('VIP API request', ['url' => $url, 'path' => $path, 'event' => $logEvent]);
+        Log::info('VIP RUNTIME AUDIT REQUEST', [
+            'event' => $logEvent,
+            'REQUEST_URL' => $url,
+            'REQUEST_HEADERS' => $headers,
+            'REQUEST_BODY' => $requestBodyForLog,
+            'http_method' => 'POST',
+        ]);
+        Log::info('VIP REQUEST URL', ['REQUEST_URL' => $url]);
+        Log::info('VIP REQUEST BODY', ['REQUEST_BODY' => $requestBodyForLog]);
+        Log::info('VIP REQUEST HEADERS', ['REQUEST_HEADERS' => $headers]);
 
         try {
             $timeout = app()->environment('testing') ? 5 : 30;
             /** @var Response $response */
             $response = Http::asForm()
+                ->withHeaders(['Accept' => 'application/json'])
                 ->timeout($timeout)
                 ->connectTimeout(app()->environment('testing') ? 2 : 10)
-                ->acceptJson()
                 ->post($url, $params);
 
             $ms = (int) ((microtime(true) - $started) * 1000);
+            $rawBodyString = $response->body();
             $body = $response->json();
             if (!is_array($body)) {
-                $body = ['raw_body' => $response->body()];
+                $body = ['raw_body' => $rawBodyString];
             }
 
             $this->writeLog($provider?->id, 'api_response', [
@@ -227,13 +258,22 @@ class VipService
                 'event' => $logEvent,
             ], $ms, $response->successful());
 
-            Log::info('VIP API response', [
-                'url' => $url,
-                'status' => $response->status(),
+            Log::info('VIP RUNTIME AUDIT RESPONSE', [
+                'event' => $logEvent,
+                'RESPONSE_STATUS' => $response->status(),
+                'RESPONSE_BODY' => $rawBodyString,
                 'latency_ms' => $ms,
+                'REQUEST_URL' => $url,
             ]);
+            Log::info('VIP RESPONSE STATUS', ['RESPONSE_STATUS' => $response->status()]);
+            Log::info('VIP RESPONSE BODY', ['RESPONSE_BODY' => $rawBodyString]);
 
             if (in_array($response->status(), [401, 403], true)) {
+                Log::error('VIP Authentication Error', [
+                    'RESPONSE_STATUS' => $response->status(),
+                    'RESPONSE_BODY' => $rawBodyString,
+                    'REQUEST_URL' => $url,
+                ]);
                 $this->writeLog($provider?->id, 'authentication_failure', [
                     'http_status' => $response->status(),
                     'message' => $body['message'] ?? 'Unauthorized',
@@ -243,6 +283,12 @@ class VipService
             }
 
             if ($response->serverError()) {
+                Log::error('VIP HTTP 5xx', [
+                    'RESPONSE_STATUS' => $response->status(),
+                    'RESPONSE_BODY' => $rawBodyString,
+                    'REQUEST_URL' => $url,
+                ]);
+
                 return $this->failResult('offline', 'red', $response->status(), $ms, 'HTTP ' . $response->status(), $body);
             }
 
@@ -252,6 +298,12 @@ class VipService
             $authLike = $this->looksLikeAuthFailure($message, $resultFlag);
 
             if ($authLike) {
+                Log::error('VIP Authentication Error', [
+                    'RESPONSE_STATUS' => $response->status(),
+                    'RESPONSE_BODY' => $rawBodyString,
+                    'message' => $message,
+                    'REQUEST_URL' => $url,
+                ]);
                 $this->writeLog($provider?->id, 'authentication_failure', [
                     'http_status' => $response->status(),
                     'message' => $message,
@@ -261,10 +313,23 @@ class VipService
             }
 
             if ($resultFlag === false || $resultFlag === 0 || $resultFlag === 'false') {
+                Log::error('VIP API logical failure', [
+                    'RESPONSE_STATUS' => $response->status(),
+                    'RESPONSE_BODY' => $rawBodyString,
+                    'body.result_or_status' => $resultFlag,
+                    'REQUEST_URL' => $url,
+                ]);
+
                 return $this->failResult('offline', 'yellow', $response->status(), $ms, $message ?: 'VIP API returned failure', $body);
             }
 
             if (!$response->successful() && $resultFlag === null) {
+                Log::error('VIP non-2xx without result flag', [
+                    'RESPONSE_STATUS' => $response->status(),
+                    'RESPONSE_BODY' => $rawBodyString,
+                    'REQUEST_URL' => $url,
+                ]);
+
                 return $this->failResult('offline', 'yellow', $response->status(), $ms, $message ?: ('HTTP ' . $response->status()), $body);
             }
 
@@ -282,16 +347,31 @@ class VipService
             ];
         } catch (ConnectionException $e) {
             $ms = (int) ((microtime(true) - $started) * 1000);
+            $msg = $e->getMessage();
+            $isSsl = str_contains(strtolower($msg), 'ssl') || str_contains(strtolower($msg), 'certificate');
+
+            Log::error($isSsl ? 'VIP SSL Error' : 'VIP Timeout', [
+                'Exception' => $msg,
+                'Timeout' => !$isSsl,
+                'SSL_Error' => $isSsl,
+                'REQUEST_URL' => $url,
+                'class' => $e::class,
+            ]);
+
             $this->writeLog($provider?->id, 'api_response', [
                 'url' => $url,
-                'error' => $e->getMessage(),
+                'error' => $msg,
                 'event' => $logEvent,
             ], $ms, false);
 
-            return $this->failResult('timeout', 'yellow', null, $ms, 'Timeout / connection error: ' . $e->getMessage(), []);
+            return $this->failResult('timeout', 'yellow', null, $ms, 'Timeout / connection error: ' . $msg, []);
         } catch (\Throwable $e) {
             $ms = (int) ((microtime(true) - $started) * 1000);
-            Log::error('VIP API exception', ['error' => $e->getMessage(), 'url' => $url]);
+            Log::error('VIP Exception', [
+                'Exception' => $e->getMessage(),
+                'REQUEST_URL' => $url,
+                'class' => $e::class,
+            ]);
 
             return $this->failResult('offline', 'red', null, $ms, $e->getMessage(), []);
         }
