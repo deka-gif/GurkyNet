@@ -3,6 +3,7 @@
 namespace App\Services\ProductProviders;
 
 use App\Actions\Admin\Operations\SyncDigiflazzCatalogAction;
+use App\Actions\Admin\Operations\SyncVipCatalogAction;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
@@ -18,6 +19,7 @@ class ProductProviderControlService
     public function __construct(
         protected ProductProviderHealthService $health,
         protected SyncDigiflazzCatalogAction $syncDigiflazz,
+        protected SyncVipCatalogAction $syncVip,
     ) {}
 
     /**
@@ -41,7 +43,17 @@ class ProductProviderControlService
 
     public function toCard(ProductProvider $p): array
     {
-        $isOnline = ($p->api_status === 'online' || $p->api_status === 'degraded') && $p->is_active;
+        $api = strtolower((string) ($p->api_status ?? 'unknown'));
+        $statusLabel = match (true) {
+            !$p->is_active => 'OFFLINE',
+            $api === 'online' => 'ONLINE',
+            $api === 'degraded' => 'DEGRADED',
+            $api === 'auth_failed' => 'AUTH_FAILED',
+            $api === 'timeout' => 'TIMEOUT',
+            $api === 'not_configured' => 'NOT_CONFIGURED',
+            default => 'OFFLINE',
+        };
+        $isOnline = $p->is_active && in_array($api, ['online', 'degraded'], true);
 
         return [
             'id' => $p->id,
@@ -49,7 +61,7 @@ class ProductProviderControlService
             'name' => $p->name,
             'logo' => $p->logo,
             'enabled' => (bool) $p->is_active,
-            'status' => !$p->is_active ? 'OFFLINE' : (strtoupper($p->api_status === 'online' ? 'ONLINE' : ($p->api_status === 'degraded' ? 'DEGRADED' : 'OFFLINE'))),
+            'status' => $statusLabel,
             'priority' => (int) $p->priority,
             'apiStatus' => $p->api_status,
             'healthColor' => $p->health_color,
@@ -169,7 +181,18 @@ class ProductProviderControlService
             return array_merge($result, ['provider' => $this->toCard($provider->fresh())]);
         }
 
-        // VIP / future — structured stub until credentials + catalog API wired
+        if ($provider->code === ProductProvider::CODE_VIP) {
+            try {
+                $result = $this->syncVip->execute($options);
+
+                return array_merge($result, ['provider' => $this->toCard($provider->fresh())]);
+            } catch (\Throwable $e) {
+                throw ValidationException::withMessages([
+                    'provider' => [$e->getMessage()],
+                ]);
+            }
+        }
+
         ProductProviderLog::create([
             'product_provider_id' => $provider->id,
             'event_type' => 'sync',

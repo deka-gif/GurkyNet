@@ -13,13 +13,17 @@ class ProductProviderSku extends Model
         'product_id',
         'product_provider_id',
         'provider_sku',
+        'provider_name',
         'base_price',
+        'provider_price',
+        'provider_status',
         'is_preferred',
         'is_active',
     ];
 
     protected $casts = [
         'base_price' => 'decimal:2',
+        'provider_price' => 'decimal:2',
         'is_preferred' => 'boolean',
         'is_active' => 'boolean',
     ];

@@ -26,11 +26,14 @@ class ProductProviderHealthService
                 'last_error' => 'No adapter registered',
             ])->save();
 
-            $this->log($provider, false, null, 'No adapter registered');
+            $this->log($provider, false, null, 'No adapter registered', [
+                'api_status' => 'offline',
+            ]);
 
             return $provider->fresh();
         }
 
+        // Disabled providers are marked offline for routing, but still surface a clear reason.
         if (!$provider->is_active) {
             $provider->forceFill([
                 'api_status' => 'offline',
@@ -39,7 +42,9 @@ class ProductProviderHealthService
                 'last_error' => 'Provider disabled',
             ])->save();
 
-            $this->log($provider, false, null, 'Provider disabled');
+            $this->log($provider, false, null, 'Provider disabled', [
+                'api_status' => 'offline',
+            ]);
 
             return $provider->fresh();
         }
@@ -47,25 +52,47 @@ class ProductProviderHealthService
         $adapter = $this->registry->get($provider->code);
         $result = $adapter->healthCheck();
 
-        $reachable = (bool) ($result['reachable'] ?? false);
-        $auth = (bool) ($result['authenticated'] ?? false);
         $latency = $result['latency_ms'] ?? null;
         $balance = $result['balance'] ?? null;
         $message = $result['message'] ?? null;
 
-        $color = 'red';
-        $status = 'offline';
-        if ($reachable && $auth) {
-            $status = 'online';
-            $color = ($latency !== null && $latency > 3000) ? 'yellow' : 'green';
-            if ($balance !== null && $balance <= 0) {
-                $color = 'yellow';
+        // Prefer adapter-provided status (online / auth_failed / timeout / not_configured / …)
+        $status = (string) ($result['api_status'] ?? '');
+        $color = (string) ($result['health_color'] ?? '');
+
+        if ($status === '') {
+            $reachable = (bool) ($result['reachable'] ?? false);
+            $auth = (bool) ($result['authenticated'] ?? false);
+            $status = 'offline';
+            $color = 'red';
+            if ($reachable && $auth) {
+                $status = 'online';
+                $color = ($latency !== null && $latency > 3000) ? 'yellow' : 'green';
+                if ($balance !== null && $balance <= 0) {
+                    $color = 'yellow';
+                    $status = 'degraded';
+                }
+            } elseif ($reachable) {
                 $status = 'degraded';
+                $color = 'yellow';
             }
-        } elseif ($reachable) {
+        }
+
+        if ($color === '') {
+            $color = match ($status) {
+                'online' => 'green',
+                'degraded', 'timeout' => 'yellow',
+                'auth_failed', 'not_configured', 'offline' => 'red',
+                default => 'yellow',
+            };
+        }
+
+        if ($status === 'online' && $balance !== null && $balance <= 0) {
             $status = 'degraded';
             $color = 'yellow';
         }
+
+        $ok = in_array($status, ['online', 'degraded'], true);
 
         $provider->forceFill([
             'api_status' => $status,
@@ -73,13 +100,16 @@ class ProductProviderHealthService
             'balance' => $balance,
             'avg_response_ms' => $latency ?? $provider->avg_response_ms,
             'last_health_check_at' => now(),
-            'last_error' => $reachable ? null : $message,
+            'last_error' => $ok ? null : $message,
+            'last_success_at' => $ok ? now() : $provider->last_success_at,
+            'last_failure_at' => $ok ? $provider->last_failure_at : now(),
         ])->save();
 
-        $this->log($provider, $reachable && $auth, $latency, $message, [
+        $this->log($provider, $ok, $latency, $message, [
             'balance' => $balance,
             'health_color' => $color,
             'api_status' => $status,
+            'http_status' => $result['http_status'] ?? null,
         ]);
 
         return $provider->fresh();

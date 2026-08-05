@@ -38,11 +38,14 @@ return [
     ],
 
     'vip' => [
-        'merchant_id' => env('VIP_MERCHANT_ID'),
+        // VIP Reseller / VIPAYMENT — https://vip-reseller.co.id/api
+        'base_url' => env('VIP_BASE_URL', 'https://vip-reseller.co.id/api'),
+        // API ID (dashboard) — also accepted as VIP_MERCHANT_ID for backwards compatibility
         'username' => env('VIP_USERNAME', env('VIP_MERCHANT_ID')),
+        'merchant_id' => env('VIP_MERCHANT_ID'),
         'api_key' => env('VIP_API_KEY'),
+        // Optional; when empty sign = md5(VIP_USERNAME + VIP_API_KEY)
         'signature' => env('VIP_SIGNATURE'),
-        'base_url' => env('VIP_BASE_URL', ''),
     ],
 
     'fcm' => [
