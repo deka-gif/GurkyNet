@@ -152,6 +152,41 @@ export const websiteService = {
     }
   },
 
+  async getPublicHomepage(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/homepage');
+    return res.data;
+  },
+
+  async getPublicPromotions(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/promotions', { params });
+    return res.data;
+  },
+
+  async getPublicVouchers(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/vouchers', { params });
+    return res.data;
+  },
+
+  async getPublicAnnouncements(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/announcements', { params });
+    return res.data;
+  },
+
+  async getPublicNews(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/news');
+    return res.data;
+  },
+
+  async getPublicFaq(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/faq');
+    return res.data;
+  },
+
+  async getPublicProviderStatus(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/public/provider-status');
+    return res.data;
+  },
+
   // ==========================================
   // WEBSITE SETTINGS (ADMIN)
   // ==========================================

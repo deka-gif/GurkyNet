@@ -31,4 +31,12 @@ class Media extends Model
         'width' => 'integer',
         'height' => 'integer',
     ];
+
+    /**
+     * Always expose an absolute, CDN-ready URL to all API clients.
+     */
+    public function getUrlAttribute(?string $value): ?string
+    {
+        return \App\Support\MediaUrl::absolute($value, $this->storage_disk ?: 'public');
+    }
 }

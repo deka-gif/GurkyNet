@@ -172,13 +172,16 @@ export const OwnerDashboard: React.FC = () => {
   const opsSummary = useMemo(() => {
     const d = dashboardData || {};
     const dept = departmentOverview || {};
+    const ops = dept.operations_kpi || dept.operations || {};
+    const support = dept.customer_support_kpi || dept.customer_support || {};
     const summary = d.summary || d.operations || {};
+    const productsCount = d.products_online_count ?? ops.total_products ?? null;
 
     return {
-      activeProviders: d.provider_health ?? d.activeProviders ?? d.active_providers ?? summary.active_providers ?? 'Online',
+      activeProviders: d.provider_health ?? d.activeProviders ?? d.active_providers ?? ops.active_providers ?? summary.active_providers ?? 'Online',
       providerBalance: d.provider_balance_formatted ?? d.digiflazz_balance ?? summary.provider_balance_formatted ?? null,
-      productsOnline: d.productsOnline ?? d.products_online ?? summary.products_online ?? '0 SKU',
-      openTickets: d.openSupportTickets ?? d.open_tickets ?? summary.open_tickets ?? 0,
+      productsOnline: d.productsOnline ?? d.products_online ?? summary.products_online ?? (productsCount !== null ? `${productsCount} SKU` : '0 SKU'),
+      openTickets: d.openSupportTickets ?? d.open_tickets ?? support.open_tickets ?? summary.open_tickets ?? 0,
       pendingRefunds: d.pendingRefunds ?? d.pending_refunds ?? summary.pending_refunds ?? 0,
       topProducts: Array.isArray(d.topProducts)
         ? d.topProducts

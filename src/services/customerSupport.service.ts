@@ -39,13 +39,8 @@ export const customerSupportService = {
 
   async replyTicket(id: string | number, message: string | Record<string, any>) {
     const payload = typeof message === 'string' ? { message } : message;
-    try {
-      const res = await apiClient.post<ApiResponse<any>>(`/admin/customer-support/tickets/${id}/replies`, payload);
-      return res.data;
-    } catch {
-      const res = await apiClient.put<ApiResponse<any>>(`/admin/customer-support/tickets/${id}`, payload);
-      return res.data;
-    }
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/customer-support/tickets/${id}/reply`, payload);
+    return res.data;
   },
 
   async getCustomers(params?: Record<string, any>) {

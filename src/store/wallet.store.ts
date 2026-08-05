@@ -4,12 +4,14 @@ import { Wallet } from '../types';
 
 interface WalletState {
   wallet: Wallet | null;
+  history: any[];
   loading: boolean;
   error: string | null;
   fetchWallet: () => Promise<void>;
+  fetchHistory: (params?: Record<string, any>) => Promise<void>;
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
   topUp: (amount: number, paymentMethod: string) => Promise<any | null>;
-  transfer: (recipient_wallet_number: string, amount: number, pin?: string) => Promise<any | null>;
+  transfer: (recipient_wallet_number: string, amount: number, pin: string) => Promise<any | null>;
   withdraw: (payload: {
     amount: number;
     pin: string;
@@ -23,6 +25,7 @@ interface WalletState {
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   wallet: null,
+  history: [],
   loading: false,
   error: null,
 
@@ -37,6 +40,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       }
     } catch (err: any) {
       set({ error: err.message || 'Terjadi kesalahan jaringan.', loading: false });
+    }
+  },
+
+  fetchHistory: async (params) => {
+    try {
+      const response = await walletService.getHistory(params);
+      if (response && response.success !== false) {
+        const rows = Array.isArray(response.data)
+          ? response.data
+          : (response.data?.data || response.data?.history || []);
+        set({ history: Array.isArray(rows) ? rows : [] });
+      }
+    } catch {
+      set({ history: [] });
     }
   },
 
@@ -82,6 +99,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const response = await walletService.transfer(recipient_wallet_number, amount, pin);
       if (response.success && response.data) {
         set({ loading: false });
+        await get().fetchWallet();
+        await get().fetchHistory();
         return response.data;
       } else {
         set({ error: response.message, loading: false });
@@ -100,6 +119,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       if (response.success && response.data) {
         set({ loading: false });
         await get().fetchWallet();
+        await get().fetchHistory();
         return response.data;
       }
       set({ error: response.message, loading: false });
@@ -110,12 +130,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  addBalance: async (amount) => {
+  addBalance: async (_amount: number) => {
     await get().fetchWallet();
     return true;
   },
 
-  deductBalance: async (amount) => {
+  deductBalance: async (_amount: number) => {
     await get().fetchWallet();
     return true;
   },

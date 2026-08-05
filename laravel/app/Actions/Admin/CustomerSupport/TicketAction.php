@@ -28,6 +28,11 @@ class TicketAction
         return $this->customerSupportRepository->createReply($id, $data);
     }
 
+    public function create(array $data): SupportTicket
+    {
+        return $this->customerSupportRepository->createTicket($data);
+    }
+
     public function updateStatus(string|int $id, string $status): SupportTicket
     {
         return $this->customerSupportRepository->updateTicketStatus($id, $status);

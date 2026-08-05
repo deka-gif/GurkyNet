@@ -153,6 +153,12 @@ class OwnerRepository implements OwnerRepositoryInterface
             'digiflazz_last_sync_at' => $lastSyncAt,
             'queue_status' => $queueStatus,
             'system_health' => $systemHealth,
+            'products_online' => \App\Models\Product::where('status', true)->count() . ' SKU',
+            'products_online_count' => (int) \App\Models\Product::where('status', true)->count(),
+            'open_tickets' => SupportTicket::whereIn('status', ['Terbuka', 'Open', 'Pending'])->count(),
+            'pending_refunds' => Transaction::whereIn('status', ['failed', 'gagal', 'canceled'])
+                ->where('notes', 'like', '%refund%')
+                ->count(),
         ];
     }
 

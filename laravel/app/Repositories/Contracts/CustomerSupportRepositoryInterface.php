@@ -26,9 +26,19 @@ interface CustomerSupportRepositoryInterface
     public function getTicketById(string|int $id): SupportTicket;
 
     /**
+     * Create a support ticket (optionally with an opening message).
+     */
+    public function createTicket(array $data): SupportTicket;
+
+    /**
      * Create reply for a ticket.
      */
     public function createReply(string|int $id, array $data): TicketReply;
+
+    /**
+     * Get a single knowledge-base article (FAQ or SOP) by id.
+     */
+    public function getKnowledgeBaseArticle(string|int $id): ?array;
 
     /**
      * Update ticket status.

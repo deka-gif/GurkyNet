@@ -20,7 +20,9 @@ class VoucherResource extends JsonResource
             'minTransaction' => (float) ($this->min_transaction ?? 0),
             'quota' => (int) ($this->quota ?? 0),
             'usedCount' => (int) ($this->used_count ?? 0),
-            'image' => $this->imageMedia ? new MediaResource($this->imageMedia) : $this->image_url,
+            'image' => $this->imageMedia
+                ? new MediaResource($this->imageMedia)
+                : \App\Support\MediaUrl::absolute($this->image_url),
             'mobileImage' => $this->mobileImageMedia ? new MediaResource($this->mobileImageMedia) : null,
             'imageMediaId' => $this->image_media_id,
             'mobileImageMediaId' => $this->mobile_image_media_id,

@@ -19,7 +19,6 @@ import {
   Send
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useTransactionStore } from '../../store/transaction.store';
 
 declare global {
   interface Window {
@@ -28,8 +27,7 @@ declare global {
 }
 
 export const WalletPage = () => {
-  const { wallet, loading, fetchWallet, topUp, transfer, withdraw } = useWalletStore();
-  const { transactions, fetchTransactions } = useTransactionStore();
+  const { wallet, history, loading, fetchWallet, fetchHistory, topUp, transfer, withdraw } = useWalletStore();
 
   const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>('index');
   
@@ -38,11 +36,12 @@ export const WalletPage = () => {
   const [topupMethod, setTopupMethod] = useState<string>('qris');
   
   // States for Transfer
-  const [transferType, setTransferType] = useState<'bank' | 'p2p'>('bank');
+  const [transferType, setTransferType] = useState<'bank' | 'p2p'>('p2p');
   const [targetAccount, setTargetAccount] = useState<string>('');
   const [selectedBank, setSelectedBank] = useState<string>('BCA');
   const [transferAmount, setTransferAmount] = useState<string>('');
   const [transferNote, setTransferNote] = useState<string>('');
+  const [transferPin, setTransferPin] = useState<string>('');
 
   // States for Withdraw
   const [withdrawBank, setWithdrawBank] = useState<string>('BCA');
@@ -56,8 +55,8 @@ export const WalletPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchTransactions();
-  }, [fetchWallet, fetchTransactions]);
+    fetchHistory();
+  }, [fetchWallet, fetchHistory]);
 
   const formatIDR = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -121,24 +120,30 @@ export const WalletPage = () => {
     }
 
     if (!targetAccount) {
-      setErrorMsg('Mohon isi nomor rekening atau wallet ID tujuan.');
+      setErrorMsg('Mohon isi nomor wallet tujuan.');
       return;
     }
 
-    const res = await transfer(targetAccount, amount);
+    if (transferType === 'bank') {
+      setErrorMsg('Transfer ke rekening bank belum tersedia. Gunakan Transfer Sesama GurkyPay atau fitur Tarik Dana.');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(transferPin)) {
+      setErrorMsg('PIN transaksi harus 6 digit.');
+      return;
+    }
+
+    const res = await transfer(targetAccount, amount, transferPin);
     if (res) {
-      const destination = transferType === 'bank' ? `${selectedBank} - ${targetAccount}` : targetAccount;
-      
-      fetchWallet();
-      fetchTransactions();
-      
-      setSuccessMsg(`Transfer sebesar ${formatIDR(amount)} berhasil diproses ke ${destination}.`);
+      setSuccessMsg(`Transfer sebesar ${formatIDR(amount)} berhasil diproses ke ${targetAccount}.`);
       setTransferAmount('');
       setTargetAccount('');
       setTransferNote('');
+      setTransferPin('');
       setActiveTab('index');
     } else {
-      setErrorMsg('Gagal memproses transfer. Pastikan wallet ID tujuan valid dan saldo mencukupi.');
+      setErrorMsg('Gagal memproses transfer. Pastikan PIN benar, wallet tujuan valid, dan saldo mencukupi.');
     }
   };
 
@@ -172,19 +177,27 @@ export const WalletPage = () => {
       setWithdrawAccount('');
       setWithdrawPin('');
       setActiveTab('index');
-      fetchTransactions();
     } else {
       setErrorMsg('Gagal memproses penarikan. Periksa PIN, saldo, dan nomor rekening.');
     }
   };
 
-  // Filter out only wallet/transfer/tarik transactions for history widget
-  const walletHistory = transactions.filter(t => 
-    t.serviceName.includes('Wallet') || 
-    t.serviceName.includes('Transfer') || 
-    t.serviceName.includes('Tarik') ||
-    t.serviceName.includes('Top Up')
-  );
+  // Live wallet ledger from /wallet/history
+  const walletHistory = Array.isArray(history) ? history : [];
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthEntries = walletHistory.filter((row: any) => {
+    const raw = row.created_at || row.date || row.createdAt;
+    if (!raw) return true;
+    return new Date(raw) >= monthStart;
+  });
+  const monthIn = monthEntries
+    .filter((row: any) => String(row.type || '').toLowerCase().includes('credit'))
+    .reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+  const monthOut = monthEntries
+    .filter((row: any) => String(row.type || '').toLowerCase().includes('debit'))
+    .reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="wallet-page-root">
@@ -196,7 +209,7 @@ export const WalletPage = () => {
           <p className="text-sm text-gray-500">Kelola saldo GurkyPay, transfer bank, dan riwayat mutasi keuangan Anda secara real-time.</p>
         </div>
         <button 
-          onClick={() => { fetchWallet(); fetchTransactions(); }}
+          onClick={() => { fetchWallet(); fetchHistory(); }}
           className="flex items-center gap-2 text-xs font-bold text-gray-600 bg-white border border-gray-100 hover:border-primary-200 px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all"
         >
           <RefreshCw className="w-3.5 h-3.5 animate-spin-hover" />
@@ -344,15 +357,15 @@ export const WalletPage = () => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100/50">
                     <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Pemasukan Bulan Ini</span>
-                    <h5 className="text-lg font-black text-emerald-900 mt-1">Rp 1.450.000</h5>
+                    <h5 className="text-lg font-black text-emerald-900 mt-1">{formatIDR(monthIn)}</h5>
                   </div>
                   <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100/50">
                     <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wide">Pengeluaran Bulan Ini</span>
-                    <h5 className="text-lg font-black text-indigo-900 mt-1">Rp 650.000</h5>
+                    <h5 className="text-lg font-black text-indigo-900 mt-1">{formatIDR(monthOut)}</h5>
                   </div>
                   <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100/50 col-span-2 md:col-span-1">
-                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Tingkat Cashback</span>
-                    <h5 className="text-lg font-black text-amber-900 mt-1">2.4% Average</h5>
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Mutasi Tercatat</span>
+                    <h5 className="text-lg font-black text-amber-900 mt-1">{walletHistory.length} transaksi</h5>
                   </div>
                 </div>
 
@@ -371,35 +384,32 @@ export const WalletPage = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {(Array.isArray(walletHistory) ? walletHistory : []).slice(0, 5).map((trx) => (
-                        <div key={trx.id} className="p-4 rounded-2xl border border-gray-100 hover:border-gray-200 flex items-center justify-between transition-all">
-                          <div className="flex items-center gap-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                              trx.serviceName.includes('Top Up') || trx.productName.includes('Top Up')
-                                ? 'bg-emerald-50 text-emerald-600'
-                                : trx.serviceName.includes('Tarik')
-                                ? 'bg-amber-50 text-amber-600'
-                                : 'bg-indigo-50 text-indigo-600'
-                            }`}>
-                              {trx.serviceName.includes('Top Up') ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+                      {walletHistory.slice(0, 8).map((row: any) => {
+                        const isCredit = String(row.type || '').toLowerCase().includes('credit');
+                        const title = row.description || row.note || (isCredit ? 'Kredit Saldo' : 'Debit Saldo');
+                        const when = row.created_at || row.date || row.createdAt;
+                        return (
+                          <div key={row.id} className="p-4 rounded-2xl border border-gray-100 hover:border-gray-200 flex items-center justify-between transition-all">
+                            <div className="flex items-center gap-3.5">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'
+                              }`}>
+                                {isCredit ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+                              </div>
+                              <div>
+                                <p className="text-xs font-black text-gray-900">{title}</p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  {String(row.type || 'mutasi').toUpperCase()}
+                                  {when ? ` • ${new Date(when).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}` : ''}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-black text-gray-900">{trx.productName}</p>
-                              <p className="text-[10px] text-gray-400 mt-0.5">{trx.transactionCode} • {new Date(trx.date).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-xs font-black ${
-                              trx.serviceName.includes('Top Up') ? 'text-emerald-600' : 'text-gray-900'
-                            }`}>
-                              {trx.serviceName.includes('Top Up') ? '+' : '-'}{formatIDR(trx.amount)}
+                            <p className={`text-sm font-black ${isCredit ? 'text-emerald-600' : 'text-indigo-700'}`}>
+                              {isCredit ? '+' : '-'}{formatIDR(Number(row.amount || 0))}
                             </p>
-                            <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase mt-1 bg-emerald-100 text-emerald-800">
-                              {trx.status}
-                            </span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -520,18 +530,26 @@ export const WalletPage = () => {
                 {/* Transfer Type Selectors */}
                 <div className="flex bg-gray-50 p-1 rounded-2xl border border-gray-200/60">
                   <button
-                    onClick={() => setTransferType('bank')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${transferType === 'bank' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                  >
-                    Kirim ke Rekening Bank
-                  </button>
-                  <button
+                    type="button"
                     onClick={() => setTransferType('p2p')}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${transferType === 'p2p' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
                   >
                     Transfer Sesama GurkyPay
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setTransferType('bank')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${transferType === 'bank' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                  >
+                    Kirim ke Rekening Bank
+                  </button>
                 </div>
+
+                {transferType === 'bank' && (
+                  <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-[11px] text-amber-800 font-medium">
+                    Transfer bank langsung belum tersedia. Gunakan <strong>Tarik Dana</strong> untuk penarikan ke rekening, atau pilih Transfer Sesama GurkyPay.
+                  </div>
+                )}
 
                 <form onSubmit={handleTransferSubmit} className="space-y-4">
                   {/* Bank Select (if bank) */}
@@ -593,10 +611,23 @@ export const WalletPage = () => {
                     />
                   </div>
 
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700">PIN Transaksi</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="6 digit PIN"
+                      value={transferPin}
+                      onChange={(e) => setTransferPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+                    />
+                  </div>
+
                   {/* Warning balance */}
                   <div className="p-3 bg-indigo-50 border border-indigo-100/50 rounded-xl flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <p className="text-[10px] text-indigo-700 leading-tight">Pastikan nomor rekening dan nominal transfer Anda sudah benar sebelum menekan tombol kirim.</p>
+                    <p className="text-[10px] text-indigo-700 leading-tight">Pastikan nomor wallet dan nominal transfer Anda sudah benar sebelum menekan tombol kirim.</p>
                   </div>
 
                   <button

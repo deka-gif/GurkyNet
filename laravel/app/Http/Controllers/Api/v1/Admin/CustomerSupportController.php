@@ -100,6 +100,35 @@ class CustomerSupportController extends Controller
     }
 
     /**
+     * Create a support ticket.
+     * POST /api/v1/admin/customer-support/tickets
+     */
+    public function createTicket(Request $request, TicketAction $action): JsonResponse
+    {
+        $data = $request->validate([
+            'customerEmail' => 'required_without:user_id|email',
+            'customer_email' => 'nullable|email',
+            'email' => 'nullable|email',
+            'user_id' => 'nullable|integer|exists:users,id',
+            'category' => 'required|string|max:100',
+            'priority' => 'nullable|string|max:50',
+            'status' => 'nullable|string|max:50',
+            'subject' => 'nullable|string|max:500',
+            'message' => 'nullable|string|max:5000',
+            'transaction_id' => 'nullable|integer|exists:transactions,id',
+        ]);
+
+        try {
+            $ticket = $action->create($data);
+            return $this->successResponse('Tiket berhasil dibuat.', new SupportTicketResource($ticket), 201);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * Update Support Ticket Status.
      * PUT /api/v1/admin/customer-support/tickets/{id}/status
      */
@@ -336,5 +365,19 @@ class CustomerSupportController extends Controller
     {
         $data = $action->execute();
         return $this->successResponse('Data FAQ & SOP berhasil dimuat.', $data);
+    }
+
+    /**
+     * Get a single knowledge-base article.
+     * GET /api/v1/admin/customer-support/knowledge-base/{id}
+     */
+    public function knowledgeBaseArticle(string|int $id, KnowledgeBaseAction $action): JsonResponse
+    {
+        $article = $action->show($id);
+        if (!$article) {
+            return $this->errorResponse('Artikel knowledge base tidak ditemukan.', 404);
+        }
+
+        return $this->successResponse('Artikel knowledge base berhasil dimuat.', $article);
     }
 }

@@ -111,7 +111,8 @@ class AuthController extends Controller
     }
 
     /**
-     * Refresh Authentication Session.
+     * Refresh Authentication Session (Sanctum token rotation).
+     * Compatible with Android / iOS / PWA / Website clients.
      */
     public function refresh(Request $request): JsonResponse
     {
@@ -120,14 +121,58 @@ class AuthController extends Controller
             return $this->errorResponse('Sesi Anda telah kedaluwarsa.', 401);
         }
 
-        // Revoke current token and generate a new one
+        $platform = strtolower((string) $request->header('X-Platform', $request->input('platform', 'web')));
+        $deviceUuid = $request->header('X-Device-UUID', $request->input('device_uuid'));
+        $appVersion = $request->header('X-App-Version', $request->input('app_version'));
+        $tokenName = trim($platform . '|' . ($deviceUuid ?: $request->header('User-Agent', 'Refreshed-Device')));
+
         $user->currentAccessToken()->delete();
-        $device = $request->header('User-Agent', 'Refreshed-Device');
-        $newToken = $user->createToken($device)->plainTextToken;
+        $newToken = $user->createToken($tokenName)->plainTextToken;
+
+        if ($deviceUuid) {
+            \App\Models\UserDevice::updateOrCreate(
+                [
+                    'device_uuid' => $deviceUuid,
+                    'platform' => in_array($platform, ['android', 'ios', 'web', 'pwa'], true) ? $platform : 'web',
+                ],
+                [
+                    'user_id' => $user->id,
+                    'app_version' => $appVersion,
+                    'user_agent' => substr((string) $request->userAgent(), 0, 512),
+                    'is_active' => true,
+                    'last_seen_at' => now(),
+                ]
+            );
+        }
 
         return $this->successResponse('Token otentikasi berhasil diperbarui.', [
             'user' => new \App\Http\Resources\ProfileResource($user),
             'token' => $newToken,
+            'token_type' => 'Bearer',
+            'platform' => $platform,
+        ]);
+    }
+
+    /**
+     * Validate current Sanctum session for mobile / PWA clients.
+     * GET /api/v1/auth/session
+     */
+    public function session(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->errorResponse('Sesi tidak valid.', 401);
+        }
+
+        $token = $user->currentAccessToken();
+
+        return $this->successResponse('Sesi valid.', [
+            'valid' => true,
+            'user' => new \App\Http\Resources\ProfileResource($user),
+            'token_name' => $token?->name,
+            'token_abilities' => $token?->abilities ?? ['*'],
+            'last_used_at' => optional($token?->last_used_at)?->toIso8601String(),
+            'created_at' => optional($token?->created_at)?->toIso8601String(),
         ]);
     }
 

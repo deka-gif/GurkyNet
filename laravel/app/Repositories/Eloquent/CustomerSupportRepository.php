@@ -166,6 +166,75 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
     }
 
     /**
+     * Create a support ticket for an existing customer.
+     */
+    public function createTicket(array $data): SupportTicket
+    {
+        $email = $data['customerEmail'] ?? $data['customer_email'] ?? $data['email'] ?? null;
+        $userId = $data['user_id'] ?? null;
+
+        $user = $userId
+            ? User::find($userId)
+            : ($email ? User::where('email', $email)->first() : null);
+
+        if (!$user) {
+            throw new \InvalidArgumentException('Pelanggan tidak ditemukan. Gunakan email pelanggan terdaftar.');
+        }
+
+        $priorityMap = [
+            'critical' => 'Tinggi',
+            'high' => 'Tinggi',
+            'medium' => 'Sedang',
+            'low' => 'Rendah',
+            'tinggi' => 'Tinggi',
+            'sedang' => 'Sedang',
+            'rendah' => 'Rendah',
+        ];
+        $priorityRaw = strtolower((string) ($data['priority'] ?? 'Sedang'));
+        $priority = $priorityMap[$priorityRaw] ?? ($data['priority'] ?? 'Sedang');
+
+        $statusMap = [
+            'open' => 'Terbuka',
+            'pending' => 'Pending',
+            'resolved' => 'Selesai',
+            'closed' => 'Tertutup',
+            'terbuka' => 'Terbuka',
+        ];
+        $statusRaw = strtolower((string) ($data['status'] ?? 'Terbuka'));
+        $status = $statusMap[$statusRaw] ?? ($data['status'] ?? 'Terbuka');
+
+        $ticket = SupportTicket::create([
+            'ticket_number' => 'TKT-' . now()->format('YmdHis') . '-' . mt_rand(100, 999),
+            'user_id' => $user->id,
+            'transaction_id' => $data['transaction_id'] ?? null,
+            'category' => $data['category'] ?? 'Umum',
+            'priority' => $priority,
+            'status' => $status,
+        ]);
+
+        $opening = trim((string) ($data['subject'] ?? $data['message'] ?? $data['description'] ?? ''));
+        if ($opening !== '') {
+            TicketReply::create([
+                'support_ticket_id' => $ticket->id,
+                'user_id' => Auth::id() ?: $user->id,
+                'message' => $opening,
+            ]);
+        }
+
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'activity' => 'CUSTOMER_SUPPORT_CREATE_TICKET',
+            'payload' => [
+                'ticket_id' => $ticket->id,
+                'ticket_number' => $ticket->ticket_number,
+                'customer_id' => $user->id,
+            ],
+        ]);
+
+        return $ticket->fresh(['user', 'transaction', 'replies.user']);
+    }
+
+    /**
      * Create reply for a ticket.
      */
     public function createReply(string|int $id, array $data): TicketReply
@@ -544,5 +613,33 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
             'faqs' => Faq::orderBy('order')->get(),
             'sops' => $sops,
         ];
+    }
+
+    /**
+     * Resolve a single FAQ or SOP article from the knowledge base.
+     */
+    public function getKnowledgeBaseArticle(string|int $id): ?array
+    {
+        $faq = Faq::find($id);
+        if ($faq) {
+            return [
+                'id' => $faq->id,
+                'title' => $faq->question ?? $faq->title ?? 'FAQ',
+                'content' => $faq->answer ?? $faq->content ?? '',
+                'category' => 'FAQ',
+            ];
+        }
+
+        $page = \App\Models\StaticPage::find($id);
+        if ($page) {
+            return [
+                'id' => $page->id,
+                'title' => $page->title,
+                'content' => $page->content,
+                'category' => 'SOP',
+            ];
+        }
+
+        return null;
     }
 }

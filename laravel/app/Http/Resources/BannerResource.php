@@ -9,7 +9,9 @@ class BannerResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $imageUrl = $this->imageMedia ? $this->imageMedia->url : $this->image_url;
+        $imageUrl = \App\Support\MediaUrl::absolute(
+            $this->imageMedia ? $this->imageMedia->url : $this->image_url
+        );
 
         return [
             'id' => (string) $this->id,

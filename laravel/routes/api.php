@@ -40,23 +40,45 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     Route::get('/status', [HealthCheckController::class, 'status']);
     Route::get('/metrics', [HealthCheckController::class, 'metrics']);
     
-    // Public Website Content Endpoints (no authentication required)
-    // These endpoints serve the public-facing frontend: website config, navigation
-    // menus, published static pages, and visible homepage sections.
-    Route::prefix('public')->group(function () {
+    // Public Website Content Endpoints (Website / Android / iOS / PWA)
+    Route::prefix('public')->middleware('throttle:120,1')->group(function () {
         Route::get('/settings',           [PublicWebsiteController::class, 'settings']);
         Route::get('/menus',              [PublicWebsiteController::class, 'menus']);
         Route::get('/static-pages',       [PublicWebsiteController::class, 'staticPages']);
+        Route::get('/static-pages/{slug}', [PublicWebsiteController::class, 'staticPageBySlug']);
+        Route::get('/homepage',           [PublicWebsiteController::class, 'homepage']);
         Route::get('/homepage-sections',  [PublicWebsiteController::class, 'homepageSections']);
-        Route::get('/banners', [PublicWebsiteController::class, 'banners']);
+        Route::get('/banners',            [PublicWebsiteController::class, 'banners']);
+        Route::get('/promotions',         [PublicWebsiteController::class, 'promotions']);
+        Route::get('/vouchers',           [PublicWebsiteController::class, 'vouchers']);
+        Route::get('/announcements',      [PublicWebsiteController::class, 'announcements']);
+        Route::get('/news',               [PublicWebsiteController::class, 'news']);
+        Route::get('/faq',                [PublicWebsiteController::class, 'faq']);
+        Route::get('/provider-status',    [PublicWebsiteController::class, 'providerStatus']);
+    });
+
+    // Platform versioning (shared by all clients)
+    Route::prefix('platform')->middleware('throttle:60,1')->group(function () {
+        Route::get('/api-version', [\App\Http\Controllers\Api\v1\Platform\PlatformVersionController::class, 'apiVersion']);
+        Route::get('/app-version', [\App\Http\Controllers\Api\v1\Platform\PlatformVersionController::class, 'appVersion']);
+        Route::get('/minimum-supported-version', [\App\Http\Controllers\Api\v1\Platform\PlatformVersionController::class, 'minimumSupportedVersion']);
+        Route::get('/force-update', [\App\Http\Controllers\Api\v1\Platform\PlatformVersionController::class, 'forceUpdate']);
+    });
+
+    // Device registration (auth optional — Sanctum token attaches user when present)
+    Route::prefix('devices')->middleware('throttle:60,1')->group(function () {
+        Route::post('/register', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'register']);
+        Route::post('/push-token', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'updatePushToken']);
     });
 
     // Product and PPOB Module (Public)
-    Route::get('/categories', [ProductController::class, 'indexCategories']);
-    Route::get('/categories/{slug}', [ProductController::class, 'showCategory']);
-    Route::get('/providers', [ProductController::class, 'indexProviders']);
-    Route::get('/products', [ProductController::class, 'indexProducts']);
-    Route::get('/products/{sku_code}', [ProductController::class, 'showProduct']);
+    Route::middleware('throttle:120,1')->group(function () {
+        Route::get('/categories', [ProductController::class, 'indexCategories']);
+        Route::get('/categories/{slug}', [ProductController::class, 'showCategory']);
+        Route::get('/providers', [ProductController::class, 'indexProviders']);
+        Route::get('/products', [ProductController::class, 'indexProducts']);
+        Route::get('/products/{sku_code}', [ProductController::class, 'showProduct']);
+    });
 
     // Digiflazz Webhook Callback
     Route::post('/webhooks/digiflazz', [TransactionController::class, 'digiflazzCallback']);
@@ -65,15 +87,13 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     Route::post('/webhooks/midtrans', [TransactionController::class, 'midtransCallback']);
 
     // Public Authentication Endpoints
-    Route::post('/auth/register', [AuthController::class, 'register']);
-    Route::post('/auth/login', [AuthController::class, 'login']);
-    
-    // OTP Management Endpoints
-    Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
-    Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
-    
-    // Forgot Password Reset
-    Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
+    Route::middleware('throttle:30,1')->group(function () {
+        Route::post('/auth/register', [AuthController::class, 'register']);
+        Route::post('/auth/login', [AuthController::class, 'login']);
+        Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
+        Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
+        Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
+    });
 
     // Protected API Endpoints (Requires Laravel Sanctum)
     Route::middleware('auth:sanctum')->group(function () {
@@ -82,6 +102,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/refresh', [AuthController::class, 'refresh']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::get('/auth/session', [AuthController::class, 'session']);
         
         // Profile & Account Management Module
         Route::prefix('profile')->group(function () {
@@ -96,6 +117,10 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         
         // PIN Verification / Settings
         Route::post('/auth/pin', [AuthController::class, 'changePin']);
+
+        // Device management (authenticated)
+        Route::get('/devices', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'index']);
+        Route::delete('/devices/{deviceUuid}', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'destroy']);
 
         // Notification API Module
         Route::prefix('notifications')->group(function () {
@@ -174,6 +199,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/dashboard', [CustomerSupportController::class, 'dashboard']);
             Route::get('/stats', [CustomerSupportController::class, 'stats']);
             Route::get('/tickets', [CustomerSupportController::class, 'tickets']);
+            Route::post('/tickets', [CustomerSupportController::class, 'createTicket']);
             Route::get('/tickets/{id}', [CustomerSupportController::class, 'showTicket']);
             Route::post('/tickets/{id}/reply', [CustomerSupportController::class, 'replyTicket']);
             Route::put('/tickets/{id}/status', [CustomerSupportController::class, 'updateStatus']);
@@ -188,6 +214,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::put('/refunds/{id}', [CustomerSupportController::class, 'updateRefund']);
             Route::post('/refunds/{id}/escalate', [CustomerSupportController::class, 'escalateRefund']);
             Route::get('/knowledge-base', [CustomerSupportController::class, 'knowledgeBase']);
+            Route::get('/knowledge-base/{id}', [CustomerSupportController::class, 'knowledgeBaseArticle']);
         });
 
         // Executive Owner Administration Module

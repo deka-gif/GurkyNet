@@ -14,4 +14,9 @@ class KnowledgeBaseAction
     {
         return $this->customerSupportRepository->getKnowledgeBase();
     }
+
+    public function show(string|int $id): ?array
+    {
+        return $this->customerSupportRepository->getKnowledgeBaseArticle($id);
+    }
 }

@@ -49,7 +49,11 @@ export const walletService = {
   },
 
   transfer: async (recipient_wallet_number: string, amount: number, pin?: string): Promise<ApiResponse<any>> => {
-    const response = await apiClient.post<ApiResponse<any>>('/wallet/transfer', { recipient_wallet_number, amount, pin });
+    const response = await apiClient.post<ApiResponse<any>>('/wallet/transfer', {
+      recipient_wallet_number,
+      amount,
+      pin,
+    });
     return response.data;
   },
 
@@ -61,6 +65,11 @@ export const walletService = {
     admin_fee?: number;
   }): Promise<ApiResponse<any>> => {
     const response = await apiClient.post<ApiResponse<any>>('/wallet/withdraw', payload);
+    return response.data;
+  },
+
+  getHistory: async (params?: Record<string, any>): Promise<ApiResponse<any>> => {
+    const response = await apiClient.get<ApiResponse<any>>('/wallet/history', { params });
     return response.data;
   },
 };

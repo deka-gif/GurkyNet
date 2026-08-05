@@ -13,24 +13,22 @@ use App\Http\Resources\HomepageSectionResource;
 use App\Http\Resources\WebsiteMenuResource;
 use App\Http\Resources\StaticPageResource;
 use App\Http\Resources\BannerResource;
+use App\Http\Resources\PromotionResource;
+use App\Http\Resources\VoucherResource;
+use App\Http\Resources\AnnouncementResource;
 use App\Models\BannerPromotion;
+use App\Models\Faq;
+use App\Models\Notification;
+use App\Models\Provider;
 use App\Models\WebsiteSetting;
+use App\Services\DigiflazzService;
+use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
- * PublicWebsiteController
- *
- * Serves read-only, unauthenticated endpoints that expose published website
- * content to the public frontend. Designed with high resilience and self-healing
- * capabilities: public endpoints will NEVER fail or return 404/500 if initial
- * database rows have not been configured yet.
- *
- * Routes (no auth middleware):
- *   GET /api/v1/public/settings
- *   GET /api/v1/public/menus
- *   GET /api/v1/public/static-pages
- *   GET /api/v1/public/homepage-sections
- *   GET /api/v1/public/banners
+ * Public CMS + catalog companion endpoints for Website / Android / iOS / PWA.
+ * All clients share the same Laravel API and database content.
  */
 class PublicWebsiteController extends Controller
 {
@@ -43,18 +41,11 @@ class PublicWebsiteController extends Controller
         protected StaticPageAction      $pageAction,
     ) {}
 
-    /**
-     * GET /api/v1/public/settings
-     *
-     * Returns the active website configuration record.
-     * Guaranteed to always return a valid configuration object.
-     */
     public function settings(): JsonResponse
     {
         $setting = $this->settingAction->getLatest();
 
         if (! $setting) {
-            // Self-healing fallback: create canonical settings
             $setting = WebsiteSetting::firstOrCreate(
                 ['id' => 1],
                 [
@@ -88,11 +79,6 @@ class PublicWebsiteController extends Controller
         );
     }
 
-    /**
-     * GET /api/v1/public/menus
-     *
-     * Returns all visible navigation menus with their children.
-     */
     public function menus(): JsonResponse
     {
         $menus = $this->menuAction->listAll()
@@ -105,11 +91,6 @@ class PublicWebsiteController extends Controller
         );
     }
 
-    /**
-     * GET /api/v1/public/static-pages
-     *
-     * Returns all published static pages.
-     */
     public function staticPages(): JsonResponse
     {
         $pages = $this->pageAction->listAll()
@@ -123,10 +104,22 @@ class PublicWebsiteController extends Controller
     }
 
     /**
-     * GET /api/v1/public/homepage-sections
-     *
-     * Returns all visible and active homepage sections.
+     * GET /api/v1/public/static-pages/{slug}
      */
+    public function staticPageBySlug(string $slug): JsonResponse
+    {
+        $page = $this->pageAction->findBySlug($slug);
+
+        if (!$page || $page->status !== 'published') {
+            return $this->errorResponse('Halaman tidak ditemukan.', 404);
+        }
+
+        return $this->successResponse(
+            'Detail halaman berhasil dimuat.',
+            new StaticPageResource($page)
+        );
+    }
+
     public function homepageSections(): JsonResponse
     {
         $sections = $this->sectionAction->listAll()
@@ -141,10 +134,30 @@ class PublicWebsiteController extends Controller
     }
 
     /**
-     * GET /api/v1/public/banners
-     *
-     * Returns all active banners for the public website.
+     * Aggregated homepage payload for mobile/web bootstrap.
+     * GET /api/v1/public/homepage
      */
+    public function homepage(): JsonResponse
+    {
+        $settings = $this->settingAction->getLatest();
+        $sections = $this->sectionAction->listAll()
+            ->filter(fn ($section) => $section->visible === true && $section->status === 'active')
+            ->sortBy('display_order')
+            ->values();
+        $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
+            ->where('type', 'banner')
+            ->where('is_active', true)
+            ->latest()
+            ->take(10)
+            ->get();
+
+        return $this->successResponse('Homepage berhasil dimuat.', [
+            'settings' => $settings ? new WebsiteSettingResource($settings) : null,
+            'sections' => HomepageSectionResource::collection($sections),
+            'banners' => BannerResource::collection($banners),
+        ]);
+    }
+
     public function banners(): JsonResponse
     {
         $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
@@ -153,30 +166,167 @@ class PublicWebsiteController extends Controller
             ->latest()
             ->get();
 
-        if ($banners->isEmpty()) {
-            // Seed a default promo banner if none exists
-            $defaultBanner = BannerPromotion::firstOrCreate(
-                ['title' => 'Flash Sale Spesial PPOB GurkyNet'],
-                [
-                    'type' => 'banner',
-                    'description' => 'Dapatkan diskon potongan harga langsung hingga 50% untuk transaksi pulsa dan token listrik setiap hari!',
-                    'code' => 'FLASHSALE',
-                    'discount_amount' => 5000,
-                    'discount_type' => 'fixed',
-                    'image_url' => 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=1200&q=80',
-                    'redirect_url' => '/promo/flash-sale',
-                    'is_active' => true,
-                ]
-            );
-            $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
-                ->where('type', 'banner')
-                ->where('is_active', true)
-                ->get();
-        }
-
         return $this->successResponse(
             'Daftar banner berhasil dimuat.',
             BannerResource::collection($banners)
         );
+    }
+
+    /**
+     * GET /api/v1/public/promotions
+     */
+    public function promotions(Request $request): JsonResponse
+    {
+        $items = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
+            ->where('type', 'promotion')
+            ->where('is_active', true)
+            ->latest()
+            ->paginate((int) $request->query('per_page', 20));
+
+        return $this->paginatedResponse(
+            'Daftar promo berhasil dimuat.',
+            PromotionResource::collection($items->items()),
+            $items
+        );
+    }
+
+    /**
+     * GET /api/v1/public/vouchers
+     */
+    public function vouchers(Request $request): JsonResponse
+    {
+        $items = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
+            ->where('type', 'voucher')
+            ->where('is_active', true)
+            ->latest()
+            ->paginate((int) $request->query('per_page', 20));
+
+        return $this->paginatedResponse(
+            'Daftar voucher berhasil dimuat.',
+            VoucherResource::collection($items->items()),
+            $items
+        );
+    }
+
+    /**
+     * GET /api/v1/public/announcements
+     */
+    public function announcements(Request $request): JsonResponse
+    {
+        $items = Notification::with('coverMedia')
+            ->whereIn('type', ['announcement', 'broadcast'])
+            ->where('is_active', true)
+            ->latest()
+            ->paginate((int) $request->query('per_page', 20));
+
+        return $this->paginatedResponse(
+            'Daftar pengumuman berhasil dimuat.',
+            AnnouncementResource::collection($items->items()),
+            $items
+        );
+    }
+
+    /**
+     * News feed — active announcements + homepage news sections.
+     * GET /api/v1/public/news
+     */
+    public function news(Request $request): JsonResponse
+    {
+        $announcements = Notification::with('coverMedia')
+            ->whereIn('type', ['announcement', 'broadcast'])
+            ->where('is_active', true)
+            ->latest()
+            ->take(50)
+            ->get()
+            ->map(function (Notification $item) {
+                return [
+                    'id' => 'announcement-' . $item->id,
+                    'source' => 'announcement',
+                    'title' => $item->title,
+                    'body' => $item->message,
+                    'cover_image' => MediaUrl::absolute($item->coverMedia?->url),
+                    'published_at' => optional($item->created_at)?->toIso8601String(),
+                ];
+            });
+
+        $newsSections = $this->sectionAction->listAll()
+            ->filter(function ($section) {
+                $type = strtolower((string) ($section->component_type ?? ''));
+                return $section->visible
+                    && $section->status === 'active'
+                    && in_array($type, ['news', 'berita', 'article'], true);
+            })
+            ->sortBy('display_order')
+            ->values()
+            ->map(function ($section) {
+                $cover = optional($section->heroBackgroundMedia)->url
+                    ?? optional($section->heroIllustrationMedia)->url
+                    ?? optional($section->heroMobileImageMedia)->url
+                    ?? null;
+
+                return [
+                    'id' => 'section-' . $section->id,
+                    'source' => 'homepage_section',
+                    'title' => $section->title,
+                    'body' => $section->description ?? '',
+                    'cover_image' => MediaUrl::absolute($cover),
+                    'published_at' => optional($section->updated_at)?->toIso8601String(),
+                ];
+            });
+
+        $feed = $announcements->concat($newsSections)->values();
+
+        return $this->successResponse('Feed berita berhasil dimuat.', $feed);
+    }
+
+    /**
+     * GET /api/v1/public/faq
+     */
+    public function faq(): JsonResponse
+    {
+        $faqs = Faq::orderBy('order')->get()->map(fn (Faq $faq) => [
+            'id' => $faq->id,
+            'question' => $faq->question,
+            'answer' => $faq->answer,
+            'order' => (int) $faq->order,
+        ]);
+
+        return $this->successResponse('FAQ berhasil dimuat.', $faqs);
+    }
+
+    /**
+     * Public provider health for mobile clients.
+     * GET /api/v1/public/provider-status
+     */
+    public function providerStatus(DigiflazzService $digiflazzService): JsonResponse
+    {
+        $configured = $digiflazzService->isConfigured();
+        $balance = null;
+        if ($configured) {
+            $balance = \Illuminate\Support\Facades\Cache::remember(
+                'digiflazz_balance_public',
+                60,
+                fn () => $digiflazzService->checkBalance()
+            );
+        }
+
+        $activeProviders = Provider::where('is_active', true)->count();
+        $totalProviders = Provider::count();
+
+        $status = 'offline';
+        if ($configured && $balance !== null && $activeProviders > 0) {
+            $status = 'online';
+        } elseif ($configured && $activeProviders > 0) {
+            $status = 'degraded';
+        }
+
+        return $this->successResponse('Status provider berhasil dimuat.', [
+            'status' => $status,
+            'digiflazz_configured' => $configured,
+            'digiflazz_reachable' => $balance !== null,
+            'active_providers' => $activeProviders,
+            'total_providers' => $totalProviders,
+            'updated_at' => now()->toIso8601String(),
+        ]);
     }
 }

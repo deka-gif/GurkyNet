@@ -39,4 +39,9 @@ return [
         'api_key' => env('VIP_API_KEY'),
         'signature' => env('VIP_SIGNATURE'),
     ],
+
+    'fcm' => [
+        'server_key' => env('FCM_SERVER_KEY'),
+        'sender_id' => env('FCM_SENDER_ID'),
+    ],
 ];

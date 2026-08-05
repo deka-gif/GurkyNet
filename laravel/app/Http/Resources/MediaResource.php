@@ -21,7 +21,8 @@ class MediaResource extends JsonResource
             'altText' => $this->alt_text,
             'folder' => $this->folder,
             'storageDisk' => $this->storage_disk,
-            'url' => $this->url,
+            'url' => \App\Support\MediaUrl::absolute($this->url, $this->storage_disk ?: 'public'),
+            'cdnUrl' => \App\Support\MediaUrl::absolute($this->url, $this->storage_disk ?: 'public'),
             'uploadedBy' => $this->uploaded_by,
             'createdAt' => $this->created_at?->toIso8601String(),
         ];

@@ -3,6 +3,13 @@
 return [
     'default' => env('FILESYSTEM_DISK', 'local'),
 
+    /*
+    | Absolute media / CDN base URL for Website, Android, iOS, and future object storage.
+    | Example: https://cdn.gurkynet.id
+    */
+    'cdn_url' => env('CDN_URL'),
+    'default_public_disk' => env('FILESYSTEM_PUBLIC_DISK', 'public'),
+
     'disks' => [
         'local' => [
             'driver' => 'local',
@@ -16,6 +23,19 @@ return [
             'root' => storage_path('app/public'),
             'url' => env('APP_URL').'/storage',
             'visibility' => 'public',
+            'throw' => false,
+        ],
+
+        // Ready for future object storage / CDN origin without code changes.
+        's3' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION', 'ap-southeast-1'),
+            'bucket' => env('AWS_BUCKET'),
+            'url' => env('AWS_URL'),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
         ],
     ],
