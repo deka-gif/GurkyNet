@@ -79,6 +79,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Runtime audit: every UPDATE touching product_providers
+        \Illuminate\Support\Facades\DB::listen(function ($query) {
+            $sql = (string) ($query->sql ?? '');
+            if (!preg_match('/\bupdate\s+[`"\[]?product_providers[`"\]]?/i', $sql)) {
+                return;
+            }
+
+            \Illuminate\Support\Facades\Log::info('EXEC TRACE — product_providers SQL UPDATE (DB::listen)', [
+                'sql' => $sql,
+                'bindings' => $query->bindings ?? [],
+                'time_ms' => $query->time ?? null,
+            ]);
+        });
+
         // Define Authorization Gates for RBAC
         \Illuminate\Support\Facades\Gate::before(function (\App\Models\User $user, $ability) {
             if ($user->isSuperAdmin()) {

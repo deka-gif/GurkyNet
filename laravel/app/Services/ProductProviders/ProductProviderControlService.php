@@ -86,26 +86,56 @@ class ProductProviderControlService
 
     public function enable(ProductProvider $provider): ProductProvider
     {
-        Log::info('EXEC TRACE — enable() before save', [
-            'provider_id' => $provider->id,
-            'current_is_active' => $provider->is_active,
+        Log::info('EXEC TRACE — ENTER Service Enable', [
+            'Provider ID' => $provider->id,
+            'code' => $provider->code,
+            'Current model is_active' => $provider->is_active,
+            'Current model api_status' => $provider->api_status,
         ]);
 
         $provider->is_active = true;
-        $provider->save();
 
-        Log::info('EXEC TRACE — enable() after save', [
-            'provider_id' => $provider->id,
-            'new_is_active' => $provider->is_active,
+        Log::info('EXEC TRACE — Before save() Enable', [
+            'Provider ID' => $provider->id,
+            'Dirty attributes' => $provider->getDirty(),
+        ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $saved = $provider->save();
+        $queryLog = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        $updateQueries = array_values(array_filter($queryLog, function (array $q) {
+            return (bool) preg_match('/\bupdate\s+[`"\[]?product_providers[`"\]]?/i', (string) ($q['query'] ?? ''));
+        }));
+
+        Log::info('EXEC TRACE — SQL UPDATE executed Enable', [
+            'Provider ID' => $provider->id,
+            'save_returned' => $saved,
+            'SQL UPDATE executed' => $updateQueries,
+            'Rows affected' => $provider->wasChanged() ? 1 : 0,
+            'wasChanged_is_active' => $provider->wasChanged('is_active'),
+            'getChanges' => $provider->getChanges(),
+        ]);
+
+        Log::info('EXEC TRACE — After save() Enable', [
+            'Provider ID' => $provider->id,
+            'model is_active' => $provider->is_active,
+            'model api_status' => $provider->api_status,
         ]);
 
         $this->audit($provider, 'enable', true, 'Provider enabled');
 
         $fresh = $provider->fresh();
+        $dbRow = DB::table('product_providers')->where('id', $provider->id)->first(['is_active', 'api_status']);
 
-        Log::info('EXEC TRACE — enable() after fresh()', [
-            'provider_id' => $fresh?->id,
-            'fresh_is_active' => $fresh?->is_active,
+        Log::info('EXEC TRACE — Fresh model Enable', [
+            'Provider ID' => $fresh?->id,
+            'Fresh model is_active' => $fresh?->is_active,
+            'Fresh model api_status' => $fresh?->api_status,
+            'Fresh DB is_active' => $dbRow->is_active ?? null,
+            'Fresh DB api_status' => $dbRow->api_status ?? null,
         ]);
 
         $this->flushProductCatalogCache();
@@ -115,16 +145,63 @@ class ProductProviderControlService
 
     public function disable(ProductProvider $provider): ProductProvider
     {
+        Log::info('EXEC TRACE — ENTER Service Disable', [
+            'Provider ID' => $provider->id,
+            'code' => $provider->code,
+            'Current model is_active' => $provider->is_active,
+            'Current model api_status' => $provider->api_status,
+        ]);
+
         $provider->is_active = false;
         $provider->api_status = 'offline';
         $provider->health_color = 'yellow';
-        $provider->save();
+
+        Log::info('EXEC TRACE — Before save() Disable', [
+            'Provider ID' => $provider->id,
+            'Dirty attributes' => $provider->getDirty(),
+        ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $saved = $provider->save();
+        $queryLog = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        $updateQueries = array_values(array_filter($queryLog, function (array $q) {
+            return (bool) preg_match('/\bupdate\s+[`"\[]?product_providers[`"\]]?/i', (string) ($q['query'] ?? ''));
+        }));
+
+        Log::info('EXEC TRACE — SQL UPDATE executed Disable', [
+            'Provider ID' => $provider->id,
+            'save_returned' => $saved,
+            'SQL UPDATE executed' => $updateQueries,
+            'Rows affected' => $provider->wasChanged() ? 1 : 0,
+            'wasChanged_is_active' => $provider->wasChanged('is_active'),
+            'getChanges' => $provider->getChanges(),
+        ]);
+
+        Log::info('EXEC TRACE — After save() Disable', [
+            'Provider ID' => $provider->id,
+            'model is_active' => $provider->is_active,
+            'model api_status' => $provider->api_status,
+        ]);
 
         $this->audit($provider, 'disable', true, 'Provider disabled — traffic auto-switches to next priority');
 
+        $fresh = $provider->fresh();
+        $dbRow = DB::table('product_providers')->where('id', $provider->id)->first(['is_active', 'api_status']);
+
+        Log::info('EXEC TRACE — Fresh model Disable', [
+            'Provider ID' => $fresh?->id,
+            'Fresh model is_active' => $fresh?->is_active,
+            'Fresh model api_status' => $fresh?->api_status,
+            'Fresh DB is_active' => $dbRow->is_active ?? null,
+            'Fresh DB api_status' => $dbRow->api_status ?? null,
+        ]);
+
         $this->flushProductCatalogCache();
 
-        return $provider->fresh();
+        return $fresh;
     }
 
     public function setPriority(ProductProvider $provider, int $priority): ProductProvider

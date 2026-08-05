@@ -48,6 +48,36 @@ class ProductProvider extends Model
         'last_failure_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::updating(function (ProductProvider $provider) {
+            if (!$provider->isDirty('is_active')) {
+                return;
+            }
+
+            $old = $provider->getOriginal('is_active');
+            $new = $provider->is_active;
+
+            $trace = collect(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 25))
+                ->map(function (array $frame) {
+                    $file = $frame['file'] ?? '?';
+                    $line = $frame['line'] ?? '?';
+                    $fn = ($frame['class'] ?? '') . ($frame['type'] ?? '') . ($frame['function'] ?? '');
+
+                    return $file . ':' . $line . ' ' . $fn;
+                })
+                ->all();
+
+            \Illuminate\Support\Facades\Log::warning('EXEC TRACE — product_providers.is_active CHANGE', [
+                'Provider ID' => $provider->id,
+                'code' => $provider->code,
+                'OLD VALUE' => $old,
+                'NEW VALUE' => $new,
+                'Call stack' => $trace,
+            ]);
+        });
+    }
+
     public function products(): HasMany
     {
         return $this->hasMany(Product::class, 'product_provider_id');

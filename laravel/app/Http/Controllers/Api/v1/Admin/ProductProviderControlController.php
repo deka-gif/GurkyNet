@@ -38,25 +38,69 @@ class ProductProviderControlController extends Controller
 
     public function enable(int $id, ProductProviderControlService $service): JsonResponse
     {
-        Log::info('EXEC TRACE — ENTER enable controller', [
-            'provider_id' => $id,
+        $dbBefore = \Illuminate\Support\Facades\DB::table('product_providers')->where('id', $id)->first(['id', 'is_active', 'api_status', 'code']);
+
+        Log::info('EXEC TRACE — ENTER Controller Enable', [
+            'Provider ID' => $id,
+            'Current DB is_active' => $dbBefore->is_active ?? null,
+            'Current DB api_status' => $dbBefore->api_status ?? null,
+            'code' => $dbBefore->code ?? null,
+            'path' => request()->path(),
         ]);
 
         $provider = ProductProvider::findOrFail($id);
         $fresh = $service->enable($provider);
+        $card = $service->toCard($fresh);
 
-        return $this->successResponse('Product provider diaktifkan.', $service->toCard($fresh));
+        $response = $this->successResponse('Product provider diaktifkan.', $card);
+
+        Log::info('EXEC TRACE — RETURN JSON Enable', [
+            'Provider ID' => $fresh->id,
+            'JSON enabled' => $card['enabled'] ?? null,
+            'JSON status' => $card['status'] ?? null,
+            'JSON apiStatus' => $card['apiStatus'] ?? null,
+            'Fresh DB is_active' => $fresh->is_active,
+            'Fresh DB api_status' => $fresh->api_status,
+            'response_status' => $response->getStatusCode(),
+        ]);
+
+        return $response;
     }
 
     public function disable(int $id, ProductProviderControlService $service): JsonResponse
     {
+        $dbBefore = \Illuminate\Support\Facades\DB::table('product_providers')->where('id', $id)->first(['id', 'is_active', 'api_status', 'code']);
+
+        Log::info('EXEC TRACE — ENTER Controller Disable', [
+            'Provider ID' => $id,
+            'Current DB is_active' => $dbBefore->is_active ?? null,
+            'Current DB api_status' => $dbBefore->api_status ?? null,
+            'code' => $dbBefore->code ?? null,
+            'path' => request()->path(),
+            'request_payload' => request()->all(),
+        ]);
+
         $provider = ProductProvider::findOrFail($id);
         $fresh = $service->disable($provider);
+        $card = $service->toCard($fresh);
 
-        return $this->successResponse(
+        $response = $this->successResponse(
             'Product provider dinonaktifkan. Trafik otomatis dialihkan ke provider aktif berikutnya.',
-            $service->toCard($fresh)
+            $card
         );
+
+        Log::info('EXEC TRACE — RETURN JSON Disable', [
+            'Provider ID' => $fresh->id,
+            'JSON enabled' => $card['enabled'] ?? null,
+            'JSON status' => $card['status'] ?? null,
+            'JSON apiStatus' => $card['apiStatus'] ?? null,
+            'Fresh DB is_active' => $fresh->is_active,
+            'Fresh DB api_status' => $fresh->api_status,
+            'db_is_active_raw' => \Illuminate\Support\Facades\DB::table('product_providers')->where('id', $fresh->id)->value('is_active'),
+            'response_status' => $response->getStatusCode(),
+        ]);
+
+        return $response;
     }
 
     public function setPrimary(int $id, ProductProviderControlService $service): JsonResponse
