@@ -17,7 +17,7 @@ class ProfileResource extends JsonResource
             'birthDate' => $this->birth_date,
             'gender' => $this->gender,
             'address' => $this->address,
-            'avatar' => $this->avatar_url ?? 'https://via.placeholder.com/150',
+            'avatar' => $this->avatar_url ?? null,
             'role' => $this->role instanceof \App\Enums\UserRole ? $this->role->value : $this->role,
             'isVerified' => (bool) $this->email_verified_at,
             'wallet' => $this->wallet ? [
@@ -37,7 +37,7 @@ class ProfileResource extends JsonResource
                 'name' => $this->name,
                 'email' => $this->email,
                 'phone' => $this->phone_number,
-                'avatar' => $this->avatar_url ?? 'https://via.placeholder.com/150',
+                'avatar' => $this->avatar_url ?? null,
                 'role' => $this->role instanceof \App\Enums\UserRole ? $this->role->value : $this->role,
                 'isVerified' => (bool) $this->email_verified_at,
                 'createdAt' => $this->created_at?->toIso8601String(),

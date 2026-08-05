@@ -90,6 +90,45 @@ class DigiflazzService
     }
 
     /**
+     * Whether real (non-placeholder) Digiflazz credentials are configured.
+     */
+    public function isConfigured(): bool
+    {
+        return $this->username !== 'dummy_username'
+            && $this->apiKey !== 'dummy_api_key'
+            && $this->username !== ''
+            && $this->apiKey !== '';
+    }
+
+    /**
+     * Check live deposit balance on Digiflazz (cek-saldo API).
+     * Returns the balance as float, or null when unavailable.
+     */
+    public function checkBalance(): ?float
+    {
+        if (!$this->isConfigured()) {
+            return null;
+        }
+
+        $payload = [
+            'cmd' => 'deposit',
+            'username' => $this->username,
+            'sign' => md5($this->username . $this->apiKey . 'depo'),
+        ];
+
+        try {
+            $response = $this->postRequest('/cek-saldo', $payload, 1);
+            $deposit = $response['data']['deposit'] ?? null;
+
+            return $deposit !== null ? (float) $deposit : null;
+        } catch (\Throwable $e) {
+            Log::warning('Digiflazz balance check failed', ['message' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
      * Perform HTTP POST request to Digiflazz with exponential backoff retry and precise logging.
      */
     protected function postRequest(string $endpoint, array $payload, int $maxRetries = 3): array

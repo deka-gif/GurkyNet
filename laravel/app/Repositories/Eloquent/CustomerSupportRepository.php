@@ -13,7 +13,11 @@ use App\Models\DigiflazzTransaction;
 use App\Models\MidtransTransaction;
 use App\Models\ActivityLog;
 use App\Models\Faq;
+use App\Enums\TransactionStatus;
+use App\Enums\WalletHistoryType;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class CustomerSupportRepository implements CustomerSupportRepositoryInterface
 {
@@ -43,10 +47,55 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
             'open_tickets' => $openTickets,
             'pending_tickets' => $pendingTickets,
             'resolved_today' => $resolvedToday,
-            'avg_response_time' => '4m 12s',
+            'avg_response_time' => $this->calculateAverageFirstResponseTime(),
             'recent_tickets' => $recentTickets,
             'recent_refund_requests' => $recentRefundRequests,
         ];
+    }
+
+    /**
+     * Average time between ticket creation and the first support reply,
+     * formatted for display (e.g. "4m 12s"), or null when no replies exist.
+     */
+    protected function calculateAverageFirstResponseTime(): ?string
+    {
+        $firstReplies = TicketReply::selectRaw('support_ticket_id, MIN(created_at) as first_reply_at')
+            ->groupBy('support_ticket_id')
+            ->pluck('first_reply_at', 'support_ticket_id');
+
+        if ($firstReplies->isEmpty()) {
+            return null;
+        }
+
+        $ticketCreatedAt = SupportTicket::whereIn('id', $firstReplies->keys())
+            ->pluck('created_at', 'id');
+
+        $totalSeconds = 0;
+        $count = 0;
+        foreach ($firstReplies as $ticketId => $firstReplyAt) {
+            $createdAt = $ticketCreatedAt[$ticketId] ?? null;
+            if (!$createdAt) {
+                continue;
+            }
+            $diff = \Illuminate\Support\Carbon::parse($firstReplyAt)->diffInSeconds($createdAt, true);
+            $totalSeconds += $diff;
+            $count++;
+        }
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $avg = (int) round($totalSeconds / $count);
+        $hours = intdiv($avg, 3600);
+        $minutes = intdiv($avg % 3600, 60);
+        $seconds = $avg % 60;
+
+        if ($hours > 0) {
+            return "{$hours}j {$minutes}m";
+        }
+
+        return "{$minutes}m {$seconds}s";
     }
 
     /**
@@ -459,22 +508,27 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
      */
     public function getKnowledgeBase(): array
     {
+        // SOP articles are managed as published static pages (CMS); no dedicated
+        // SOP table exists, so only real DB-backed content is returned here.
+        $sops = \App\Models\StaticPage::where('status', 'published')
+            ->where(function ($query) {
+                $query->where('slug', 'like', 'sop-%')
+                    ->orWhere('title', 'like', 'SOP%');
+            })
+            ->orderBy('title')
+            ->get(['id', 'title', 'content', 'slug'])
+            ->map(fn ($page) => [
+                'id' => $page->id,
+                'title' => $page->title,
+                'content' => $page->content,
+                'category' => 'SOP',
+            ])
+            ->values()
+            ->all();
+
         return [
             'faqs' => Faq::orderBy('order')->get(),
-            'sops' => [
-                [
-                    'id' => 1,
-                    'title' => 'SOP Mengatasi Transaksi Token PLN Delay',
-                    'content' => '1. Cek status di Digiflazz Logs. 2. Jika sukses tapi SN belum keluar, tunggu maksimal 5 menit. 3. Jika gagal, lakukan refund saldo otomatis.',
-                    'category' => 'PPOB & PLN',
-                ],
-                [
-                    'id' => 2,
-                    'title' => 'SOP Prosedur Refund Manual',
-                    'content' => '1. Verifikasi keluhan pelanggan. 2. Cek mutasi dompet pelanggan. 3. Lakukan pengembalian dana melalui menu refund di dashboard finansial.',
-                    'category' => 'Finance & Wallet',
-                ]
-            ]
+            'sops' => $sops,
         ];
     }
 }

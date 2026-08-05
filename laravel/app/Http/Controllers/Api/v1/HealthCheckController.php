@@ -36,6 +36,19 @@ class HealthCheckController extends Controller
             // Cache Down
         }
 
+        $queueConnected = false;
+        try {
+            if (Schema::hasTable('jobs')) {
+                DB::table('jobs')->count();
+                $queueConnected = true;
+            } else {
+                Queue::size();
+                $queueConnected = true;
+            }
+        } catch (\Exception $e) {
+            // Queue backend unreachable
+        }
+
         $overallStatus = ($dbConnected && $cacheConnected) ? 'UP' : 'DEGRADED';
 
         return response()->json([
@@ -44,7 +57,7 @@ class HealthCheckController extends Controller
             'services' => [
                 'database' => $dbConnected ? 'UP' : 'DOWN',
                 'cache' => $cacheConnected ? 'UP' : 'DOWN',
-                'queue' => 'UP', // Laravel queues fall back gracefully or run sync/db
+                'queue' => $queueConnected ? 'UP' : 'DOWN',
             ],
             'version' => '1.0.0',
         ], $overallStatus === 'UP' ? 200 : 500);
@@ -106,8 +119,9 @@ class HealthCheckController extends Controller
             $failedJobs = 0;
         }
 
-        // 2. Average Queue Time (calculated from actual settlement activity logs)
-        $avgQueueTime = 1.25; // Default reference baseline
+        // 2. Average Queue Time (calculated from actual settlement activity logs).
+        // Null when no callback metrics have been recorded yet.
+        $avgQueueTime = null;
         try {
             $logs = ActivityLog::where('activity', 'midtrans_callback_metric')->get();
             if ($logs->count() > 0) {
@@ -125,7 +139,7 @@ class HealthCheckController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            $avgQueueTime = 1.25;
+            $avgQueueTime = null;
         }
 
         // 3. Daily Transactions
@@ -146,8 +160,9 @@ class HealthCheckController extends Controller
             $dailyRevenue = 0.00;
         }
 
-        // 5. Digiflazz Success Rate (non-midtrans transactions)
-        $digiflazzSuccessRate = 100.00;
+        // 5. Digiflazz Success Rate (non-midtrans transactions).
+        // Null when there is no transaction volume to measure.
+        $digiflazzSuccessRate = null;
         try {
             $digiTotal = Transaction::whereDate('created_at', $date)
                 ->where('payment_method', '!=', 'midtrans')
@@ -160,11 +175,11 @@ class HealthCheckController extends Controller
                 $digiflazzSuccessRate = round(($digiSuccess / $digiTotal) * 100, 2);
             }
         } catch (\Exception $e) {
-            $digiflazzSuccessRate = 100.00;
+            $digiflazzSuccessRate = null;
         }
 
-        // 6. Midtrans Success Rate
-        $midtransSuccessRate = 100.00;
+        // 6. Midtrans Success Rate. Null when there is no volume to measure.
+        $midtransSuccessRate = null;
         try {
             $midtransTotal = Transaction::whereDate('created_at', $date)
                 ->where('payment_method', 'midtrans')
@@ -177,7 +192,7 @@ class HealthCheckController extends Controller
                 $midtransSuccessRate = round(($midtransSuccess / $midtransTotal) * 100, 2);
             }
         } catch (\Exception $e) {
-            $midtransSuccessRate = 100.00;
+            $midtransSuccessRate = null;
         }
 
         return response()->json([

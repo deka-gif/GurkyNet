@@ -40,36 +40,31 @@ export const CustomerSupportDashboard: React.FC = () => {
     fetchTickets();
   }, [fetchDashboard, fetchTickets]);
 
-  // Statistics from store
+  // Statistics from store (real API values only; no fabricated deltas)
   const stats = [
     {
       title: 'Open Tickets',
       value: (dashboardData?.openTickets ?? dashboardData?.open_tickets ?? 0).toString(),
-      change: '+3 dari jam lalu',
       icon: Ticket,
     },
     {
       title: 'Pending Tickets',
       value: (dashboardData?.pendingTickets ?? dashboardData?.pending_tickets ?? 0).toString(),
-      change: '-2 dari kemarin',
       icon: AlertCircle,
     },
     {
       title: 'Resolved Today',
       value: (dashboardData?.resolvedToday ?? dashboardData?.resolved_today ?? 0).toString(),
-      change: '+18% vs rata-rata',
       icon: CheckCircle2,
     },
     {
       title: 'Average Response Time',
-      value: dashboardData?.avgResponseTime || dashboardData?.avg_response_time || '14m',
-      change: 'Sangat Cepat',
+      value: dashboardData?.avgResponseTime || dashboardData?.avg_response_time || '-',
       icon: Clock,
     },
     {
-      title: 'Average Resolution Time',
-      value: dashboardData?.avgResolutionTime || dashboardData?.avg_resolution_time || '2j 15m',
-      change: 'Optimal',
+      title: 'Total Tickets',
+      value: (Array.isArray(tickets) ? tickets.length : 0).toString(),
       icon: ArrowUpRight,
     }
   ];
@@ -219,7 +214,6 @@ export const CustomerSupportDashboard: React.FC = () => {
             key={idx}
             title={stat.title}
             value={stat.value}
-            change={stat.change}
             icon={stat.icon}
           />
         ))}

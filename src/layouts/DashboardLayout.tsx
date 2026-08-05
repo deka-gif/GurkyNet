@@ -21,7 +21,6 @@ import {
   UserCheck,
   FileText,
   Headset,
-  ShieldCheck,
   DollarSign,
   Building,
   FileSpreadsheet,
@@ -180,7 +179,6 @@ export const DashboardLayout = () => {
       case 'Super Admin':
         return [
           { path: '/dashboard/owner', label: 'Executive Dashboard', icon: Crown },
-          { path: '/dashboard/admin', label: 'Admin Portal', icon: ShieldCheck },
           { path: '/dashboard/finance', label: 'Finance CMS', icon: DollarSign },
           { path: '/dashboard/operations', label: 'Operations CMS', icon: Server },
           { path: '/dashboard/marketing', label: 'Marketing CMS', icon: Megaphone },
@@ -256,7 +254,6 @@ export const DashboardLayout = () => {
       case 'Super Admin':
         return [
           { path: '/dashboard/owner', label: 'Executive', icon: Crown },
-          { path: '/dashboard/admin', label: 'Admin', icon: ShieldCheck },
           { path: '/dashboard', label: 'User Site', icon: Home },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
           { path: '/dashboard/profil', label: 'Profil', icon: User },

@@ -3,6 +3,7 @@
 namespace App\Actions\Transaction;
 
 use App\Models\Transaction;
+use App\Models\WebsiteSetting;
 
 class GetReceiptAction
 {
@@ -11,7 +12,7 @@ class GetReceiptAction
      */
     public function execute(Transaction $transaction): array
     {
-        $transaction->load(['items', 'user']);
+        $transaction->load(['items', 'user', 'digiflazzTransaction']);
         $firstItem = $transaction->items->first();
 
         $productCode = $firstItem ? $firstItem->product_code : '';
@@ -19,20 +20,19 @@ class GetReceiptAction
         $price = $firstItem ? (float) $firstItem->price : (float) $transaction->amount;
         $quantity = $firstItem ? (int) $firstItem->quantity : 1;
 
-        // Extract custom metadata if available
-        $customMetadata = $firstItem ? ($firstItem->custom_metadata ?? []) : [];
-        $providerName = $customMetadata['provider'] ?? '';
+        // Real provider serial number recorded by the Digiflazz webhook/fulfillment job
+        $serialNumber = $transaction->digiflazzTransaction?->sn;
 
-        // Generate a simulated serial number (SN) if the transaction is successful
-        $serialNumber = 'DUMMY-SN-' . now()->format('Ymd') . '-' . mt_rand(100000, 999999);
+        // Company identity comes from the CMS-managed website settings
+        $settings = WebsiteSetting::first();
 
         return [
             'header' => [
-                'company_name' => 'GurkyPay',
-                'tagline' => 'Solusi Pembayaran Digital Tercepat',
-                'address' => 'Gedung Gurky Lt. 5, Jakarta Selatan, Indonesia',
-                'support_phone' => '021-80682222',
-                'support_email' => 'support@gurkypay.com',
+                'company_name' => $settings?->website_name ?? config('app.name'),
+                'tagline' => $settings?->tagline,
+                'address' => $settings?->office_address,
+                'support_phone' => $settings?->support_phone,
+                'support_email' => $settings?->support_email,
             ],
             'transaction_details' => [
                 'invoice_number' => $transaction->invoice_number,
@@ -41,7 +41,7 @@ class GetReceiptAction
                 'service_name' => $transaction->service_name,
                 'target_number' => $transaction->target_number,
                 'payment_method' => strtoupper($transaction->payment_method),
-                'serial_number' => $transaction->status === 'success' ? $serialNumber : null,
+                'serial_number' => $serialNumber,
             ],
             'items' => [
                 [

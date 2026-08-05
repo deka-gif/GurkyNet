@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,9 +12,6 @@ import {
   CheckCircle2,
   XCircle,
   Receipt,
-  Wallet,
-  ShoppingBag,
-  FileText,
   AlertCircle,
   FileImage,
   Send,
@@ -36,8 +33,6 @@ export const CustomerSupportTicketDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const ticketId = id || 'TCK-1002';
-
   const {
     selectedTicket,
     ticketsLoading,
@@ -52,59 +47,68 @@ export const CustomerSupportTicketDetail: React.FC = () => {
     }
   }, [id, fetchTicketById]);
 
-  // Fallback / Normalized values from store ticket detail
+  // Normalized values from real ticket detail API
   const currentTicket = selectedTicket || {};
-  const status = currentTicket.status || 'Pending';
-  const priority = currentTicket.priority || 'Critical';
-  const assignedStaff = currentTicket.assignedTo || currentTicket.assigned_to || 'CS Ani';
-  const category = currentTicket.category || 'Token PLN';
-  const createdAt = currentTicket.createdAt || currentTicket.created_at || '2026-07-31 08:12';
+  const ticketId = currentTicket.ticket_number || currentTicket.ticketNumber || id || '-';
+  const status = currentTicket.status || '-';
+  const priority = currentTicket.priority || '-';
+  const assignedStaff = currentTicket.assignedTo || currentTicket.assigned_to || 'Unassigned';
+  const category = currentTicket.category || '-';
+  const createdAt = currentTicket.createdAt || currentTicket.created_at || '-';
 
-  // Customer details
+  // Customer details from the real ticket->user relation
+  const ticketUser = currentTicket.user || {};
   const customer = {
-    avatar: currentTicket.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    fullName: currentTicket.customerName || currentTicket.customer_name || 'Siti Rahmawati',
-    email: currentTicket.customerEmail || currentTicket.customer_email || 'siti.rahma@yahoo.com',
-    phoneNumber: currentTicket.customerPhone || currentTicket.customer_phone || '+62 812-3456-7890',
-    userId: currentTicket.customerId || currentTicket.user_id || 'USR-882910',
-    memberSince: currentTicket.memberSince || '12 Jan 2024'
+    avatar: ticketUser.avatar || ticketUser.avatar_url || null,
+    fullName: ticketUser.name || currentTicket.customerName || currentTicket.customer_name || '-',
+    email: ticketUser.email || currentTicket.customerEmail || currentTicket.customer_email || '-',
+    phoneNumber: ticketUser.phone_number || currentTicket.customerPhone || currentTicket.customer_phone || '-',
+    userId: String(ticketUser.id ?? currentTicket.user_id ?? '-'),
+    memberSince: ticketUser.created_at || '-',
+    isVerified: !!ticketUser.email_verified_at
   };
 
-  // Issue details
+  // Issue details from real ticket fields
   const issue = {
-    subject: currentTicket.subject || currentTicket.title || 'Kode Token Listrik Mati Lampu Urgent',
-    description: currentTicket.description || currentTicket.message || `Pelanggan membeli token listrik senilai Rp 500.000 via metode pembayaran Saldo GurkyWallet. Transaksi dinyatakan 'Sukses' pada sistem dashboard, namun nomor Serial Number (SN) / Kode Token 20 digit tidak muncul pada struk transaksi maupun di halaman riwayat.`,
-    attachmentName: currentTicket.attachmentName || 'screenshot_kendala_token_pln.png',
-    attachmentSize: currentTicket.attachmentSize || '1.2 MB'
+    subject: currentTicket.subject || currentTicket.title || '-',
+    description: currentTicket.description || currentTicket.message || '-',
+    attachmentName: currentTicket.attachmentName || currentTicket.attachment_name || null,
+    attachmentSize: currentTicket.attachmentSize || currentTicket.attachment_size || null
   };
 
-  // Timeline
-  const [timeline, setTimeline] = useState<TimelineItem[]>([
-    {
-      id: 'tl-1',
-      time: createdAt,
-      title: 'Ticket Created',
-      description: 'Tiket berhasil dibuat oleh sistem berdasarkan keluhan pelanggan via portal dukungan.',
-      operator: 'System Automated',
-      type: 'system'
-    },
-    {
-      id: 'tl-2',
-      time: '2026-07-31 08:15',
-      title: 'Customer Submitted Screenshot',
-      description: 'Pelanggan mengunggah bukti struk pemotongan saldo tanpa kode token PLN.',
-      operator: `${customer.fullName} (Customer)`,
-      type: 'customer'
-    },
-    {
-      id: 'tl-3',
-      time: '2026-07-31 08:20',
-      title: `Assigned to ${assignedStaff}`,
-      description: `Tiket diserahkan ke ${assignedStaff} untuk pemrosesan rekueri manual ke biller.`,
-      operator: 'System Dispatcher',
-      type: 'agent'
+  // Related transaction from real ticket->transaction relation
+  const relatedTransaction = currentTicket.transaction || null;
+
+  // Timeline derived from real ticket replies
+  const timeline: TimelineItem[] = useMemo(() => {
+    const items: TimelineItem[] = [];
+
+    if (currentTicket.id) {
+      items.push({
+        id: 'tl-created',
+        time: createdAt,
+        title: 'Ticket Created',
+        description: 'Tiket dibuat melalui portal dukungan pelanggan.',
+        operator: customer.fullName,
+        type: 'system'
+      });
     }
-  ]);
+
+    const replies = Array.isArray(currentTicket.replies) ? currentTicket.replies : [];
+    replies.forEach((reply: any) => {
+      const isAgent = reply.user?.role && reply.user.role !== 'User';
+      items.push({
+        id: `tl-reply-${reply.id}`,
+        time: reply.created_at || reply.createdAt || '',
+        title: isAgent ? 'Balasan Petugas' : 'Balasan Pelanggan',
+        description: reply.message || '',
+        operator: reply.user?.name || '-',
+        type: isAgent ? 'agent' : 'customer'
+      });
+    });
+
+    return items;
+  }, [currentTicket, createdAt, customer.fullName]);
 
   // Action Panel Modals & Forms
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -120,22 +124,12 @@ export const CustomerSupportTicketDetail: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Action Handlers
+  // Action Handlers — each performs the real API call, then re-fetches the ticket
   const handleAssignSubmit = async () => {
     if (id) {
       await updateTicket(id, { assignedTo: selectedStaffOption });
+      await fetchTicketById(id);
     }
-    setTimeline((prev) => [
-      ...prev,
-      {
-        id: `tl-${Date.now()}`,
-        time: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        title: `Assigned to ${selectedStaffOption}`,
-        description: `Penugasan tiket diperbarui ke ${selectedStaffOption}.`,
-        operator: 'CS Support Lead',
-        type: 'agent'
-      }
-    ]);
     triggerToast(`Tiket berhasil ditugaskan ke ${selectedStaffOption}`);
     setShowAssignModal(false);
   };
@@ -143,18 +137,8 @@ export const CustomerSupportTicketDetail: React.FC = () => {
   const handleStatusSubmit = async () => {
     if (id) {
       await updateTicket(id, { status: selectedStatusOption });
+      await fetchTicketById(id);
     }
-    setTimeline((prev) => [
-      ...prev,
-      {
-        id: `tl-${Date.now()}`,
-        time: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        title: `Status Changed to ${selectedStatusOption}`,
-        description: `Status tiket diperbarui dari ${status} menjadi ${selectedStatusOption}.`,
-        operator: assignedStaff,
-        type: 'agent'
-      }
-    ]);
     triggerToast(`Status tiket diperbarui menjadi ${selectedStatusOption}`);
     setShowStatusModal(false);
   };
@@ -164,19 +148,9 @@ export const CustomerSupportTicketDetail: React.FC = () => {
     if (!newNoteText.trim()) return;
     if (id) {
       await replyTicket(id, newNoteText);
+      await fetchTicketById(id);
     }
-    setTimeline((prev) => [
-      ...prev,
-      {
-        id: `tl-${Date.now()}`,
-        time: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        title: 'Internal Note',
-        description: newNoteText,
-        operator: assignedStaff,
-        type: 'note'
-      }
-    ]);
-    triggerToast('Catatan internal berhasil ditambahkan');
+    triggerToast('Catatan berhasil ditambahkan');
     setNewNoteText('');
     setShowNoteModal(false);
   };
@@ -184,36 +158,16 @@ export const CustomerSupportTicketDetail: React.FC = () => {
   const handleMarkAsResolved = async () => {
     if (id) {
       await updateTicket(id, { status: 'Resolved' });
+      await fetchTicketById(id);
     }
-    setTimeline((prev) => [
-      ...prev,
-      {
-        id: `tl-${Date.now()}`,
-        time: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        title: 'Resolved',
-        description: 'Kode Token PLN berhasil diterbitkan manual dan diselesaikan oleh petugas.',
-        operator: assignedStaff,
-        type: 'agent'
-      }
-    ]);
     triggerToast('Tiket telah ditandai sebagai Selesai (Resolved)');
   };
 
   const handleCloseTicket = async () => {
     if (id) {
       await updateTicket(id, { status: 'Closed' });
+      await fetchTicketById(id);
     }
-    setTimeline((prev) => [
-      ...prev,
-      {
-        id: `tl-${Date.now()}`,
-        time: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        title: 'Closed',
-        description: 'Tiket ditutup secara permanen oleh petugas support.',
-        operator: assignedStaff,
-        type: 'system'
-      }
-    ]);
     triggerToast('Tiket telah Ditutup (Closed)');
   };
 
@@ -350,11 +304,17 @@ export const CustomerSupportTicketDetail: React.FC = () => {
               </Link>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <img
-                src={customer.avatar}
-                alt={customer.fullName}
-                className="w-14 h-14 rounded-2xl object-cover border-2 border-blue-100 shadow-xs"
-              />
+              {customer.avatar ? (
+                <img
+                  src={customer.avatar}
+                  alt={customer.fullName}
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-blue-100 shadow-xs"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 border-2 border-blue-100 shadow-xs flex items-center justify-center text-lg font-bold text-blue-600">
+                  {(customer.fullName || '-').charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-2">
                   <Link
@@ -363,9 +323,11 @@ export const CustomerSupportTicketDetail: React.FC = () => {
                   >
                     {customer.fullName}
                   </Link>
-                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                    Verified User
-                  </span>
+                  {customer.isVerified && (
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                      Verified User
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600 pt-1">
                   <div className="flex items-center gap-1.5">
@@ -410,27 +372,23 @@ export const CustomerSupportTicketDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* Attachment Placeholder */}
-            <div className="space-y-2 pt-2">
-              <div className="text-xs font-bold text-gray-500">Lampiran Bukti (Attachment):</div>
-              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            {/* Attachment — only rendered when the ticket actually has one */}
+            {issue.attachmentName && (
+              <div className="space-y-2 pt-2">
+                <div className="text-xs font-bold text-gray-500">Lampiran Bukti (Attachment):</div>
+                <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center gap-3">
                   <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
                     <FileImage className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-gray-900">{issue.attachmentName}</div>
-                    <div className="text-[10px] text-gray-500">{issue.attachmentSize} • PNG File</div>
+                    {issue.attachmentSize && (
+                      <div className="text-[10px] text-gray-500">{issue.attachmentSize}</div>
+                    )}
                   </div>
                 </div>
-                <button 
-                  onClick={() => triggerToast('Membuka file lampiran tangkapan layar...')}
-                  className="px-3 py-1.5 bg-white hover:bg-gray-50 text-blue-600 border border-blue-200 rounded-lg text-xs font-medium transition"
-                >
-                  Lihat File
-                </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ACTION PANEL */}
@@ -518,7 +476,7 @@ export const CustomerSupportTicketDetail: React.FC = () => {
         <div className="space-y-4">
           <div className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">Right Panel & Related Context</div>
 
-          {/* Quick Information Summary Card */}
+          {/* Quick Information Summary Card — real ticket metadata */}
           <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2.5">
             <div className="flex items-center gap-2 text-xs font-bold text-gray-900 border-b border-gray-100 pb-2">
               <AlertCircle className="w-4 h-4 text-blue-600" />
@@ -526,123 +484,73 @@ export const CustomerSupportTicketDetail: React.FC = () => {
             </div>
             <div className="text-xs space-y-2 text-gray-600">
               <div className="flex justify-between">
-                <span className="text-gray-400">SLA Response:</span>
-                <span className="font-semibold text-emerald-600">Tercapai (3m)</span>
+                <span className="text-gray-400">Nomor Tiket:</span>
+                <span className="font-mono font-semibold text-gray-800">{ticketId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Tingkat Eskalasi:</span>
-                <span className="font-semibold text-gray-800">Tier 1 Support</span>
+                <span className="text-gray-400">Kategori:</span>
+                <span className="font-semibold text-gray-800">{category}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Biller Provider:</span>
-                <span className="font-semibold text-gray-800">PLN Artajasa</span>
+                <span className="text-gray-400">Prioritas:</span>
+                <span className="font-semibold text-gray-800">{priority}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Total Tiket User:</span>
-                <span className="font-semibold text-blue-600">3 Tiket (1 Open)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Related Transaction Card */}
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2.5">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
-                <Receipt className="w-4 h-4 text-emerald-600" />
-                <span>Related Transaction</span>
-              </div>
-              <Link
-                to="/dashboard/customer-support/investigation"
-                className="text-[10px] font-semibold text-blue-600 hover:underline"
-              >
-                Investigate →
-              </Link>
-            </div>
-            <div className="text-xs space-y-1.5 text-gray-600">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Trx ID:</span>
-                <Link to="/dashboard/customer-support/investigation" className="font-mono font-bold text-blue-600 hover:underline">
-                  TRX-982104
-                </Link>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Produk:</span>
-                <span className="font-semibold text-gray-800">Token PLN 500k</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Nominal:</span>
-                <span className="font-bold text-emerald-600">Rp 501.500</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Status Trx:</span>
-                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                  Sukses (System)
+                <span className="text-gray-400">Jumlah Balasan:</span>
+                <span className="font-semibold text-blue-600">
+                  {Array.isArray(currentTicket.replies) ? currentTicket.replies.length : 0}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Related Wallet Card */}
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-gray-900 border-b border-gray-100 pb-2">
-              <Wallet className="w-4 h-4 text-purple-600" />
-              <span>Related Wallet</span>
-            </div>
-            <div className="text-xs space-y-1.5 text-gray-600">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Wallet Account:</span>
-                <span className="font-mono font-bold text-gray-900">GW-882910</span>
+          {/* Related Transaction Card — only when the ticket is linked to a real transaction */}
+          {relatedTransaction ? (
+            <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
+                  <Receipt className="w-4 h-4 text-emerald-600" />
+                  <span>Related Transaction</span>
+                </div>
+                <Link
+                  to="/dashboard/customer-support/investigation"
+                  className="text-[10px] font-semibold text-blue-600 hover:underline"
+                >
+                  Investigate →
+                </Link>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Saldo Saat Ini:</span>
-                <span className="font-bold text-gray-900">Rp 1.450.000</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Pemotongan:</span>
-                <span className="font-semibold text-red-600">-Rp 501.500</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Related Order Card */}
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-gray-900 border-b border-gray-100 pb-2">
-              <ShoppingBag className="w-4 h-4 text-amber-600" />
-              <span>Related Order</span>
-            </div>
-            <div className="text-xs space-y-1.5 text-gray-600">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Order Ref:</span>
-                <span className="font-mono font-bold text-gray-900">ORD-2026-0731-002</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">ID Pelanggan PLN:</span>
-                <span className="font-mono font-bold text-blue-600">53210984122</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Nama Meteran:</span>
-                <span className="font-semibold text-gray-800">SITI RAHMAWATI</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Related Invoice Card */}
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-gray-900 border-b border-gray-100 pb-2">
-              <FileText className="w-4 h-4 text-blue-600" />
-              <span>Related Invoice</span>
-            </div>
-            <div className="text-xs space-y-1.5 text-gray-600">
-              <div className="flex justify-between">
-                <span className="text-gray-400">No. Invoice:</span>
-                <span className="font-mono font-bold text-gray-900">INV/20260731/PLN/0091</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Status Faktur:</span>
-                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">Lunas</span>
+              <div className="text-xs space-y-1.5 text-gray-600">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Invoice:</span>
+                  <span className="font-mono font-bold text-blue-600">
+                    {relatedTransaction.invoice_number || relatedTransaction.invoiceNumber || '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Produk:</span>
+                  <span className="font-semibold text-gray-800">
+                    {relatedTransaction.service_name || relatedTransaction.serviceName || '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Nominal:</span>
+                  <span className="font-bold text-emerald-600">
+                    Rp {Number(relatedTransaction.total_payment ?? relatedTransaction.totalPayment ?? 0).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Status Trx:</span>
+                  <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-[10px] font-bold">
+                    {relatedTransaction.status || '-'}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 text-center text-xs text-gray-400">
+              Tiket ini tidak terkait dengan transaksi tertentu.
+            </div>
+          )}
         </div>
       </div>
 
@@ -656,17 +564,14 @@ export const CustomerSupportTicketDetail: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="text-xs text-gray-600">Pilih staff Customer Support penanggung jawab:</div>
-            <select
-              value={selectedStaffOption}
-              onChange={(e) => setSelectedStaffOption(e.target.value)}
+            <div className="text-xs text-gray-600">Masukkan nama staff Customer Support penanggung jawab:</div>
+            <input
+              type="text"
+              value={selectedStaffOption === 'Unassigned' ? '' : selectedStaffOption}
+              onChange={(e) => setSelectedStaffOption(e.target.value || 'Unassigned')}
+              placeholder="Nama petugas CS..."
               className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none"
-            >
-              <option value="CS Ani">CS Ani (Spesialis Transfer & Token PLN)</option>
-              <option value="CS Budi">CS Budi (Spesialis Pulsa & Paket Data)</option>
-              <option value="CS Doni">CS Doni (Spesialis Tagihan & Voucher)</option>
-              <option value="Unassigned">Unassigned (Belum Ditugaskan)</option>
-            </select>
+            />
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowAssignModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Batal</button>
               <button onClick={handleAssignSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold">Simpan</button>

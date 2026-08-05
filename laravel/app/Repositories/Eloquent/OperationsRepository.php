@@ -190,6 +190,29 @@ class OperationsRepository implements OperationsRepositoryInterface
      */
     public function getMonitoring(array $filters = []): array
     {
+        // Real average fulfillment time per provider, computed from Digiflazz
+        // transaction records of the last 7 days (created -> last status update).
+        $recentFulfillments = DigiflazzTransaction::whereIn('digiflazz_status', ['success', 'sukses'])
+            ->where('created_at', '>=', now()->subDays(7))
+            ->whereColumn('updated_at', '>', 'created_at')
+            ->get(['buyer_sku_code', 'created_at', 'updated_at']);
+
+        $skuToProvider = Product::whereNotNull('provider_id')->pluck('provider_id', 'sku_code');
+
+        $providerDurations = [];
+        foreach ($recentFulfillments as $fulfillment) {
+            $providerId = $skuToProvider[$fulfillment->buyer_sku_code] ?? null;
+            if ($providerId === null) {
+                continue;
+            }
+            $providerDurations[$providerId][] = $fulfillment->updated_at->diffInSeconds($fulfillment->created_at, true);
+        }
+
+        $providerResponseTimes = [];
+        foreach ($providerDurations as $providerId => $durations) {
+            $providerResponseTimes[$providerId] = round(array_sum($durations) / count($durations), 1) . 's';
+        }
+
         $providersQuery = Provider::withCount([
             'products as total_products',
             'products as active_products' => fn ($query) => $query->where('status', true)->where('sku_code', 'not like', '%MAINTENANCE%'),
@@ -205,7 +228,7 @@ class OperationsRepository implements OperationsRepositoryInterface
         $services = $providersQuery
             ->orderBy('name')
             ->get()
-            ->map(function (Provider $provider) {
+            ->map(function (Provider $provider) use ($providerResponseTimes) {
                 $status = match (true) {
                     ! $provider->is_active => 'Offline',
                     $provider->maintenance_products > 0 => 'Maintenance',
@@ -224,8 +247,8 @@ class OperationsRepository implements OperationsRepositoryInterface
                     'provider' => $provider->name,
                     'category' => 'PPOB Provider',
                     'status' => $status,
-                    'response_time' => '-',
-                    'responseTime' => '-',
+                    'response_time' => $providerResponseTimes[$provider->id] ?? null,
+                    'responseTime' => $providerResponseTimes[$provider->id] ?? null,
                     'uptime' => $uptime,
                     'last_updated' => optional($provider->updated_at)->toISOString(),
                     'lastUpdated' => optional($provider->updated_at)->toISOString(),
@@ -337,16 +360,8 @@ class OperationsRepository implements OperationsRepositoryInterface
         return [
             'margin_rules' => [
                 'default_margin' => (float) $defaultMargin,
-                'category_margin' => $categoryMargins ?: [
-                    ['category' => 'Pulsa', 'margin' => 1500],
-                    ['category' => 'Data', 'margin' => 2000],
-                    ['category' => 'PLN', 'margin' => 2500],
-                ],
-                'provider_margin' => $providerMargins ?: [
-                    ['provider' => 'Telkomsel', 'margin' => 1500],
-                    ['provider' => 'Indosat', 'margin' => 1200],
-                    ['provider' => 'XL', 'margin' => 1300],
-                ],
+                'category_margin' => $categoryMargins ?: [],
+                'provider_margin' => $providerMargins ?: [],
             ],
         ];
     }

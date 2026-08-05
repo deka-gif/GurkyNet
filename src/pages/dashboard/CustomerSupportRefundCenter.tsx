@@ -48,75 +48,18 @@ export const CustomerSupportRefundCenter: React.FC = () => {
   // Selected Refund Item for Detail Panel
   const [selectedRefundId, setSelectedRefundId] = useState<string | null>(null);
 
-  const activeRefundList: RefundItem[] = useMemo(() => {
-    if (Array.isArray(refunds) && refunds.length > 0) return refunds;
-    return [
-      {
-        requestId: 'REF-2026-001',
-        invoiceNumber: 'INV/20260731/PLN/0091',
-        transactionId: 'TRX-982104',
-        customerName: 'Siti Rahmawati',
-        customerEmail: 'siti.rahma@yahoo.com',
-        customerPhone: '+62 812-3456-7890',
-        userId: 'USR-882910',
-        transactionAmount: 501500,
-        refundAmount: 501500,
-        reason: 'Provider Failure',
-        priority: 'Critical',
-        status: 'Under Review',
-        createdBy: 'CS Ani',
-        assignedReviewer: 'Finance Lead - Budi',
-        escalatedTo: 'Finance',
-        escalationReason: 'Provider Investigation',
-        reviewNotes: 'Menunggu konfirmasi reversal saldo dari Biller PLN Artajasa.',
-        createdAt: '2026-07-31 08:30',
-        evidencePlaceholder: 'screenshot_gagal_biller_pln.png (1.4 MB)'
-      },
-      {
-        requestId: 'REF-2026-002',
-        invoiceNumber: 'INV/20260727/TGH/0021',
-        transactionId: 'TRX-981022',
-        customerName: 'Budi Santoso',
-        customerEmail: 'budi.santoso@gmail.com',
-        customerPhone: '+62 813-9876-5432',
-        userId: 'USR-771822',
-        transactionAmount: 300000,
-        refundAmount: 300000,
-        reason: 'Failed Transaction',
-        priority: 'High',
-        status: 'Approved',
-        createdBy: 'CS Doni',
-        assignedReviewer: 'Finance Manager - Ratna',
-        reviewNotes: 'Pengembalian saldo ke GurkyWallet disetujui, siap eksekusi pembukuan.',
-        createdAt: '2026-07-27 10:15',
-        evidencePlaceholder: 'mutasi_gagal_bpjs.pdf (820 KB)'
-      }
-    ];
-  }, [refunds]);
+  // Real API data only — no seeded fallback refunds.
+  const activeRefundList: RefundItem[] = useMemo(
+    () => (Array.isArray(refunds) ? refunds : []),
+    [refunds]
+  );
 
-  const selectedRefund: RefundItem = useMemo(() => {
+  const selectedRefund: RefundItem | null = useMemo(() => {
     if (selectedRefundId) {
       const found = activeRefundList.find((r) => r.requestId === selectedRefundId || r.id === selectedRefundId);
       if (found) return found;
     }
-    return activeRefundList[0] || {
-      requestId: 'REF-2026-001',
-      invoiceNumber: 'INV/20260731/PLN/0091',
-      transactionId: 'TRX-982104',
-      customerName: 'Siti Rahmawati',
-      customerEmail: 'siti.rahma@yahoo.com',
-      customerPhone: '+62 812-3456-7890',
-      userId: 'USR-882910',
-      transactionAmount: 501500,
-      refundAmount: 501500,
-      reason: 'Provider Failure',
-      priority: 'Critical',
-      status: 'Under Review',
-      createdBy: 'CS Ani',
-      assignedReviewer: 'Finance Lead - Budi',
-      createdAt: '2026-07-31 08:30',
-      evidencePlaceholder: 'screenshot.png'
-    };
+    return activeRefundList[0] || null;
   }, [selectedRefundId, activeRefundList]);
 
   // Filters State
@@ -186,7 +129,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
       refundAmount: Number(newRefundAmount),
       reason: newReason,
       priority: newPriority,
-      evidencePlaceholder: newEvidence || 'attachment_bukti_pengajuan.png'
+      evidencePlaceholder: newEvidence || undefined
     });
 
     setShowCreateModal(false);
@@ -200,7 +143,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
   };
 
   const handleSubmitForReview = async () => {
-    const reqId = selectedRefund.requestId || selectedRefund.id;
+    const reqId = selectedRefund?.requestId || selectedRefund?.id;
     if (reqId) {
       await updateRefundStatus(reqId, 'Submitted', 'Pengajuan dikirim ke Tim Finance untuk Review.');
       showToast(`Pengajuan ${reqId} telah dikirim ke Tim Finance untuk Review!`);
@@ -209,7 +152,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
 
   const handleEscalateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const reqId = selectedRefund.requestId || selectedRefund.id;
+    const reqId = selectedRefund?.requestId || selectedRefund?.id;
     if (reqId) {
       await escalateRefund(reqId, { department: escalateDepartment, reason: escalationReasonInput });
       setShowEscalateModal(false);
@@ -218,14 +161,44 @@ export const CustomerSupportRefundCenter: React.FC = () => {
   };
 
   const handleCancelRequest = async () => {
-    const reqId = selectedRefund.requestId || selectedRefund.id;
+    const reqId = selectedRefund?.requestId || selectedRefund?.id;
     if (reqId) {
       await updateRefundStatus(reqId, 'Cancelled', 'Pengajuan dibatalkan oleh petugas CS.');
       showToast(`Pengajuan refund ${reqId} dibatalkan.`);
     }
   };
 
+  // Exports the real, currently filtered refund list as CSV.
   const handleExportSummary = () => {
+    if (filteredRefunds.length === 0) {
+      showToast('Tidak ada data refund untuk diekspor.');
+      return;
+    }
+
+    const headers = ['Request ID', 'Invoice', 'Customer', 'Transaction Amount', 'Refund Amount', 'Reason', 'Priority', 'Status', 'Reviewer', 'Created At'];
+    const rows = filteredRefunds.map((r) => [
+      r.requestId || r.id || '',
+      r.invoiceNumber || '',
+      r.customerName || '',
+      String(r.transactionAmount ?? ''),
+      String(r.refundAmount ?? ''),
+      r.reason || '',
+      r.priority || '',
+      r.status || '',
+      r.assignedReviewer || '',
+      r.createdAt || ''
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `refund-summary-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
     showToast('Laporan ringkasan pengajuan refund berhasil diunduh.');
   };
 
@@ -381,7 +354,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
 
           <button
             onClick={handleSubmitForReview}
-            disabled={selectedRefund.status !== 'Draft'}
+            disabled={!selectedRefund || selectedRefund.status !== 'Draft'}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-xs transition"
           >
             <Send className="w-3.5 h-3.5" />
@@ -390,7 +363,8 @@ export const CustomerSupportRefundCenter: React.FC = () => {
 
           <button
             onClick={() => setShowEscalateModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+            disabled={!selectedRefund}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-xs transition"
           >
             <ArrowUpRight className="w-3.5 h-3.5" />
             <span>Escalate Case</span>
@@ -398,7 +372,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
 
           <button
             onClick={handleCancelRequest}
-            disabled={selectedRefund.status === 'Completed' || selectedRefund.status === 'Cancelled'}
+            disabled={!selectedRefund || selectedRefund.status === 'Completed' || selectedRefund.status === 'Cancelled'}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 rounded-xl text-xs font-medium transition"
           >
             <XCircle className="w-3.5 h-3.5 text-gray-500" />
@@ -556,7 +530,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
                   <tbody className="divide-y divide-gray-100 text-gray-700">
                     {paginatedRefunds.length > 0 ? (
                       paginatedRefunds.map((item) => {
-                        const isSelected = (item.requestId || item.id) === (selectedRefund.requestId || selectedRefund.id);
+                        const isSelected = (item.requestId || item.id) === (selectedRefund?.requestId || selectedRefund?.id);
                         return (
                           <tr
                             key={item.requestId || item.id}
@@ -639,6 +613,7 @@ export const CustomerSupportRefundCenter: React.FC = () => {
         {/* RIGHT COLUMN: REFUND DETAIL PANEL & ACTIVITY TIMELINE (1/3 width) */}
         <div className="space-y-4">
           {/* REFUND DETAIL PANEL */}
+          {selectedRefund ? (
           <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">
@@ -663,13 +638,13 @@ export const CustomerSupportRefundCenter: React.FC = () => {
 
               <div className="flex justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-gray-400">Transaction ID:</span>
-                <span className="font-mono font-bold text-gray-900">{selectedRefund.transactionId || 'TRX-982104'}</span>
+                <span className="font-mono font-bold text-gray-900">{selectedRefund.transactionId || '-'}</span>
               </div>
 
               <div className="p-2 bg-gray-50 rounded-lg space-y-1">
                 <span className="text-gray-400 text-[10px] block">Customer Details</span>
-                <div className="font-bold text-gray-900">{selectedRefund.customerName || 'Siti Rahmawati'}</div>
-                <div className="text-[11px] text-gray-500">{selectedRefund.customerEmail || 'siti.rahma@yahoo.com'} • {selectedRefund.customerPhone || '+62 812-3456-7890'}</div>
+                <div className="font-bold text-gray-900">{selectedRefund.customerName || '-'}</div>
+                <div className="text-[11px] text-gray-500">{selectedRefund.customerEmail || '-'} • {selectedRefund.customerPhone || '-'}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -696,23 +671,24 @@ export const CustomerSupportRefundCenter: React.FC = () => {
                 </div>
               )}
 
-              {/* Supporting Evidence Placeholder */}
-              <div className="p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg space-y-1">
-                <span className="text-blue-800 text-[10px] font-bold block">Supporting Evidence:</span>
-                <div className="flex items-center gap-2 text-blue-700 text-[11px] font-mono">
-                  <Paperclip className="w-3.5 h-3.5" />
-                  <span className="truncate">{selectedRefund.evidencePlaceholder || 'screenshot.png'}</span>
+              {selectedRefund.evidencePlaceholder && (
+                <div className="p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg space-y-1">
+                  <span className="text-blue-800 text-[10px] font-bold block">Supporting Evidence:</span>
+                  <div className="flex items-center gap-2 text-blue-700 text-[11px] font-mono">
+                    <Paperclip className="w-3.5 h-3.5" />
+                    <span className="truncate">{selectedRefund.evidencePlaceholder}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-gray-400">Created By:</span>
-                <span className="font-semibold text-gray-800">{selectedRefund.createdBy || 'CS Agent'}</span>
+                <span className="font-semibold text-gray-800">{selectedRefund.createdBy || '-'}</span>
               </div>
 
               <div className="flex justify-between p-2 bg-gray-50 rounded-lg">
                 <span className="text-gray-400">Assigned Reviewer:</span>
-                <span className="font-semibold text-indigo-600">{selectedRefund.assignedReviewer || 'Finance Lead'}</span>
+                <span className="font-semibold text-indigo-600">{selectedRefund.assignedReviewer || 'Unassigned'}</span>
               </div>
 
               <div className="p-2 bg-gray-50 rounded-lg space-y-1">
@@ -721,48 +697,11 @@ export const CustomerSupportRefundCenter: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* ACTIVITY TIMELINE CARD */}
-          <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <h3 className="text-xs font-bold text-gray-900 uppercase">Activity Timeline</h3>
-              <span className="text-[10px] font-mono text-gray-400">Approval Workflow</span>
-            </div>
-
-            <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
-              <div className="relative">
-                <div className="absolute -left-[1.85rem] top-1 w-3 h-3 rounded-full border-2 border-white ring-2 ring-blue-100 bg-blue-600" />
-                <div className="text-xs space-y-0.5">
-                  <div className="font-bold text-gray-900">Refund Requested</div>
-                  <div className="text-[10px] text-gray-400">Dibuat oleh {selectedRefund.createdBy || 'CS Agent'} ({selectedRefund.createdAt})</div>
-                </div>
-              </div>
-
-              <div className="relative">
-                <div className="absolute -left-[1.85rem] top-1 w-3 h-3 rounded-full border-2 border-white ring-2 ring-purple-100 bg-purple-600" />
-                <div className="text-xs space-y-0.5">
-                  <div className="font-bold text-gray-900">Assigned Reviewer</div>
-                  <div className="text-[10px] text-gray-400">Penugasan ke {selectedRefund.assignedReviewer || 'Finance Lead'}</div>
-                </div>
-              </div>
-
-              <div className="relative">
-                <div className="absolute -left-[1.85rem] top-1 w-3 h-3 rounded-full border-2 border-white ring-2 ring-amber-100 bg-amber-500" />
-                <div className="text-xs space-y-0.5">
-                  <div className="font-bold text-gray-900">Finance & Legal Review</div>
-                  <div className="text-[10px] text-gray-400">Proses verifikasi mutasi dan audit transaksi</div>
-                </div>
-              </div>
-
-              <div className="relative">
-                <div className="absolute -left-[1.85rem] top-1 w-3 h-3 rounded-full border-2 border-white ring-2 ring-emerald-100 bg-emerald-500" />
-                <div className="text-xs space-y-0.5">
-                  <div className="font-bold text-gray-900">Approval & Disbursal</div>
-                  <div className="text-[10px] text-gray-400">Otorisasi akhir oleh Pejabat Keuangan</div>
-                </div>
-              </div>
-            </div>
+          ) : (
+          <div className="bg-white p-8 rounded-2xl shadow-xs border border-gray-100 text-center text-xs text-gray-400">
+            Tidak ada pengajuan refund untuk ditampilkan. Buat pengajuan baru atau tunggu antrean masuk.
           </div>
+          )}
         </div>
       </div>
 

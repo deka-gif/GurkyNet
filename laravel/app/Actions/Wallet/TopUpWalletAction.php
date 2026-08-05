@@ -9,7 +9,9 @@ use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
 use App\Enums\TransactionStatus;
 use App\Enums\WalletHistoryType;
+use App\Models\MidtransTransaction;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TopUpWalletAction
 {
@@ -38,8 +40,10 @@ class TopUpWalletAction
 
             $invoiceNumber = 'TRX-TOPUP-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
             
-            // If the status is explicitly set to SUCCESS / SUKSES / SUKSES string, bypass Midtrans for backward compatibility/testing
-            if (in_array(strtolower($status), ['sukses', 'success'])) {
+            // Direct-credit bypass is only allowed outside production (testing/local
+            // sandboxes). In production every top-up must go through Midtrans.
+            $allowDirectCredit = app()->environment('local', 'testing');
+            if ($allowDirectCredit && in_array(strtolower($status), ['sukses', 'success'])) {
                 $transaction = Transaction::create([
                     'user_id' => $user->id,
                     'invoice_number' => $invoiceNumber,

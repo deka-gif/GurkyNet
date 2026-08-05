@@ -2,58 +2,35 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Zap, 
-  User, 
   CheckCircle2, 
   AlertCircle, 
   CreditCard, 
   Wallet,
-  RefreshCw,
-  Receipt,
-  FileText
+  RefreshCw
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useTransactionStore } from '../../store/transaction.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
 
 export const TokenPlnPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
-  const { createTransaction } = useTransactionStore();
   const { products, loading: productsLoading, fetchProducts } = useProductStore();
 
   const [customerId, setCustomerId] = useState<string>('');
-  const [customerName, setCustomerName] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
 
   // Status Alerts
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [queryingName, setQueryingName] = useState<boolean>(false);
+
+  const isValidCustomerId = customerId.length >= 11;
 
   useEffect(() => {
     fetchWallet();
     fetchProducts({ category: 'pln' });
   }, [fetchWallet, fetchProducts]);
-
-  // Simulate customer name verification once ID is 11-12 digits
-  useEffect(() => {
-    if (customerId.length >= 11) {
-      setQueryingName(true);
-      const timer = setTimeout(() => {
-        setCustomerName('GURKY ADIPATI - R1 / 900VA');
-        setQueryingName(false);
-      }, 800);
-      return () => clearTimeout(timer);
-    } else {
-      setCustomerName(null);
-      setSelectedProduct(null);
-      setGeneratedToken(null);
-    }
-  }, [customerId]);
 
   const displayProducts = products.filter(p => p.status === 'tersedia' && p.name.toLowerCase().includes('token'));
 
@@ -66,7 +43,7 @@ export const TokenPlnPage = () => {
   };
 
   const handleCheckout = async () => {
-    if (!customerName) {
+    if (!isValidCustomerId) {
       setErrorMsg('Tolong masukkan ID pelanggan PLN yang valid terlebih dahulu.');
       return;
     }
@@ -80,22 +57,15 @@ export const TokenPlnPage = () => {
       return;
     }
 
-    const randToken = Array.from({ length: 5 }, () => Math.floor(1000 + Math.random() * 9000).toString()).join('-');
-
-    const nominalString = selectedProduct.name.replace(/\D/g, '');
-    const nominal = nominalString ? parseInt(nominalString) : selectedProduct.price;
-
     setCheckoutData({
       serviceName: 'Token PLN',
       productName: selectedProduct.name,
       targetNo: customerId,
-      amount: nominal,
-      adminFee: selectedProduct.price - nominal,
+      amount: selectedProduct.price,
+      adminFee: 0,
       skuCode: selectedProduct.code,
       customDetails: {
-        'Nama Pelanggan': 'GURKY ADIPATI',
-        'Daya / Tarif': 'R1 / 900VA',
-        'Nomor Token PLN': randToken
+        'Nomor Meter / ID Pelanggan': customerId
       }
     });
   };
@@ -167,39 +137,14 @@ export const TokenPlnPage = () => {
                 onChange={(e) => setCustomerId(e.target.value.replace(/\D/g, ''))}
                 className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all tracking-wide"
               />
-              {queryingName && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  <RefreshCw className="w-4 h-4 text-primary-600 animate-spin" />
-                </div>
-              )}
             </div>
           </div>
-
-          {/* Customer Profile Banner */}
-          <AnimatePresence>
-            {customerName && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-4 bg-emerald-50/50 border border-emerald-100/60 rounded-2xl flex items-center gap-3"
-              >
-                <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700 shrink-0">
-                  <User className="w-4 h-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Verifikasi Pelanggan</p>
-                  <h6 className="text-xs font-black text-emerald-950 mt-0.5">{customerName}</h6>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Nominal Selector Panel */}
           <div className="space-y-4">
             <h5 className="font-extrabold text-gray-900 text-sm">Pilih Nominal Token</h5>
             
-            {!customerName ? (
+            {!isValidCustomerId ? (
               <div className="p-12 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
                 <Zap className="w-8 h-8 mx-auto text-gray-300" />
                 <p className="text-xs font-medium">Tolong masukkan 11-12 digit ID Pelanggan PLN Anda terlebih dahulu.</p>
@@ -219,10 +164,7 @@ export const TokenPlnPage = () => {
                 {displayProducts.map((opt) => (
                   <button
                     key={opt.id}
-                    onClick={() => {
-                      setSelectedProduct(opt);
-                      setGeneratedToken(null);
-                    }}
+                    onClick={() => setSelectedProduct(opt)}
                     className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                       selectedProduct?.id === opt.id 
                         ? 'bg-amber-50/20 border-amber-500 ring-2 ring-amber-500/20 shadow-md' 
@@ -244,28 +186,6 @@ export const TokenPlnPage = () => {
             )}
           </div>
 
-          {/* Generated Token Display card */}
-          <AnimatePresence>
-            {generatedToken && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center space-y-4"
-              >
-                <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-                  <Receipt className="w-6 h-6" />
-                </div>
-                <div>
-                  <h5 className="font-extrabold text-amber-900 text-sm">Nomor Token Listrik PLN Anda</h5>
-                  <p className="text-xs text-amber-700 mt-1">Gunakan 20 digit nomor ini untuk dimasukkan langsung ke perangkat kWh meteran Anda.</p>
-                </div>
-                <div className="bg-white border border-amber-200/60 py-4 px-6 rounded-2xl text-xl md:text-2xl font-black text-gray-900 tracking-widest shadow-inner select-all">
-                  {generatedToken}
-                </div>
-                <p className="text-[10px] text-amber-600">Simpan nomor token ini. Anda juga bisa melihat struk transaksi di halaman Riwayat kapan saja.</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Right Pane Bill Summary Card */}
@@ -281,14 +201,6 @@ export const TokenPlnPage = () => {
                 <div className="flex justify-between text-xs font-bold text-gray-500">
                   <span>ID Pelanggan</span>
                   <span className="text-gray-900">{customerId || '-'}</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-gray-500">
-                  <span>Nama Pelanggan</span>
-                  <span className="text-gray-900 text-right max-w-[150px] truncate">GURKY ADIPATI</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-gray-500">
-                  <span>Daya Listrik</span>
-                  <span className="text-gray-900">R1 / 900VA</span>
                 </div>
                 <div className="flex justify-between text-xs font-bold text-gray-500">
                   <span>Nominal Token</span>
@@ -308,27 +220,16 @@ export const TokenPlnPage = () => {
           </div>
 
           <button
-            disabled={loading || !selectedProduct}
+            disabled={!selectedProduct}
             onClick={handleCheckout}
             className={`w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
-              loading 
-                ? 'bg-primary-400 cursor-not-allowed' 
-                : selectedProduct 
+              selectedProduct 
                 ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/10' 
                 : 'bg-gray-200 cursor-not-allowed text-gray-400'
             }`}
           >
-            {loading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Memproses Pembayaran...</span>
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-4 h-4" />
-                <span>Konfirmasi Pembayaran</span>
-              </>
-            )}
+            <CreditCard className="w-4 h-4" />
+            <span>Konfirmasi Pembayaran</span>
           </button>
         </div>
 
@@ -339,7 +240,7 @@ export const TokenPlnPage = () => {
           data={checkoutData}
           onClose={() => setCheckoutData(null)}
           onSuccess={() => {
-            setGeneratedToken(checkoutData.customDetails?.['Nomor Token PLN'] as string || '');
+            setSuccessMsg('Pembelian token sedang diproses. Nomor token (SN) akan tersedia pada struk transaksi di halaman Riwayat setelah diterbitkan oleh provider.');
             setCustomerId('');
             setSelectedProduct(null);
             setCheckoutData(null);

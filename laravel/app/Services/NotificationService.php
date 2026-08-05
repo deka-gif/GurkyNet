@@ -75,53 +75,52 @@ class NotificationService
     }
 
     /**
-     * Send Email Notification (Log/Dummy support, or Mail facade).
+     * Send Email Notification via the configured mailer.
+     * Returns false when delivery fails instead of pretending success.
      */
     protected function sendEmail(User $user, string $title, string $message): bool
     {
-        Log::info("Sending Email notification", [
-            'to' => $user->email,
-            'subject' => $title,
-            'body' => $message,
-        ]);
-
-        // Attempt Mail dispatch, but fallback gracefully if mail agent is not configured
         try {
-            // We can log or use mock mailer
             Mail::raw($message, function ($mail) use ($user, $title) {
                 $mail->to($user->email)->subject($title);
             });
-        } catch (\Exception $e) {
-            Log::debug("Mail configuration not set, falling back to dummy email log: " . $e->getMessage());
-        }
 
-        return true;
+            return true;
+        } catch (\Exception $e) {
+            Log::warning('Email notification delivery failed', [
+                'to' => $user->email,
+                'subject' => $title,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /**
-     * Send Push Notification.
+     * Push notifications are not wired to a provider (FCM/APNs) yet.
+     * Report failure honestly instead of a fake success.
      */
     protected function sendPush(User $user, string $title, string $message): bool
     {
-        Log::info("Sending Push notification", [
+        Log::warning('Push notification channel is not configured; message not delivered', [
             'user_id' => $user->id,
             'title' => $title,
-            'message' => $message,
         ]);
 
-        return true;
+        return false;
     }
 
     /**
-     * Send SMS Notification.
+     * SMS is not wired to a gateway yet.
+     * Report failure honestly instead of a fake success.
      */
     protected function sendSms(User $user, string $message): bool
     {
-        Log::info("Sending SMS notification", [
+        Log::warning('SMS notification channel is not configured; message not delivered', [
             'phone' => $user->phone_number,
-            'message' => $message,
         ]);
 
-        return true;
+        return false;
     }
 }

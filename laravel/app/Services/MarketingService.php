@@ -45,13 +45,20 @@ class MarketingService
         $totalVouchersRedeemed = (int) BannerPromotion::where('type', 'voucher')->sum('used_count');
         $totalQuotaAvailable = (int) BannerPromotion::where('type', 'voucher')->sum('quota');
 
+        // Views/clicks are not tracked anywhere in the platform yet, so they are
+        // reported as null instead of fabricated numbers. Redemption metrics and
+        // the redemption rate are computed from real database values.
+        $redemptionRate = $totalQuotaAvailable > 0
+            ? round(($totalVouchersRedeemed / $totalQuotaAvailable) * 100, 2)
+            : null;
+
         return [
-            'total_views' => 12500 + ($totalVouchersRedeemed * 15),
-            'total_clicks' => 3200 + ($totalVouchersRedeemed * 5),
-            'ctr_percentage' => 25.6,
+            'total_views' => null,
+            'total_clicks' => null,
+            'ctr_percentage' => null,
             'total_vouchers_redeemed' => $totalVouchersRedeemed,
             'total_quota_available' => $totalQuotaAvailable,
-            'conversion_rate' => 12.8,
+            'conversion_rate' => $redemptionRate,
         ];
     }
 

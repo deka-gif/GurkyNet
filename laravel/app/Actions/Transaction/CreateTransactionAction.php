@@ -49,7 +49,7 @@ class CreateTransactionAction
      */
     public function execute(User $user, string $skuCode, string $targetNumber, string $pin, float $adminFeeOverride = 0.00, string $status = 'success'): Transaction
     {
-        return DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $adminFeeOverride, $status) {
+        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $adminFeeOverride, $status) {
             
             // 1. Create Draft
             $invoiceNumber = $this->generateUniqueInvoice();

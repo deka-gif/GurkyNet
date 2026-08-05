@@ -21,11 +21,10 @@ import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary'
 import { Product } from '../../types';
 
 interface BillDetail {
-  customerName: string;
+  productName: string;
   month: string;
   billAmount: number;
   adminFee: number;
-  fine: number; // Denda
   totalAmount: number;
 }
 
@@ -93,44 +92,27 @@ export const TagihanPage = () => {
       return;
     }
 
+    if (!selectedProduct) {
+      setErrorMsg('Produk tagihan belum tersedia untuk kategori ini.');
+      return;
+    }
+
     setQuerying(true);
     setBillDetails(null);
     setErrorMsg(null);
 
-    let customerName = 'GURKY ADIPATI RATU';
-    let billAmount = 145000;
-    // For postpaid products, price is usually just the admin fee, or 0.
-    // If we have selectedProduct, we can extract admin fee from it
-    let adminFee = selectedProduct ? selectedProduct.price : 2500;
-    let fine = 0;
-
-    switch (activeTab) {
-      case 'pdam':
-        customerName = 'GURKY ADIPATI (PAM JAYA)';
-        billAmount = 87500;
-        break;
-      case 'bpjs':
-        customerName = 'KELUARGA GURKY ADIPATI (4 Anggota)';
-        billAmount = 150000; // Rp 150.000 (4 x Kelas 2 BPJS)
-        break;
-      case 'internet':
-        customerName = 'GURKY NETWORKS (Broadband)';
-        billAmount = 375000;
-        break;
-      case 'pln_pasca':
-        customerName = 'RUMAH UTAMA GURKY (PLN Pascabayar 2200VA)';
-        billAmount = 645000;
-        fine = 10000; // late fee simulation
-        break;
-    }
+    // Bill details are built strictly from the real product catalog price.
+    // Live bill inquiry (customer name / outstanding amount from the biller)
+    // requires provider inquiry integration, which is not yet available.
+    const billAmount = selectedProduct.price;
+    const monthLabel = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
 
     setBillDetails({
-      customerName,
-      month: 'Juli 2026',
+      productName: selectedProduct.name,
+      month: monthLabel,
       billAmount,
-      adminFee,
-      fine,
-      totalAmount: billAmount + adminFee + fine
+      adminFee: 0,
+      totalAmount: billAmount
     });
 
     setQuerying(false);
@@ -172,9 +154,8 @@ export const TagihanPage = () => {
       adminFee: billDetails.adminFee,
       skuCode: selectedProduct?.code,
       customDetails: {
-        'Nama Pelanggan': billDetails.customerName,
-        'Periode Tagihan': billDetails.month,
-        'Denda / Keterlambatan': formatIDR(billDetails.fine)
+        'Nomor Pelanggan': customerId,
+        'Periode Tagihan': billDetails.month
       }
     });
   };
@@ -385,14 +366,14 @@ export const TagihanPage = () => {
           <div className="space-y-5">
             <div className="border-b border-gray-100 pb-4">
               <h4 className="font-extrabold text-gray-900 text-base">Detail Tagihan</h4>
-              <p className="text-xs text-gray-500 mt-1">Rincian nama, denda, dan biaya penanganan administrasi tagihan Anda.</p>
+              <p className="text-xs text-gray-500 mt-1">Rincian produk dan biaya pembayaran tagihan Anda.</p>
             </div>
 
             {billDetails ? (
               <div className="space-y-4">
                 <div className="p-3 bg-emerald-50/50 border border-emerald-100/50 rounded-2xl flex items-center gap-2.5">
                   <User className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-black text-emerald-950 truncate">{billDetails.customerName}</span>
+                  <span className="text-xs font-black text-emerald-950 truncate">{billDetails.productName}</span>
                 </div>
 
                 <div className="flex justify-between text-xs font-bold text-gray-500">
@@ -411,12 +392,6 @@ export const TagihanPage = () => {
                   <span>Biaya Admin</span>
                   <span className="text-gray-900">{formatIDR(billDetails.adminFee)}</span>
                 </div>
-                {billDetails.fine > 0 && (
-                  <div className="flex justify-between text-xs font-bold text-red-500">
-                    <span>Denda Keterlambatan</span>
-                    <span>{formatIDR(billDetails.fine)}</span>
-                  </div>
-                )}
 
                 <div className="border-t border-dashed border-gray-100 pt-4 flex justify-between items-center">
                   <span className="text-xs font-black text-gray-900">Total Pelunasan</span>

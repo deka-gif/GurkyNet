@@ -1,26 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Send, 
   Building2, 
   User, 
   ArrowRight, 
   CheckCircle2, 
   AlertCircle, 
   Wallet,
-  ShieldAlert,
-  HelpCircle,
-  Lock,
   RefreshCw,
   Clock
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useTransactionStore } from '../../store/transaction.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 
 export const TransferPage = () => {
-  const { wallet, fetchWallet, deductBalance } = useWalletStore();
-  const { createTransaction } = useTransactionStore();
+  const { wallet, fetchWallet } = useWalletStore();
 
   // Step state
   const [step, setStep] = useState<1 | 2>(1);
@@ -35,9 +29,6 @@ export const TransferPage = () => {
   const [note, setNote] = useState('');
   const [method, setMethod] = useState<'bifast' | 'online'>('bifast'); // bifast = 2500, online = 6500
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
-
-  // PIN check simulation
-  const [pin, setPin] = useState('');
 
   // Status indicators
   const [checkingAccount, setCheckingAccount] = useState(false);
@@ -66,13 +57,13 @@ export const TransferPage = () => {
 
     setCheckingAccount(true);
     setErrorMsg(null);
-    
-    if (transferType === 'bank') {
-      setReceiverName(`EKA CHANDRA SAPUTRA (${selectedBank})`);
-    } else {
-      setReceiverName('DEWI AYU LESTARI (GurkyPay)');
-    }
-    
+
+    // Real account-holder name lookup is not available; show only the
+    // user-entered destination instead of fabricating a receiver name.
+    setReceiverName(
+      transferType === 'bank' ? `${selectedBank} - ${accountNo}` : `GurkyPay - ${accountNo}`
+    );
+
     setCheckingAccount(false);
     setStep(2);
   };
@@ -99,7 +90,7 @@ export const TransferPage = () => {
       amount: parsedAmount,
       adminFee: fee,
       customDetails: {
-        'Nama Penerima': receiverName || 'Penerima',
+        'Rekening Tujuan': receiverName || accountNo,
         'Tipe Transfer': transferType === 'bank' ? `Transfer Bank (${selectedBank})` : 'Peer-to-Peer (GurkyPay)',
         'Metode Transfer': transferType === 'bank' ? (method === 'bifast' ? 'BI-Fast' : 'Online Transfer') : 'Instan',
         'Catatan': note || '-'
@@ -254,7 +245,7 @@ export const TransferPage = () => {
                 </>
               ) : (
                 <>
-                  <span>Verifikasi Rekening</span>
+                  <span>Lanjutkan</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -267,7 +258,7 @@ export const TransferPage = () => {
           <form onSubmit={handleDetailsSubmit} className="space-y-6">
             <div className="border-b border-gray-100 pb-4 flex justify-between items-center">
               <div>
-                <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Rekening Terverifikasi</span>
+                <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Rekening Tujuan</span>
                 <h5 className="font-extrabold text-gray-900 text-sm mt-0.5">{receiverName}</h5>
               </div>
               <button 

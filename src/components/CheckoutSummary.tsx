@@ -170,9 +170,9 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     window.print();
   };
 
-  const handleDownloadPlaceholder = () => {
-    setCopiedText('Mempersiapkan pengunduhan PDF (Mock)...');
-    setTimeout(() => setCopiedText(null), 3000);
+  // Browsers offer "Save as PDF" from the print dialog; the receipt is print-styled.
+  const handleDownloadPdf = () => {
+    window.print();
   };
 
   return (
@@ -404,7 +404,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
             {pinError && (
               <p className="text-center text-xs font-extrabold text-red-500 animate-pulse">
-                PIN Salah! Silakan coba kembali. (Dummy PIN: 123456)
+                PIN Salah! Silakan coba kembali.
               </p>
             )}
 
@@ -439,9 +439,6 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
               </button>
             </div>
 
-            <p className="text-center text-[10px] text-gray-400 font-bold">
-              Tip: Gunakan pin default <span className="text-primary-600 font-black">123456</span> untuk simulasi sukses.
-            </p>
           </div>
         )}
 
@@ -643,7 +640,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
               <div className="grid grid-cols-3 gap-2">
                 <button 
-                  onClick={handleDownloadPlaceholder}
+                  onClick={handleDownloadPdf}
                   className="py-3 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 font-bold text-xs rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all shadow-sm"
                 >
                   <Download className="w-4 h-4 text-gray-500" />

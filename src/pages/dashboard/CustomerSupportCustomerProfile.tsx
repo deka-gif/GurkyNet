@@ -10,7 +10,6 @@ import {
   Wallet,
   CheckCircle2,
   XCircle,
-  Clock,
   Search,
   Copy,
   PlusCircle,
@@ -18,7 +17,6 @@ import {
   Receipt,
   Activity,
   TrendingUp,
-  Award,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -46,23 +44,34 @@ interface ActivityTimelineItem {
   description: string;
 }
 
+const normalizeStatus = (status: string): string => {
+  const s = (status || '').toLowerCase();
+  if (['success', 'sukses', 'settlement'].includes(s)) return 'Sukses';
+  if (['pending', 'processing', 'draft'].includes(s)) return 'Pending';
+  if (['failed', 'gagal', 'canceled', 'cancelled', 'cancel'].includes(s)) return 'Gagal';
+  return status || '-';
+};
+
 export const CustomerSupportCustomerProfile: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
 
-  const currentUserId = userId || 'USR-882910';
+  const currentUserId = userId || '';
 
   const {
     selectedCustomer,
+    customerTransactions,
     customersLoading,
-    fetchCustomerById
+    fetchCustomerById,
+    fetchCustomerTransactions
   } = useCustomerSupportStore();
 
   useEffect(() => {
     if (userId) {
       fetchCustomerById(userId);
+      fetchCustomerTransactions(userId);
     }
-  }, [userId, fetchCustomerById]);
+  }, [userId, fetchCustomerById, fetchCustomerTransactions]);
 
   // Copy state feedback
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -73,106 +82,60 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
     setTimeout(() => setCopiedField(null), 2500);
   };
 
-  // Profile Header Data from Store / Fallback
+  // Profile Header Data — real API values only
   const cust = selectedCustomer || {};
   const profile = {
-    avatar: cust.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    fullName: cust.name || cust.fullName || 'Siti Rahmawati',
-    userId: cust.id || currentUserId,
-    email: cust.email || 'siti.rahma@yahoo.com',
-    phoneNumber: cust.phone || cust.phoneNumber || '+62 812-3456-7890',
-    registrationDate: cust.createdAt || cust.registrationDate || '12 Januari 2024',
-    memberLevel: cust.memberLevel || cust.tier || 'VIP Platinum',
-    accountStatus: cust.status || 'Aktif',
-    verificationStatus: cust.verificationStatus || 'Terverifikasi (KYC Passed)'
+    avatar: cust.avatar || cust.avatar_url || null,
+    fullName: cust.name || cust.fullName || '-',
+    userId: String(cust.id ?? currentUserId),
+    email: cust.email || '-',
+    phoneNumber: cust.phone || cust.phone_number || cust.phoneNumber || '-',
+    registrationDate: cust.createdAt || cust.created_at || '-',
+    accountStatus: cust.status || '-',
+    verificationStatus: cust.email_verified_at ? 'Email Terverifikasi' : 'Belum Terverifikasi'
   };
 
-  // Account Information Summary
-  const accountInfo = {
-    walletBalance: cust.walletBalance ?? cust.balance ?? 1450000,
-    totalTransactions: cust.totalTransactions ?? 148,
-    successfulTransactions: cust.successfulTransactions ?? 142,
-    failedTransactions: cust.failedTransactions ?? 6,
-    lastLogin: cust.lastLogin || '31 Juli 2026, 08:10 WIB',
-    lastPurchase: cust.lastPurchase || '31 Juli 2026, 08:12 WIB',
-    preferredCategory: cust.preferredCategory || 'Token PLN & Pulsa'
-  };
-
-  // Support History Summary
-  const supportHistory = {
-    previousTickets: cust.previousTickets ?? 8,
-    currentOpenTickets: cust.currentOpenTickets ?? 1,
-    resolvedTickets: cust.resolvedTickets ?? 7,
-    avgResolutionTime: cust.avgResolutionTime || '14 Menit'
-  };
-
-  // Transaction History Dataset from store or fallback
+  // Transaction History Dataset from the real customer transactions endpoint
   const transactions: TransactionItem[] = useMemo(() => {
-    if (cust.transactions && Array.isArray(cust.transactions)) {
-      return cust.transactions.map((t: any) => ({
-        invoiceNumber: t.invoiceNumber || t.id || 'INV/20260731/PLN/0091',
-        product: t.product || t.title || 'Token PLN Rp 500.000',
-        category: t.category || 'Token PLN',
-        provider: t.provider || 'PLN Artajasa',
-        amount: t.amount || 501500,
-        paymentMethod: t.paymentMethod || 'GurkyWallet',
-        status: t.status || 'Sukses',
-        createdAt: t.createdAt || '2026-07-31 08:12'
-      }));
-    }
-    return [
-      {
-        invoiceNumber: 'INV/20260731/PLN/0091',
-        product: 'Token PLN Rp 500.000',
-        category: 'Token PLN',
-        provider: 'PLN Artajasa',
-        amount: 501500,
-        paymentMethod: 'GurkyWallet',
-        status: 'Sukses',
-        createdAt: '2026-07-31 08:12'
-      },
-      {
-        invoiceNumber: 'INV/20260730/PLS/0182',
-        product: 'Pulsa Telkomsel 100k',
-        category: 'Pulsa',
-        provider: 'Telkomsel',
-        amount: 101000,
-        paymentMethod: 'GurkyWallet',
-        status: 'Sukses',
-        createdAt: '2026-07-30 19:40'
-      },
-      {
-        invoiceNumber: 'INV/20260729/TRF/0043',
-        product: 'Transfer Bank BCA',
-        category: 'Transfer',
-        provider: 'BCA Fast',
-        amount: 2500000,
-        paymentMethod: 'GurkyWallet',
-        status: 'Sukses',
-        createdAt: '2026-07-29 14:15'
-      },
-      {
-        invoiceNumber: 'INV/20260728/DATA/0112',
-        product: 'Paket Data Indosat 50GB',
-        category: 'Paket Data',
-        provider: 'Indosat Ooredoo',
-        amount: 125000,
-        paymentMethod: 'QRIS',
-        status: 'Sukses',
-        createdAt: '2026-07-28 11:20'
-      },
-      {
-        invoiceNumber: 'INV/20260727/TGH/0021',
-        product: 'Tagihan BPJS Kesehatan',
-        category: 'Tagihan',
-        provider: 'BPJS Kesehatan',
-        amount: 300000,
-        paymentMethod: 'GurkyWallet',
-        status: 'Gagal',
-        createdAt: '2026-07-27 09:30'
-      }
-    ];
-  }, [cust]);
+    const source = Array.isArray(customerTransactions) && customerTransactions.length > 0
+      ? customerTransactions
+      : (Array.isArray(cust.transactions) ? cust.transactions : []);
+
+    return source.map((t: any) => ({
+      invoiceNumber: t.invoiceNumber || t.invoice_number || String(t.id ?? ''),
+      product: t.product || t.service_name || t.title || '-',
+      category: t.category || t.service_name || '-',
+      provider: t.provider || t.items?.[0]?.custom_metadata?.provider || '-',
+      amount: Number(t.amount ?? t.total_payment ?? 0),
+      paymentMethod: t.paymentMethod || t.payment_method || '-',
+      status: normalizeStatus(t.status),
+      createdAt: t.createdAt || t.created_at || ''
+    }));
+  }, [customerTransactions, cust]);
+
+  // Account Information Summary computed from real data
+  const successCount = useMemo(() => transactions.filter((t) => t.status === 'Sukses').length, [transactions]);
+  const failedCount = useMemo(() => transactions.filter((t) => t.status === 'Gagal').length, [transactions]);
+
+  const accountInfo = {
+    walletBalance: Number(cust.wallet?.balance ?? cust.walletBalance ?? 0),
+    totalTransactions: cust.transactions_count ?? cust.totalTransactions ?? transactions.length,
+    successfulTransactions: successCount,
+    failedTransactions: failedCount,
+    lastPurchase: transactions[0]?.createdAt || '-'
+  };
+
+  // Support History Summary from real ticket data
+  const customerTickets: any[] = useMemo(
+    () => (Array.isArray(cust.support_tickets) ? cust.support_tickets : (Array.isArray(cust.supportTickets) ? cust.supportTickets : [])),
+    [cust]
+  );
+
+  const supportHistory = {
+    previousTickets: cust.support_tickets_count ?? cust.previousTickets ?? customerTickets.length,
+    currentOpenTickets: customerTickets.filter((t) => ['Terbuka', 'Open', 'Pending'].includes(t.status)).length,
+    resolvedTickets: customerTickets.filter((t) => ['Selesai', 'Resolved', 'Closed', 'Tertutup'].includes(t.status)).length
+  };
 
   // Transaction Filters
   const [searchInvoice, setSearchInvoice] = useState('');
@@ -185,52 +148,33 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 5;
 
-  // Recent Activities Timeline
+  // Recent Activities Timeline built from real support tickets
   const activities: ActivityTimelineItem[] = useMemo(() => {
     if (cust.activities && Array.isArray(cust.activities)) {
       return cust.activities;
     }
-    return [
-      {
-        id: 'act-1',
-        time: '31 Juli 2026, 08:12 WIB',
-        type: 'Purchase',
-        title: 'Pembelian Token PLN Rp 500.000',
-        description: 'Transaksi senilai Rp 501.500 diproses via GurkyWallet. Invoice: INV/20260731/PLN/0091'
-      },
-      {
-        id: 'act-2',
-        time: '31 Juli 2026, 08:12 WIB',
-        type: 'Ticket Created',
-        title: 'Tiket Dukungan Dibuat (TCK-1002)',
-        description: 'Tiket ketiadaan Kode Token Listrik PLN dibuat secara otomatis.'
-      },
-      {
-        id: 'act-3',
-        time: '31 Juli 2026, 08:10 WIB',
-        type: 'Login',
-        title: 'Login Berhasil via Android App',
-        description: 'Perangkat Samsung Galaxy S24 Ultra (IP 180.252.88.12).'
-      },
-      {
-        id: 'act-4',
-        time: '30 Juli 2026, 19:35 WIB',
-        type: 'Top Up',
-        title: 'Top Up Saldo GurkyWallet Sukses',
-        description: 'Penambahan saldo Rp 1.000.000 via Transfer Bank BCA.'
-      },
-      {
-        id: 'act-5',
-        time: '27 Juli 2026, 10:15 WIB',
-        type: 'Refund Request',
-        title: 'Pengajuan Pengembalian Dana (Refund)',
-        description: 'Pengajuan refund tagihan BPJS senilai Rp 300.000 disetujui.'
-      }
-    ];
-  }, [cust]);
+    return customerTickets.map((t: any) => ({
+      id: `ticket-${t.id}`,
+      time: t.created_at || t.createdAt || '',
+      type: 'Support Ticket',
+      title: `${t.ticket_number || `Tiket #${t.id}`} — ${t.category || 'Dukungan'}`,
+      description: t.subject || t.description || `Status: ${t.status}`
+    }));
+  }, [cust, customerTickets]);
+
+  // Dynamic filter options derived from real data
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(transactions.map((t) => t.category).filter((c) => c && c !== '-'))),
+    [transactions]
+  );
+  const providerOptions = useMemo(
+    () => Array.from(new Set(transactions.map((t) => t.provider).filter((p) => p && p !== '-'))),
+    [transactions]
+  );
 
   // Filtering Logic
   const filteredTransactions = useMemo(() => {
+    const now = new Date();
     return transactions.filter((trx) => {
       const matchSearch =
         trx.invoiceNumber.toLowerCase().includes(searchInvoice.toLowerCase()) ||
@@ -241,12 +185,18 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
       const matchProvider = providerFilter === 'All' || trx.provider === providerFilter;
 
       let matchDate = true;
-      if (dateRangeFilter === 'Hari Ini') {
-        matchDate = trx.createdAt.startsWith('2026-07-31');
-      } else if (dateRangeFilter === '7 Hari Terakhir') {
-        matchDate = trx.createdAt >= '2026-07-24';
-      } else if (dateRangeFilter === '30 Hari Terakhir') {
-        matchDate = trx.createdAt >= '2026-07-01';
+      if (dateRangeFilter !== 'All' && trx.createdAt) {
+        const trxDate = new Date(trx.createdAt);
+        if (!isNaN(trxDate.getTime())) {
+          const diffDays = (now.getTime() - trxDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (dateRangeFilter === 'Hari Ini') {
+            matchDate = trxDate.toDateString() === now.toDateString();
+          } else if (dateRangeFilter === '7 Hari Terakhir') {
+            matchDate = diffDays <= 7;
+          } else if (dateRangeFilter === '30 Hari Terakhir') {
+            matchDate = diffDays <= 30;
+          }
+        }
       }
 
       return matchSearch && matchStatus && matchCategory && matchProvider && matchDate;
@@ -296,19 +246,21 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
           {/* 1. PROFILE HEADER */}
           <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 relative overflow-hidden">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-              <img
-                src={profile.avatar}
-                alt={profile.fullName}
-                className="w-20 h-20 rounded-2xl object-cover border-2 border-blue-100 shadow-xs"
-              />
+              {profile.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.fullName}
+                  className="w-20 h-20 rounded-2xl object-cover border-2 border-blue-100 shadow-xs"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl bg-blue-50 border-2 border-blue-100 shadow-xs flex items-center justify-center text-2xl font-bold text-blue-600">
+                  {(profile.fullName || '-').charAt(0).toUpperCase()}
+                </div>
+              )}
 
               <div className="space-y-2 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-bold text-gray-900">{profile.fullName}</h1>
-                  <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5" />
-                    {profile.memberLevel}
-                  </span>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5" />
                     {profile.verificationStatus}
@@ -417,11 +369,13 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
             {/* Total & Successful Trx */}
             <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex items-center justify-between">
               <div>
-                <span className="text-xs font-medium text-gray-500">Total / Successful Trx</span>
+                <span className="text-xs font-medium text-gray-500">Successful / Loaded Trx</span>
                 <div className="text-xl font-bold text-gray-900 mt-1">
-                  {accountInfo.successfulTransactions} <span className="text-xs font-normal text-gray-400">/ {accountInfo.totalTransactions}</span>
+                  {accountInfo.successfulTransactions} <span className="text-xs font-normal text-gray-400">/ {transactions.length}</span>
                 </div>
-                <span className="text-[11px] text-emerald-600 font-medium">95.9% Success Rate</span>
+                <span className="text-[11px] text-emerald-600 font-medium">
+                  Total transaksi: {accountInfo.totalTransactions}
+                </span>
               </div>
               <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
                 <CheckCircle2 className="w-6 h-6" />
@@ -433,43 +387,24 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
               <div>
                 <span className="text-xs font-medium text-gray-500">Failed Transactions</span>
                 <div className="text-xl font-bold text-red-600 mt-1">{accountInfo.failedTransactions}</div>
-                <span className="text-[11px] text-gray-400 font-medium">4.1% Failure Rate</span>
+                <span className="text-[11px] text-gray-400 font-medium">Dari riwayat termuat</span>
               </div>
               <div className="p-3 bg-red-50 text-red-600 rounded-2xl border border-red-100">
                 <XCircle className="w-6 h-6" />
               </div>
             </div>
 
-            {/* Preferred Category */}
+            {/* Last Purchase */}
             <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex items-center justify-between">
               <div>
-                <span className="text-xs font-medium text-gray-500">Preferred Category</span>
+                <span className="text-xs font-medium text-gray-500">Pembelian Terakhir</span>
                 <div className="text-sm font-bold text-gray-900 mt-1 line-clamp-1">
-                  {accountInfo.preferredCategory}
+                  {accountInfo.lastPurchase}
                 </div>
-                <span className="text-[11px] text-blue-600 font-medium">Dominan Pembelian</span>
+                <span className="text-[11px] text-blue-600 font-medium">Transaksi terbaru</span>
               </div>
               <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
                 <TrendingUp className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          {/* Account Info Additional Detail Bar */}
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <div>
-                <span className="text-gray-400 block text-[10px]">Sesi Terakhir (Last Login):</span>
-                <span className="font-semibold text-gray-900">{accountInfo.lastLogin}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Receipt className="w-4 h-4 text-gray-400" />
-              <div>
-                <span className="text-gray-400 block text-[10px]">Pembelian Terakhir (Last Purchase):</span>
-                <span className="font-semibold text-gray-900">{accountInfo.lastPurchase}</span>
               </div>
             </div>
           </div>
@@ -501,11 +436,6 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
                   <span className="text-gray-600">Resolved Tickets:</span>
                   <span className="font-bold text-emerald-700 text-sm">{supportHistory.resolvedTickets}</span>
                 </div>
-
-                <div className="p-3 bg-indigo-50/60 rounded-xl flex items-center justify-between">
-                  <span className="text-gray-600">Average Resolution Time:</span>
-                  <span className="font-bold text-indigo-700 text-sm">{supportHistory.avgResolutionTime}</span>
-                </div>
               </div>
             </div>
 
@@ -519,20 +449,26 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
                 <span className="text-xs text-gray-400 font-mono">Jejak Aktivitas Pelanggan</span>
               </div>
 
-              <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
-                {activities.map((act) => (
-                  <div key={act.id} className="relative group">
-                    <div className="absolute -left-[1.85rem] top-1.5 w-3 h-3 rounded-full border-2 border-white ring-2 ring-gray-100 bg-indigo-500" />
-                    <div className="bg-gray-50/70 p-3 rounded-xl border border-gray-100 space-y-0.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-gray-900 text-xs">{act.title}</span>
-                        <span className="text-[10px] font-mono text-gray-400">{act.time}</span>
+              {activities.length > 0 ? (
+                <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
+                  {activities.map((act) => (
+                    <div key={act.id} className="relative group">
+                      <div className="absolute -left-[1.85rem] top-1.5 w-3 h-3 rounded-full border-2 border-white ring-2 ring-gray-100 bg-indigo-500" />
+                      <div className="bg-gray-50/70 p-3 rounded-xl border border-gray-100 space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-gray-900 text-xs">{act.title}</span>
+                          <span className="text-[10px] font-mono text-gray-400">{act.time}</span>
+                        </div>
+                        <p className="text-xs text-gray-600">{act.description}</p>
                       </div>
-                      <p className="text-xs text-gray-600">{act.description}</p>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-gray-400">
+                  Belum ada aktivitas tiket tercatat untuk pelanggan ini.
+                </div>
+              )}
             </div>
           </div>
 
@@ -598,12 +534,9 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
                   className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg p-1.5 focus:outline-none"
                 >
                   <option value="All">Semua Kategori</option>
-                  <option value="Token PLN">Token PLN</option>
-                  <option value="Pulsa">Pulsa</option>
-                  <option value="Transfer">Transfer</option>
-                  <option value="Paket Data">Paket Data</option>
-                  <option value="Tagihan">Tagihan</option>
-                  <option value="Voucher">Voucher</option>
+                  {categoryOptions.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
 
@@ -619,12 +552,9 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
                   className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg p-1.5 focus:outline-none"
                 >
                   <option value="All">Semua Provider</option>
-                  <option value="PLN Artajasa">PLN Artajasa</option>
-                  <option value="Telkomsel">Telkomsel</option>
-                  <option value="BCA Fast">BCA Fast</option>
-                  <option value="Indosat Ooredoo">Indosat Ooredoo</option>
-                  <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-                  <option value="Google Play">Google Play</option>
+                  {providerOptions.map((prov) => (
+                    <option key={prov} value={prov}>{prov}</option>
+                  ))}
                 </select>
               </div>
 

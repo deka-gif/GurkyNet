@@ -53,16 +53,31 @@ class OwnerRepository implements OwnerRepositoryInterface
         $successCount = Transaction::where('status', 'success')->count();
         $failedCount = Transaction::whereIn('status', ['failed', 'canceled'])->count();
 
-        $successRate = $totalTransactions > 0 
-            ? round(($successCount / $totalTransactions) * 100, 2) 
-            : 100.00;
+        $successRate = $totalTransactions > 0
+            ? round(($successCount / $totalTransactions) * 100, 2)
+            : null;
 
-        $failedRate = $totalTransactions > 0 
-            ? round(($failedCount / $totalTransactions) * 100, 2) 
-            : 0.00;
+        $failedRate = $totalTransactions > 0
+            ? round(($failedCount / $totalTransactions) * 100, 2)
+            : null;
 
         // Wallet Balance
         $walletBalance = Wallet::sum('balance');
+
+        // Provider health derived from real provider activation state
+        $totalProviders = Provider::count();
+        $inactiveProviders = Provider::where('is_active', false)->count();
+        $providerHealth = $totalProviders === 0
+            ? 'No Providers'
+            : ($inactiveProviders === 0 ? 'Normal' : "Degraded ({$inactiveProviders} inactive)");
+
+        // Queue status from the real jobs table when available
+        $pendingJobs = $this->countPendingQueueJobs();
+        $queueStatus = $pendingJobs === null ? 'Unavailable' : "{$pendingJobs} Pending";
+
+        // System health from real failed-jobs / pending transaction signals
+        $failedJobs = $this->countFailedQueueJobs();
+        $systemHealth = ($failedJobs !== null && $failedJobs > 0) ? 'Degraded' : 'Healthy';
 
         return [
             'today_revenue' => (float) $todayRevenue,
@@ -70,13 +85,45 @@ class OwnerRepository implements OwnerRepositoryInterface
             'total_users' => $totalUsers,
             'active_users' => $activeUsers,
             'total_transactions' => $totalTransactions,
-            'success_rate' => $successRate . '%',
-            'failed_rate' => $failedRate . '%',
+            'success_rate' => $successRate !== null ? $successRate . '%' : null,
+            'failed_rate' => $failedRate !== null ? $failedRate . '%' : null,
             'wallet_balance' => (float) $walletBalance,
-            'provider_health' => 'Normal',
-            'queue_status' => '0 Pending',
-            'system_health' => 'Healthy',
+            'provider_health' => $providerHealth,
+            'queue_status' => $queueStatus,
+            'system_health' => $systemHealth,
         ];
+    }
+
+    /**
+     * Count pending jobs in the queue table, or null when the table is absent.
+     */
+    protected function countPendingQueueJobs(): ?int
+    {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('jobs')) {
+                return null;
+            }
+
+            return (int) DB::table('jobs')->count();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Count failed jobs, or null when the table is absent.
+     */
+    protected function countFailedQueueJobs(): ?int
+    {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('failed_jobs')) {
+                return null;
+            }
+
+            return (int) DB::table('failed_jobs')->count();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -139,11 +186,19 @@ class OwnerRepository implements OwnerRepositoryInterface
             'wallet_balance' => (float) Wallet::sum('balance'),
         ];
 
-        // 2. Operations KPI
+        // 2. Operations KPI — fulfillment time computed from real Digiflazz transaction records
+        $avgFulfillmentSeconds = DigiflazzTransaction::whereIn('digiflazz_status', ['success', 'Sukses'])
+            ->whereColumn('updated_at', '>', 'created_at')
+            ->get(['created_at', 'updated_at'])
+            ->map(fn ($row) => $row->updated_at->diffInSeconds($row->created_at, true))
+            ->avg();
+
         $operationsKpi = [
             'active_providers' => Provider::where('is_active', true)->count(),
             'total_products' => \App\Models\Product::count(),
-            'provider_latency' => '124ms',
+            'provider_latency' => $avgFulfillmentSeconds !== null
+                ? round($avgFulfillmentSeconds, 1) . 's'
+                : null,
         ];
 
         // 3. Marketing KPI
@@ -171,18 +226,82 @@ class OwnerRepository implements OwnerRepositoryInterface
     }
 
     /**
-     * Get system health metrics.
+     * Get system health metrics from live infrastructure and provider checks.
      */
     public function getSystemHealth(): array
     {
+        // Database connectivity
+        try {
+            DB::connection()->getPdo();
+            $databaseStatus = 'Connected';
+        } catch (\Throwable) {
+            $databaseStatus = 'Disconnected';
+        }
+
+        // Cache store round-trip using the actually configured driver
+        $cacheDriver = config('cache.default');
+        try {
+            $probe = 'health_probe_' . now()->timestamp;
+            \Illuminate\Support\Facades\Cache::put($probe, 'ok', 5);
+            $cacheStatus = \Illuminate\Support\Facades\Cache::get($probe) === 'ok'
+                ? "Connected ({$cacheDriver})"
+                : "Degraded ({$cacheDriver})";
+            \Illuminate\Support\Facades\Cache::forget($probe);
+        } catch (\Throwable) {
+            $cacheStatus = "Disconnected ({$cacheDriver})";
+        }
+
+        // Queue backlog from the real jobs table
+        $pendingJobs = $this->countPendingQueueJobs();
+        $failedJobs = $this->countFailedQueueJobs();
+        if ($pendingJobs === null) {
+            $queueStatus = 'Unavailable (driver: ' . config('queue.default') . ')';
+        } else {
+            $queueStatus = ($pendingJobs === 0 ? 'Idle' : 'Active') . " ({$pendingJobs} pending"
+                . ($failedJobs ? ", {$failedJobs} failed" : '') . ')';
+        }
+
+        // Live Digiflazz deposit balance (cached briefly to avoid hammering the API)
+        $digiflazzService = app(\App\Services\DigiflazzService::class);
+        if (!$digiflazzService->isConfigured()) {
+            $digiflazzStatus = 'Not Configured';
+        } else {
+            $balance = \Illuminate\Support\Facades\Cache::remember(
+                'digiflazz_balance',
+                60,
+                fn () => $digiflazzService->checkBalance()
+            );
+            $digiflazzStatus = $balance !== null
+                ? 'Connected (Balance: Rp ' . number_format($balance, 0, ',', '.') . ')'
+                : 'Unreachable';
+        }
+
+        // Midtrans configuration state (no lightweight ping endpoint exists)
+        $midtransServerKey = (string) config('services.midtrans.server_key', env('MIDTRANS_SERVER_KEY', ''));
+        $midtransStatus = ($midtransServerKey !== '' && $midtransServerKey !== 'dummy_server_key')
+            ? 'Configured'
+            : 'Not Configured';
+
+        // Real storage usage of the application disk
+        try {
+            $total = disk_total_space(storage_path());
+            $free = disk_free_space(storage_path());
+            $usedPercent = ($total > 0) ? round((($total - $free) / $total) * 100) : null;
+            $storageStatus = $usedPercent !== null
+                ? ($usedPercent >= 90 ? "Critical ({$usedPercent}% used)" : "Normal ({$usedPercent}% used)")
+                : 'Unavailable';
+        } catch (\Throwable) {
+            $storageStatus = 'Unavailable';
+        }
+
         return [
             'application_status' => 'Up',
-            'database_status' => 'Connected',
-            'redis_status' => 'Connected',
-            'queue_status' => 'Idle (0 pending)',
-            'digiflazz_status' => 'Connected (Balance: Rp 45.321.000)',
-            'midtrans_status' => 'Connected',
-            'storage_status' => 'Normal (14% used)',
+            'database_status' => $databaseStatus,
+            'redis_status' => $cacheStatus,
+            'queue_status' => $queueStatus,
+            'digiflazz_status' => $digiflazzStatus,
+            'midtrans_status' => $midtransStatus,
+            'storage_status' => $storageStatus,
         ];
     }
 
@@ -260,81 +379,6 @@ class OwnerRepository implements OwnerRepositoryInterface
             ->latest()
             ->take(10)
             ->get();
-
-        // If database logs are empty, return highly descriptive default values so the UI is beautifully populated
-        if ($recentActivities->isEmpty()) {
-            $recentActivities = collect([
-                [
-                    'id' => 1,
-                    'activity' => 'USER_LOGIN',
-                    'created_at' => now()->toDateTimeString(),
-                    'user' => [
-                        'name' => 'Budi Customer',
-                        'email' => 'budi@gurkypay.com',
-                        'role' => 'User',
-                    ],
-                ]
-            ]);
-        }
-
-        if ($systemEvents->isEmpty()) {
-            $systemEvents = collect([
-                [
-                    'id' => 1,
-                    'activity' => 'SYSTEM_CRON_SETTLEMENT',
-                    'payload' => ['status' => 'success', 'processed' => 12],
-                    'created_at' => now()->subMinutes(5)->toDateTimeString(),
-                ],
-                [
-                    'id' => 2,
-                    'activity' => 'QUEUE_HEARTBEAT',
-                    'payload' => ['status' => 'active', 'jobs_processed' => 140],
-                    'created_at' => now()->subMinutes(10)->toDateTimeString(),
-                ]
-            ]);
-        }
-
-        if ($adminActivities->isEmpty()) {
-            $adminActivities = collect([
-                [
-                    'id' => 1,
-                    'activity' => 'CUSTOMER_SUPPORT_REPLY_TICKET',
-                    'created_at' => now()->subMinutes(2)->toDateTimeString(),
-                    'user' => [
-                        'name' => 'Support Agent',
-                        'email' => 'support@gurkypay.com',
-                        'role' => 'Customer Support',
-                    ],
-                ],
-                [
-                    'id' => 2,
-                    'activity' => 'MARKETING_CREATE_BANNER',
-                    'created_at' => now()->subHours(1)->toDateTimeString(),
-                    'user' => [
-                        'name' => 'Marketing Officer',
-                        'email' => 'marketing@gurkypay.com',
-                        'role' => 'Marketing',
-                    ],
-                ]
-            ]);
-        }
-
-        if ($gatewayEvents->isEmpty()) {
-            $gatewayEvents = collect([
-                [
-                    'id' => 1,
-                    'activity' => 'MIDTRANS_CALLBACK',
-                    'payload' => ['invoice' => 'INV-99999', 'status' => 'settlement'],
-                    'created_at' => now()->subMinutes(4)->toDateTimeString(),
-                ],
-                [
-                    'id' => 2,
-                    'activity' => 'DIGIFLAZZ_CALLBACK',
-                    'payload' => ['invoice' => 'INV-99999', 'status' => 'success'],
-                    'created_at' => now()->subMinutes(3)->toDateTimeString(),
-                ]
-            ]);
-        }
 
         return [
             'recent_activities' => $recentActivities,

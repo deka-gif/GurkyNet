@@ -52,17 +52,7 @@ import { MarketingMediaLibrary } from '../pages/dashboard/MarketingMediaLibrary'
 import { OwnerDashboard } from '../pages/dashboard/OwnerDashboard';
 import { SystemSettingsCenter } from '../pages/dashboard/SystemSettingsCenter';
 
-import { AdminPage } from '../pages/admin/AdminPage';
-
 export const router = createBrowserRouter([
-  {
-    path: '/admin',
-    element: (
-      <ProtectedRoute allowedRoles={['Super Admin']}>
-        <AdminPage />
-      </ProtectedRoute>
-    )
-  },
   {
     path: '/unauthorized',
     element: <UnauthorizedPage />
@@ -121,14 +111,6 @@ export const router = createBrowserRouter([
       { 
         index: true, 
         element: <DashboardHomePage />
-      },
-      {
-        path: 'admin',
-        element: (
-          <ProtectedRoute allowedRoles={['Super Admin']}>
-            <AdminPage />
-          </ProtectedRoute>
-        )
       },
       {
         path: 'owner',

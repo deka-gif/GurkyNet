@@ -10,7 +10,7 @@ export type UserRole =
 export const getRedirectPathForRole = (role: UserRole | string): string => {
   switch (role) {
     case 'Super Admin':
-      return '/dashboard/admin';
+      return '/dashboard/owner';
     case 'Owner':
       return '/dashboard/owner';
     case 'Finance':

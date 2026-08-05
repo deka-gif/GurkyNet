@@ -35,11 +35,6 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
   // Path-based protection fallback
   const path = location.pathname;
 
-  // Admin / Super Admin section: Only Super Admin allowed (already returned if Super Admin)
-  if (path.startsWith('/admin') || path.startsWith('/dashboard/admin')) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-
   // Executive Owner section: Only Owner
   if (path.startsWith('/dashboard/owner')) {
     if (userRole !== 'Owner') {

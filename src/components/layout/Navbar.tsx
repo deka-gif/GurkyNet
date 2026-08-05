@@ -154,21 +154,13 @@ export const Navbar = () => {
                 );
               })}
 
-              {/* Mandatory Dev tools/Admin Links */}
+              {/* Mandatory Dev tools Links */}
               <li>
                 <Link
                   to="/docs"
                   className="text-indigo-600 hover:text-indigo-700 font-extrabold transition-colors text-sm bg-indigo-50 px-3 py-1.5 rounded-full"
                 >
                   API Docs
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/admin"
-                  className="text-emerald-600 hover:text-emerald-700 font-extrabold transition-colors text-sm bg-emerald-50 px-3 py-1.5 rounded-full"
-                >
-                  Admin CMS
                 </Link>
               </li>
             </ul>
@@ -277,7 +269,7 @@ export const Navbar = () => {
                 );
               })}
 
-              {/* Mandatory Mobile Admin Links */}
+              {/* Mandatory Mobile Dev tools Links */}
               <li className="flex gap-4 pt-2">
                 <Link
                   to="/docs"
@@ -285,13 +277,6 @@ export const Navbar = () => {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   API Docs
-                </Link>
-                <Link
-                  to="/admin"
-                  className="flex-1 text-center text-emerald-600 font-bold text-sm bg-emerald-50 py-2.5 rounded-xl"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Admin CMS
                 </Link>
               </li>
 

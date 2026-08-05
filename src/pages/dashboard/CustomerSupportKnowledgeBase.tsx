@@ -52,38 +52,11 @@ export const CustomerSupportKnowledgeBase: React.FC = () => {
   // Popular Searches options
   const popularSearches = ['Top Up Failed', 'Refund', 'Payment Pending', 'Digiflazz Error', 'Wallet'];
 
-  // Active articles source
-  const activeKbList: KBArticle[] = useMemo(() => {
-    if (Array.isArray(kbArticles) && kbArticles.length > 0) return kbArticles;
-    return [
-      {
-        id: 'SOP-001',
-        title: 'SOP Penanganan Kegagalan Pembelian Token Listrik PLN (Biller Artajasa)',
-        category: 'Transaction',
-        shortDescription: 'Langkah verifikasi requery manual ke provider Artajasa ketika SN Token 20-digit tidak terbit pada sistem.',
-        readingTime: '4m',
-        lastUpdated: '30 Juli 2026',
-        createdDate: '10 Januari 2026',
-        author: 'CS Lead Ani',
-        isPinned: true,
-        tags: ['PLN', 'Token', 'Biller', 'Artajasa', 'Failed'],
-        content: `### Objective\nPetunjuk operasional standar (SOP) bagi tim Customer Support saat menangani komplain pelanggan terkait pembelian Token Listrik PLN yang terdebit saldo namun nomor Serial Number (SN) 20 digit tidak terbit.\n\n### Prasyarat\n- Petugas memiliki akses ke Transaction Investigation Center.\n- Memiliki nomor Invoice atau Transaction ID pengguna.\n\n### Langkah-Langkah Penanganan\n1. Verifikasi Status Mutasi Ledger.\n2. Cek Respons Callback Biller.\n3. Penerbitan SN Manual.\n4. Eskalasi Jika Biller Gagal.`
-      },
-      {
-        id: 'SOP-002',
-        title: 'Prosedur Verifikasi Identitas Akun Pengguna (KYC Verification)',
-        category: 'Account',
-        shortDescription: 'Panduan pencocokan data foto KTP dan Swafoto pelanggan untuk persetujuan akun VIP Platinum.',
-        readingTime: '3m',
-        lastUpdated: '28 Juli 2026',
-        createdDate: '12 Februari 2026',
-        author: 'Compliance Officer Ratna',
-        isPinned: true,
-        tags: ['KYC', 'Account', 'Verifikasi', 'KTP'],
-        content: `### Ringkasan\nProsedur verifikasi tingkat 2 (VIP Platinum) untuk memastikan integritas data pemilik akun GurkyNet.`
-      }
-    ];
-  }, [kbArticles]);
+  // Active articles source — real API data only, no seeded fallback articles.
+  const activeKbList: KBArticle[] = useMemo(
+    () => (Array.isArray(kbArticles) ? kbArticles : []),
+    [kbArticles]
+  );
 
   // Filtered Articles List
   const filteredArticles = useMemo(() => {
