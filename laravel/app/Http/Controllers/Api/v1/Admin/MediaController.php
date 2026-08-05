@@ -9,6 +9,8 @@ use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -78,37 +80,114 @@ class MediaController extends Controller
         $filename     = Str::uuid() . '.' . $extension;
         $storagePath  = $folder . '/' . $filename;
 
-        // Store the file in public disk
-        Storage::disk('public')->putFileAs($folder, $file, $filename);
+        $disk = Storage::disk('public');
+        $absolutePath = $disk->path($storagePath);
 
-        // Get image dimensions if applicable
-        $width  = null;
-        $height = null;
-        $mime   = $file->getMimeType();
-        if (in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'])) {
-            try {
-                [$width, $height] = getimagesize($file->getRealPath());
-            } catch (\Throwable) {
-                // Not an image or getimagesize not supported
+        try {
+            $media = DB::transaction(function () use (
+                $disk,
+                $file,
+                $folder,
+                $filename,
+                $storagePath,
+                $absolutePath,
+                $altText
+            ) {
+                try {
+                    $stored = $disk->putFileAs($folder, $file, $filename);
+                } catch (\Throwable $e) {
+                    Log::error('media.upload.putFileAs.exception', [
+                        'storage_path' => $storagePath,
+                        'absolute_path' => $absolutePath,
+                        'disk_root' => $disk->path(''),
+                        'exception_class' => $e::class,
+                        'exception' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+
+                    throw new \RuntimeException(
+                        'Gagal menyimpan file ke storage: ' . $e->getMessage(),
+                        500,
+                        $e
+                    );
+                }
+
+                $exists = $stored !== false && $disk->exists($storagePath);
+                $bytes = is_file($absolutePath) ? (int) filesize($absolutePath) : 0;
+
+                Log::info('media.upload.putFileAs.result', [
+                    'stored' => $stored,
+                    'exists' => $exists,
+                    'filesize' => $bytes,
+                    'absolute_path' => $absolutePath,
+                ]);
+
+                if ($stored === false || ! $exists || $bytes <= 0) {
+                    if ($stored !== false) {
+                        $disk->delete($storagePath);
+                    }
+
+                    Log::error('media.upload.verification_failed', [
+                        'stored' => $stored,
+                        'exists' => $exists,
+                        'filesize' => $bytes,
+                        'storage_path' => $storagePath,
+                        'absolute_path' => $absolutePath,
+                        'disk_root' => $disk->path(''),
+                    ]);
+
+                    throw new \RuntimeException(
+                        'Gagal menulis file ke storage (disk public). File tidak ditemukan atau berukuran 0.',
+                        500
+                    );
+                }
+
+                $width = null;
+                $height = null;
+                $mime = $file->getMimeType();
+                if (in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) {
+                    try {
+                        [$width, $height] = getimagesize($absolutePath);
+                    } catch (\Throwable) {
+                        // Not an image or getimagesize not supported
+                    }
+                }
+
+                // Only create Media after the physical file is confirmed on disk.
+                return Media::create([
+                    'filename'      => $filename,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type'     => $mime,
+                    'extension'     => strtolower(pathinfo($filename, PATHINFO_EXTENSION)),
+                    'size'          => $file->getSize(),
+                    'width'         => $width,
+                    'height'        => $height,
+                    'alt_text'      => $altText,
+                    'folder'        => $folder,
+                    'storage_disk'  => 'public',
+                    'url'           => $storagePath,
+                    'uploaded_by'   => Auth::user()?->name ?? 'system',
+                ]);
+            });
+        } catch (\Throwable $e) {
+            // Ensure no orphan partial file remains if DB rolled back after a write.
+            if ($disk->exists($storagePath)) {
+                $disk->delete($storagePath);
             }
-        }
 
-        // Store disk-relative path only — never bake APP_URL into the database.
-        // Absolute / CDN URLs are resolved at read time via MediaUrl / MediaResource.
-        $media = Media::create([
-            'filename'      => $filename,
-            'original_name' => $file->getClientOriginalName(),
-            'mime_type'     => $mime,
-            'extension'     => strtolower($extension),
-            'size'          => $file->getSize(),
-            'width'         => $width,
-            'height'        => $height,
-            'alt_text'      => $altText,
-            'folder'        => $folder,
-            'storage_disk'  => 'public',
-            'url'           => $storagePath,
-            'uploaded_by'   => Auth::user()?->name ?? 'system',
-        ]);
+            Log::error('media.upload.failed', [
+                'storage_path' => $storagePath,
+                'exception_class' => $e::class,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return $this->errorResponse(
+                $e->getMessage() !== ''
+                    ? $e->getMessage()
+                    : 'Gagal mengunggah media.',
+                500
+            );
+        }
 
         return $this->successResponse('File berhasil diunggah.', new MediaResource($media), 201);
     }
