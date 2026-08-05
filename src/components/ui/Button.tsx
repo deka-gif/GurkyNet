@@ -1,7 +1,7 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, type HTMLMotionProps } from 'motion/react';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
   variant?: 'primary' | 'secondary' | 'outline';
   children: React.ReactNode;
   className?: string;
@@ -28,3 +28,5 @@ export const Button = ({ variant = 'primary', children, className = '', ...props
     </motion.button>
   );
 };
+
+

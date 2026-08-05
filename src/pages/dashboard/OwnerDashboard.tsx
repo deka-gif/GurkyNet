@@ -78,6 +78,7 @@ const TransactionTooltip = ({ active, payload, label }: any) => {
 
 export const OwnerDashboard: React.FC = () => {
   const user = storageService.getUser();
+  const userName = typeof user?.name === 'string' ? user.name : 'Super Admin / Owner';
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Filters for Audit Logs
@@ -275,7 +276,7 @@ export const OwnerDashboard: React.FC = () => {
               <span>Executive Business Overview</span>
             </h1>
             <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed max-w-2xl">
-              Selamat datang, <strong>{user?.name || 'Super Admin / Owner'}</strong>. Pemantauan tingkat tinggi bisnis digital, indikator performa pendapatan, kesehatan infrastruktur, dan aktivitas kunci.
+              Selamat datang, <strong>{userName}</strong>. Pemantauan tingkat tinggi bisnis digital, indikator performa pendapatan, kesehatan infrastruktur, dan aktivitas kunci.
             </p>
           </div>
 
@@ -1001,3 +1002,4 @@ export const OwnerDashboard: React.FC = () => {
     </div>
   );
 };
+

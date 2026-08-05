@@ -224,7 +224,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
                 {formState.logo ? (
                   <div className="relative group rounded-2xl border border-gray-100 p-2.5 bg-gray-50/50 flex items-center gap-3">
                     <img
-                      src={formState.logo}
+                      src={typeof formState.logo === 'string' ? formState.logo : formState.logo?.url || ''}
                       alt="Logo Terang"
                       className="w-12 h-12 object-contain bg-white rounded-lg border border-gray-100"
                     />
@@ -278,7 +278,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
                 {formState.logoDark ? (
                   <div className="relative group rounded-2xl border border-gray-100 p-2.5 bg-gray-50/50 flex items-center gap-3">
                     <img
-                      src={formState.logoDark}
+                      src={typeof formState.logoDark === 'string' ? formState.logoDark : formState.logoDark?.url || ''}
                       alt="Logo Gelap"
                       className="w-12 h-12 object-contain bg-gray-950 rounded-lg border border-gray-800"
                     />
@@ -332,7 +332,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
                 {formState.favicon ? (
                   <div className="relative group rounded-2xl border border-gray-100 p-2.5 bg-gray-50/50 flex items-center gap-3">
                     <img
-                      src={formState.favicon}
+                      src={typeof formState.favicon === 'string' ? formState.favicon : formState.favicon?.url || ''}
                       alt="Favicon"
                       className="w-12 h-12 object-contain bg-white rounded-lg border border-gray-100"
                     />
@@ -633,3 +633,4 @@ export const MarketingWebsiteSettings: React.FC = () => {
     </div>
   );
 };
+

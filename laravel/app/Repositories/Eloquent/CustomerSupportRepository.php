@@ -7,6 +7,7 @@ use App\Models\SupportTicket;
 use App\Models\TicketReply;
 use App\Models\User;
 use App\Models\Transaction;
+use App\Models\Wallet;
 use App\Models\WalletHistory;
 use App\Models\DigiflazzTransaction;
 use App\Models\MidtransTransaction;
@@ -199,11 +200,57 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
     }
 
     /**
+     * Get customer details.
+     */
+    public function getCustomerById(string|int $id): User
+    {
+        return User::with(['wallet', 'supportTickets' => fn ($query) => $query->latest()->take(5)])
+            ->withCount(['transactions', 'supportTickets'])
+            ->where('role', \App\Enums\UserRole::USER)
+            ->where(function ($query) use ($id) {
+                $query->where('id', $id)
+                    ->orWhere('email', $id)
+                    ->orWhere('phone_number', $id);
+            })
+            ->firstOrFail();
+    }
+
+    /**
+     * Get customer transaction history.
+     */
+    public function getCustomerTransactions(string|int $id, array $filters): LengthAwarePaginator
+    {
+        $customer = $this->getCustomerById($id);
+        $perPage = $filters['per_page'] ?? 15;
+
+        $query = Transaction::with(['items', 'paymentHistory'])
+            ->where('user_id', $customer->id);
+
+        if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('invoice_number', 'like', "%{$search}%")
+                    ->orWhere('service_name', 'like', "%{$search}%")
+                    ->orWhere('target_number', 'like', "%{$search}%");
+            });
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    /**
      * Investigate a transaction.
      */
     public function getInvestigation(string $invoiceNumber): array
     {
-        $transaction = Transaction::with(['user.wallet', 'items'])->where('invoice_number', $invoiceNumber)->firstOrFail();
+        $transaction = Transaction::with(['user.wallet', 'items', 'paymentHistory'])
+            ->where('invoice_number', $invoiceNumber)
+            ->orWhere('id', $invoiceNumber)
+            ->firstOrFail();
 
         $walletHistory = [];
         if ($transaction->user && $transaction->user->wallet) {
@@ -249,6 +296,162 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
         }
 
         return $query->latest()->paginate($perPage);
+    }
+
+    /**
+     * Get refund detail by transaction ID or invoice number.
+     */
+    public function getRefundById(string|int $id): Transaction
+    {
+        return Transaction::with(['user.wallet', 'items', 'paymentHistory', 'digiflazzTransaction', 'midtransTransaction'])
+            ->where('id', $id)
+            ->orWhere('invoice_number', $id)
+            ->firstOrFail();
+    }
+
+    /**
+     * Create a refund claim from customer support.
+     */
+    public function createRefund(array $data): Transaction
+    {
+        $transactionId = $data['transaction_id'] ?? $data['invoice_number'] ?? $data['transactionId'] ?? null;
+        if (!$transactionId) {
+            throw new \InvalidArgumentException('transaction_id atau invoice_number wajib diisi.', 422);
+        }
+
+        $transaction = $this->getRefundById($transactionId);
+        $reason = $data['reason'] ?? $data['note'] ?? $data['notes'] ?? 'Diajukan oleh Customer Support';
+        $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Diajukan CS: ' . $reason);
+        $transaction->save();
+
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'activity' => 'CUSTOMER_SUPPORT_CREATE_REFUND',
+            'payload' => [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'reason' => $reason,
+            ],
+        ]);
+
+        return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
+    }
+
+    /**
+     * Update refund status or notes.
+     */
+    public function updateRefund(string|int $id, array $data): Transaction
+    {
+        $status = strtolower((string) ($data['status'] ?? ''));
+        $note = $data['note'] ?? $data['notes'] ?? $data['reason'] ?? null;
+
+        if (in_array($status, ['approved', 'approve', 'disetujui'], true)) {
+            return $this->approveRefund($id, $note);
+        }
+
+        if (in_array($status, ['rejected', 'reject', 'ditolak'], true)) {
+            return $this->rejectRefund($id, $note);
+        }
+
+        $transaction = $this->getRefundById($id);
+        $label = $status ? 'Refund Status CS: ' . $status : 'Refund Diperbarui CS';
+        $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . $label . ($note ? ': ' . $note : ''));
+        $transaction->save();
+
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'activity' => 'CUSTOMER_SUPPORT_UPDATE_REFUND',
+            'payload' => [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'status' => $status ?: null,
+                'note' => $note,
+            ],
+        ]);
+
+        return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
+    }
+
+    /**
+     * Escalate a refund claim.
+     */
+    public function escalateRefund(string|int $id, array $data): Transaction
+    {
+        $transaction = $this->getRefundById($id);
+        $note = $data['note'] ?? $data['notes'] ?? $data['reason'] ?? 'Perlu review lanjutan';
+        $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Dieskalasi CS: ' . $note);
+        $transaction->save();
+
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'activity' => 'CUSTOMER_SUPPORT_ESCALATE_REFUND',
+            'payload' => [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'note' => $note,
+            ],
+        ]);
+
+        return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
+    }
+
+    protected function approveRefund(string|int $id, ?string $note = null): Transaction
+    {
+        return DB::transaction(function () use ($id, $note) {
+            $transaction = $this->getRefundById($id);
+
+            if (!str_contains(strtolower((string) $transaction->notes), 'refund disetujui')) {
+                $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
+                if ($wallet) {
+                    $refundAmount = $transaction->total_payment;
+                    $wallet->balance += $refundAmount;
+                    $wallet->save();
+
+                    WalletHistory::create([
+                        'wallet_id' => $wallet->id,
+                        'amount' => $refundAmount,
+                        'type' => WalletHistoryType::CREDIT->value,
+                        'description' => 'Refund Customer Support: ' . $transaction->invoice_number,
+                        'reference_id' => $transaction->invoice_number,
+                    ]);
+                }
+            }
+
+            $transaction->status = TransactionStatus::CANCELED->value;
+            $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Disetujui CS: ' . ($note ?? 'Diproses oleh Customer Support'));
+            $transaction->save();
+
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'activity' => 'CUSTOMER_SUPPORT_APPROVE_REFUND',
+                'payload' => [
+                    'transaction_id' => $transaction->id,
+                    'invoice_number' => $transaction->invoice_number,
+                    'note' => $note,
+                ],
+            ]);
+
+            return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
+        });
+    }
+
+    protected function rejectRefund(string|int $id, ?string $note = null): Transaction
+    {
+        $transaction = $this->getRefundById($id);
+        $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Ditolak CS: ' . ($note ?? 'Tidak memenuhi syarat'));
+        $transaction->save();
+
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'activity' => 'CUSTOMER_SUPPORT_REJECT_REFUND',
+            'payload' => [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'note' => $note,
+            ],
+        ]);
+
+        return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
     }
 
     /**

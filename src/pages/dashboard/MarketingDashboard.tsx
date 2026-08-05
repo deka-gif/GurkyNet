@@ -63,6 +63,7 @@ const RedemptionTooltip = ({ active, payload, label }: any) => {
 
 export const MarketingDashboard: React.FC = () => {
   const user = storageService.getUser();
+  const userName = typeof user?.name === 'string' ? user.name : 'Marketing Specialist';
   const { dashboardData, dashboardLoading, dashboardError, fetchDashboard } = useMarketingStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -263,7 +264,7 @@ export const MarketingDashboard: React.FC = () => {
               Marketing Management Dashboard
             </h1>
             <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed max-w-2xl">
-              Selamat datang, <strong>{user?.name || 'Marketing Specialist'}</strong>. Pusat pemantauan kinerja kampanye promosi, penggunaan kode voucher, jadwal banner aplikasi, dan pengumuman siaran.
+              Selamat datang, <strong>{userName}</strong>. Pusat pemantauan kinerja kampanye promosi, penggunaan kode voucher, jadwal banner aplikasi, dan pengumuman siaran.
             </p>
           </div>
 
@@ -580,3 +581,4 @@ export const MarketingDashboard: React.FC = () => {
     </div>
   );
 };
+

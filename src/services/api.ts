@@ -1,7 +1,24 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { storageService } from './storage.service';
 
-const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'https://gurkynet.my.id/api/v1';
+export const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+
+function getApiOrigin(): string {
+  const apiUrl = new URL(API_BASE_URL, window.location.origin);
+  const apiRootPath = apiUrl.pathname.replace(/\/api(?:\/.*)?$/, '');
+  return apiUrl.origin + apiRootPath;
+}
+
+export const API_ORIGIN = getApiOrigin();
+
+export function buildApiUrl(path: string): string {
+  const normalizedPath = path
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/^v1\/?/, '');
+
+  return normalizedPath ? `${API_BASE_URL}/${normalizedPath}` : API_BASE_URL;
+}
 
 export type AuthMode = 'sanctum_cookie' | 'sanctum_token';
 
@@ -23,7 +40,7 @@ export const apiClient = axios.create({
 export async function ensureCsrfCookie(): Promise<void> {
   if (apiConfig.authMode === 'sanctum_cookie') {
     try {
-      await axios.get(`${API_BASE_URL.split('/api')[0]}/sanctum/csrf-cookie`, {
+      await axios.get(`${API_ORIGIN}/sanctum/csrf-cookie`, {
         withCredentials: true,
       });
     } catch (err) {
@@ -144,3 +161,5 @@ apiClient.interceptors.response.use(
     return Promise.reject(parsed);
   }
 );
+
+

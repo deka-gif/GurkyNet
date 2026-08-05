@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { BarChart3, RefreshCw } from 'lucide-react';
 
 interface Props {
@@ -13,7 +13,7 @@ interface State {
   error?: Error;
 }
 
-export class ChartErrorBoundary extends Component<Props, State> {
+export class ChartErrorBoundary extends React.Component<Props, State> {
   state: State = {
     hasError: false,
   };
@@ -64,3 +64,4 @@ export class ChartErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+

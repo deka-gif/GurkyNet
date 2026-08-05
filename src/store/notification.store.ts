@@ -23,13 +23,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     try {
       const response = await notificationService.getNotifications();
       if (response && response.success !== false) {
-        const raw = response.data;
+        const raw: unknown = response.data;
+        const wrapped = raw && typeof raw === 'object' ? raw as { data?: unknown; items?: unknown } : null;
         const list = Array.isArray(raw) 
           ? raw 
-          : Array.isArray(raw?.data) 
-            ? raw.data 
-            : Array.isArray(raw?.items) 
-              ? raw.items 
+          : Array.isArray(wrapped?.data) 
+            ? wrapped.data 
+            : Array.isArray(wrapped?.items) 
+              ? wrapped.items 
               : [];
         const unread = list.filter((n: any) => !n.isRead && !n.is_read).length;
         set({
@@ -82,3 +83,4 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     }
   },
 }));
+

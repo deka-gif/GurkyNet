@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Models\Provider;
 use App\Models\Setting;
 use App\Models\ActivityLog;
+use App\Models\DigiflazzTransaction;
+use App\Models\MidtransTransaction;
 use App\Services\PricingService;
 use App\Services\AvailabilityService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -181,6 +183,146 @@ class OperationsRepository implements OperationsRepositoryInterface
         ]);
 
         return $provider->fresh();
+    }
+
+    /**
+     * Get service monitoring data for Operations dashboard.
+     */
+    public function getMonitoring(array $filters = []): array
+    {
+        $providersQuery = Provider::withCount([
+            'products as total_products',
+            'products as active_products' => fn ($query) => $query->where('status', true)->where('sku_code', 'not like', '%MAINTENANCE%'),
+            'products as inactive_products' => fn ($query) => $query->where('status', false),
+            'products as maintenance_products' => fn ($query) => $query->where('status', true)->where('sku_code', 'like', '%MAINTENANCE%'),
+        ]);
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $providersQuery->where('name', 'like', "%{$search}%");
+        }
+
+        $services = $providersQuery
+            ->orderBy('name')
+            ->get()
+            ->map(function (Provider $provider) {
+                $status = match (true) {
+                    ! $provider->is_active => 'Offline',
+                    $provider->maintenance_products > 0 => 'Maintenance',
+                    $provider->inactive_products > 0 => 'Degraded',
+                    default => 'Online',
+                };
+
+                $uptime = $provider->total_products > 0
+                    ? round(($provider->active_products / $provider->total_products) * 100, 2) . '%'
+                    : '0%';
+
+                return [
+                    'id' => $provider->id,
+                    'code' => 'PRV-' . $provider->id,
+                    'name' => $provider->name,
+                    'provider' => $provider->name,
+                    'category' => 'PPOB Provider',
+                    'status' => $status,
+                    'response_time' => '-',
+                    'responseTime' => '-',
+                    'uptime' => $uptime,
+                    'last_updated' => optional($provider->updated_at)->toISOString(),
+                    'lastUpdated' => optional($provider->updated_at)->toISOString(),
+                    'description' => sprintf(
+                        '%d active products, %d inactive products, %d products under maintenance.',
+                        $provider->active_products,
+                        $provider->inactive_products,
+                        $provider->maintenance_products
+                    ),
+                    'metrics' => [
+                        'total_products' => $provider->total_products,
+                        'active_products' => $provider->active_products,
+                        'inactive_products' => $provider->inactive_products,
+                        'maintenance_products' => $provider->maintenance_products,
+                    ],
+                ];
+            })
+            ->filter(function (array $service) use ($filters) {
+                if (empty($filters['status'])) {
+                    return true;
+                }
+
+                return strtolower($service['status']) === strtolower((string) $filters['status']);
+            })
+            ->values();
+
+        $maintenance = Product::with('provider:id,name')
+            ->where('status', true)
+            ->where('sku_code', 'like', '%MAINTENANCE%')
+            ->latest('updated_at')
+            ->take(20)
+            ->get()
+            ->map(fn (Product $product) => [
+                'id' => 'MNT-' . $product->id,
+                'service' => $product->name,
+                'service_name' => $product->name,
+                'provider' => $product->provider?->name ?? '-',
+                'start_time' => optional($product->updated_at)->toISOString(),
+                'startTime' => optional($product->updated_at)->toISOString(),
+                'end_time' => null,
+                'endTime' => null,
+                'status' => 'In Progress',
+                'description' => 'Product SKU is marked as maintenance in Operations.',
+            ]);
+
+        $digiflazzIncidents = DigiflazzTransaction::query()
+            ->whereNotIn('digiflazz_status', ['success', 'sukses', 'pending', 'processing'])
+            ->latest()
+            ->take(10)
+            ->get()
+            ->map(fn (DigiflazzTransaction $transaction) => [
+                'id' => 'DGF-' . $transaction->id,
+                'service' => 'Digiflazz',
+                'time' => optional($transaction->created_at)->toISOString(),
+                'timestamp' => optional($transaction->created_at)->toISOString(),
+                'status' => $transaction->digiflazz_status,
+                'currentStatus' => $transaction->digiflazz_status,
+                'incident' => 'Digiflazz transaction returned status: ' . $transaction->digiflazz_status,
+                'message' => 'Ref ID: ' . $transaction->ref_id . ', SKU: ' . $transaction->buyer_sku_code,
+            ]);
+
+        $midtransIncidents = MidtransTransaction::query()
+            ->whereNotIn('transaction_status', ['settlement', 'capture', 'pending'])
+            ->latest()
+            ->take(10)
+            ->get()
+            ->map(fn (MidtransTransaction $transaction) => [
+                'id' => 'MID-' . $transaction->id,
+                'service' => 'Midtrans',
+                'time' => optional($transaction->created_at)->toISOString(),
+                'timestamp' => optional($transaction->created_at)->toISOString(),
+                'status' => $transaction->transaction_status,
+                'currentStatus' => $transaction->transaction_status,
+                'incident' => 'Midtrans transaction returned status: ' . $transaction->transaction_status,
+                'message' => 'Order ID: ' . $transaction->order_id,
+            ]);
+
+        $incidents = $digiflazzIncidents
+            ->concat($midtransIncidents)
+            ->sortByDesc('timestamp')
+            ->values()
+            ->take(20);
+
+        return [
+            'summary' => [
+                'online_services' => $services->where('status', 'Online')->count(),
+                'maintenance_services' => $services->where('status', 'Maintenance')->count(),
+                'degraded_services' => $services->where('status', 'Degraded')->count(),
+                'offline_services' => $services->where('status', 'Offline')->count(),
+                'total_services' => $services->count(),
+            ],
+            'services' => $services,
+            'maintenance' => $maintenance,
+            'schedules' => $maintenance,
+            'incidents' => $incidents,
+            'logs' => $incidents,
+        ];
     }
 
     /**

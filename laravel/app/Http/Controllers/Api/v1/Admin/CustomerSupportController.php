@@ -36,6 +36,16 @@ class CustomerSupportController extends Controller
     }
 
     /**
+     * Get Customer Support Stats.
+     * GET /api/v1/admin/customer-support/stats
+     */
+    public function stats(CustomerSupportDashboardAction $action): JsonResponse
+    {
+        $data = $action->execute();
+        return $this->successResponse('Statistik customer support berhasil dimuat.', $data);
+    }
+
+    /**
      * Get Paginated Support Tickets.
      * GET /api/v1/admin/customer-support/tickets
      */
@@ -128,6 +138,49 @@ class CustomerSupportController extends Controller
     }
 
     /**
+     * Get Customer Details.
+     * GET /api/v1/admin/customer-support/customers/{id}
+     */
+    public function showCustomer(string|int $id, CustomerAction $action): JsonResponse
+    {
+        try {
+            $customer = $action->show($id);
+            return $this->successResponse('Detail pelanggan berhasil dimuat.', new CustomerResource($customer));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Pelanggan tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get Customer Transaction History.
+     * GET /api/v1/admin/customer-support/customers/{id}/transactions
+     */
+    public function customerTransactions(string|int $id, Request $request, CustomerAction $action): JsonResponse
+    {
+        try {
+            $filters = $request->only(['search', 'status', 'per_page']);
+            $paginator = $action->transactions($id, $filters);
+
+            return $this->paginatedResponse(
+                'Riwayat transaksi pelanggan berhasil dimuat.',
+                TransactionResource::collection($paginator->items()),
+                [
+                    'current_page' => $paginator->currentPage(),
+                    'last_page' => $paginator->lastPage(),
+                    'per_page' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                ]
+            );
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Pelanggan tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * Investigate Transaction.
      * GET /api/v1/admin/customer-support/investigations/{transaction}
      */
@@ -154,12 +207,27 @@ class CustomerSupportController extends Controller
     }
 
     /**
+     * Investigate Transaction by query string.
+     * GET /api/v1/admin/customer-support/investigation
+     */
+    public function investigationQuery(Request $request, InvestigationAction $action): JsonResponse
+    {
+        $transaction = $request->query('query')
+            ?? $request->query('q')
+            ?? $request->query('invoiceNumber')
+            ?? $request->query('transactionId')
+            ?? $request->query('invoice_number');
+
+        return $this->investigation((string) $transaction, $action);
+    }
+
+    /**
      * Get Refund Queue.
      * GET /api/v1/admin/customer-support/refunds
      */
-    public function refunds(CustomerFilterRequest $request, RefundQueueAction $action): JsonResponse
+    public function refunds(Request $request, RefundQueueAction $action): JsonResponse
     {
-        $filters = $request->validated();
+        $filters = $request->only(['search', 'status', 'per_page']);
         $paginator = $action->execute($filters);
 
         return $this->paginatedResponse(
@@ -172,6 +240,92 @@ class CustomerSupportController extends Controller
                 'total' => $paginator->total(),
             ]
         );
+    }
+
+    /**
+     * Get Refund Details.
+     * GET /api/v1/admin/customer-support/refunds/{id}
+     */
+    public function showRefund(string|int $id, RefundQueueAction $action): JsonResponse
+    {
+        try {
+            $transaction = $action->show($id);
+            return $this->successResponse('Detail refund berhasil dimuat.', new TransactionResource($transaction));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Refund tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Create Refund Claim.
+     * POST /api/v1/admin/customer-support/refunds
+     */
+    public function createRefund(Request $request, RefundQueueAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'transaction_id' => 'nullable',
+                'transactionId' => 'nullable',
+                'invoice_number' => 'nullable|string',
+                'reason' => 'nullable|string|max:500',
+                'note' => 'nullable|string|max:500',
+                'notes' => 'nullable|string|max:500',
+            ]);
+            $transaction = $action->create($data);
+            return $this->successResponse('Pengajuan refund berhasil dibuat.', new TransactionResource($transaction), 201);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Transaksi tidak ditemukan.', 404);
+        } catch (\InvalidArgumentException $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 422;
+            return $this->errorResponse($e->getMessage(), $code);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Update Refund Claim.
+     * PUT /api/v1/admin/customer-support/refunds/{id}
+     */
+    public function updateRefund(string|int $id, Request $request, RefundQueueAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'status' => 'nullable|string|max:50',
+                'reason' => 'nullable|string|max:500',
+                'note' => 'nullable|string|max:500',
+                'notes' => 'nullable|string|max:500',
+            ]);
+            $transaction = $action->update($id, $data);
+            return $this->successResponse('Refund berhasil diperbarui.', new TransactionResource($transaction));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Refund tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Escalate Refund Claim.
+     * POST /api/v1/admin/customer-support/refunds/{id}/escalate
+     */
+    public function escalateRefund(string|int $id, Request $request, RefundQueueAction $action): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'reason' => 'nullable|string|max:500',
+                'note' => 'nullable|string|max:500',
+                'notes' => 'nullable|string|max:500',
+            ]);
+            $transaction = $action->escalate($id, $data);
+            return $this->successResponse('Refund berhasil dieskalasi.', new TransactionResource($transaction));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Refund tidak ditemukan.', 404);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
     }
 
     /**

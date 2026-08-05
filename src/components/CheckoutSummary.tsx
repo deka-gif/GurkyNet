@@ -48,7 +48,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const [pinError, setPinError] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
   const [loadingStatus, setLoadingStatus] = useState<string>('Memproses Transaksi...');
-  const [finalStatus, setFinalStatus] = useState<'sukses' | 'pending' | 'gagal'>('sukses');
+  const [finalStatus, setFinalStatus] = useState<'sukses' | 'success' | 'pending' | 'gagal'>('sukses');
   const [createdTrx, setCreatedTrx] = useState<any | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<any | null>(null);
@@ -680,3 +680,4 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     </div>
   );
 };
+

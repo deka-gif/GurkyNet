@@ -5,6 +5,7 @@ import {
   Layers, Lock, Database, Globe, ArrowRight, HeartPulse, Sparkles
 } from 'lucide-react';
 import { openapiSpec } from '../../data/openapi';
+import { API_BASE_URL, buildApiUrl } from '../../services/api';
 
 // TypeScript SDK Template for Developer Copying
 const tsSdkCode = `/**
@@ -32,7 +33,7 @@ export class GurkyPayClient {
   private correlationIdProvider: () => string;
 
   constructor(config: GurkyPayConfig = {}) {
-    this.baseUrl = config.baseUrl || '/api';
+    this.baseUrl = config.baseUrl || '${API_BASE_URL}';
     this.authToken = config.authToken;
     this.correlationIdProvider = config.correlationIdProvider || (() => {
       return 'ts-sdk-' + Math.random().toString(36).substring(2, 10);
@@ -88,24 +89,24 @@ export class GurkyPayClient {
 
   // Observability & Health
   async getHealth() {
-    return this.request('/health', 'GET');
+    return this.request('GET', '/health');
   }
 
   async getStatus() {
-    return this.request('/status', 'GET');
+    return this.request('GET', '/status');
   }
 
   async getMetrics() {
-    return this.request('/metrics', 'GET');
+    return this.request('GET', '/metrics');
   }
 
   // Authentication Module
   async register(data: any) {
-    return this.request<any>('POST', '/v1/auth/register', data);
+    return this.request<any>('POST', '/auth/register', data);
   }
 
   async login(credentials: any) {
-    const res = await this.request<any>('POST', '/v1/auth/login', credentials);
+    const res = await this.request<any>('POST', '/auth/login', credentials);
     if (res.success && res.data?.token) {
       this.setAuthToken(res.data.token);
     }
@@ -113,37 +114,37 @@ export class GurkyPayClient {
   }
 
   async getProfile() {
-    return this.request<any>('GET', '/v1/auth/me');
+    return this.request<any>('GET', '/auth/me');
   }
 
   // Wallet Module
   async getWallet() {
-    return this.request<any>('GET', '/v1/wallet');
+    return this.request<any>('GET', '/wallet');
   }
 
   async getHistory() {
-    return this.request<any>('GET', '/v1/wallet/history');
+    return this.request<any>('GET', '/wallet/history');
   }
 
   async initiateTopUp(amount: number) {
-    return this.request<any>('POST', '/v1/wallet/topup', { amount });
+    return this.request<any>('POST', '/wallet/topup', { amount });
   }
 
   async transfer(data: { target_wallet_number: string; amount: number; transaction_pin: string }) {
-    return this.request<any>('POST', '/v1/wallet/transfer', data);
+    return this.request<any>('POST', '/wallet/transfer', data);
   }
 
   // PPOB & Order Module
   async getCategories() {
-    return this.request<any>('GET', '/v1/categories');
+    return this.request<any>('GET', '/categories');
   }
 
   async getProducts(params?: { category?: string; provider?: string }) {
-    return this.request<any>('GET', '/v1/products', undefined, params);
+    return this.request<any>('GET', '/products', undefined, params);
   }
 
   async checkoutOrder(data: { sku_code: string; target_number: string; transaction_pin: string }) {
-    return this.request<any>('POST', '/v1/transactions', data);
+    return this.request<any>('POST', '/transactions', data);
   }
 }`;
 
@@ -166,7 +167,7 @@ data class ApiResponse<T>(
 )
 
 class GurkyPayClient(
-    private val baseUrl: String = "https://gurkypay.com/api",
+    private val baseUrl: String = "${API_BASE_URL}",
     private var authToken: String? = null
 ) {
     private val client = OkHttpClient()
@@ -235,7 +236,7 @@ class GurkyPayClient(
     }
 
     fun login(body: Map<String, String>): ApiResponse<Map<String, Any>> {
-        val response = executeRequest("POST", "/v1/auth/login", gson.toJson(body), Map::class.java)
+        val response = executeRequest("POST", "/auth/login", gson.toJson(body), Map::class.java)
         if (response.success && response.data != null) {
             val token = response.data["token"] as? String
             token?.let { setToken(it) }
@@ -312,7 +313,7 @@ export const DocsPage: React.FC = () => {
     setPlaygroundHeaders(null);
 
     const [method, rawPath] = selectedEndpoint.split(' ');
-    const url = rawPath.startsWith('/') ? `/api${rawPath}` : `/api/${rawPath}`;
+    const url = buildApiUrl(rawPath);
     
     const correlationId = 'playground-' + Math.random().toString(36).substring(2, 10);
     const requestId = 'req-' + Math.random().toString(36).substring(2, 10);
@@ -366,7 +367,7 @@ export const DocsPage: React.FC = () => {
       { name: 'Root System Metadata Status Check', path: '/status', method: 'GET' },
       { name: 'System Realtime Observability Metrics', path: '/metrics', method: 'GET' },
       { name: 'Module Health Check Probe v1', path: '/v1/health', method: 'GET' },
-      { name: 'Active PPOB Product Category Listing', path: '/v1/categories', method: 'GET' },
+      { name: 'Active PPOB Product Category Listing', path: '/categories', method: 'GET' },
     ];
 
     const results: TestResult[] = [];
@@ -384,7 +385,7 @@ export const DocsPage: React.FC = () => {
         details.push(`Initiating fetch connection to [${test.method}] ${test.path}`);
         details.push(`Request Tracing Headers: X-Correlation-ID: ${corrId}, X-Request-ID: ${reqId}`);
 
-        const res = await fetch(`/api${test.path}`, {
+        const res = await fetch(buildApiUrl(test.path), {
           method: test.method,
           headers: {
             'Content-Type': 'application/json',
@@ -479,7 +480,7 @@ export const DocsPage: React.FC = () => {
           
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => copyToClipboard('https://gurkypay.com/api', 'baseUrl')}
+              onClick={() => copyToClipboard(API_BASE_URL, 'baseUrl')}
               className="bg-white/10 hover:bg-white/15 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 border border-white/10 active:scale-95"
             >
               <Globe size={15} />
@@ -724,7 +725,7 @@ export const DocsPage: React.FC = () => {
                               {method}
                             </span>
                             <span className="font-mono text-sm font-bold text-slate-950">
-                              /api{path}
+                              {buildApiUrl(path)}
                             </span>
                           </div>
 
@@ -962,3 +963,4 @@ export const DocsPage: React.FC = () => {
     </div>
   );
 };
+

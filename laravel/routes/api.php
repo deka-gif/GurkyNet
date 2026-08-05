@@ -135,6 +135,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::put('/products/{id}', [OperationsController::class, 'updateProduct']);
             Route::get('/providers', [OperationsController::class, 'providers']);
             Route::put('/providers/{id}', [OperationsController::class, 'updateProvider']);
+            Route::get('/monitoring', [OperationsController::class, 'monitoring']);
             Route::get('/pricing', [OperationsController::class, 'pricing']);
             Route::put('/pricing', [OperationsController::class, 'updatePricing']);
         });
@@ -167,13 +168,21 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         // Customer Support Administration Module
         Route::prefix('admin/customer-support')->middleware([EnsureRole::class . ':customer_support,owner'])->group(function () {
             Route::get('/dashboard', [CustomerSupportController::class, 'dashboard']);
+            Route::get('/stats', [CustomerSupportController::class, 'stats']);
             Route::get('/tickets', [CustomerSupportController::class, 'tickets']);
             Route::get('/tickets/{id}', [CustomerSupportController::class, 'showTicket']);
             Route::post('/tickets/{id}/reply', [CustomerSupportController::class, 'replyTicket']);
             Route::put('/tickets/{id}/status', [CustomerSupportController::class, 'updateStatus']);
             Route::get('/customers', [CustomerSupportController::class, 'customers']);
+            Route::get('/customers/{id}/transactions', [CustomerSupportController::class, 'customerTransactions']);
+            Route::get('/customers/{id}', [CustomerSupportController::class, 'showCustomer']);
+            Route::get('/investigation', [CustomerSupportController::class, 'investigationQuery']);
             Route::get('/investigations/{transaction}', [CustomerSupportController::class, 'investigation']);
             Route::get('/refunds', [CustomerSupportController::class, 'refunds']);
+            Route::post('/refunds', [CustomerSupportController::class, 'createRefund']);
+            Route::get('/refunds/{id}', [CustomerSupportController::class, 'showRefund']);
+            Route::put('/refunds/{id}', [CustomerSupportController::class, 'updateRefund']);
+            Route::post('/refunds/{id}/escalate', [CustomerSupportController::class, 'escalateRefund']);
             Route::get('/knowledge-base', [CustomerSupportController::class, 'knowledgeBase']);
         });
 

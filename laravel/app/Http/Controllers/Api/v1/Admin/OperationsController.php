@@ -8,6 +8,7 @@ use App\Actions\Admin\Operations\OperationsDashboardAction;
 use App\Actions\Admin\Operations\OperationsProductsAction;
 use App\Actions\Admin\Operations\OperationsProvidersAction;
 use App\Actions\Admin\Operations\OperationsPricingAction;
+use App\Actions\Admin\Operations\OperationsMonitoringAction;
 use App\Http\Requests\Admin\Operations\ProductFilterRequest;
 use App\Http\Requests\Admin\Operations\UpdateProductRequest;
 use App\Http\Requests\Admin\Operations\ProviderFilterRequest;
@@ -15,6 +16,7 @@ use App\Http\Requests\Admin\Operations\UpdateProviderRequest;
 use App\Http\Requests\Admin\Operations\UpdatePricingRequest;
 use App\Http\Resources\ProductResource;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class OperationsController extends Controller
 {
@@ -98,6 +100,18 @@ return $this->paginatedResponse(
             $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 400;
             return $this->errorResponse($e->getMessage(), $code);
         }
+    }
+
+    /**
+     * Get Service Monitoring Data.
+     * GET /api/v1/admin/operations/monitoring
+     */
+    public function monitoring(Request $request, OperationsMonitoringAction $action): JsonResponse
+    {
+        $filters = $request->only(['status', 'search']);
+        $data = $action->execute($filters);
+
+        return $this->successResponse('Data monitoring layanan operasional berhasil dimuat.', $data);
     }
 
     /**

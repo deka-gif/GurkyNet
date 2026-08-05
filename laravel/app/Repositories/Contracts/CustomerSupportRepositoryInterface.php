@@ -4,6 +4,8 @@ namespace App\Repositories\Contracts;
 
 use App\Models\SupportTicket;
 use App\Models\TicketReply;
+use App\Models\User;
+use App\Models\Transaction;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 interface CustomerSupportRepositoryInterface
@@ -39,6 +41,16 @@ interface CustomerSupportRepositoryInterface
     public function getCustomers(array $filters): LengthAwarePaginator;
 
     /**
+     * Get customer details.
+     */
+    public function getCustomerById(string|int $id): User;
+
+    /**
+     * Get customer transaction history.
+     */
+    public function getCustomerTransactions(string|int $id, array $filters): LengthAwarePaginator;
+
+    /**
      * Investigate a transaction.
      */
     public function getInvestigation(string $invoiceNumber): array;
@@ -47,6 +59,26 @@ interface CustomerSupportRepositoryInterface
      * Get refund queue (failed or canceled transactions).
      */
     public function getRefundQueue(array $filters): LengthAwarePaginator;
+
+    /**
+     * Get refund detail by transaction ID or invoice number.
+     */
+    public function getRefundById(string|int $id): Transaction;
+
+    /**
+     * Create a refund claim from customer support.
+     */
+    public function createRefund(array $data): Transaction;
+
+    /**
+     * Update refund status or notes.
+     */
+    public function updateRefund(string|int $id, array $data): Transaction;
+
+    /**
+     * Escalate a refund claim.
+     */
+    public function escalateRefund(string|int $id, array $data): Transaction;
 
     /**
      * Get knowledge base (FAQ & SOP articles).

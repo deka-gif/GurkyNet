@@ -18,6 +18,7 @@ import { FinanceQuickActions } from '../../components/finance/FinanceQuickAction
 
 export const FinanceDashboard: React.FC = () => {
   const user = storageService.getUser();
+  const userName = typeof user?.name === 'string' ? user.name : 'Finance Manager';
 
   return (
     <div className="space-y-6 pb-12">
@@ -33,7 +34,7 @@ export const FinanceDashboard: React.FC = () => {
               Finance Management Dashboard
             </h1>
             <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed max-w-2xl">
-              Selamat datang, <strong>{user?.name || 'Finance Manager'}</strong>. Pantau mutasi kas, indikator pembayaran real-time, dan audit transaksi keuangan.
+              Selamat datang, <strong>{userName}</strong>. Pantau mutasi kas, indikator pembayaran real-time, dan audit transaksi keuangan.
             </p>
           </div>
 
@@ -95,3 +96,4 @@ export const FinanceDashboard: React.FC = () => {
     </div>
   );
 };
+

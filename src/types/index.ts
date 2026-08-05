@@ -29,6 +29,7 @@ export interface Banner {
   promoCode?: string;
   validUntil?: string;
   isActive: boolean;
+  redirectUrl?: string;
 }
 
 export interface Product {
@@ -39,6 +40,7 @@ export interface Product {
   category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'game' | 'transfer' | 'tagihan';
   operatorName: string;
   status: 'tersedia' | 'gangguan';
+  isActive?: boolean;
 }
 
 export interface Transaction {
@@ -50,7 +52,7 @@ export interface Transaction {
   targetNo: string;
   amount: number;
   date: string;
-  status: 'sukses' | 'pending' | 'gagal';
+  status: 'sukses' | 'success' | 'pending' | 'gagal';
   note?: string;
 }
 
@@ -92,3 +94,4 @@ export * from './website';
 export * from './media';
 
 export * from './dashboard';
+

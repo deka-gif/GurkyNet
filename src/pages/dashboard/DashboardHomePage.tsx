@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -113,7 +113,7 @@ export const DashboardHomePage = () => {
   };
 
   // Copy wallet number
-  const handleCopyWalletNo = (e: MouseEvent) => {
+  const handleCopyWalletNo = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     if (!wallet?.walletNo) return;
     navigator.clipboard.writeText(wallet.walletNo);
@@ -122,7 +122,7 @@ export const DashboardHomePage = () => {
   };
 
   // Copy promo code
-  const handleCopyPromoCode = (code: string, id: string, e: MouseEvent) => {
+  const handleCopyPromoCode = (code: string, id: string, e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     navigator.clipboard.writeText(code);
     setCopiedPromoId(id);
@@ -954,3 +954,4 @@ export const DashboardHomePage = () => {
     </div>
   );
 };
+

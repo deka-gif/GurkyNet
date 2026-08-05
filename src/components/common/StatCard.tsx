@@ -5,7 +5,7 @@ export interface StatCardProps {
   title: string;
   value: string | number;
   change?: string;
-  changeType?: 'positive' | 'negative' | 'neutral';
+  changeType?: 'positive' | 'negative' | 'neutral' | 'warning';
   icon?: LucideIcon;
   iconBg?: string;
   iconColor?: string;
@@ -70,3 +70,4 @@ export const StatCard: React.FC<StatCardProps> = ({
     </div>
   );
 };
+

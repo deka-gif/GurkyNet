@@ -34,6 +34,11 @@ interface OperationsRepositoryInterface
     public function updateProvider(string|int $id, array $data): Provider;
 
     /**
+     * Get service monitoring data for Operations dashboard.
+     */
+    public function getMonitoring(array $filters = []): array;
+
+    /**
      * Get pricing margin rules configuration.
      */
     public function getPricing(): array;
