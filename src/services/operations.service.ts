@@ -12,6 +12,11 @@ export const operationsService = {
     return res.data;
   },
 
+  async getProductProviders() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/product-providers');
+    return res.data;
+  },
+
   async updateProduct(id: string | number, data: Record<string, any>) {
     const res = await apiClient.put<ApiResponse<any>>(`/admin/operations/products/${id}`, data);
     return res.data;
@@ -55,6 +60,49 @@ export const operationsService = {
 
   async getSyncStatus() {
     const res = await apiClient.get<ApiResponse<any>>('/admin/operations/sync-status');
+    return res.data;
+  },
+
+  // —— Product Provider Control Center (not payment gateways) ——
+  async getProductProviderControl() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/product-provider-control');
+    return res.data;
+  },
+
+  async enableProductProvider(id: number | string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/enable`);
+    return res.data;
+  },
+
+  async disableProductProvider(id: number | string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/disable`);
+    return res.data;
+  },
+
+  async setPrimaryProductProvider(id: number | string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/set-primary`);
+    return res.data;
+  },
+
+  async setProductProviderPriority(id: number | string, priority: number) {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/priority`, { priority });
+    return res.data;
+  },
+
+  async healthCheckProductProvider(id: number | string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/health-check`);
+    return res.data;
+  },
+
+  async syncProductProvider(id: number | string, payload?: { cmd?: string[] }) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/sync`, payload || {});
+    return res.data;
+  },
+
+  async getProductProviderLogs(id: number | string, limit = 50) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/logs`, {
+      params: { limit },
+    });
     return res.data;
   },
 };

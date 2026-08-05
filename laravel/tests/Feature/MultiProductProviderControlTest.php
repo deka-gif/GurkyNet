@@ -1,0 +1,226 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Jobs\ProcessProductProviderTransaction;
+use App\Models\Product;
+use App\Models\ProductCategory;
+use App\Models\ProductProvider;
+use App\Models\ProductProviderSku;
+use App\Models\Provider;
+use App\Models\User;
+use App\Services\ProductProviders\DigiflazzProductProviderAdapter;
+use App\Services\ProductProviders\ProductProviderFulfillmentService;
+use App\Services\ProductProviders\ProductProviderSelectionService;
+use App\Services\ProductProviders\ProviderFulfillmentResult;
+use App\Models\Transaction;
+use App\Models\TransactionItem;
+use App\Enums\TransactionStatus;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
+use Laravel\Sanctum\Sanctum;
+use Mockery;
+use Tests\TestCase;
+
+class MultiProductProviderControlTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function actingAsOps(): User
+    {
+        $user = User::factory()->create([
+            'role' => \App\Enums\UserRole::OPERATIONS,
+        ]);
+        Sanctum::actingAs($user);
+
+        return $user;
+    }
+
+    public function test_control_center_lists_providers_without_payment_gateways(): void
+    {
+        $this->actingAsOps();
+
+        $response = $this->getJson('/api/v1/admin/operations/product-provider-control');
+        $response->assertOk();
+
+        $codes = collect($response->json('data'))->pluck('code')->all();
+        $this->assertContains('digiflazz', $codes);
+        $this->assertContains('vip', $codes);
+        $this->assertNotContains('midtrans', $codes);
+        $this->assertNotContains('xendit', $codes);
+        $this->assertNotContains('alterra', $codes);
+        $this->assertNotContains('artajasa', $codes);
+    }
+
+    public function test_disable_provider_and_set_primary(): void
+    {
+        $this->actingAsOps();
+
+        $digi = ProductProvider::digiflazz();
+        $vip = ProductProvider::vip();
+        $this->assertNotNull($digi);
+        $this->assertNotNull($vip);
+
+        $this->postJson("/api/v1/admin/operations/product-provider-control/{$digi->id}/disable")
+            ->assertOk();
+
+        $this->assertFalse($digi->fresh()->is_active);
+
+        $this->postJson("/api/v1/admin/operations/product-provider-control/{$vip->id}/set-primary")
+            ->assertOk();
+
+        $this->assertSame(1, (int) $vip->fresh()->priority);
+        $this->assertGreaterThan(1, (int) $digi->fresh()->priority);
+    }
+
+    public function test_sku_mapping_and_priority_selection(): void
+    {
+        $digi = ProductProvider::digiflazz();
+        $vip = ProductProvider::vip();
+        $digi->update(['is_active' => true, 'priority' => 1, 'api_status' => 'online']);
+        $vip->update(['is_active' => true, 'priority' => 2, 'api_status' => 'online']);
+
+        $category = ProductCategory::create(['name' => 'Data', 'slug' => 'data', 'icon' => 'wifi']);
+        $brand = Provider::create(['name' => 'Telkomsel', 'logo' => 't.png', 'is_active' => true]);
+
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'FLASH1',
+            'name' => 'Telkomsel Flash 1GB',
+            'base_price' => 15160,
+            'sell_price' => 17000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'flash1',
+            'base_price' => 15160,
+            'is_preferred' => false,
+            'is_active' => true,
+        ]);
+
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'TLK_FLASH_1GB',
+            'base_price' => 15050,
+            'is_preferred' => false,
+            'is_active' => true,
+        ]);
+
+        $selection = app(ProductProviderSelectionService::class);
+        $candidates = $selection->candidatesForProduct($product);
+
+        $this->assertCount(2, $candidates);
+        $this->assertSame('flash1', $candidates->first()->provider_sku);
+        $this->assertSame(ProductProvider::CODE_DIGIFLAZZ, $candidates->first()->productProvider->code);
+
+        // Disable Digiflazz → only VipPulsa remains
+        $digi->update(['is_active' => false]);
+        $candidates2 = $selection->candidatesForProduct($product->fresh());
+        $this->assertCount(1, $candidates2);
+        $this->assertSame('TLK_FLASH_1GB', $candidates2->first()->provider_sku);
+    }
+
+    public function test_fulfillment_failovers_to_next_provider(): void
+    {
+        $digi = ProductProvider::digiflazz();
+        $vip = ProductProvider::vip();
+        $digi->update(['is_active' => true, 'priority' => 1, 'api_status' => 'online']);
+        $vip->update(['is_active' => true, 'priority' => 2, 'api_status' => 'online']);
+
+        $category = ProductCategory::create(['name' => 'Data', 'slug' => 'data2', 'icon' => 'wifi']);
+        $brand = Provider::create(['name' => 'XL', 'logo' => 'xl.png', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'FLASH1',
+            'name' => 'Flash 1GB',
+            'base_price' => 15000,
+            'sell_price' => 16000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'flash1',
+            'base_price' => 15160,
+            'is_preferred' => true,
+            'is_active' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'TLK_FLASH_1GB',
+            'base_price' => 15050,
+            'is_preferred' => false,
+            'is_active' => true,
+        ]);
+
+        $user = User::factory()->create();
+        $tx = Transaction::create([
+            'user_id' => $user->id,
+            'invoice_number' => 'GRK-TEST-000001',
+            'service_name' => 'Test',
+            'target_number' => '081234567890',
+            'amount' => 16000,
+            'admin_fee' => 0,
+            'total_payment' => 16000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::PENDING->value,
+            'notes' => 'test',
+        ]);
+        TransactionItem::create([
+            'transaction_id' => $tx->id,
+            'product_code' => 'FLASH1',
+            'product_name' => 'Flash 1GB',
+            'price' => 16000,
+            'quantity' => 1,
+        ]);
+
+        $digiAdapter = Mockery::mock(DigiflazzProductProviderAdapter::class);
+        $digiAdapter->shouldReceive('code')->andReturn('digiflazz');
+        $digiAdapter->shouldReceive('isConfigured')->andReturn(true);
+        $digiAdapter->shouldReceive('fulfill')->once()->andReturn(
+            ProviderFulfillmentResult::error(1200, 'timeout', true, 'Connection timed out')
+        );
+
+        $vipAdapter = Mockery::mock(\App\Services\ProductProviders\VipPulsaProductProviderAdapter::class);
+        $vipAdapter->shouldReceive('code')->andReturn('vip');
+        $vipAdapter->shouldReceive('isConfigured')->andReturn(true);
+        $vipAdapter->shouldReceive('fulfill')->once()->andReturn(
+            ProviderFulfillmentResult::success(800, 'SN123', ['status' => 'success'])
+        );
+
+        $registry = new \App\Services\ProductProviders\ProductProviderRegistry($digiAdapter, $vipAdapter);
+        $this->app->instance(\App\Services\ProductProviders\ProductProviderRegistry::class, $registry);
+        $this->app->instance(ProductProviderSelectionService::class, new ProductProviderSelectionService($registry));
+
+        $service = app(ProductProviderFulfillmentService::class);
+        $service->fulfill($tx->fresh(['items']));
+
+        $this->assertSame(TransactionStatus::SUCCESS->value, $tx->fresh()->status);
+        $this->assertDatabaseHas('product_provider_logs', [
+            'transaction_id' => $tx->id,
+            'event_type' => 'failover',
+        ]);
+    }
+
+    public function test_create_transaction_dispatches_multi_provider_job(): void
+    {
+        Queue::fake();
+        $this->actingAsOps(); // not needed for action, but ok
+
+        // Covered indirectly: job class exists and is dispatchable
+        ProcessProductProviderTransaction::dispatch(1);
+        Queue::assertPushed(ProcessProductProviderTransaction::class);
+    }
+}

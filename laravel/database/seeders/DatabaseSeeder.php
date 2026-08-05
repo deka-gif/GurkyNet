@@ -637,6 +637,8 @@ class DatabaseSeeder extends Seeder
             'ppob_digiflazz_username' => env('DIGIFLAZZ_USERNAME', ''),
             'ppob_digiflazz_api_key' => env('DIGIFLAZZ_API_KEY', ''),
             'ppob_digiflazz_webhook_secret' => env('DIGIFLAZZ_SECRET', ''),
+            'ppob_vip_display_name' => env('VIP_PRODUCT_PROVIDER_NAME', 'VipPulsa'),
+            'ppob_vip_enable' => env('VIP_PRODUCT_PROVIDER_ENABLED', 'false'),
             'ppob_vip_merchant_id' => env('VIP_MERCHANT_ID', ''),
             'ppob_vip_api_key' => env('VIP_API_KEY', ''),
             'ppob_vip_signature' => env('VIP_SIGNATURE', ''),

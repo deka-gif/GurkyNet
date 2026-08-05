@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Services\PricingService;
 use App\Services\AvailabilityService;
+use App\Http\Resources\ProviderResource;
+use App\Http\Resources\CategoryResource;
+use App\Http\Resources\ProductProviderResource;
 
 class ProductResource extends JsonResource
 {
@@ -33,8 +36,14 @@ class ProductResource extends JsonResource
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
 'operatorName' => $this->provider?->name ?? 'System',
-'provider' => $this->provider?->name ?? 'System',
-'providerDetails' => new ProviderResource($this->whenLoaded('provider')),
+            // Operator brand (Telkomsel, PLN, …) — kept as `provider` for existing UI.
+            'provider' => $this->provider?->name ?? 'System',
+            'providerDetails' => new ProviderResource($this->whenLoaded('provider')),
+            // Product Provider / catalog source (Digiflazz, VipPulsa, …).
+            'productProvider' => $this->productProvider?->name,
+            'productProviderCode' => $this->productProvider?->code,
+            'productProviderId' => $this->product_provider_id,
+            'productProviderDetails' => $this->whenLoaded('productProvider', fn () => new ProductProviderResource($this->productProvider)),
             'createdAt' => $this->created_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
         ];

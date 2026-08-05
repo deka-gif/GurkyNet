@@ -168,11 +168,13 @@ class OperationsRepository implements OperationsRepositoryInterface
 
     /**
      * Get paginated products list with filters.
+     * Product Provider filtering uses products.product_provider_id only.
+     * Payment gateway names must never match Digiflazz products by accident.
      */
     public function getProducts(array $filters): LengthAwarePaginator
     {
         $perPage = $filters['per_page'] ?? 15;
-        $query = Product::with(['category', 'provider']);
+        $query = Product::with(['category', 'provider', 'productProvider']);
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];
@@ -187,7 +189,17 @@ class OperationsRepository implements OperationsRepositoryInterface
         }
 
         if (!empty($filters['provider_id'])) {
+            // Operator brand (Telkomsel, PLN, …) — not Product Provider.
             $query->where('provider_id', $filters['provider_id']);
+        }
+
+        // Resolve Product Provider filter (id preferred, then code, then legacy "provider" label).
+        $productProviderId = $this->resolveProductProviderFilterId($filters);
+        if ($productProviderId === 0) {
+            // Explicit empty: payment gateway selected, or unknown provider label.
+            $query->whereRaw('1 = 0');
+        } elseif ($productProviderId !== null) {
+            $query->where('product_provider_id', $productProviderId);
         }
 
         if (isset($filters['status'])) {
@@ -201,6 +213,87 @@ class OperationsRepository implements OperationsRepositoryInterface
         }
 
         return $query->latest()->paginate($perPage);
+    }
+
+    /**
+     * Product Management dropdown source — ONLY product_providers.
+     * Never merges config payment_gateways.
+     *
+     * @return \Illuminate\Support\Collection<int, object{id:int,name:string,code:string}>
+     */
+    public function getProductProviders(): \Illuminate\Support\Collection
+    {
+        $paymentCodes = array_keys((array) config('ppob.payment_gateways', []));
+
+        return \App\Models\ProductProvider::query()
+            ->when($paymentCodes !== [], fn ($q) => $q->whereNotIn('code', $paymentCodes))
+            ->orderBy('priority')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'priority', 'is_active', 'sort_order']);
+    }
+
+    /**
+     * @return int|null Product provider id to filter; 0 = force empty; null = no filter
+     */
+    protected function resolveProductProviderFilterId(array $filters): ?int
+    {
+        if (!empty($filters['product_provider_id'])) {
+            $id = (int) $filters['product_provider_id'];
+            $exists = \App\Models\ProductProvider::query()
+                ->where('id', $id)
+                ->whereNotIn('code', array_keys((array) config('ppob.payment_gateways', [])))
+                ->exists();
+
+            return $exists ? $id : 0;
+        }
+
+        if (!empty($filters['product_provider_code'])) {
+            $code = strtolower((string) $filters['product_provider_code']);
+            if ($this->isPaymentGatewayCodeOrName($code)) {
+                return 0;
+            }
+            $id = \App\Models\ProductProvider::query()->where('code', $code)->value('id');
+
+            return $id ? (int) $id : 0;
+        }
+
+        // Legacy UI sent `provider=Midtrans|Xendit|…` — never treat those as catalog filters.
+        if (!empty($filters['provider']) && empty($filters['provider_id'])) {
+            $label = trim((string) $filters['provider']);
+            if ($label === '' || strcasecmp($label, 'All') === 0) {
+                return null;
+            }
+            if ($this->isPaymentGatewayCodeOrName($label)) {
+                return 0;
+            }
+            $id = \App\Models\ProductProvider::query()
+                ->where(function ($q) use ($label) {
+                    $q->where('code', strtolower($label))
+                        ->orWhere('name', $label);
+                })
+                ->value('id');
+
+            return $id ? (int) $id : 0;
+        }
+
+        return null;
+    }
+
+    protected function isPaymentGatewayCodeOrName(string $value): bool
+    {
+        $normalized = strtolower(trim($value));
+        foreach ((array) config('ppob.payment_gateways', []) as $code => $meta) {
+            if ($normalized === strtolower((string) $code)) {
+                return true;
+            }
+            $name = strtolower((string) ($meta['name'] ?? ''));
+            if ($name !== '' && $normalized === $name) {
+                return true;
+            }
+        }
+
+        return in_array($normalized, ['midtrans', 'xendit', 'alterra', 'artajasa'], true);
     }
 
     /**
@@ -463,16 +556,33 @@ class OperationsRepository implements OperationsRepositoryInterface
     }
 
     /**
-     * Get pricing margin rules configuration.
+     * Get pricing margin rules configuration (+ master products for Pricing UI).
+     * Optional filters use products.product_provider_id (never payment gateways).
      */
-    public function getPricing(): array
+    public function getPricing(array $filters = []): array
     {
         $defaultMargin = Setting::where('key', 'default_margin')->value('value') ?? '1500';
         $categoryMargins = json_decode(Setting::where('key', 'category_margins')->value('value') ?? '[]', true);
         $providerMargins = json_decode(Setting::where('key', 'provider_margins')->value('value') ?? '[]', true);
 
-        // Master products drive cost / margin / selling price for Pricing UI
-        $masterProducts = Product::with(['category:id,name,slug', 'provider:id,name'])
+        $query = Product::with(['category:id,name,slug', 'provider:id,name', 'productProvider:id,name,code']);
+
+        $productProviderId = $this->resolveProductProviderFilterId($filters);
+        if ($productProviderId === 0) {
+            $query->whereRaw('1 = 0');
+        } elseif ($productProviderId !== null) {
+            $query->where('product_provider_id', $productProviderId);
+        }
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('sku_code', 'like', "%{$search}%");
+            });
+        }
+
+        $masterProducts = $query
             ->orderByDesc('updated_at')
             ->limit(50)
             ->get()
@@ -484,6 +594,9 @@ class OperationsRepository implements OperationsRepositoryInterface
                     'name' => $product->name,
                     'category' => $product->category?->name,
                     'provider' => $product->provider?->name,
+                    'productProvider' => $product->productProvider?->name,
+                    'productProviderCode' => $product->productProvider?->code,
+                    'productProviderId' => $product->product_provider_id,
                     'provider_cost' => $pricing['provider_cost'],
                     'base_price' => $pricing['base_price'],
                     'margin' => $pricing['margin'],

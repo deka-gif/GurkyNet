@@ -22,6 +22,7 @@ import {
   Save
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
+import { operationsService } from '../../services/operations.service';
 
 export const OperationsPricingManagement: React.FC = () => {
   const {
@@ -37,9 +38,10 @@ export const OperationsPricingManagement: React.FC = () => {
   const [editingPricing, setEditingPricing] = useState<any | null>(null);
   const [historyModalProduct, setHistoryModalProduct] = useState<any | null>(null);
 
-  // Filters
+  // Filters — Product Providers from API only (never payment gateways)
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [providerFilter, setProviderFilter] = useState<string>('All');
+  const [productProviders, setProductProviders] = useState<Array<{ id: number; code: string; name: string }>>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -57,10 +59,34 @@ export const OperationsPricingManagement: React.FC = () => {
     estMarginPct: number;
   } | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await operationsService.getProductProviders();
+        const raw = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const paymentCodes = new Set(['midtrans', 'xendit', 'alterra', 'artajasa']);
+        const items = raw
+          .filter((p: any) => p && p.id != null && p.code && !paymentCodes.has(String(p.code).toLowerCase()))
+          .map((p: any) => ({
+            id: Number(p.id),
+            code: String(p.code),
+            name: String(p.name || p.code),
+          }));
+        if (!cancelled) setProductProviders(items);
+      } catch {
+        if (!cancelled) setProductProviders([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadData = useCallback((page: number = 1) => {
     const params: Record<string, any> = { page };
     if (categoryFilter !== 'All') params.category = categoryFilter;
-    if (providerFilter !== 'All') params.provider = providerFilter;
+    if (providerFilter !== 'All') params.product_provider_id = Number(providerFilter);
     if (statusFilter !== 'All') params.status = statusFilter;
     if (searchQuery.trim() !== '') params.search = searchQuery.trim();
 
@@ -293,7 +319,7 @@ export const OperationsPricingManagement: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-gray-500 mb-1">Provider</label>
+            <label className="block text-[11px] font-bold text-gray-500 mb-1">Product Provider</label>
             <select
               value={providerFilter}
               onChange={(e) => {
@@ -303,10 +329,11 @@ export const OperationsPricingManagement: React.FC = () => {
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             >
               <option value="All">Semua Provider</option>
-              <option value="Digiflazz">Digiflazz</option>
-              <option value="Alterra">Alterra</option>
-              <option value="Artajasa">Artajasa</option>
-              <option value="Midtrans">Midtrans</option>
+              {productProviders.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.name}
+                </option>
+              ))}
             </select>
           </div>
 

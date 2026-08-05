@@ -39,6 +39,7 @@ import { OperationsProductManagement } from '../pages/dashboard/OperationsProduc
 import { OperationsProviderManagement } from '../pages/dashboard/OperationsProviderManagement';
 import { OperationsServiceMonitoring } from '../pages/dashboard/OperationsServiceMonitoring';
 import { OperationsPricingManagement } from '../pages/dashboard/OperationsPricingManagement';
+import { OperationsProductProviderControl } from '../pages/dashboard/OperationsProductProviderControl';
 import { MarketingDashboard } from '../pages/dashboard/MarketingDashboard';
 import { MarketingBannerManagement } from '../pages/dashboard/MarketingBannerManagement';
 import { MarketingPromotionManagement } from '../pages/dashboard/MarketingPromotionManagement';
@@ -173,6 +174,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
             <OperationsProductManagement />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'operations/product-providers',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
+            <OperationsProductProviderControl />
           </ProtectedRoute>
         )
       },

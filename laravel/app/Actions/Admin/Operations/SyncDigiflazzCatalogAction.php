@@ -27,6 +27,11 @@ class SyncDigiflazzCatalogAction
      */
     public function execute(array $options = []): array
     {
+        $digiProvider = \App\Models\ProductProvider::digiflazz();
+        if ($digiProvider && !$digiProvider->is_active) {
+            throw new \RuntimeException('Digiflazz product provider is disabled. Enable it in Product Provider Control Center before syncing.');
+        }
+
         if (!$this->digiflazzService->isConfigured()) {
             $result = $this->persistSyncMeta([
                 'status' => 'failed',

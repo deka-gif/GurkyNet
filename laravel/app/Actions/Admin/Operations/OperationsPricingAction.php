@@ -10,9 +10,9 @@ class OperationsPricingAction
         protected OperationsRepositoryInterface $operationsRepository
     ) {}
 
-    public function get(): array
+    public function get(array $filters = []): array
     {
-        return $this->operationsRepository->getPricing();
+        return $this->operationsRepository->getPricing($filters);
     }
 
     public function update(array $data): array

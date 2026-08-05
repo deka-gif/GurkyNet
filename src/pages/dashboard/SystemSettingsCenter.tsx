@@ -256,15 +256,16 @@ export const SystemSettingsCenter: React.FC = () => {
             </div>
           </div>
         );
-      case 'PPOB':
+      case 'PPOB': {
+        const vipBrand = (settings.ppob_vip_display_name || 'VIPAYMENT').trim() || 'VIPAYMENT';
         return (
           <div className="space-y-4">
-            <h3 className="font-extrabold text-sm text-gray-900 border-b border-gray-100 pb-2 mb-4">Pengaturan Provider PPOB</h3>
+            <h3 className="font-extrabold text-sm text-gray-900 border-b border-gray-100 pb-2 mb-4">Pengaturan Product Provider PPOB</h3>
             
             {/* Digiflazz Section */}
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-              <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">Digiflazz Integration</h4>
-              {renderToggle('ppob_digiflazz_enable', 'Enable Digiflazz Provider', 'Aktifkan integrasi Digiflazz untuk stok produk PPOB.')}
+              <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">Digiflazz (Product Provider)</h4>
+              {renderToggle('ppob_digiflazz_enable', 'Enable Digiflazz', 'Aktifkan Digiflazz sebagai product provider untuk katalog SKU PPOB.')}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 {renderInput('ppob_digiflazz_username', 'Digiflazz Username')}
                 {renderInput('ppob_digiflazz_api_key', 'API Key (Production / Dev)', 'password')}
@@ -274,26 +275,27 @@ export const SystemSettingsCenter: React.FC = () => {
               </div>
             </div>
 
-            {/* VIP Payment Section */}
+            {/* Configurable secondary product provider brand */}
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-              <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">VIP Payment / VIP Reseller Integration</h4>
-              {renderToggle('ppob_vip_enable', 'Enable VIP Payment Provider', 'Aktifkan integrasi VIP Payment sebagai provider sekunder/failover.')}
+              <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">{vipBrand} (Product Provider)</h4>
+              {renderInput('ppob_vip_display_name', 'Brand Name Product Provider', 'text')}
+              {renderToggle('ppob_vip_enable', `Enable ${vipBrand}`, `Aktifkan ${vipBrand} sebagai product provider sekunder/failover.`)}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                {renderInput('ppob_vip_merchant_id', 'VIP Merchant ID')}
-                {renderInput('ppob_vip_api_key', 'VIP API Key', 'password')}
+                {renderInput('ppob_vip_merchant_id', 'Merchant ID')}
+                {renderInput('ppob_vip_api_key', 'API Key', 'password')}
                 <div className="sm:col-span-2">
-                  {renderInput('ppob_vip_signature', 'VIP Secret / Signature', 'password')}
+                  {renderInput('ppob_vip_signature', 'Secret / Signature', 'password')}
                 </div>
               </div>
             </div>
 
             {/* Priority & Failover Strategy */}
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-              <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">Provider Routing & Failover Strategy</h4>
+              <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">Product Provider Routing & Failover</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {renderSelect('ppob_provider_priority', 'Primary Provider Priority', [
+                {renderSelect('ppob_provider_priority', 'Primary Product Provider Priority', [
                   { label: 'Digiflazz First', value: 'digiflazz' },
-                  { label: 'VIP Payment First', value: 'vip' },
+                  { label: `${vipBrand} First`, value: 'vip' },
                 ])}
                 {renderSelect('ppob_failover_strategy', 'Failover Strategy', [
                   { label: 'Automatic Failover (Switch to Secondary on Error)', value: 'auto' },
@@ -304,6 +306,7 @@ export const SystemSettingsCenter: React.FC = () => {
             </div>
           </div>
         );
+      }
       case 'Security':
         return (
           <div className="space-y-4">

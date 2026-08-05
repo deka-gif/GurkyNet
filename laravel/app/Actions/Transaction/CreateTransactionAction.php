@@ -181,7 +181,9 @@ class CreateTransactionAction
         event(new \App\Events\TransactionCreated($transaction));
         event(new \App\Events\TransactionProcessing($transaction));
 
-        \App\Jobs\ProcessDigiflazzTransaction::dispatch($transaction->id);
+        // Multi Product Provider router (Digiflazz + VipPulsa + failover).
+        // Digiflazz behavior preserved when it is the selected / only enabled provider.
+        \App\Jobs\ProcessProductProviderTransaction::dispatch($transaction->id);
 
         return $transaction;
     }

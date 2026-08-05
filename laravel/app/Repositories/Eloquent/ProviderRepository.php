@@ -5,6 +5,7 @@ namespace App\Repositories\Eloquent;
 use App\Models\Provider;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductProvider;
 use App\Models\DigiflazzProduct;
 use App\Models\Setting;
 use App\Repositories\Contracts\ProviderRepositoryInterface;
@@ -39,6 +40,8 @@ class ProviderRepository implements ProviderRepositoryInterface
             ->keyBy(fn ($row) => Str::lower((string) ($row['category'] ?? '')));
         $providerMargins = collect(json_decode(Setting::where('key', 'provider_margins')->value('value') ?? '[]', true) ?: [])
             ->keyBy(fn ($row) => Str::lower((string) ($row['provider'] ?? '')));
+
+        $digiflazzProvider = ProductProvider::digiflazz();
 
         foreach ($digiflazzProducts as $dp) {
             $sku = $dp['buyer_sku_code'] ?? null;
@@ -108,6 +111,7 @@ class ProviderRepository implements ProviderRepositoryInterface
                 $existing->fill([
                     'product_category_id' => $category->id,
                     'provider_id' => $provider->id,
+                    'product_provider_id' => $digiflazzProvider?->id ?? $existing->product_provider_id,
                     'name' => $dp['product_name'],
                     'base_price' => $basePrice,
                     'sell_price' => $basePrice + $previousMargin + $adminFee,
@@ -126,6 +130,7 @@ class ProviderRepository implements ProviderRepositoryInterface
                 Product::create([
                     'product_category_id' => $category->id,
                     'provider_id' => $provider->id,
+                    'product_provider_id' => $digiflazzProvider?->id,
                     'sku_code' => $sku,
                     'name' => $dp['product_name'],
                     'base_price' => $basePrice,
@@ -134,6 +139,30 @@ class ProviderRepository implements ProviderRepositoryInterface
                     'status' => $isActive,
                 ]);
             }
+
+            // 5. Upsert Digiflazz SKU offer mapping (internal SKU → provider SKU)
+            $master = Product::withTrashed()->where('sku_code', $sku)->first();
+            if ($master && $digiflazzProvider) {
+                \App\Models\ProductProviderSku::updateOrCreate(
+                    [
+                        'product_id' => $master->id,
+                        'product_provider_id' => $digiflazzProvider->id,
+                    ],
+                    [
+                        'provider_sku' => $sku,
+                        'base_price' => $basePrice,
+                        'is_preferred' => true,
+                        'is_active' => $isActive,
+                    ]
+                );
+            }
+        }
+
+        if ($digiflazzProvider) {
+            $digiflazzProvider->forceFill([
+                'last_sync_at' => now(),
+                'product_count' => \App\Models\ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count(),
+            ])->save();
         }
     }
 

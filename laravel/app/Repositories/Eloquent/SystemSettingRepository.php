@@ -3,6 +3,7 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\SystemSetting;
+use App\Models\ProductProvider;
 use App\Repositories\Contracts\SystemSettingRepositoryInterface;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,8 @@ class SystemSettingRepository implements SystemSettingRepositoryInterface
         'payment_midtrans_client_key',
         'ppob_digiflazz_api_key',
         'ppob_digiflazz_webhook_secret',
+        'ppob_vip_api_key',
+        'ppob_vip_signature',
     ];
 
     /**
@@ -39,7 +42,14 @@ class SystemSettingRepository implements SystemSettingRepositoryInterface
         'ppob_digiflazz_username',
         'ppob_digiflazz_api_key',
         'ppob_digiflazz_webhook_secret',
+        'ppob_digiflazz_enable',
+        'ppob_vip_enable',
+        'ppob_vip_display_name',
+        'ppob_vip_merchant_id',
+        'ppob_vip_api_key',
+        'ppob_vip_signature',
         'ppob_provider_priority',
+        'ppob_failover_strategy',
         'notification_fcm_enabled',
         'support_email',
         'support_phone',
@@ -85,6 +95,27 @@ class SystemSettingRepository implements SystemSettingRepositoryInterface
                 SystemSetting::updateOrCreate(
                     ['key' => $key],
                     ['value' => $value]
+                );
+            }
+
+            // Keep Product Provider VIP brand name in sync with system settings / config.
+            $vipName = $settings['ppob_vip_display_name']
+                ?? SystemSetting::where('key', 'ppob_vip_display_name')->value('value')
+                ?? config('ppob.product_providers.vip.name', 'VIPAYMENT');
+
+            if (is_string($vipName) && trim($vipName) !== '') {
+                ProductProvider::query()->updateOrCreate(
+                    ['code' => ProductProvider::CODE_VIP],
+                    [
+                        'name' => trim($vipName),
+                        'is_active' => filter_var(
+                            $settings['ppob_vip_enable']
+                                ?? SystemSetting::where('key', 'ppob_vip_enable')->value('value')
+                                ?? config('ppob.product_providers.vip.is_active', false),
+                            FILTER_VALIDATE_BOOLEAN
+                        ),
+                        'sort_order' => 2,
+                    ]
                 );
             }
         });

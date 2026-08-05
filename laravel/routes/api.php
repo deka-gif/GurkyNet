@@ -175,6 +175,17 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/dashboard', [OperationsController::class, 'dashboard']);
             Route::get('/products', [OperationsController::class, 'products']);
             Route::put('/products/{id}', [OperationsController::class, 'updateProduct']);
+            Route::get('/product-providers', [OperationsController::class, 'productProviders']);
+            // Product Provider Control Center (PPOB suppliers only — not payment gateways)
+            Route::get('/product-provider-control', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'index']);
+            Route::get('/product-provider-control/{id}', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'show']);
+            Route::post('/product-provider-control/{id}/enable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'enable']);
+            Route::post('/product-provider-control/{id}/disable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'disable']);
+            Route::post('/product-provider-control/{id}/set-primary', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'setPrimary']);
+            Route::put('/product-provider-control/{id}/priority', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'setPriority']);
+            Route::post('/product-provider-control/{id}/health-check', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'healthCheck']);
+            Route::post('/product-provider-control/{id}/sync', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'sync']);
+            Route::get('/product-provider-control/{id}/logs', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'logs']);
             Route::get('/providers', [OperationsController::class, 'providers']);
             Route::put('/providers/{id}', [OperationsController::class, 'updateProvider']);
             Route::get('/monitoring', [OperationsController::class, 'monitoring']);

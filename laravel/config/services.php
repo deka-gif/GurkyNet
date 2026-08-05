@@ -39,8 +39,10 @@ return [
 
     'vip' => [
         'merchant_id' => env('VIP_MERCHANT_ID'),
+        'username' => env('VIP_USERNAME', env('VIP_MERCHANT_ID')),
         'api_key' => env('VIP_API_KEY'),
         'signature' => env('VIP_SIGNATURE'),
+        'base_url' => env('VIP_BASE_URL', ''),
     ],
 
     'fcm' => [

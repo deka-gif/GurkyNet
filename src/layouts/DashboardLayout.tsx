@@ -37,7 +37,8 @@ import {
   PlusCircle,
   Gamepad2,
   Settings,
-  Menu
+  Menu,
+  Zap
 } from 'lucide-react';
 
 import { storageService } from '../services/storage.service';
@@ -130,6 +131,7 @@ export const DashboardLayout = () => {
       case 'Operations':
         return [
           { path: '/dashboard/operations', label: 'Dashboard', icon: Server },
+          { path: '/dashboard/operations/product-providers', label: 'Product Provider Control', icon: Zap },
           { path: '/dashboard/operations/products', label: 'Product Management', icon: Layers },
           { path: '/dashboard/operations/providers', label: 'Provider Management', icon: Server },
           { path: '/dashboard/operations/monitoring', label: 'Service Monitoring', icon: Activity },
@@ -222,6 +224,7 @@ export const DashboardLayout = () => {
       case 'Operations':
         return [
           { path: '/dashboard/operations', label: 'Dashboard', icon: Server },
+          { path: '/dashboard/operations/product-providers', label: 'Providers', icon: Zap },
           { path: '/dashboard/operations/products', label: 'Products', icon: Layers },
           { path: '/dashboard/operations/monitoring', label: 'Monitoring', icon: Activity },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },

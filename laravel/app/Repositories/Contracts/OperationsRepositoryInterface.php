@@ -19,6 +19,11 @@ interface OperationsRepositoryInterface
     public function getProducts(array $filters): LengthAwarePaginator;
 
     /**
+     * Active product providers (Digiflazz, VIP brand, …) for catalog filters.
+     */
+    public function getProductProviders(): \Illuminate\Support\Collection;
+
+    /**
      * Update product details (sell price, margin, status, admin notes).
      */
     public function updateProduct(string|int $id, array $data): Product;
@@ -41,7 +46,7 @@ interface OperationsRepositoryInterface
     /**
      * Get pricing margin rules configuration.
      */
-    public function getPricing(): array;
+    public function getPricing(array $filters = []): array;
 
     /**
      * Update pricing margin rules configuration.

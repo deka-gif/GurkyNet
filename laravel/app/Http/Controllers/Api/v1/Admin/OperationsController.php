@@ -19,6 +19,7 @@ use App\Http\Requests\Admin\Operations\UpdatePricingRequest;
 use App\Http\Resources\ProductResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Repositories\Contracts\OperationsRepositoryInterface;
 
 class OperationsController extends Controller
 {
@@ -49,6 +50,29 @@ return $this->paginatedResponse(
     $paginator
 );
 
+    }
+
+    /**
+     * Product Providers for Product Management filters (Digiflazz, VIP brand, …).
+     * Payment gateways are intentionally excluded.
+     * GET /api/v1/admin/operations/product-providers
+     */
+    public function productProviders(OperationsRepositoryInterface $repository): JsonResponse
+    {
+        // Strict Product Management contract: id, name, code from product_providers only.
+        $items = $repository->getProductProviders()
+            ->map(fn ($p) => [
+                'id' => (int) $p->id,
+                'name' => (string) $p->name,
+                'code' => (string) $p->code,
+            ])
+            ->values()
+            ->all();
+
+        return $this->successResponse(
+            'Daftar product provider berhasil dimuat.',
+            $items
+        );
     }
 
     /**
@@ -120,9 +144,16 @@ return $this->paginatedResponse(
      * Get Pricing Margin Rules.
      * GET /api/v1/admin/operations/pricing
      */
-    public function pricing(OperationsPricingAction $action): JsonResponse
+    public function pricing(Request $request, OperationsPricingAction $action): JsonResponse
     {
-        $data = $action->get();
+        $filters = $request->only([
+            'product_provider_id',
+            'product_provider_code',
+            'provider',
+            'search',
+            'status',
+        ]);
+        $data = $action->get($filters);
         return $this->successResponse('Aturan harga dan margin berhasil dimuat.', $data);
     }
 

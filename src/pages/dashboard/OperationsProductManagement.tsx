@@ -19,6 +19,7 @@ import {
   Save
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
+import { operationsService } from '../../services/operations.service';
 
 export const OperationsProductManagement: React.FC = () => {
   const {
@@ -33,9 +34,10 @@ export const OperationsProductManagement: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
 
-  // Filters
+  // Filters — Product Providers from API only (never payment gateways)
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
-  const [providerFilter, setProviderFilter] = useState<string>('All');
+  const [providerFilter, setProviderFilter] = useState<string>('All'); // product_provider id as string, or All
+  const [productProviders, setProductProviders] = useState<Array<{ id: number; code: string; name: string }>>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -43,10 +45,36 @@ export const OperationsProductManagement: React.FC = () => {
   // Toast / Status Message
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await operationsService.getProductProviders();
+        // ApiResponse: { success, data: [{id,name,code}, ...] }
+        const raw = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const paymentCodes = new Set(['midtrans', 'xendit', 'alterra', 'artajasa']);
+        const items = raw
+          .filter((p: any) => p && p.id != null && p.code && !paymentCodes.has(String(p.code).toLowerCase()))
+          .map((p: any) => ({
+            id: Number(p.id),
+            code: String(p.code),
+            name: String(p.name || p.code),
+          }));
+        if (!cancelled) setProductProviders(items);
+      } catch {
+        if (!cancelled) setProductProviders([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadData = useCallback((page: number = 1) => {
     const params: Record<string, any> = { page };
     if (categoryFilter !== 'All') params.category = categoryFilter;
-    if (providerFilter !== 'All') params.provider = providerFilter;
+    // Filter by products.product_provider_id — never payment gateway / operator brand
+    if (providerFilter !== 'All') params.product_provider_id = Number(providerFilter);
     if (statusFilter !== 'All') params.status = statusFilter;
     if (searchQuery.trim() !== '') params.search = searchQuery.trim();
 
@@ -231,9 +259,9 @@ export const OperationsProductManagement: React.FC = () => {
             </select>
           </div>
 
-          {/* Provider Filter */}
+          {/* Product Provider Filter — loaded from product_providers API only */}
           <div>
-            <label className="block text-[11px] font-bold text-gray-500 mb-1">Provider</label>
+            <label className="block text-[11px] font-bold text-gray-500 mb-1">Product Provider</label>
             <select
               value={providerFilter}
               onChange={(e) => {
@@ -243,11 +271,11 @@ export const OperationsProductManagement: React.FC = () => {
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
               <option value="All">Semua Provider</option>
-              <option value="Digiflazz">Digiflazz</option>
-              <option value="Alterra">Alterra</option>
-              <option value="Artajasa">Artajasa</option>
-              <option value="Midtrans">Midtrans</option>
-              <option value="Xendit">Xendit</option>
+              {productProviders.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -314,7 +342,8 @@ export const OperationsProductManagement: React.FC = () => {
                   <th className="py-3 px-4">Product Code</th>
                   <th className="py-3 px-4">Product Name</th>
                   <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4">Provider</th>
+                  <th className="py-3 px-4">Product Provider</th>
+                  <th className="py-3 px-4">Operator</th>
                   <th className="py-3 px-4">Base Price</th>
                   <th className="py-3 px-4">Selling Price</th>
                   <th className="py-3 px-4">Margin</th>
@@ -325,8 +354,8 @@ export const OperationsProductManagement: React.FC = () => {
               <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
                 {products.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-gray-400">
-                      Tidak ada produk SKU yang memenuhi kriteria pencarian filter.
+                    <td colSpan={10} className="py-8 text-center text-gray-400">
+                      No products found
                     </td>
                   </tr>
                 ) : (
@@ -334,7 +363,8 @@ export const OperationsProductManagement: React.FC = () => {
                     const code = item.code || item.id;
                     const name = item.name || item.title || '-';
                     const category = item.category || '-';
-                    const provider = item.provider || item.provider_name || '-';
+                    const productProvider = item.productProvider || item.product_provider || '-';
+                    const operator = item.provider || item.provider_name || item.operatorName || '-';
                     const basePrice = Number(item.basePrice ?? item.base_price ?? item.price ?? 0);
                     const sellingPrice = Number(item.sellingPrice ?? item.selling_price ?? item.price ?? 0);
                     const margin = Number(item.margin ?? (sellingPrice - basePrice));
@@ -358,8 +388,11 @@ export const OperationsProductManagement: React.FC = () => {
                             {category}
                           </span>
                         </td>
+                        <td className="py-3.5 px-4 font-bold text-indigo-700">
+                          {productProvider}
+                        </td>
                         <td className="py-3.5 px-4 font-bold text-blue-700">
-                          {provider}
+                          {operator}
                         </td>
                         <td className="py-3.5 px-4 font-mono text-gray-600">
                           Rp {basePrice.toLocaleString('id-ID')}
