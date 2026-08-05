@@ -100,7 +100,7 @@ class FinanceTest extends TestCase
                     'revenue_summary' => [
                         'today_revenue',
                         'monthly_revenue',
-                        'total_transactions',
+                        'totalTransactions',
                         'pending_settlement_count',
                         'pending_settlement_amount',
                         'refund_pending_count',
@@ -174,10 +174,7 @@ class FinanceTest extends TestCase
                 'message',
                 'data',
                 'meta' => [
-                    'current_page',
-                    'last_page',
-                    'per_page',
-                    'total',
+                    'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
                 ],
             ]);
     }
@@ -280,10 +277,7 @@ class FinanceTest extends TestCase
                 'message',
                 'data',
                 'meta' => [
-                    'current_page',
-                    'last_page',
-                    'per_page',
-                    'total',
+                    'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
                 ],
             ]);
     }

@@ -23,6 +23,13 @@ class ProcessMidtransCallback implements ShouldQueue
 
     public array $payload;
 
+    public int $tries = 3;
+
+    /** @var array<int, int> */
+    public array $backoff = [15, 45, 90];
+
+    public int $timeout = 60;
+
     /**
      * Create a new job instance.
      */

@@ -68,27 +68,25 @@ class HealthCheckController extends Controller
      */
     public function status(): JsonResponse
     {
-        $uptime = 'N/A';
-        if (function_exists('shell_exec')) {
-            $uptimeOutput = @shell_exec('uptime -p');
-            if ($uptimeOutput) {
-                $uptime = trim($uptimeOutput);
-            }
-        }
-
-        return response()->json([
+        $payload = [
             'status' => 'healthy',
-            'environment' => env('APP_ENV', 'production'),
-            'debug_mode' => env('APP_DEBUG', false),
             'timezone' => config('app.timezone'),
-            'php_version' => PHP_VERSION,
-            'laravel_version' => app()->version(),
-            'server_uptime' => $uptime,
             'request_tracing' => [
                 'correlation_enabled' => true,
                 'request_id_enabled' => true,
-            ]
-        ]);
+            ],
+        ];
+
+        // Sensitive runtime details only for authenticated metrics access path
+        // (this method is already behind ProtectHealthMetrics).
+        if (!app()->environment('production')) {
+            $payload['environment'] = app()->environment();
+            $payload['debug_mode'] = (bool) config('app.debug');
+            $payload['php_version'] = PHP_VERSION;
+            $payload['laravel_version'] = app()->version();
+        }
+
+        return response()->json($payload);
     }
 
     /**

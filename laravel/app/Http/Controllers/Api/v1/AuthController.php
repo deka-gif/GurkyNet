@@ -214,18 +214,27 @@ class AuthController extends Controller
         // Create 6-digit random code
         $code = str_pad((string)mt_rand(100000, 999999), 6, '0', STR_PAD_LEFT);
 
-        // Save in OTP records
-        $this->otpRepository->create($phone, $code, $action, 5); // 5 minutes expiry
+        // Persist OTP; never log or return the plaintext code outside local/testing.
+        $this->otpRepository->create($phone, $code, $action, 5);
 
-        // Dummy sender log representation
-        Log::info("OTP Code [{$code}] generated for {$phone} action: {$action}");
-
-        return $this->successResponse('Kode OTP berhasil dikirim.', [
+        Log::info('OTP generated', [
             'phone_number' => $phone,
             'action' => $action,
-            'dummy_sent_code' => $code, // Display code in response for sandbox testing ease
-            'expires_at' => now()->addMinutes(5)->toIso8601String(),
+            'expires_minutes' => 5,
         ]);
+
+        $payload = [
+            'phone_number' => $phone,
+            'action' => $action,
+            'expires_at' => now()->addMinutes(5)->toIso8601String(),
+        ];
+
+        // Sandbox convenience only — never expose OTP in production/staging.
+        if (app()->environment('local', 'testing')) {
+            $payload['dummy_sent_code'] = $code;
+        }
+
+        return $this->successResponse('Kode OTP berhasil dikirim.', $payload);
     }
 
     /**

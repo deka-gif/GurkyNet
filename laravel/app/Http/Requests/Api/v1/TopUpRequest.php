@@ -18,7 +18,7 @@ class TopUpRequest extends FormRequest
         return [
             'amount' => 'required|numeric|min:10000',
             'admin_fee' => 'nullable|numeric|min:0',
-            'status' => 'nullable|string|in:sukses,pending,gagal',
+            // Client-supplied status removed — top-up always starts as pending via Midtrans.
         ];
     }
 
@@ -28,7 +28,6 @@ class TopUpRequest extends FormRequest
             'amount.required' => 'Nominal top up wajib diisi.',
             'amount.numeric' => 'Nominal top up harus berupa angka.',
             'amount.min' => 'Nominal top up minimal Rp 10.000.',
-            'status.in' => 'Status transaksi tidak valid.',
         ];
     }
 

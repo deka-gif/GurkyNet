@@ -67,20 +67,20 @@ class ProfileTest extends TestCase
                     'id',
                     'name',
                     'email',
-                    'phone_number',
-                    'birth_date',
+                    'phone',
+                    'birthDate',
                     'gender',
                     'address',
                     'role',
                     'wallet' => [
-                        'wallet_number',
+                        'walletNo',
                         'balance',
                         'status',
                     ],
                 ],
             ])
             ->assertJsonPath('data.name', 'Budi Customer')
-            ->assertJsonPath('data.wallet.balance', 150000.00);
+            ->assertJsonPath('data.wallet.balance', 150000);
     }
 
     public function test_update_profile(): void
@@ -222,10 +222,8 @@ class ProfileTest extends TestCase
         $token1 = $user->createToken('Device 1');
         $token2 = $user->createToken('Device 2');
 
-        // Authenticate with Token 1
-        Sanctum::actingAs($user, [], 'web');
-        // Manually bind the current token on the user object (how Sanctum does it during auth)
-        $user->withAccessToken($token1->accessToken);
+        // Authenticate with Token 1 via real Sanctum bearer token (not TransientToken).
+        $this->withToken($token1->plainTextToken);
 
         $this->assertDatabaseHas('personal_access_tokens', ['id' => $token2->accessToken->id]);
 
@@ -247,9 +245,8 @@ class ProfileTest extends TestCase
         $token2 = $user->createToken('Device 2');
         $token3 = $user->createToken('Device 3');
 
-        // Authenticate with Token 1
-        Sanctum::actingAs($user, [], 'web');
-        $user->withAccessToken($token1->accessToken);
+        // Authenticate with Token 1 via real Sanctum bearer token (not TransientToken).
+        $this->withToken($token1->plainTextToken);
 
         $this->assertDatabaseHas('personal_access_tokens', ['id' => $token2->accessToken->id]);
         $this->assertDatabaseHas('personal_access_tokens', ['id' => $token3->accessToken->id]);

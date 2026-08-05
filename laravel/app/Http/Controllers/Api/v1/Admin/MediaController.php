@@ -57,17 +57,24 @@ class MediaController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'file'     => 'required|file|mimes:jpg,jpeg,png,webp,svg,ico|max:5120',
-            'folder'   => 'nullable|string|max:100',
+            'file'     => 'required|file|mimetypes:image/jpeg,image/png,image/webp,image/x-icon,image/vnd.microsoft.icon|max:5120',
+            'folder'   => ['nullable', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_\\/\\-]+$/'],
             'alt_text' => 'nullable|string|max:255',
         ]);
 
         $file     = $request->file('file');
-        $folder   = $request->input('folder', 'media');
+        $folder   = trim(str_replace(['..', '\\'], '', (string) $request->input('folder', 'media')), '/');
+        if ($folder === '' || str_contains($folder, '..')) {
+            $folder = 'media';
+        }
         $altText  = $request->input('alt_text', '');
 
-        // Generate unique filename
-        $extension    = $file->getClientOriginalExtension();
+        // Generate unique filename (never trust client extension alone)
+        $extension    = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension() ?: 'bin');
+        $allowedExt   = ['jpg', 'jpeg', 'png', 'webp', 'ico'];
+        if (!in_array($extension, $allowedExt, true)) {
+            return $this->errorResponse('Tipe file tidak diizinkan.', 422);
+        }
         $filename     = Str::uuid() . '.' . $extension;
         $storagePath  = $folder . '/' . $filename;
 

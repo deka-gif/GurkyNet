@@ -15,11 +15,11 @@ class MidtransService
 
     public function __construct()
     {
-        $this->serverKey = env('MIDTRANS_SERVER_KEY', 'dummy_server_key');
-        $this->clientKey = env('MIDTRANS_CLIENT_KEY', 'dummy_client_key');
-        $this->isProduction = (bool) env('MIDTRANS_IS_PRODUCTION', false);
+        $this->serverKey = (string) (config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
+        $this->clientKey = (string) (config('services.midtrans.client_key') ?: env('MIDTRANS_CLIENT_KEY', ''));
+        $this->isProduction = (bool) (config('services.midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
 
-        $configuredBaseUrl = env('MIDTRANS_BASE_URL');
+        $configuredBaseUrl = config('services.midtrans.base_url') ?: env('MIDTRANS_BASE_URL');
         if ($configuredBaseUrl) {
             $this->snapBaseUrl = rtrim($configuredBaseUrl, '/');
             $this->apiBaseUrl = rtrim($configuredBaseUrl, '/');
@@ -34,11 +34,33 @@ class MidtransService
         }
     }
 
+    public function isConfigured(): bool
+    {
+        $placeholders = ['', 'dummy_server_key', 'dummy_client_key'];
+
+        return !in_array($this->serverKey, $placeholders, true)
+            && !in_array($this->clientKey, $placeholders, true);
+    }
+
+    public function getServerKey(): string
+    {
+        return $this->serverKey;
+    }
+
+    protected function assertConfigured(): void
+    {
+        if (!$this->isConfigured()) {
+            throw new \RuntimeException('Midtrans credentials are not configured.');
+        }
+    }
+
     /**
      * Create Snap Transaction.
      */
     public function createSnapTransaction(string $orderId, float $grossAmount, array $customerDetails = [], array $itemDetails = []): array
     {
+        $this->assertConfigured();
+
         $payload = [
             'transaction_details' => [
                 'order_id' => $orderId,

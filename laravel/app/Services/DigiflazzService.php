@@ -13,9 +13,9 @@ class DigiflazzService
 
     public function __construct()
     {
-        $this->username = env('DIGIFLAZZ_USERNAME', 'dummy_username');
-        $this->apiKey = env('DIGIFLAZZ_API_KEY', 'dummy_api_key');
-        $this->baseUrl = rtrim(env('DIGIFLAZZ_BASE_URL', 'https://api.digiflazz.com/v1'), '/');
+        $this->username = (string) (config('services.digiflazz.username') ?: env('DIGIFLAZZ_USERNAME', ''));
+        $this->apiKey = (string) (config('services.digiflazz.api_key') ?: env('DIGIFLAZZ_API_KEY', ''));
+        $this->baseUrl = rtrim((string) (config('services.digiflazz.base_url') ?: env('DIGIFLAZZ_BASE_URL', 'https://api.digiflazz.com/v1')), '/');
     }
 
     /**
@@ -47,6 +47,8 @@ class DigiflazzService
      */
     public function buy(string $sku, string $customerNo, string $refId): array
     {
+        $this->assertConfigured();
+
         $payload = [
             'username' => $this->username,
             'buyer_sku_code' => $sku,
@@ -80,6 +82,8 @@ class DigiflazzService
      */
     public function fetchPriceList(string $cmd = 'prepaid'): array
     {
+        $this->assertConfigured();
+
         $payload = [
             'cmd' => $cmd,
             'username' => $this->username,
@@ -94,10 +98,20 @@ class DigiflazzService
      */
     public function isConfigured(): bool
     {
-        return $this->username !== 'dummy_username'
-            && $this->apiKey !== 'dummy_api_key'
-            && $this->username !== ''
-            && $this->apiKey !== '';
+        $placeholder = ['', 'dummy_username', 'dummy_api_key'];
+
+        return !in_array($this->username, $placeholder, true)
+            && !in_array($this->apiKey, $placeholder, true);
+    }
+
+    /**
+     * Fail closed when production credentials are missing.
+     */
+    protected function assertConfigured(): void
+    {
+        if (!$this->isConfigured()) {
+            throw new \RuntimeException('Digiflazz credentials are not configured.');
+        }
     }
 
     /**
@@ -136,6 +150,9 @@ class DigiflazzService
         $url = $this->baseUrl . $endpoint;
         $attempt = 0;
         $delay = 1000; // millisecond delay start
+        if (app()->environment('testing')) {
+            $maxRetries = 1;
+        }
 
         while (true) {
             $attempt++;
@@ -147,7 +164,11 @@ class DigiflazzService
                     'payload' => array_merge($payload, ['sign' => '***hidden***']),
                 ]);
 
-                $response = Http::timeout(10)
+                $timeout = app()->environment('testing') ? 5 : 30;
+                $connectTimeout = app()->environment('testing') ? 2 : 10;
+
+                $response = Http::timeout($timeout)
+                    ->connectTimeout($connectTimeout)
                     ->withHeaders(['Content-Type' => 'application/json'])
                     ->post($url, $payload);
 

@@ -213,14 +213,33 @@ class TransactionController extends Controller
     public function digiflazzCallback(Request $request): JsonResponse
     {
         $signatureHeader = $request->header('X-Digiflazz-Signature');
-        $secret = env('DIGIFLAZZ_WEBHOOK_SECRET', env('DIGIFLAZZ_API_KEY'));
+        $secret = (string) (
+            config('services.digiflazz.webhook_secret')
+            ?: env('DIGIFLAZZ_WEBHOOK_SECRET')
+            ?: config('services.digiflazz.secret')
+            ?: env('DIGIFLAZZ_SECRET')
+            ?: env('DIGIFLAZZ_API_KEY')
+            ?: ''
+        );
+
+        if ($secret === '' || $secret === 'dummy_api_key') {
+            if (app()->environment('testing')) {
+                $secret = 'testing_webhook_secret';
+            } else {
+                \Illuminate\Support\Facades\Log::error('Digiflazz webhook rejected: secret not configured');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Webhook secret is not configured.',
+                ], 503);
+            }
+        }
+
         $expectedSignature = 'sha1=' . hash_hmac('sha1', $request->getContent(), $secret);
 
-        // Verify Signature (allow bypassing in testing/local if signature is not passed)
-        if (env('APP_ENV') !== 'testing' && $signatureHeader !== $expectedSignature) {
+        // Bypass signature only in automated tests.
+        if (!app()->environment('testing') && !hash_equals($expectedSignature, (string) $signatureHeader)) {
             \Illuminate\Support\Facades\Log::warning('Digiflazz Webhook Signature Mismatch', [
-                'header' => $signatureHeader,
-                'expected' => $expectedSignature,
+                'has_header' => !empty($signatureHeader),
             ]);
             return response()->json([
                 'success' => false,
@@ -344,16 +363,26 @@ class TransactionController extends Controller
             ], 400);
         }
 
-        $serverKey = env('MIDTRANS_SERVER_KEY', 'dummy_server_key');
+        $serverKey = (string) (config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
+        if (!app()->environment('testing') && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
+            \Illuminate\Support\Facades\Log::error('Midtrans webhook rejected: server key not configured');
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment gateway is not configured.',
+            ], 503);
+        }
+
+        if (app()->environment('testing') && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
+            $serverKey = 'testing_server_key';
+        }
         
         // Calculate expected signature
         // SHA512(order_id + status_code + gross_amount + ServerKey)
         $expectedSignature = hash('sha512', $orderId . $statusCode . $grossAmount . $serverKey);
         
-        if (env('APP_ENV') !== 'testing' && $signatureKey !== $expectedSignature) {
+        if (!app()->environment('testing') && !hash_equals($expectedSignature, (string) $signatureKey)) {
             \Illuminate\Support\Facades\Log::warning('Midtrans Webhook Signature Mismatch', [
-                'received' => $signatureKey,
-                'expected' => $expectedSignature,
+                'order_id' => $orderId,
             ]);
             return response()->json([
                 'success' => false,

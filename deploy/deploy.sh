@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# GurkyNet production deploy helper (Azure VPS / Ubuntu)
+set -euo pipefail
+
+APP_DIR="${APP_DIR:-/var/www/gurkynet}"
+PHP_BIN="${PHP_BIN:-php}"
+COMPOSER_BIN="${COMPOSER_BIN:-composer}"
+
+cd "$APP_DIR"
+
+echo "==> Pulling latest code"
+git pull --ff-only
+
+echo "==> Backend dependencies"
+cd laravel
+$COMPOSER_BIN install --no-dev --optimize-autoloader --no-interaction
+
+echo "==> Environment checks"
+test -f .env || { echo "Missing laravel/.env"; exit 1; }
+$PHP_BIN artisan config:clear
+
+echo "==> Migrations"
+$PHP_BIN artisan migrate --force
+
+echo "==> Optimize"
+$PHP_BIN artisan optimize
+$PHP_BIN artisan storage:link || true
+
+echo "==> Frontend build (repo root)"
+cd ..
+npm ci
+npm run build
+
+echo "==> Reload workers"
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl restart gurkynet-worker:* || true
+sudo supervisorctl restart gurkynet-scheduler || true
+sudo systemctl reload php8.3-fpm || true
+sudo systemctl reload nginx || true
+
+echo "==> Health check"
+curl -fsS "${APP_URL:-https://api.gurkynet.id}/api/health" || true
+
+echo "Deploy complete."

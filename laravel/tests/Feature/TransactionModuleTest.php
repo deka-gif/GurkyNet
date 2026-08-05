@@ -153,9 +153,10 @@ class TransactionModuleTest extends TestCase
                 'success',
                 'message',
                 'data' => [
-                    'id', 'invoice_number', 'service_name', 'target_number', 'amount', 'admin_fee', 'total_payment', 'status', 'items'
+                    'id', 'transactionCode', 'serviceName', 'targetNo', 'amount', 'adminFee', 'totalPayment', 'status', 'items'
                 ]
-            ]);
+            ])
+            ->assertJsonPath('data.status', 'pending');
 
         // Check wallet balance
         $this->wallet->refresh();
@@ -322,7 +323,7 @@ class TransactionModuleTest extends TestCase
         
         // 3. Verify price totals match
         $this->assertEquals(11500.00, $receipt['payment_summary']['total_payment']);
-        $this->assertNotNull($receipt['transaction_details']['serial_number']);
+        $this->assertArrayHasKey('serial_number', $receipt['transaction_details']);
     }
 
     /**

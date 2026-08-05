@@ -28,5 +28,11 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="MIDTRANS_SERVER_KEY" value="testing_server_key"/>
+        <env name="MIDTRANS_CLIENT_KEY" value="testing_client_key"/>
+        <env name="DIGIFLAZZ_USERNAME" value="testing_username"/>
+        <env name="DIGIFLAZZ_API_KEY" value="testing_api_key"/>
+        <env name="DIGIFLAZZ_WEBHOOK_SECRET" value="testing_webhook_secret"/>
+        <env name="HEALTH_METRICS_TOKEN" value=""/>
     </php>
 </phpunit>

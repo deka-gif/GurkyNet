@@ -26,12 +26,15 @@ return [
         'server_key' => env('MIDTRANS_SERVER_KEY'),
         'client_key' => env('MIDTRANS_CLIENT_KEY'),
         'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
+        'base_url' => env('MIDTRANS_BASE_URL'),
     ],
 
     'digiflazz' => [
         'username' => env('DIGIFLAZZ_USERNAME'),
         'api_key' => env('DIGIFLAZZ_API_KEY'),
         'secret' => env('DIGIFLAZZ_SECRET'),
+        'webhook_secret' => env('DIGIFLAZZ_WEBHOOK_SECRET', env('DIGIFLAZZ_SECRET')),
+        'base_url' => env('DIGIFLAZZ_BASE_URL', 'https://api.digiflazz.com/v1'),
     ],
 
     'vip' => [
@@ -43,5 +46,9 @@ return [
     'fcm' => [
         'server_key' => env('FCM_SERVER_KEY'),
         'sender_id' => env('FCM_SENDER_ID'),
+    ],
+
+    'health' => [
+        'metrics_token' => env('HEALTH_METRICS_TOKEN'),
     ],
 ];

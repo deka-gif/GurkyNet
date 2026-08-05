@@ -14,6 +14,7 @@ class ProfileResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'phone' => $this->phone_number,
+            'phone_number' => $this->phone_number,
             'birthDate' => $this->birth_date,
             'gender' => $this->gender,
             'address' => $this->address,
@@ -23,6 +24,7 @@ class ProfileResource extends JsonResource
             'wallet' => $this->wallet ? [
                 'id' => $this->wallet->id,
                 'walletNo' => $this->wallet->wallet_number,
+                'wallet_number' => $this->wallet->wallet_number,
                 'balance' => (float) $this->wallet->balance,
                 'points' => (int) ($this->wallet->points ?? 0),
                 'currency' => $this->wallet->currency ?? 'IDR',

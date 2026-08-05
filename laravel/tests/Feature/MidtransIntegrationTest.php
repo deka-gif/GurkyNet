@@ -29,6 +29,9 @@ class MidtransIntegrationTest extends TestCase
     {
         parent::setUp();
 
+        // Reset accumulated HTTP stubs from the base TestCase so each test controls responses.
+        Http::swap(new \Illuminate\Http\Client\Factory());
+
         // Establish the user and wallet ecosystem
         $this->user = User::create([
             'name' => 'John Midtrans',
@@ -53,7 +56,7 @@ class MidtransIntegrationTest extends TestCase
     {
         // 1. Mock Midtrans Snap API response
         Http::fake([
-            '*/transactions' => Http::response([
+            'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response([
                 'token' => 'mock-snap-token-12345',
                 'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v1/payment-page/mock-snap-token-12345',
             ], 201),
@@ -99,7 +102,7 @@ class MidtransIntegrationTest extends TestCase
             'gross_amount' => '50000.00',
             'transaction_status' => 'settlement',
             'payment_type' => 'credit_card',
-            'signature_key' => hash('sha512', $transaction->invoice_number . '200' . '50000.00' . env('MIDTRANS_SERVER_KEY', 'dummy_server_key')),
+            'signature_key' => hash('sha512', $transaction->invoice_number . '200' . '50000.00' . config('services.midtrans.server_key', env('MIDTRANS_SERVER_KEY', 'testing_server_key'))),
         ];
 
         $response = $this->postJson('/api/v1/webhooks/midtrans', $payload);
@@ -189,7 +192,8 @@ class MidtransIntegrationTest extends TestCase
         $job->handle();
 
         $transaction->refresh();
-        $this->assertEquals('pending', $transaction->status);
+        // Midtrans "pending" maps to local processing (awaiting settlement).
+        $this->assertEquals('processing', $transaction->status);
 
         $this->wallet->refresh();
         $this->assertEquals(50000.00, $this->wallet->balance); // balance unchanged
@@ -261,7 +265,7 @@ class MidtransIntegrationTest extends TestCase
     public function test_midtrans_service_refund_success(): void
     {
         Http::fake([
-            '*/refund' => Http::response([
+            'https://api.sandbox.midtrans.com/v2/*/refund' => Http::response([
                 'status_code' => '200',
                 'transaction_status' => 'refund',
                 'refund_chargeback_amount' => '10000.00',

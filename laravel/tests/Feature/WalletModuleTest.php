@@ -72,11 +72,9 @@ class WalletModuleTest extends TestCase
                 'success' => true,
                 'message' => 'Detail data dompet digital berhasil didapatkan.',
                 'data' => [
-                    'wallet' => [
-                        'user_id' => $this->sender->id,
-                        'wallet_number' => '104211111111',
-                        'balance' => '100000.00',
-                    ],
+                    'walletNo' => '104211111111',
+                    'balance' => 100000,
+                    'status' => 'active',
                 ],
             ]);
     }
@@ -87,13 +85,13 @@ class WalletModuleTest extends TestCase
     public function test_get_wallet_history_and_filters(): void
     {
         // Pre-create wallet history
-        WalletHistory::create([
+        $olderHistory = WalletHistory::create([
             'wallet_id' => $this->senderWallet->id,
             'amount' => 20000.00,
             'type' => WalletHistoryType::CREDIT->value,
             'description' => 'Top Up Saldo',
-            'created_at' => now()->subDays(2),
         ]);
+        $olderHistory->forceFill(['created_at' => now()->subDays(2)])->save();
 
         WalletHistory::create([
             'wallet_id' => $this->senderWallet->id,
@@ -111,32 +109,32 @@ class WalletModuleTest extends TestCase
             ->assertJsonStructure([
                 'success',
                 'message',
-                'data' => [
-                    'history',
-                    'meta' => ['current_page', 'last_page', 'per_page', 'total'],
+                'data',
+                'meta' => [
+                    'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
                 ],
             ]);
 
-        $this->assertCount(2, $response->json('data.history'));
+        $this->assertCount(2, $response->json('data'));
 
         // 2. Test filter by type (debit)
         $responseFilterType = $this->actingAs($this->sender)
             ->getJson('/api/v1/wallet/history?type=debit');
 
         $responseFilterType->assertStatus(200);
-        $this->assertCount(1, $responseFilterType->json('data.history'));
-        $this->assertEquals('debit', $responseFilterType->json('data.history.0.type'));
+        $this->assertCount(1, $responseFilterType->json('data'));
+        $this->assertEquals('debit', $responseFilterType->json('data.0.type'));
 
         // 3. Test filter by date range
         $responseFilterDate = $this->actingAs($this->sender)
-            ->getJson('/api/v1/wallet/history?start_date=' . now()->subDays(1)->toDateString());
+            ->getJson('/api/v1/wallet/history?start_date=' . now()->toDateString() . '&end_date=' . now()->toDateString());
 
         $responseFilterDate->assertStatus(200);
-        $this->assertCount(1, $responseFilterDate->json('data.history')); // Only the one created today
+        $this->assertCount(1, $responseFilterDate->json('data')); // Only the one created today
     }
 
     /**
-     * Test top up using dummy gateway.
+     * Test top up creates a pending Midtrans transaction (no client-controlled credit).
      */
     public function test_top_up_success(): void
     {
@@ -144,7 +142,6 @@ class WalletModuleTest extends TestCase
             ->postJson('/api/v1/wallet/topup', [
                 'amount' => 50000,
                 'admin_fee' => 0,
-                'status' => 'sukses',
             ]);
 
         $response->assertStatus(201)
@@ -154,12 +151,13 @@ class WalletModuleTest extends TestCase
             ]);
 
         $this->senderWallet->refresh();
-        $this->assertEquals(150000.00, $this->senderWallet->balance);
+        // Balance unchanged until Midtrans settlement webhook.
+        $this->assertEquals(100000.00, $this->senderWallet->balance);
 
         $this->assertDatabaseHas('transactions', [
             'user_id' => $this->sender->id,
             'amount' => 50000.00,
-            'status' => 'sukses',
+            'status' => 'pending',
         ]);
     }
 

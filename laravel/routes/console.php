@@ -12,3 +12,6 @@ Schedule::command('digiflazz:sync')
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Operational hygiene
+Schedule::command('queue:prune-failed --hours=168')->daily();

@@ -131,7 +131,10 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         $currentToken = $user->currentAccessToken();
-        $currentTokenId = $currentToken ? $currentToken->id : '';
+        // TransientToken (e.g. Sanctum::actingAs) has no id — only PersonalAccessToken does.
+        $currentTokenId = ($currentToken instanceof \Laravel\Sanctum\PersonalAccessToken)
+            ? (string) $currentToken->id
+            : '';
 
         $action->revokeOtherSessions($user, $currentTokenId);
 

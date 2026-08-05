@@ -14,10 +14,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
+            'health.token' => \App\Http\Middleware\ProtectHealthMetrics::class,
         ]);
         $middleware->api(prepend: [
             \App\Http\Middleware\TraceRequest::class,
             \App\Http\Middleware\StandardizeApiErrors::class,
+            \App\Http\Middleware\SecurityHeaders::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

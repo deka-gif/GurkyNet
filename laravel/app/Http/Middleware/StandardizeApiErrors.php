@@ -23,6 +23,18 @@ class StandardizeApiErrors
         try {
             $response = $next($request);
 
+            // Keep raw observability payloads for probes / metrics dashboards.
+            if ($request->is(
+                'api/health',
+                'api/status',
+                'api/metrics',
+                'api/*/health',
+                'api/*/status',
+                'api/*/metrics'
+            )) {
+                return $response;
+            }
+
             // If it is a JsonResponse, ensure it matches our strict response contract
             if ($response instanceof \Illuminate\Http\JsonResponse) {
                 $data = $response->getData(true);

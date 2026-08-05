@@ -24,6 +24,13 @@ class ProcessDigiflazzTransaction implements ShouldQueue
 
     public int $transactionId;
 
+    public int $tries = 3;
+
+    /** @var array<int, int> */
+    public array $backoff = [30, 60, 120];
+
+    public int $timeout = 90;
+
     /**
      * Create a new job instance.
      */

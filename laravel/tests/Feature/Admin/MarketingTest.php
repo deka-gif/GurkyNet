@@ -174,7 +174,7 @@ class MarketingTest extends TestCase
                 'success' => true,
                 'data' => [
                     'title' => 'Promo Lebaran Diperbarui',
-                    'is_active' => false,
+                    'isActive' => false,
                 ],
             ]);
 
@@ -237,7 +237,7 @@ class MarketingTest extends TestCase
                 'success' => true,
                 'data' => [
                     'title' => 'Cashback 15%',
-                    'discount_amount' => 15,
+                    'discountAmount' => 15,
                 ],
             ]);
 
@@ -263,6 +263,7 @@ class MarketingTest extends TestCase
             'discount_type' => 'fixed',
             'min_transaction' => 50000,
             'quota' => 100,
+            'image_url' => 'http://gurkypay.com/voucher-merdeka.png',
             'is_active' => true,
         ]);
 
@@ -346,7 +347,7 @@ class MarketingTest extends TestCase
                 'success' => true,
                 'data' => [
                     'title' => 'Pemeliharaan Server Utama',
-                    'is_active' => false,
+                    'isActive' => false,
                 ],
             ]);
 

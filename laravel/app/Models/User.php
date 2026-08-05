@@ -39,6 +39,14 @@ class User extends Authenticatable
         'role' => \App\Enums\UserRole::class,
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            if (empty($user->role)) {
+                $user->role = \App\Enums\UserRole::USER;
+            }
+        });
+    }
     /**
      * Check if user has any of the given roles.
      */

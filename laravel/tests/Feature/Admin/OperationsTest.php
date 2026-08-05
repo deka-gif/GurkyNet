@@ -150,10 +150,7 @@ class OperationsTest extends TestCase
                 'message',
                 'data',
                 'meta' => [
-                    'current_page',
-                    'last_page',
-                    'per_page',
-                    'total',
+                    'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
                 ],
             ]);
     }
@@ -191,10 +188,7 @@ class OperationsTest extends TestCase
                 'message',
                 'data',
                 'meta' => [
-                    'current_page',
-                    'last_page',
-                    'per_page',
-                    'total',
+                    'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
                 ],
             ]);
     }

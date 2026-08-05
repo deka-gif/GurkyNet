@@ -127,10 +127,18 @@ class AuthModuleTest extends TestCase
                 'data' => [
                     'phone_number',
                     'action',
-                    'dummy_sent_code',
                     'expires_at',
                 ],
             ]);
+
+        // OTP plaintext is only returned in local/testing sandbox mode.
+        if (app()->environment('local', 'testing')) {
+            $response->assertJsonStructure([
+                'data' => ['dummy_sent_code'],
+            ]);
+        } else {
+            $response->assertJsonMissingPath('data.dummy_sent_code');
+        }
 
         $this->assertDatabaseHas('otp_codes', [
             'phone_number' => '081234567890',

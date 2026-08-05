@@ -60,7 +60,7 @@ class ProductModuleTest extends TestCase
                 'message',
                 'data' => [
                     '*' => [
-                        'id', 'sku_code', 'name', 'base_price', 'margin', 'admin_fee', 'sell_price', 'status', 'availability_status'
+                        'id', 'code', 'name', 'basePrice', 'margin', 'adminFee', 'price', 'status', 'availabilityStatus'
                     ]
                 ],
                 'meta'
@@ -76,7 +76,7 @@ class ProductModuleTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertCount(1, $response->json('data'));
-        $this->assertEquals('TSEL10K', $response->json('data.0.sku_code'));
+        $this->assertEquals('TSEL10K', $response->json('data.0.code'));
     }
 
     /**
@@ -162,13 +162,13 @@ class ProductModuleTest extends TestCase
         $response1 = $this->getJson('/api/v1/categories');
         $response1->assertStatus(200);
 
-        // Verify cache contains categories list
-        $this->assertTrue(Cache::has('product_categories_all'));
+        // Verify cache contains categories list (stored under cache tags when supported)
+        $this->assertTrue($this->cacheKeyExists('product_categories_all', ['categories']));
 
         // Trigger cache creation for providers
         $response2 = $this->getJson('/api/v1/providers');
         $response2->assertStatus(200);
-        $this->assertTrue(Cache::has('providers_active_all'));
+        $this->assertTrue($this->cacheKeyExists('providers_active_all', ['providers']));
     }
 
     /**
@@ -180,7 +180,7 @@ class ProductModuleTest extends TestCase
 
         // 1. Warm cache
         $this->getJson('/api/v1/categories');
-        $this->assertTrue(Cache::has('product_categories_all'));
+        $this->assertTrue($this->cacheKeyExists('product_categories_all', ['categories']));
 
         // 2. Clear / Refresh cache tags or keys explicitly to simulate updates
         try {
@@ -189,6 +189,19 @@ class ProductModuleTest extends TestCase
             Cache::forget('product_categories_all');
         }
 
-        $this->assertFalse(Cache::has('product_categories_all'));
+        $this->assertFalse($this->cacheKeyExists('product_categories_all', ['categories']));
+    }
+
+    private function cacheKeyExists(string $key, array $tags = []): bool
+    {
+        if ($tags !== []) {
+            try {
+                return Cache::tags($tags)->has($key);
+            } catch (\BadMethodCallException) {
+                // Driver without tag support stores under the plain key
+            }
+        }
+
+        return Cache::has($key);
     }
 }

@@ -165,13 +165,12 @@ class OwnerTest extends TestCase
                 'success',
                 'message',
                 'data' => [
-                    'application_status',
-                    'database_status',
-                    'redis_status',
-                    'queue_status',
-                    'digiflazz_status',
-                    'midtrans_status',
-                    'storage_status',
+                    '*' => [
+                        'service',
+                        'type',
+                        'status',
+                        'notes',
+                    ],
                 ],
             ]);
     }
@@ -204,15 +203,12 @@ class OwnerTest extends TestCase
                             'email',
                             'role',
                         ],
-                        'created_at',
+                        'createdAt',
                     ]
                 ],
                 'meta' => [
-                    'current_page',
-                    'last_page',
-                    'per_page',
-                    'total',
-                ]
+                    'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
+                ],
             ]);
     }
 

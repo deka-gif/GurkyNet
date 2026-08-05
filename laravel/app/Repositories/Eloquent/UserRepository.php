@@ -36,6 +36,9 @@ class UserRepository implements UserRepositoryInterface
 
     public function update(User $user, array $data): bool
     {
+        // Prevent privilege escalation via mass assignment.
+        unset($data['role'], $data['id'], $data['email_verified_at']);
+
         if (isset($data['password'])) {
             $data['password'] = Hash::make($data['password']);
         }

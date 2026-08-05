@@ -27,18 +27,22 @@ use App\Http\Middleware\EnsureRole;
 */
 
 // Root level health routes for general platform observability
-Route::middleware([\App\Http\Middleware\StandardizeApiErrors::class, \App\Http\Middleware\TraceRequest::class])->group(function () {
+Route::middleware([\App\Http\Middleware\StandardizeApiErrors::class, \App\Http\Middleware\TraceRequest::class, \App\Http\Middleware\SecurityHeaders::class])->group(function () {
     Route::get('/health', [HealthCheckController::class, 'health']);
-    Route::get('/status', [HealthCheckController::class, 'status']);
-    Route::get('/metrics', [HealthCheckController::class, 'metrics']);
+    Route::middleware(\App\Http\Middleware\ProtectHealthMetrics::class)->group(function () {
+        Route::get('/status', [HealthCheckController::class, 'status']);
+        Route::get('/metrics', [HealthCheckController::class, 'metrics']);
+    });
 });
 
-Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::class, \App\Http\Middleware\TraceRequest::class])->group(function () {
+Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::class, \App\Http\Middleware\TraceRequest::class, \App\Http\Middleware\SecurityHeaders::class])->group(function () {
     
     // Module health routes inside v1
     Route::get('/health', [HealthCheckController::class, 'health']);
-    Route::get('/status', [HealthCheckController::class, 'status']);
-    Route::get('/metrics', [HealthCheckController::class, 'metrics']);
+    Route::middleware(\App\Http\Middleware\ProtectHealthMetrics::class)->group(function () {
+        Route::get('/status', [HealthCheckController::class, 'status']);
+        Route::get('/metrics', [HealthCheckController::class, 'metrics']);
+    });
     
     // Public Website Content Endpoints (Website / Android / iOS / PWA)
     Route::prefix('public')->middleware('throttle:120,1')->group(function () {
@@ -81,18 +85,21 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     });
 
     // Digiflazz Webhook Callback
-    Route::post('/webhooks/digiflazz', [TransactionController::class, 'digiflazzCallback']);
+    Route::post('/webhooks/digiflazz', [TransactionController::class, 'digiflazzCallback'])->middleware('throttle:120,1');
 
     // Midtrans Webhook Callback
-    Route::post('/webhooks/midtrans', [TransactionController::class, 'midtransCallback']);
+    Route::post('/webhooks/midtrans', [TransactionController::class, 'midtransCallback'])->middleware('throttle:120,1');
 
     // Public Authentication Endpoints
-    Route::middleware('throttle:30,1')->group(function () {
+    Route::middleware('throttle:20,1')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         Route::post('/auth/login', [AuthController::class, 'login']);
+        Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
+    });
+
+    Route::middleware('throttle:5,1')->group(function () {
         Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
         Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
-        Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
     });
 
     // Protected API Endpoints (Requires Laravel Sanctum)
@@ -131,18 +138,22 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Wallet and Financial Modules
-        Route::get('/wallet', [WalletController::class, 'show']);
-        Route::get('/wallet/history', [WalletController::class, 'history']);
-        Route::post('/wallet/topup', [WalletController::class, 'topUp']);
-        Route::post('/wallet/transfer', [WalletController::class, 'transfer']);
-        Route::post('/wallet/withdraw', [WalletController::class, 'withdraw']);
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::get('/wallet', [WalletController::class, 'show']);
+            Route::get('/wallet/history', [WalletController::class, 'history']);
+            Route::post('/wallet/topup', [WalletController::class, 'topUp']);
+            Route::post('/wallet/transfer', [WalletController::class, 'transfer']);
+            Route::post('/wallet/withdraw', [WalletController::class, 'withdraw']);
+        });
 
         // Transaction Engine Module
-        Route::get('/transactions', [TransactionController::class, 'index']);
-        Route::post('/transactions', [TransactionController::class, 'store']);
-        Route::get('/transactions/{id_or_invoice}', [TransactionController::class, 'show']);
-        Route::post('/transactions/{id_or_invoice}/cancel', [TransactionController::class, 'cancel']);
-        Route::get('/transactions/{id_or_invoice}/receipt', [TransactionController::class, 'receipt']);
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::get('/transactions', [TransactionController::class, 'index']);
+            Route::post('/transactions', [TransactionController::class, 'store']);
+            Route::get('/transactions/{id_or_invoice}', [TransactionController::class, 'show']);
+            Route::post('/transactions/{id_or_invoice}/cancel', [TransactionController::class, 'cancel']);
+            Route::get('/transactions/{id_or_invoice}/receipt', [TransactionController::class, 'receipt']);
+        });
 
         // Finance Administration Module
         Route::prefix('admin/finance')->middleware([EnsureRole::class . ':finance,owner'])->group(function () {

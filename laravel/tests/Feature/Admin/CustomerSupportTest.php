@@ -161,7 +161,7 @@ class CustomerSupportTest extends TestCase
                 'success',
                 'data' => [
                     'id',
-                    'ticket_number',
+                    'ticketNumber',
                     'user' => [
                         'id',
                         'name',
@@ -250,10 +250,10 @@ class CustomerSupportTest extends TestCase
                         'id',
                         'name',
                         'email',
-                        'wallet_balance',
-                        'transactions_count',
-                        'support_tickets_count',
-                        'recent_transactions',
+                        'walletBalance',
+                        'transactionsCount',
+                        'supportTicketsCount',
+                        'recentTransactions',
                     ]
                 ],
             ]);

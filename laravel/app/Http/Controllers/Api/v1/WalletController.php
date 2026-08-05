@@ -109,9 +109,8 @@ class WalletController extends Controller
 
             $amount = (float) $request->amount;
             $adminFee = (float) $request->input('admin_fee', 0.00);
-            $status = $request->input('status', 'pending'); // Defaults to pending for Midtrans integration
-
-            $transaction = $this->topUpWalletAction->execute($user, $amount, $adminFee, $status);
+            // Always pending — never accept client-controlled settlement status.
+            $transaction = $this->topUpWalletAction->execute($user, $amount, $adminFee, 'pending');
 
             return $this->successResponse('Top up berhasil diajukan.', [
                 'transaction' => $transaction,
