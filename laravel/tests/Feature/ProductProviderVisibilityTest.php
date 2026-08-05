@@ -118,6 +118,27 @@ class ProductProviderVisibilityTest extends TestCase
         $this->assertContains('VIP-XL5K', $codes);
     }
 
+    public function test_digiflazz_off_vip_on_prepaid_category_appears_under_pulsa_filter(): void
+    {
+        // VIP sync historically stores category slug "prepaid"; User Dashboard requests "pulsa".
+        $prepaid = ProductCategory::create(['name' => 'prepaid', 'slug' => 'prepaid', 'icon' => 'phone']);
+        $this->vipProduct->update([
+            'product_category_id' => $prepaid->id,
+            'name' => 'XL 5K Digi',
+        ]);
+
+        $this->digi->update(['is_active' => false]);
+        $this->vip->update(['is_active' => true]);
+        ProductCatalogCache::bump();
+
+        $res = $this->getJson('/api/v1/products?category=pulsa&per_page=100');
+        $res->assertOk();
+        $codes = collect($res->json('data'))->pluck('code')->all();
+
+        $this->assertNotContains('XL5K_DIGI', $codes);
+        $this->assertContains('VIP-XL5K', $codes);
+    }
+
     public function test_both_on_merges_duplicate_logical_cards(): void
     {
         $this->digi->update(['is_active' => true, 'priority' => 1]);
@@ -132,6 +153,33 @@ class ProductProviderVisibilityTest extends TestCase
 
         $cards = collect($res->json('data'))->filter(fn ($row) => ($row['name'] ?? '') === 'XL 5K Digi');
         $this->assertCount(1, $cards);
+        $this->assertSame('XL5K_DIGI', $cards->first()['code'] ?? null);
+    }
+
+    public function test_both_on_merges_pulsa_and_prepaid_category_family(): void
+    {
+        $pulsa = ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa', 'icon' => 'phone']);
+        $prepaid = ProductCategory::create(['name' => 'prepaid', 'slug' => 'prepaid', 'icon' => 'phone']);
+
+        $this->digiProduct->update([
+            'product_category_id' => $pulsa->id,
+            'name' => 'XL 5K Digi',
+        ]);
+        $this->vipProduct->update([
+            'product_category_id' => $prepaid->id,
+            'name' => 'XL 5K Digi',
+        ]);
+
+        $this->digi->update(['is_active' => true, 'priority' => 1]);
+        $this->vip->update(['is_active' => true, 'priority' => 2]);
+        ProductCatalogCache::bump();
+
+        $res = $this->getJson('/api/v1/products?category=pulsa&per_page=100');
+        $res->assertOk();
+
+        $cards = collect($res->json('data'))->filter(fn ($row) => ($row['name'] ?? '') === 'XL 5K Digi');
+        $this->assertCount(1, $cards);
+        $this->assertSame('XL5K_DIGI', $cards->first()['code'] ?? null);
     }
 
     public function test_both_on_shows_both_when_names_differ(): void

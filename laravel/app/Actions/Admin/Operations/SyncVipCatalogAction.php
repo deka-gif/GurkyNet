@@ -172,6 +172,10 @@ class SyncVipCatalogAction
             if ($categoryName === '') {
                 $categoryName = $game !== '' ? 'game' : 'prepaid';
             }
+            // Align VIP catalog families with Digiflazz / User Dashboard slugs so
+            // findMatchingMasterProduct can attach VIP SKUs onto Digi masters and
+            // GET /products?category=pulsa returns VIP offers when Digi is off.
+            $categoryName = $this->normalizeVipCategoryName($categoryName, $game !== '');
 
             $statusRaw = strtolower(trim((string) ($row['status'] ?? 'available')));
             $providerPrice = $this->extractPrice($row); // NEVER (float)$row['price'] when array
@@ -610,6 +614,28 @@ class SyncVipCatalogAction
         }
 
         return 0.0;
+    }
+
+    /**
+     * Map VIP Reseller category labels onto Digiflazz / dashboard families.
+     * Without this, VIP rows land in slug "prepaid" while the User Dashboard
+     * requests category=pulsa — Digi OFF + VIP ON then returns an empty list.
+     */
+    protected function normalizeVipCategoryName(string $categoryName, bool $isGame): string
+    {
+        $raw = Str::lower(trim($categoryName));
+
+        if ($isGame || in_array($raw, ['game', 'game-feature', 'voucher'], true)) {
+            return 'Voucher';
+        }
+
+        return match ($raw) {
+            'prepaid', 'pulsa', 'pulse', 'phone credit' => 'Pulsa',
+            'data', 'paket data', 'paket-data', 'internet' => 'Data',
+            'pln', 'token pln', 'token-pln', 'listrik', 'electricity' => 'PLN',
+            'pdam', 'bpjs' => Str::title($raw),
+            default => $categoryName !== '' ? $categoryName : 'Pulsa',
+        };
     }
 
     protected function upsertCategory(string $categoryName): ProductCategory

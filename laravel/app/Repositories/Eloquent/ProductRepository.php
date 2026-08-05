@@ -20,8 +20,17 @@ use Illuminate\Support\Str;
  */
 class ProductRepository implements ProductRepositoryInterface
 {
+    /** @var int */
+    protected static $vipTraceBudget = 30;
+
+    /** @var int */
+    protected static $visibilityTraceBudget = 30;
+
     public function getPaginatedProducts(array $filters = []): LengthAwarePaginator
     {
+        static::$vipTraceBudget = 30;
+        static::$visibilityTraceBudget = 30;
+
         Log::info('CATALOG TRACE — product_providers', [
             'rows' => ProductProvider::query()->get(['id', 'code', 'is_active', 'priority'])->map(fn (ProductProvider $p) => [
                 'id' => $p->id,
@@ -67,6 +76,8 @@ class ProductRepository implements ProductRepositoryInterface
         Log::info('CATALOG TRACE — count($all) after get()', [
             'count' => $all->count(),
         ]);
+
+        $this->logVipCatalogMappings($all);
 
         $merged = $this->mergeDuplicateCatalogProducts($all);
 
@@ -166,12 +177,35 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function applyControlCenterVisibility(Builder $query): void
     {
+        $providers = ProductProvider::query()->get(['id', 'code', 'is_active', 'priority']);
+        $availableIds = $providers->pluck('id')->values()->all();
+        $filteredIds = $providers->where('is_active', true)->pluck('id')->values()->all();
+
+        Log::info('CATALOG TRACE — applyControlCenterVisibility BEFORE', [
+            'Provider IDs available' => $availableIds,
+            'Provider IDs filtered (is_active=1)' => $filteredIds,
+            'providers' => $providers->map(fn (ProductProvider $p) => [
+                'id' => $p->id,
+                'code' => $p->code,
+                'is_active' => (bool) $p->is_active,
+                'priority' => $p->priority,
+            ])->all(),
+        ]);
+
         $query->whereHas('providerSkus', function (Builder $q) {
             $q->where('product_provider_skus.is_active', true)
                 ->whereHas('productProvider', function (Builder $pp) {
                     $pp->where('product_providers.is_active', true);
                 });
         });
+
+        Log::info('CATALOG TRACE — applyControlCenterVisibility AFTER', [
+            'Provider IDs available' => $availableIds,
+            'Provider IDs filtered' => $filteredIds,
+            'Remaining product count' => (clone $query)->count(),
+            'Generated SQL' => $query->toSql(),
+            'Bindings' => $query->getBindings(),
+        ]);
     }
 
     /**
@@ -180,18 +214,50 @@ class ProductRepository implements ProductRepositoryInterface
     protected function isVisibleViaControlCenter(Product $product): bool
     {
         if (!$product->status) {
+            if (static::$visibilityTraceBudget > 0) {
+                static::$visibilityTraceBudget--;
+                Log::info('VIP CATALOG TRACE — isVisibleViaControlCenter', [
+                    'Product ID' => $product->id,
+                    'Final decision' => false,
+                    'reason' => 'product_status_false',
+                ]);
+            }
+
             return false;
         }
 
         $product->loadMissing('providerSkus.productProvider');
 
+        $visible = false;
         foreach ($product->providerSkus as $sku) {
-            if ($sku->is_active && $sku->productProvider && $sku->productProvider->is_active) {
-                return true;
+            $pp = $sku->productProvider;
+            $skuVisible = (bool) ($sku->is_active && $pp && $pp->is_active);
+            if ($skuVisible) {
+                $visible = true;
+            }
+
+            if (static::$visibilityTraceBudget > 0) {
+                Log::info('VIP CATALOG TRACE — isVisibleViaControlCenter SKU', [
+                    'Product ID' => $product->id,
+                    'provider_id' => $sku->product_provider_id,
+                    'provider_code' => $pp?->code,
+                    'provider enabled' => (bool) ($pp?->is_active),
+                    'sku enabled' => (bool) $sku->is_active,
+                    'provider priority' => $pp?->priority,
+                    'visible' => $skuVisible,
+                ]);
             }
         }
 
-        return false;
+        if (static::$visibilityTraceBudget > 0) {
+            static::$visibilityTraceBudget--;
+            Log::info('VIP CATALOG TRACE — isVisibleViaControlCenter', [
+                'Product ID' => $product->id,
+                'Final decision' => $visible,
+            ]);
+        }
+
+        return $visible;
     }
 
     /**
@@ -268,7 +334,7 @@ class ProductRepository implements ProductRepositoryInterface
     }
 
     /**
-     * One card per logical product (category + operator brand + normalized name).
+     * One card per logical product (category family + operator brand + normalized name).
      *
      * @param  Collection<int, Product>|EloquentCollection<int, Product>  $products
      * @return Collection<int, Product>
@@ -288,7 +354,31 @@ class ProductRepository implements ProductRepositoryInterface
                 continue;
             }
 
-            $groups[$key] = $this->preferCatalogProduct($groups[$key], $product);
+            $kept = $groups[$key];
+            $chosen = $this->preferCatalogProduct($kept, $product);
+            $discarded = $chosen->id === $kept->id ? $product : $kept;
+            $reason = $this->preferCatalogReason($kept, $product, $chosen);
+
+            Log::info('VIP CATALOG TRACE — mergeDuplicateCatalogProducts', [
+                'Normalized Name' => Str::lower(preg_replace('/\s+/u', ' ', trim((string) $product->name)) ?? ''),
+                'Category' => $product->category?->slug,
+                'Category family' => $this->normalizeCategoryFamily((string) ($product->category?->slug ?? '')),
+                'Provider IDs' => [
+                    $kept->product_provider_id,
+                    $product->product_provider_id,
+                ],
+                'Provider Priority' => [
+                    $this->bestActiveOfferPriority($kept),
+                    $this->bestActiveOfferPriority($product),
+                ],
+                'Chosen Provider' => $chosen->productProvider?->code ?? $chosen->sku_code,
+                'Chosen product_id' => $chosen->id,
+                'Discarded Provider' => $discarded->productProvider?->code ?? $discarded->sku_code,
+                'Discarded product_id' => $discarded->id,
+                'Reason' => $reason,
+            ]);
+
+            $groups[$key] = $chosen;
         }
 
         return collect(array_values($groups))->values();
@@ -296,11 +386,47 @@ class ProductRepository implements ProductRepositoryInterface
 
     protected function catalogGroupKey(Product $product): string
     {
+        $product->loadMissing('category');
         $name = Str::lower(preg_replace('/\s+/u', ' ', trim((string) $product->name)) ?? '');
+        $family = $this->normalizeCategoryFamily((string) ($product->category?->slug ?? ''));
 
-        return (int) $product->product_category_id
+        return $family
             . '|' . (int) ($product->provider_id ?? 0)
             . '|' . $name;
+    }
+
+    /**
+     * Dashboard uses Digiflazz-style slugs (pulsa). VIP sync historically stored "prepaid".
+     * Treat aliases as one catalog family so VIP products appear under User Dashboard filters
+     * and merge with Digiflazz cards of the same brand+name.
+     */
+    protected function normalizeCategoryFamily(string $slug): string
+    {
+        $slug = Str::lower(trim($slug));
+
+        return match (true) {
+            in_array($slug, ['pulsa', 'prepaid'], true) => 'pulsa',
+            in_array($slug, ['data', 'paket-data', 'paket_data'], true) => 'data',
+            in_array($slug, ['pln', 'token-pln', 'token_pln', 'listrik'], true) => 'pln',
+            in_array($slug, ['voucher', 'game', 'game-feature'], true) => 'voucher',
+            default => $slug !== '' ? $slug : 'unknown',
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function categoryFilterSlugs(string $category): array
+    {
+        $family = $this->normalizeCategoryFamily($category);
+
+        return match ($family) {
+            'pulsa' => ['pulsa', 'prepaid'],
+            'data' => ['data', 'paket-data', 'paket_data'],
+            'pln' => ['pln', 'token-pln', 'token_pln', 'listrik'],
+            'voucher' => ['voucher', 'game', 'game-feature'],
+            default => [Str::lower(trim($category))],
+        };
     }
 
     protected function preferCatalogProduct(Product $a, Product $b): Product
@@ -319,6 +445,23 @@ class ProductRepository implements ProductRepositoryInterface
         }
 
         return (float) $a->sell_price <= (float) $b->sell_price ? $a : $b;
+    }
+
+    protected function preferCatalogReason(Product $a, Product $b, Product $chosen): string
+    {
+        $pa = $this->bestActiveOfferPriority($a);
+        $pb = $this->bestActiveOfferPriority($b);
+        if ($pa !== $pb) {
+            return 'lower_active_provider_priority';
+        }
+
+        $aVip = str_starts_with((string) $a->sku_code, 'VIP-');
+        $bVip = str_starts_with((string) $b->sku_code, 'VIP-');
+        if ($aVip !== $bVip) {
+            return 'prefer_non_vip_sku_code';
+        }
+
+        return 'lower_or_equal_sell_price';
     }
 
     protected function bestActiveOfferPriority(Product $product): int
@@ -354,8 +497,9 @@ class ProductRepository implements ProductRepositoryInterface
             if (is_numeric($category)) {
                 $query->where('product_category_id', $category);
             } else {
-                $query->whereHas('category', function ($q) use ($category) {
-                    $q->where('slug', $category);
+                $slugs = $this->categoryFilterSlugs((string) $category);
+                $query->whereHas('category', function ($q) use ($slugs) {
+                    $q->whereIn('slug', $slugs);
                 });
             }
         }
@@ -379,6 +523,51 @@ class ProductRepository implements ProductRepositoryInterface
                 $q->where('name', 'like', "%{$keyword}%")
                     ->orWhere('sku_code', 'like', "%{$keyword}%");
             });
+        }
+    }
+
+    /**
+     * @param  Collection<int, Product>|EloquentCollection<int, Product>  $products
+     */
+    protected function logVipCatalogMappings(Collection|EloquentCollection $products): void
+    {
+        foreach ($products->take(30) as $product) {
+            $product->loadMissing(['providerSkus.productProvider', 'category']);
+
+            if ($product->providerSkus->isEmpty()) {
+                Log::info('VIP CATALOG TRACE', [
+                    'Product ID' => $product->id,
+                    'Product Name' => $product->name,
+                    'ProviderSku ID' => null,
+                    'Provider ID' => null,
+                    'Provider Code' => null,
+                    'Provider Enabled' => null,
+                    'Sku Enabled' => null,
+                    'Priority' => null,
+                    'Visible' => false,
+                    'category_slug' => $product->category?->slug,
+                ]);
+                continue;
+            }
+
+            foreach ($product->providerSkus as $sku) {
+                $pp = $sku->productProvider;
+                $visible = (bool) ($product->status && $sku->is_active && $pp && $pp->is_active);
+
+                Log::info('VIP CATALOG TRACE', [
+                    'Product ID' => $product->id,
+                    'Product Name' => $product->name,
+                    'ProviderSku ID' => $sku->id,
+                    'Provider ID' => $sku->product_provider_id,
+                    'Provider Code' => $pp?->code,
+                    'Provider Enabled' => (bool) ($pp?->is_active),
+                    'Sku Enabled' => (bool) $sku->is_active,
+                    'Priority' => $pp?->priority,
+                    'Visible' => $visible,
+                    'category_slug' => $product->category?->slug,
+                    'sku_code' => $product->sku_code,
+                ]);
+            }
         }
     }
 
