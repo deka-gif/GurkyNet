@@ -5,3 +5,16 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Build output
+dist/
+
+# Vite
+.vite/
+
+# PHP cache
+laravel/.phpunit.result.cache
+
+# Backup files
+*.bak
+*.save

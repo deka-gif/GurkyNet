@@ -4,6 +4,7 @@ import { Menu, X, LogIn, UserCheck, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
 import { WebsiteMenu } from '../../types';
+import logoImg from '../../logo.png'; // Direct import file logo dari src/logo.png
 
 // Helper to construct nested menu structure
 function buildMenuTree(menuItems: WebsiteMenu[]): WebsiteMenu[] {
@@ -67,31 +68,23 @@ export const Navbar = () => {
   };
 
   // Build the dynamic menu tree
-  const menuTree = buildMenuTree(menus.filter(m => m.visible));
+  const menuTree = buildMenuTree(menus.filter((m) => m.visible));
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white/90 backdrop-blur-md shadow-xs py-4' : 'bg-transparent py-6'}`}>
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-white/90 backdrop-blur-md shadow-xs py-4' : 'bg-transparent py-6'
+      }`}
+    >
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="flex items-center justify-between">
-
           {/* Logo and Brand */}
           <Link to="/" className="flex items-center gap-2" id="nav-brand">
-            {settings?.logo ? (
-              <img
-                src={
-                  typeof settings.logo === 'string'
-                    ? settings.logo
-                    : settings.logo?.url
-                }
-                alt={settings.websiteName || 'GurkyNet'}
-                className="w-10 h-10 object-contain rounded-xl"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-500/30">
-                {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
-              </div>
-            )}
+            <img
+              src={logoImg}
+              alt={settings?.websiteName || 'GurkyNet'}
+              className="w-10 h-10 object-contain rounded-xl"
+            />
             <span className="font-extrabold text-2xl tracking-tight text-gray-900">
               {settings?.websiteName || 'GurkyNet'}
             </span>
@@ -113,11 +106,21 @@ export const Navbar = () => {
                     >
                       <button className="flex items-center gap-1 text-gray-600 hover:text-primary-600 font-semibold transition-colors py-2 cursor-pointer focus:outline-none">
                         <span>{menu.title}</span>
-                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${activeDropdown === menu.id ? 'rotate-180 text-primary-600' : 'text-gray-400'}`} />
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform duration-200 ${
+                            activeDropdown === menu.id ? 'rotate-180 text-primary-600' : 'text-gray-400'
+                          }`}
+                        />
                       </button>
 
                       {/* Submenu Dropdown */}
-                      <div className={`absolute left-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl p-3 shadow-xl min-w-[200px] transition-all duration-200 origin-top-left ${activeDropdown === menu.id ? 'opacity-100 scale-100 translate-y-0 visible' : 'opacity-0 scale-95 -translate-y-2 invisible pointer-events-none'}`}>
+                      <div
+                        className={`absolute left-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl p-3 shadow-xl min-w-[200px] transition-all duration-200 origin-top-left ${
+                          activeDropdown === menu.id
+                            ? 'opacity-100 scale-100 translate-y-0 visible'
+                            : 'opacity-0 scale-95 -translate-y-2 invisible pointer-events-none'
+                        }`}
+                      >
                         <ul className="space-y-1">
                           {menu.children?.map((child) => (
                             <li key={child.id}>
@@ -153,22 +156,34 @@ export const Navbar = () => {
 
               {/* Mandatory Dev tools/Admin Links */}
               <li>
-                <Link to="/docs" className="text-indigo-600 hover:text-indigo-700 font-extrabold transition-colors text-sm bg-indigo-50 px-3 py-1.5 rounded-full">
+                <Link
+                  to="/docs"
+                  className="text-indigo-600 hover:text-indigo-700 font-extrabold transition-colors text-sm bg-indigo-50 px-3 py-1.5 rounded-full"
+                >
                   API Docs
                 </Link>
               </li>
               <li>
-                <Link to="/admin" className="text-emerald-600 hover:text-emerald-700 font-extrabold transition-colors text-sm bg-emerald-50 px-3 py-1.5 rounded-full">
+                <Link
+                  to="/admin"
+                  className="text-emerald-600 hover:text-emerald-700 font-extrabold transition-colors text-sm bg-emerald-50 px-3 py-1.5 rounded-full"
+                >
                   Admin CMS
                 </Link>
               </li>
             </ul>
 
             <div className="flex items-center gap-3">
-              <Link to="/login" className="text-sm font-bold text-gray-700 hover:text-primary-600 transition-colors px-4 py-2">
+              <Link
+                to="/login"
+                className="text-sm font-bold text-gray-700 hover:text-primary-600 transition-colors px-4 py-2"
+              >
                 Masuk
               </Link>
-              <Link to="/register" className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-md shadow-primary-500/20">
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-md shadow-primary-500/20"
+              >
                 Daftar
               </Link>
             </div>
@@ -211,7 +226,11 @@ export const Navbar = () => {
                         className="flex items-center justify-between w-full text-gray-800 hover:text-primary-600 font-bold text-lg py-1.5"
                       >
                         <span>{menu.title}</span>
-                        <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isSubmenuOpen ? 'rotate-180 text-primary-600' : 'text-gray-400'}`} />
+                        <ChevronDown
+                          className={`w-5 h-5 transition-transform duration-200 ${
+                            isSubmenuOpen ? 'rotate-180 text-primary-600' : 'text-gray-400'
+                          }`}
+                        />
                       </button>
 
                       {/* Nested Mobile Child Menu */}

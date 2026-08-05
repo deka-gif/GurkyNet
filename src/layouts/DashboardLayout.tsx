@@ -48,6 +48,8 @@ import { useAuthStore } from '../store/auth.store';
 import { useWebsiteStore } from '../store/website.store';
 import { UserRole } from '../constants/auth';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
+// @ts-ignore
+import logoImg from '../logo.png';
 
 export const DashboardLayout = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -152,7 +154,6 @@ export const DashboardLayout = () => {
           { path: '/dashboard/profil', label: 'Profile', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
-
 
       case 'Customer Support':
         return [
@@ -295,18 +296,11 @@ export const DashboardLayout = () => {
         {/* Sidebar Header Logo */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-gray-50">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            {settings?.logo ? (
-              <img
-                src={typeof settings.logo === 'string' ? settings.logo : settings.logo?.url}
-                alt={settings.websiteName || 'GurkyNet'}
-                className="w-9 h-9 object-contain rounded-xl shrink-0"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-500/25 shrink-0">
-                {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
-              </div>
-            )}
+            <img
+              src={logoImg}
+              alt={settings?.websiteName || 'GurkyNet'}
+              className="w-9 h-9 object-contain rounded-xl shrink-0"
+            />
             {!isSidebarCollapsed && (
               <motion.span 
                 initial={{ opacity: 0 }}
@@ -410,18 +404,11 @@ export const DashboardLayout = () => {
           <div className="flex items-center gap-4 flex-1">
             {/* Mobile Brand Logo */}
             <div className="flex md:hidden items-center gap-2">
-              {settings?.logo ? (
-                <img
-                  src={typeof settings.logo === 'string' ? settings.logo : settings.logo?.url}
-                  alt={settings.websiteName || 'GurkyNet'}
-                  className="w-8 h-8 object-contain rounded-lg shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary-500/25">
-                  {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
-                </div>
-              )}
+              <img
+                src={logoImg}
+                alt={settings?.websiteName || 'GurkyNet'}
+                className="w-8 h-8 object-contain rounded-lg shrink-0"
+              />
               <span className="font-extrabold text-base text-gray-900 tracking-tight">
                 Gurky<span className="text-primary-600">Net</span>
               </span>

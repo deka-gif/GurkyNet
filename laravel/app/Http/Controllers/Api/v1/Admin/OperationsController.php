@@ -13,6 +13,7 @@ use App\Http\Requests\Admin\Operations\UpdateProductRequest;
 use App\Http\Requests\Admin\Operations\ProviderFilterRequest;
 use App\Http\Requests\Admin\Operations\UpdateProviderRequest;
 use App\Http\Requests\Admin\Operations\UpdatePricingRequest;
+use App\Http\Resources\ProductResource;
 use Illuminate\Http\JsonResponse;
 
 class OperationsController extends Controller
@@ -38,16 +39,12 @@ class OperationsController extends Controller
         $filters = $request->validated();
         $paginator = $action->list($filters);
 
-        return $this->paginatedResponse(
-            'Daftar produk operasional berhasil dimuat.',
-            $paginator->items(),
-            [
-                'current_page' => $paginator->currentPage(),
-                'last_page' => $paginator->lastPage(),
-                'per_page' => $paginator->perPage(),
-                'total' => $paginator->total(),
-            ]
-        );
+return $this->paginatedResponse(
+    'Daftar produk operasional berhasil dimuat.',
+    ProductResource::collection($paginator),
+    $paginator
+);
+
     }
 
     /**

@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { storageService } from './storage.service';
 
-const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'https://api.gurkynet.my.id/api/v1';
+const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'https://gurkynet.my.id/api/v1';
 
 export type AuthMode = 'sanctum_cookie' | 'sanctum_token';
 

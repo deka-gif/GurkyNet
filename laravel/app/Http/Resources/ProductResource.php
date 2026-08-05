@@ -30,8 +30,9 @@ class ProductResource extends JsonResource
             'availabilityStatus' => $availabilityStatus, // Engine calculated: active, inactive, maintenance
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
-            'operatorName' => $this->provider?->name ?? 'System', // Frontend expected operator name
-            'provider' => new ProviderResource($this->whenLoaded('provider')),
+'operatorName' => $this->provider?->name ?? 'System',
+'provider' => $this->provider?->name ?? 'System',
+'providerDetails' => new ProviderResource($this->whenLoaded('provider')),
             'createdAt' => $this->created_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
         ];
