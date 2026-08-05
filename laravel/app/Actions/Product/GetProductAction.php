@@ -2,8 +2,10 @@
 
 namespace App\Actions\Product;
 
-use App\Repositories\Contracts\ProductRepositoryInterface;
 use App\Models\Product;
+use App\Repositories\Contracts\ProductRepositoryInterface;
+use App\Services\ProductProviders\ProductCatalogCache;
+use Illuminate\Support\Facades\Cache;
 
 class GetProductAction
 {
@@ -26,15 +28,15 @@ class GetProductAction
 
     public function getActiveProducts(): \Illuminate\Database\Eloquent\Collection
     {
-        $cacheKey = 'products_active_all';
-        $ttl = 3600; // 1 hour
+        $cacheKey = ProductCatalogCache::activeAllKey();
+        $ttl = 60;
 
         try {
-            return \Illuminate\Support\Facades\Cache::tags(['products', 'active_products'])->remember($cacheKey, $ttl, function () {
+            return Cache::tags(['products', 'active_products'])->remember($cacheKey, $ttl, function () {
                 return $this->productRepository->getActiveProducts();
             });
         } catch (\BadMethodCallException $e) {
-            return \Illuminate\Support\Facades\Cache::remember($cacheKey, $ttl, function () {
+            return Cache::remember($cacheKey, $ttl, function () {
                 return $this->productRepository->getActiveProducts();
             });
         }

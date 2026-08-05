@@ -7,7 +7,7 @@ use App\Actions\Admin\Operations\SyncVipCatalogAction;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
-use Illuminate\Support\Facades\Cache;
+use App\Services\ProductProviders\ProductCatalogCache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -274,16 +274,10 @@ class ProductProviderControlService
     }
 
     /**
-     * Enable/Disable/Priority must affect user catalog immediately (no deploy / restart).
+     * Enable/Disable/Priority/Sync must affect user catalog immediately.
      */
     protected function flushProductCatalogCache(): void
     {
-        try {
-            Cache::tags(['products', 'active_products'])->flush();
-        } catch (\BadMethodCallException) {
-            // File/array cache drivers do not support tags.
-        }
-
-        Cache::forget('products_active_all');
+        ProductCatalogCache::bump();
     }
 }
