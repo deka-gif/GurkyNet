@@ -34,9 +34,27 @@ class Media extends Model
 
     /**
      * Always expose an absolute, CDN-ready URL to all API clients.
+     * Raw DB value remains disk-relative (or legacy absolute); resolution happens here.
      */
     public function getUrlAttribute(?string $value): ?string
     {
-        return \App\Support\MediaUrl::absolute($value, $this->storage_disk ?: 'public');
+        $raw = $value;
+        // When accessed as $model->url, Laravel passes the attributes value.
+        // Prefer raw original to avoid nested accessor surprises during serialization.
+        if ($this->exists && array_key_exists('url', $this->attributes)) {
+            $raw = $this->attributes['url'];
+        }
+
+        return \App\Support\MediaUrl::absolute($raw, $this->storage_disk ?: 'public');
+    }
+
+    /**
+     * Disk-relative path for storage operations (delete, exists checks).
+     */
+    public function diskPath(): string
+    {
+        $raw = (string) ($this->attributes['url'] ?? ($this->folder . '/' . $this->filename));
+
+        return \App\Support\MediaUrl::toDiskRelativePath($raw);
     }
 }

@@ -21,8 +21,17 @@ class MediaResource extends JsonResource
             'altText' => $this->alt_text,
             'folder' => $this->folder,
             'storageDisk' => $this->storage_disk,
-            'url' => \App\Support\MediaUrl::absolute($this->url, $this->storage_disk ?: 'public'),
-            'cdnUrl' => \App\Support\MediaUrl::absolute($this->url, $this->storage_disk ?: 'public'),
+            // Always resolve from the RAW DB value so legacy absolute URLs are rebased
+            // onto the current API host / CDN (never trust a baked-in APP_URL).
+            'url' => \App\Support\MediaUrl::absolute(
+                $this->resource->getRawOriginal('url'),
+                $this->storage_disk ?: 'public'
+            ),
+            'cdnUrl' => \App\Support\MediaUrl::absolute(
+                $this->resource->getRawOriginal('url'),
+                $this->storage_disk ?: 'public'
+            ),
+            'path' => \App\Support\MediaUrl::toDiskRelativePath((string) $this->resource->getRawOriginal('url')),
             'uploadedBy' => $this->uploaded_by,
             'createdAt' => $this->created_at?->toIso8601String(),
         ];

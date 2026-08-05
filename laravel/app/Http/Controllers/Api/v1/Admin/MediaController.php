@@ -93,10 +93,8 @@ class MediaController extends Controller
             }
         }
 
-        // Build the public URL
-        $url = Storage::disk('public')->url($storagePath);
-
-        // Persist the record
+        // Store disk-relative path only — never bake APP_URL into the database.
+        // Absolute / CDN URLs are resolved at read time via MediaUrl / MediaResource.
         $media = Media::create([
             'filename'      => $filename,
             'original_name' => $file->getClientOriginalName(),
@@ -108,7 +106,7 @@ class MediaController extends Controller
             'alt_text'      => $altText,
             'folder'        => $folder,
             'storage_disk'  => 'public',
-            'url'           => $url,
+            'url'           => $storagePath,
             'uploaded_by'   => Auth::user()?->name ?? 'system',
         ]);
 
@@ -165,8 +163,8 @@ class MediaController extends Controller
         }
 
         // Remove the physical file from storage
-        $relativePath = $media->folder . '/' . $media->filename;
-        if (Storage::disk('public')->exists($relativePath)) {
+        $relativePath = $media->diskPath();
+        if ($relativePath !== '' && Storage::disk('public')->exists($relativePath)) {
             Storage::disk('public')->delete($relativePath);
         }
 

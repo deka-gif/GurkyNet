@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export const AppPreview = () => {
   const navigate = useNavigate();
@@ -20,8 +21,8 @@ export const AppPreview = () => {
 
   const getImageUrl = (image: any): string => {
     if (!image) return '';
-    if (typeof image === 'string') return image;
-    if (typeof image === 'object' && image.url) return image.url;
+    if (typeof image === 'string') return resolveMediaUrl(image);
+    if (typeof image === 'object' && image.url) return resolveMediaUrl(image.url);
     return '';
   };
 

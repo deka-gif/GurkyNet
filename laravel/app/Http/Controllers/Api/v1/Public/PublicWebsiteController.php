@@ -245,7 +245,9 @@ class PublicWebsiteController extends Controller
                     'source' => 'announcement',
                     'title' => $item->title,
                     'body' => $item->message,
-                    'cover_image' => MediaUrl::absolute($item->coverMedia?->url),
+                    'cover_image' => MediaUrl::absolute(
+                        $item->coverMedia?->getRawOriginal('url')
+                    ),
                     'published_at' => optional($item->created_at)?->toIso8601String(),
                 ];
             });
@@ -260,9 +262,9 @@ class PublicWebsiteController extends Controller
             ->sortBy('display_order')
             ->values()
             ->map(function ($section) {
-                $cover = optional($section->heroBackgroundMedia)->url
-                    ?? optional($section->heroIllustrationMedia)->url
-                    ?? optional($section->heroMobileImageMedia)->url
+                $cover = optional($section->heroBackgroundMedia)->getRawOriginal('url')
+                    ?? optional($section->heroIllustrationMedia)->getRawOriginal('url')
+                    ?? optional($section->heroMobileImageMedia)->getRawOriginal('url')
                     ?? null;
 
                 return [

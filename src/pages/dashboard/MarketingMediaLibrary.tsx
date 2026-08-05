@@ -8,6 +8,7 @@ import { useMediaStore } from '../../store/media.store';
 import { useAuthStore } from '../../store/auth.store'; // Auth store for checking role authorization
 import { DashboardHeader } from '../../components/common/DashboardHeader';
 import { Media } from '../../types';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export const MarketingMediaLibrary = () => {
   const { user } = useAuthStore() as any; // Retrieve logged in user to verify role authorization
@@ -82,7 +83,7 @@ export const MarketingMediaLibrary = () => {
 
   // Copy to clipboard
   const handleCopyUrl = (url: string, id: number) => {
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(resolveMediaUrl(url));
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -335,7 +336,7 @@ export const MarketingMediaLibrary = () => {
               {/* Thumbnail Stage */}
               <div className="relative aspect-square bg-gray-50 overflow-hidden cursor-pointer" onClick={() => openPreview(media)}>
                 <img
-                  src={media.url}
+                  src={resolveMediaUrl(media.url)}
                   alt={media.altText || media.filename}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   referrerPolicy="no-referrer"
@@ -429,7 +430,7 @@ export const MarketingMediaLibrary = () => {
                         onClick={() => openPreview(media)}
                       >
                         <img 
-                          src={media.url} 
+                          src={resolveMediaUrl(media.url)} 
                           alt={media.altText || media.filename} 
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
@@ -728,7 +729,7 @@ export const MarketingMediaLibrary = () => {
               {/* Image Preview Canvas */}
               <div className="flex-1 bg-gray-950 flex items-center justify-center p-6 relative">
                 <img
-                  src={selectedMedia.url}
+                  src={resolveMediaUrl(selectedMedia.url)}
                   alt={selectedMedia.altText}
                   className="max-w-full max-h-full object-contain"
                   referrerPolicy="no-referrer"

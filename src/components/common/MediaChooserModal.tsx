@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Folder, Image as ImageIcon, Upload, X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { useMediaStore } from '../../store/media.store';
 import { Media } from '../../types';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 interface MediaChooserModalProps {
   isOpen: boolean;
@@ -55,7 +56,7 @@ export const MediaChooserModal = ({
 
   const handleSelect = () => {
     if (selectedItem) {
-      onSelect(selectedItem.url, selectedItem);
+      onSelect(resolveMediaUrl(selectedItem.url), selectedItem);
       onClose();
     }
   };
@@ -174,13 +175,13 @@ export const MediaChooserModal = ({
                         onClick={() => setSelectedItem(media)}
                         onDoubleClick={() => {
                           setSelectedItem(media);
-                          onSelect(media.url, media);
+                          onSelect(resolveMediaUrl(media.url), media);
                           onClose();
                         }}
                         className={`group relative aspect-square border-2 rounded-2xl overflow-hidden bg-gray-50 text-left transition-all outline-none ${isSelected ? 'border-primary-500 ring-4 ring-primary-500/10 scale-[0.98]' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <img
-                          src={media.url}
+                          src={resolveMediaUrl(media.url)}
                           alt={media.altText || media.filename}
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"

@@ -39,6 +39,7 @@ import { useBannerStore } from '../../store/banner.store';
 import { useTransactionStore } from '../../store/transaction.store';
 import { useNotificationStore } from '../../store/notification.store';
 import { Transaction, Banner } from '../../types';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export const DashboardHomePage = () => {
   const navigate = useNavigate();
@@ -396,7 +397,9 @@ export const DashboardHomePage = () => {
                 {displayBanners.map((banner, index) => {
                   if (index !== currentBannerSlide) return null;
 
-                  const bannerImage = typeof banner.image === 'string' ? banner.image : (banner.image as any)?.url || '';
+                  const bannerImage = resolveMediaUrl(
+                    typeof banner.image === 'string' ? banner.image : (banner.image as any)?.url || ''
+                  );
 
                   return (
                     <motion.div
