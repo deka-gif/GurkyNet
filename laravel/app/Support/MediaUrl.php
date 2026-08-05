@@ -9,8 +9,9 @@ use Illuminate\Support\Str;
  *
  * Contract:
  * - Database stores a disk-relative path (e.g. "general/uuid.png"), never a host.
- * - Legacy rows that already contain absolute /storage URLs are normalized on read.
- * - CDN_URL wins when set; otherwise APP_URL / current API request host is used.
+ * - Legacy rows that already contain absolute /storage or /api/.../media URLs are normalized on read.
+ * - CDN_URL wins when set; otherwise files are served through the Laravel API media route
+ *   so SPA catch-all hosts (serving index.html for /storage/*) still display images.
  */
 class MediaUrl
 {
@@ -37,12 +38,29 @@ class MediaUrl
         }
 
         $base = self::publicBaseUrl();
+        $prefix = self::publicDeliveryPrefix();
+
         if ($base === '') {
-            // Last resort: root-relative path (same-origin API + SPA only).
-            return '/storage/' . $relative;
+            return $prefix . '/' . $relative;
         }
 
-        return $base . '/storage/' . $relative;
+        return $base . $prefix . '/' . $relative;
+    }
+
+    /**
+     * Public path prefix that actually reaches Laravel (not the SPA index.html).
+     * Default: /api/v1/public/media
+     */
+    public static function publicDeliveryPrefix(): string
+    {
+        $prefix = (string) config(
+            'filesystems.media_delivery_path',
+            env('MEDIA_DELIVERY_PATH', '/api/v1/public/media')
+        );
+
+        $prefix = '/' . trim($prefix, '/');
+
+        return $prefix === '/' ? '/api/v1/public/media' : $prefix;
     }
 
     /**
@@ -50,23 +68,37 @@ class MediaUrl
      * Examples:
      *   general/a.png
      *   /storage/general/a.png
+     *   /api/v1/public/media/general/a.png
      *   https://host/storage/general/a.png
-     *   http://127.0.0.1:9000/storage/general/a.png
+     *   https://host/api/v1/public/media/general/a.png
      */
     public static function toDiskRelativePath(string $url): string
     {
         $url = trim($url);
 
-        if (preg_match('#https?://[^/]+/storage/(.+)$#i', $url, $matches)) {
-            return ltrim($matches[1], '/');
+        if (preg_match('#https?://[^/]+(/.*)$#i', $url, $matches)) {
+            $url = $matches[1];
         }
 
+        $delivery = self::publicDeliveryPrefix();
+        if (Str::startsWith($url, $delivery . '/')) {
+            return ltrim(Str::after($url, $delivery . '/'), '/');
+        }
+        if (Str::startsWith($url, $delivery)) {
+            return ltrim(Str::after($url, $delivery), '/');
+        }
+
+        // Legacy symlink path
         if (Str::startsWith($url, '/storage/')) {
             return ltrim(Str::after($url, '/storage/'), '/');
         }
-
         if (Str::startsWith($url, 'storage/')) {
             return ltrim(Str::after($url, 'storage/'), '/');
+        }
+
+        // Common API media path even if config prefix differs
+        if (preg_match('#/api/v1/public/media/(.+)$#i', $url, $matches)) {
+            return ltrim($matches[1], '/');
         }
 
         // Reject accidental filesystem absolute paths.
@@ -78,7 +110,7 @@ class MediaUrl
     }
 
     /**
-     * Public origin that actually serves /storage (API host).
+     * Public origin that serves the API (and therefore /api/v1/public/media).
      * Prefer the current HTTP request host so a mismatched APP_URL cannot break thumbnails.
      */
     public static function publicBaseUrl(): string

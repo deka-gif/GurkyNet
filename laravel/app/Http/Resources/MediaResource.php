@@ -31,6 +31,14 @@ class MediaResource extends JsonResource
                 $this->resource->getRawOriginal('url'),
                 $this->storage_disk ?: 'public'
             ),
+            'image_url' => \App\Support\MediaUrl::absolute(
+                $this->resource->getRawOriginal('url'),
+                $this->storage_disk ?: 'public'
+            ),
+            'thumbnail_url' => \App\Support\MediaUrl::absolute(
+                $this->resource->getRawOriginal('url'),
+                $this->storage_disk ?: 'public'
+            ),
             'path' => \App\Support\MediaUrl::toDiskRelativePath((string) $this->resource->getRawOriginal('url')),
             'uploadedBy' => $this->uploaded_by,
             'createdAt' => $this->created_at?->toIso8601String(),

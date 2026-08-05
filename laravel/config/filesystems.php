@@ -10,6 +10,12 @@ return [
     'cdn_url' => env('CDN_URL'),
     'default_public_disk' => env('FILESYSTEM_PUBLIC_DISK', 'public'),
 
+    /*
+    | Path prefix used when CDN_URL is empty. Must be a Laravel API route that streams
+    | public-disk files — SPA hosts often return index.html for classic /storage/*.
+    */
+    'media_delivery_path' => env('MEDIA_DELIVERY_PATH', '/api/v1/public/media'),
+
     'disks' => [
         'local' => [
             'driver' => 'local',

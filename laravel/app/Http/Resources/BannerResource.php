@@ -9,19 +9,22 @@ class BannerResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $imageUrl = \App\Support\MediaUrl::absolute(
-            $this->imageMedia
-                ? $this->imageMedia->getRawOriginal('url')
-                : $this->image_url
-        );
+        $rawPath = $this->imageMedia
+            ? $this->imageMedia->getRawOriginal('url')
+            : $this->image_url;
+
+        $imageUrl = \App\Support\MediaUrl::absolute($rawPath);
 
         return [
             'id' => (string) $this->id,
             'type' => $this->type ?? 'banner',
             'title' => $this->title,
             'description' => $this->description ?? '',
+            // Primary display fields (absolute, API-served)
             'image' => $imageUrl ?: '',
             'imageUrl' => $imageUrl ?: '',
+            'image_url' => $imageUrl ?: '',
+            'thumbnail_url' => $imageUrl ?: '',
             'mobileImage' => $this->mobileImageMedia ? new MediaResource($this->mobileImageMedia) : null,
             'imageMedia' => $this->imageMedia ? new MediaResource($this->imageMedia) : null,
             'imageMediaId' => $this->image_media_id,

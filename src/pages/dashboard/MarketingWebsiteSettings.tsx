@@ -4,6 +4,7 @@ import { websiteService } from '../../services';
 import { WebsiteSetting, Media } from '../../types';
 import { CmsPageHeader, CmsSaveButton } from '../../components/common/CmsCommon';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
+import { resolveMediaSrc } from '../../utils/mediaUrl';
 
 export const MarketingWebsiteSettings: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
@@ -224,7 +225,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
                 {formState.logo ? (
                   <div className="relative group rounded-2xl border border-gray-100 p-2.5 bg-gray-50/50 flex items-center gap-3">
                     <img
-                      src={typeof formState.logo === 'string' ? formState.logo : formState.logo?.url || ''}
+                      src={resolveMediaSrc(formState.logo)}
                       alt="Logo Terang"
                       className="w-12 h-12 object-contain bg-white rounded-lg border border-gray-100"
                     />
@@ -278,7 +279,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
                 {formState.logoDark ? (
                   <div className="relative group rounded-2xl border border-gray-100 p-2.5 bg-gray-50/50 flex items-center gap-3">
                     <img
-                      src={typeof formState.logoDark === 'string' ? formState.logoDark : formState.logoDark?.url || ''}
+                      src={resolveMediaSrc(formState.logoDark)}
                       alt="Logo Gelap"
                       className="w-12 h-12 object-contain bg-gray-950 rounded-lg border border-gray-800"
                     />

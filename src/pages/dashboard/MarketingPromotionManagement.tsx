@@ -25,6 +25,7 @@ import { storageService } from '../../services/storage.service';
 import { useMarketingStore } from '../../store/marketing.store';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
+import { resolveMediaUrl, resolveMediaSrc } from '../../utils/mediaUrl';
 
 export const MarketingPromotionManagement: React.FC = () => {
   const user = storageService.getUser();
@@ -666,7 +667,7 @@ export const MarketingPromotionManagement: React.FC = () => {
                   <span className="text-[10px] text-gray-400 font-bold uppercase block">Promotion Image</span>
                   <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 aspect-video">
                     <img
-                      src={selectedPromo.image_url || selectedPromo.image}
+                      src={resolveMediaSrc(selectedPromo.image_url || selectedPromo.image)}
                       alt="Promotion Banner"
                       className="w-full h-full object-cover"
                     />
@@ -896,7 +897,7 @@ export const MarketingPromotionManagement: React.FC = () => {
                     {formState.image_url ? (
                       <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
                         <img
-                          src={formState.image_url}
+                          src={resolveMediaUrl(formState.image_url)}
                           alt="Promo"
                           className="w-full h-16 object-cover rounded-lg border border-gray-100 bg-gray-50"
                         />
@@ -946,7 +947,7 @@ export const MarketingPromotionManagement: React.FC = () => {
                     {formState.mobile_image_url ? (
                       <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
                         <img
-                          src={formState.mobile_image_url}
+                          src={resolveMediaUrl(formState.mobile_image_url)}
                           alt="Mobile Promo"
                           className="w-full h-16 object-cover rounded-lg border border-gray-100 bg-gray-50"
                         />

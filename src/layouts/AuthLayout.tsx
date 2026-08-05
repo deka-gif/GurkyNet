@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { CheckCircle } from 'lucide-react';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 import { useWebsiteStore } from '../store/website.store';
+import { resolveMediaSrc } from '../utils/mediaUrl';
 
 export const AuthLayout = () => {
   const { settings, fetchSettings } = useWebsiteStore();
@@ -20,7 +21,7 @@ export const AuthLayout = () => {
         <Link to="/" className="flex items-center gap-2">
           {settings?.logo ? (
             <img
-              src={typeof settings.logo === 'string' ? settings.logo : settings.logo?.url}
+              src={resolveMediaSrc(settings.logo)}
               alt={settings.websiteName || 'GurkyNet'}
               className="w-10 h-10 object-contain rounded-xl"
               referrerPolicy="no-referrer"

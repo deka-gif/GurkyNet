@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
-import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { resolveMediaSrc } from '../../utils/mediaUrl';
 
 export const AppPreview = () => {
   const navigate = useNavigate();
@@ -19,12 +19,7 @@ export const AppPreview = () => {
     { title: "Profil", color: "bg-orange-50" },
   ];
 
-  const getImageUrl = (image: any): string => {
-    if (!image) return '';
-    if (typeof image === 'string') return resolveMediaUrl(image);
-    if (typeof image === 'object' && image.url) return resolveMediaUrl(image.url);
-    return '';
-  };
+  const getImageUrl = (image: any): string => resolveMediaSrc(image);
 
   return (
     <section className="py-20 md:py-32 bg-gray-50 overflow-hidden">

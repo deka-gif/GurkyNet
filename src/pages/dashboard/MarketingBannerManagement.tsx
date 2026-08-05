@@ -23,6 +23,7 @@ import {
   Info
 } from 'lucide-react';
 import { storageService } from '../../services/storage.service';
+import { resolveMediaUrl, resolveMediaSrc } from '../../utils/mediaUrl';
 import { useMarketingStore } from '../../store/marketing.store';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
@@ -709,7 +710,7 @@ export const MarketingBannerManagement: React.FC = () => {
                 <div className="w-full min-h-[160px] rounded-2xl p-6 text-white shadow-md bg-gradient-to-br from-purple-900 via-pink-900 to-slate-900 space-y-3 relative overflow-hidden flex flex-col justify-between">
                   {(selectedBanner.image_url || selectedBanner.image) && (
                     <img
-                      src={selectedBanner.image_url || selectedBanner.image}
+                      src={resolveMediaSrc(selectedBanner.image_url || selectedBanner.image)}
                       alt="Banner Content"
                       className="absolute inset-0 w-full h-full object-cover opacity-50 z-0"
                     />
@@ -887,7 +888,7 @@ export const MarketingBannerManagement: React.FC = () => {
                     {formState.image_url ? (
                       <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
                         <img
-                          src={formState.image_url}
+                          src={resolveMediaUrl(formState.image_url)}
                           alt="Banner"
                           className="w-full h-16 object-cover rounded-lg border border-gray-100 bg-gray-50"
                         />
@@ -937,7 +938,7 @@ export const MarketingBannerManagement: React.FC = () => {
                     {formState.mobile_image_url ? (
                       <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
                         <img
-                          src={formState.mobile_image_url}
+                          src={resolveMediaUrl(formState.mobile_image_url)}
                           alt="Mobile Banner"
                           className="w-full h-16 object-cover rounded-lg border border-gray-100 bg-gray-50"
                         />

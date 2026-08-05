@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter, Youtube, Mail, Phone, MapPin, Shield, HelpCircle } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
+import { resolveMediaSrc } from '../../utils/mediaUrl';
 
 export const Footer = () => {
   const { settings, fetchSettings, pages, fetchPages } = useWebsiteStore();
@@ -28,11 +29,7 @@ export const Footer = () => {
             <Link to="/" className="flex items-center gap-2">
               {settings?.logo ? (
                 <img
-                  src={
-                    typeof settings.logo === 'string'
-                      ? settings.logo
-                      : settings.logo?.url
-                  }
+                  src={resolveMediaSrc(settings.logo)}
                   alt={settings.websiteName || 'GurkyNet'}
                   className="w-8 h-8 object-contain rounded-lg"
                   referrerPolicy="no-referrer"

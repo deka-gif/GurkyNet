@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\v1\Admin\StaticPageController;
 use App\Http\Controllers\Api\v1\Admin\MediaController;
 use App\Http\Controllers\Api\v1\ProfileController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
+use App\Http\Controllers\Api\v1\Public\PublicMediaController;
 use App\Http\Middleware\EnsureRole;
 
 /*
@@ -59,6 +60,9 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/news',               [PublicWebsiteController::class, 'news']);
         Route::get('/faq',                [PublicWebsiteController::class, 'faq']);
         Route::get('/provider-status',    [PublicWebsiteController::class, 'providerStatus']);
+        // Stream public-disk files via API (SPA hosts often swallow /storage/* as index.html)
+        Route::get('/media/{path}',       [PublicMediaController::class, 'show'])
+            ->where('path', '.*');
     });
 
     // Platform versioning (shared by all clients)

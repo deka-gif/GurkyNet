@@ -9,6 +9,12 @@ class PromotionResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $rawPath = $this->imageMedia
+            ? $this->imageMedia->getRawOriginal('url')
+            : $this->image_url;
+
+        $imageUrl = \App\Support\MediaUrl::absolute($rawPath);
+
         return [
             'id' => $this->id,
             'type' => $this->type ?? 'promotion',
@@ -20,10 +26,12 @@ class PromotionResource extends JsonResource
             'minTransaction' => (float) ($this->min_transaction ?? 0),
             'quota' => (int) ($this->quota ?? 0),
             'usedCount' => (int) ($this->used_count ?? 0),
-            'image' => $this->imageMedia
-                ? new MediaResource($this->imageMedia)
-                : \App\Support\MediaUrl::absolute($this->image_url),
+            'image' => $imageUrl,
+            'imageUrl' => $imageUrl,
+            'image_url' => $imageUrl,
+            'thumbnail_url' => $imageUrl,
             'mobileImage' => $this->mobileImageMedia ? new MediaResource($this->mobileImageMedia) : null,
+            'imageMedia' => $this->imageMedia ? new MediaResource($this->imageMedia) : null,
             'imageMediaId' => $this->image_media_id,
             'mobileImageMediaId' => $this->mobile_image_media_id,
             'redirectUrl' => $this->redirect_url,
