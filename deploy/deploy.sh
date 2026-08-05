@@ -36,10 +36,11 @@ sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl restart gurkynet-worker:* || true
 sudo supervisorctl restart gurkynet-scheduler || true
-sudo systemctl reload php8.3-fpm || true
+# Prefer PHP 8.4 (production); fall back to 8.3
+sudo systemctl reload php8.4-fpm 2>/dev/null || sudo systemctl reload php8.3-fpm || true
 sudo systemctl reload nginx || true
 
 echo "==> Health check"
-curl -fsS "${APP_URL:-https://api.gurkynet.id}/api/health" || true
+curl -fsS "${APP_URL:-https://gurkynet.my.id}/api/health" || true
 
 echo "Deploy complete."
