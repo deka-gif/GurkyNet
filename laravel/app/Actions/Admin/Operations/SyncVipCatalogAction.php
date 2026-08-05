@@ -230,83 +230,96 @@ class SyncVipCatalogAction
                 $category = $this->upsertCategory($categoryName);
                 $operator = $this->upsertOperator($brand);
 
-                $existing = Product::withTrashed()->where('sku_code', $internalSku)->first();
-
-                if ($existing) {
-                    if ($digiflazzId && (int) $existing->product_provider_id === (int) $digiflazzId) {
-                        $skipped++;
-                        Log::info('VIP SYNC TRACE — Stage 4 Skipped', [
-                            'reason' => 'duplicate',
-                            'detail' => 'digiflazz_ownership',
-                            'sku' => $internalSku,
-                        ]);
-                        continue;
+                // Prefer attaching VIP offer onto an existing Digiflazz/master product (same brand+name).
+                $matched = $this->findMatchingMasterProduct($category->id, $operator->id, $providerName);
+                if ($matched) {
+                    if ($matched->trashed()) {
+                        $matched->restore();
                     }
-
-                    if ($existing->trashed()) {
-                        $existing->restore();
-                    }
-
-                    $adminFee = (float) $existing->admin_fee;
-                    $previousMargin = (float) $existing->sell_price - (float) $existing->base_price - $adminFee;
-                    if ($previousMargin < 0) {
-                        $previousMargin = $defaultMargin;
-                    }
-
-                    $updatePayload = [
-                        'product_category_id' => $category->id,
-                        'provider_id' => $operator->id,
-                        'product_provider_id' => $vipProvider->id,
-                        'name' => $providerName,
-                        'base_price' => $providerPrice,
-                        'sell_price' => $providerPrice + $previousMargin + $adminFee,
-                        'status' => $isActive,
-                    ];
-
-                    Log::info('VIP SYNC TRACE — Stage 5 Before Product update', $updatePayload + [
-                        'product_id' => $existing->id,
-                        'sku_code' => $internalSku,
-                    ]);
-
-                    $existing->fill($updatePayload);
-                    $existing->save();
-                    $product = $existing;
+                    $product = $matched;
                     $updated++;
-
-                    Log::info('VIP SYNC TRACE — Stage 6 After Product update', [
-                        'Inserted Product ID' => $product->id,
+                    Log::info('VIP SYNC TRACE — Stage 5 Matched existing master product (no duplicate Product)', [
+                        'product_id' => $product->id,
+                        'sku_code' => $product->sku_code,
+                        'vip_provider_sku' => $providerSku,
                     ]);
                 } else {
-                    $createPayload = [
-                        'product_category_id' => $category->id,
-                        'provider_id' => $operator->id,
-                        'product_provider_id' => $vipProvider->id,
-                        'sku_code' => $internalSku,
-                        'name' => $providerName,
-                        'base_price' => $providerPrice,
-                        'sell_price' => $providerPrice + $defaultMargin,
-                        'admin_fee' => 0.00,
-                        'status' => $isActive,
-                    ];
+                    $existing = Product::withTrashed()->where('sku_code', $internalSku)->first();
 
-                    // Stage 5
-                    Log::info('VIP SYNC TRACE — Stage 5 Before Product::create()', $createPayload);
+                    if ($existing) {
+                        if ($digiflazzId && (int) $existing->product_provider_id === (int) $digiflazzId) {
+                            $skipped++;
+                            Log::info('VIP SYNC TRACE — Stage 4 Skipped', [
+                                'reason' => 'duplicate',
+                                'detail' => 'digiflazz_ownership',
+                                'sku' => $internalSku,
+                            ]);
+                            continue;
+                        }
 
-                    $product = Product::create($createPayload);
-                    $imported++;
+                        if ($existing->trashed()) {
+                            $existing->restore();
+                        }
 
-                    // Stage 6
-                    Log::info('VIP SYNC TRACE — Stage 6 After Product::create()', [
-                        'Inserted Product ID' => $product->id,
-                    ]);
+                        $adminFee = (float) $existing->admin_fee;
+                        $previousMargin = (float) $existing->sell_price - (float) $existing->base_price - $adminFee;
+                        if ($previousMargin < 0) {
+                            $previousMargin = $defaultMargin;
+                        }
+
+                        $updatePayload = [
+                            'product_category_id' => $category->id,
+                            'provider_id' => $operator->id,
+                            'product_provider_id' => $vipProvider->id,
+                            'name' => $providerName,
+                            'base_price' => $providerPrice,
+                            'sell_price' => $providerPrice + $previousMargin + $adminFee,
+                            'status' => $isActive,
+                        ];
+
+                        Log::info('VIP SYNC TRACE — Stage 5 Before Product update', $updatePayload + [
+                            'product_id' => $existing->id,
+                            'sku_code' => $internalSku,
+                        ]);
+
+                        $existing->fill($updatePayload);
+                        $existing->save();
+                        $product = $existing;
+                        $updated++;
+
+                        Log::info('VIP SYNC TRACE — Stage 6 After Product update', [
+                            'Inserted Product ID' => $product->id,
+                        ]);
+                    } else {
+                        $createPayload = [
+                            'product_category_id' => $category->id,
+                            'provider_id' => $operator->id,
+                            'product_provider_id' => $vipProvider->id,
+                            'sku_code' => $internalSku,
+                            'name' => $providerName,
+                            'base_price' => $providerPrice,
+                            'sell_price' => $providerPrice + $defaultMargin,
+                            'admin_fee' => 0.00,
+                            'status' => $isActive,
+                        ];
+
+                        Log::info('VIP SYNC TRACE — Stage 5 Before Product::create()', $createPayload);
+
+                        $product = Product::create($createPayload);
+                        $imported++;
+
+                        Log::info('VIP SYNC TRACE — Stage 6 After Product::create()', [
+                            'Inserted Product ID' => $product->id,
+                        ]);
+                    }
                 }
 
                 $skuAttributes = [
+                    'product_id' => $product->id,
                     'product_provider_id' => $vipProvider->id,
-                    'provider_sku' => $providerSku,
                 ];
                 $skuValues = [
-                    'product_id' => $product->id,
+                    'provider_sku' => $providerSku,
                     'provider_name' => $providerName,
                     'base_price' => $providerPrice,
                     'provider_price' => $providerPrice,
@@ -315,21 +328,14 @@ class SyncVipCatalogAction
                     'is_active' => $isActive,
                 ];
 
-                $existingSku = ProductProviderSku::where($skuAttributes)->first();
-                if ($existingSku) {
-                    $existingSku->fill($skuValues);
-                    $existingSku->save();
-                    $skuRow = $existingSku;
-                    Log::info('VIP SYNC TRACE — Stage 7 After ProductProviderSku update', [
-                        'Inserted Mapping ID' => $skuRow->id,
-                    ]);
-                } else {
-                    Log::info('VIP SYNC TRACE — Stage 7 Before ProductProviderSku::create()', array_merge($skuAttributes, $skuValues));
-                    $skuRow = ProductProviderSku::create(array_merge($skuAttributes, $skuValues));
-                    Log::info('VIP SYNC TRACE — Stage 7 After ProductProviderSku::create()', [
-                        'Inserted Mapping ID' => $skuRow->id,
-                    ]);
-                }
+                Log::info('VIP SYNC TRACE — Stage 7 Before ProductProviderSku::updateOrCreate()', array_merge($skuAttributes, $skuValues));
+
+                $skuRow = ProductProviderSku::updateOrCreate($skuAttributes, $skuValues);
+
+                Log::info('VIP SYNC TRACE — Stage 7 After ProductProviderSku::updateOrCreate()', [
+                    'Inserted Mapping ID' => $skuRow->id,
+                    'was_recently_created' => $skuRow->wasRecentlyCreated,
+                ]);
 
                 if ($firstSkuId === null) {
                     $firstSkuId = (int) $skuRow->id;
@@ -620,6 +626,25 @@ class SyncVipCatalogAction
         $category->save();
 
         return $category;
+    }
+
+    /**
+     * Find an existing non-VIP master product to attach a VIP offer (enables failover + catalog merge).
+     */
+    protected function findMatchingMasterProduct(int $categoryId, int $operatorId, string $name): ?Product
+    {
+        $normalized = Str::lower(trim($name));
+        if ($normalized === '') {
+            return null;
+        }
+
+        return Product::withTrashed()
+            ->where('product_category_id', $categoryId)
+            ->where('provider_id', $operatorId)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
+            ->where('sku_code', 'not like', 'VIP-%')
+            ->orderBy('id')
+            ->first();
     }
 
     protected function upsertOperator(string $brand): Provider

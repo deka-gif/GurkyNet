@@ -62,9 +62,9 @@ class ProductProviderFulfillmentService
             return;
         }
 
-        $candidates = $this->selection->candidatesForProduct($product);
+        $candidates = $this->selection->candidatesForProduct($product, $transaction->id);
         if ($candidates->isEmpty()) {
-            Log::warning('ProductProviderFulfillment: no enabled providers', [
+            Log::warning('PRODUCT ROUTING — no enabled providers', [
                 'transaction_id' => $transaction->id,
                 'product_id' => $product->id,
             ]);
@@ -73,11 +73,18 @@ class ProductProviderFulfillmentService
             return;
         }
 
+        Log::info('PRODUCT ROUTING — fulfill start', [
+            'transaction_id' => $transaction->id,
+            'candidates' => $candidates->map(fn (ProductProviderSku $o) => $o->productProvider?->code)->values()->all(),
+        ]);
+
         $attempt = 0;
         $lastResult = null;
         $previousCode = null;
+        $candidateList = $candidates->values();
+        $total = $candidateList->count();
 
-        foreach ($candidates as $offer) {
+        foreach ($candidateList as $index => $offer) {
             /** @var ProductProviderSku $offer */
             $provider = $offer->productProvider;
             if (!$provider || !$provider->is_active) {
@@ -90,18 +97,26 @@ class ProductProviderFulfillmentService
 
             $attempt++;
             $adapter = $this->registry->get($provider->code);
+            $nextOffer = $candidateList->get($index + 1);
+            $nextCode = $nextOffer?->productProvider?->code;
 
             if (!$adapter->isConfigured()) {
+                Log::info('PRODUCT ROUTING — provider skipped', [
+                    'transaction_id' => $transaction->id,
+                    'provider_code' => $provider->code,
+                    'reason_skipped' => 'provider_not_configured',
+                ]);
                 ProductProviderLog::create([
                     'product_provider_id' => $provider->id,
                     'transaction_id' => $transaction->id,
                     'event_type' => 'failover',
                     'selected_provider_code' => $provider->code,
-                    'fallback_provider_code' => null,
+                    'fallback_provider_code' => $nextCode,
                     'reason' => 'provider_not_configured',
                     'attempt' => $attempt,
                     'success' => false,
                     'error_message' => 'Adapter not configured',
+                    'meta' => ['failover_executed' => $nextCode !== null],
                 ]);
                 $previousCode = $provider->code;
                 continue;
@@ -120,10 +135,19 @@ class ProductProviderFulfillmentService
                 );
             }
 
+            Log::info('PRODUCT ROUTING — provider selected', [
+                'transaction_id' => $transaction->id,
+                'provider_code' => $provider->code,
+                'attempt' => $attempt,
+                'of' => $total,
+                'provider_sku' => $offer->provider_sku,
+                'previous_provider' => $previousCode,
+            ]);
+
             $this->selection->logSelection(
                 $transaction->id,
                 $provider,
-                null,
+                $nextOffer?->productProvider,
                 $attempt === 1 ? 'primary_selection' : 'failover_selection',
                 [
                     'attempt' => $attempt,
@@ -146,7 +170,7 @@ class ProductProviderFulfillmentService
                 'transaction_id' => $transaction->id,
                 'event_type' => 'fulfill_attempt',
                 'selected_provider_code' => $provider->code,
-                'fallback_provider_code' => null,
+                'fallback_provider_code' => $result->shouldFailover ? $nextCode : null,
                 'reason' => $result->reason ?? $result->status,
                 'response_time_ms' => $result->responseTimeMs,
                 'attempt' => $attempt,
@@ -155,8 +179,8 @@ class ProductProviderFulfillmentService
                 'meta' => [
                     'status' => $result->status,
                     'should_failover' => $result->shouldFailover,
+                    'failover_executed' => $result->shouldFailover && $nextCode !== null,
                     'internal_sku' => $internalSku,
-                    // provider_sku logged for ops only — never returned to user APIs
                     'provider_sku' => $offer->provider_sku,
                 ],
             ]);
@@ -164,6 +188,11 @@ class ProductProviderFulfillmentService
             $this->health->recordFulfillmentOutcome($provider, $result);
 
             if ($result->ok && $result->status === 'success') {
+                Log::info('PRODUCT ROUTING — success', [
+                    'transaction_id' => $transaction->id,
+                    'provider_code' => $provider->code,
+                    'attempt' => $attempt,
+                ]);
                 $this->markSuccess($transaction, $provider, $result);
 
                 return;
@@ -177,23 +206,37 @@ class ProductProviderFulfillmentService
 
             // Failed — failover if allowed and more candidates remain
             if ($result->shouldFailover) {
+                Log::info('PRODUCT ROUTING — failover executed', [
+                    'transaction_id' => $transaction->id,
+                    'from' => $provider->code,
+                    'to' => $nextCode,
+                    'reason' => $result->reason ?? 'failover',
+                ]);
                 ProductProviderLog::create([
                     'product_provider_id' => $provider->id,
                     'transaction_id' => $transaction->id,
                     'event_type' => 'failover',
                     'selected_provider_code' => $provider->code,
-                    'fallback_provider_code' => null,
+                    'fallback_provider_code' => $nextCode,
                     'reason' => $result->reason ?? 'failover',
                     'attempt' => $attempt,
                     'success' => false,
                     'error_message' => $result->message,
-                    'meta' => ['next' => true],
+                    'meta' => [
+                        'failover_executed' => $nextCode !== null,
+                        'next' => $nextCode,
+                    ],
                 ]);
                 $previousCode = $provider->code;
                 continue;
             }
 
-            // Hard reject — stop chain
+            // Hard reject — stop chain (customer / non-failover error)
+            Log::info('PRODUCT ROUTING — hard stop (no failover)', [
+                'transaction_id' => $transaction->id,
+                'provider_code' => $provider->code,
+                'reason' => $result->reason ?? 'provider_rejected',
+            ]);
             $this->failAndRefund(
                 $transaction,
                 'Transaksi gagal diproses. Saldo akan dikembalikan bila sudah dipotong.',

@@ -12,7 +12,10 @@ use Illuminate\Support\Facades\Log;
  */
 class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
 {
-    public function __construct(protected VipService $vip) {}
+    public function __construct(
+        protected VipService $vip,
+        protected ProviderFailoverPolicy $failoverPolicy,
+    ) {}
 
     public function code(): string
     {
@@ -48,14 +51,15 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             $ms = (int) ($response['latency_ms'] ?? ((microtime(true) - $started) * 1000));
 
             if (!$response['success']) {
-                $status = $response['api_status'] ?? 'provider_error';
-                $failover = in_array($status, ['timeout', 'offline', 'auth_failed', 'not_configured'], true);
+                $status = (string) ($response['api_status'] ?? 'provider_error');
+                $message = (string) ($response['message'] ?? 'VIP order failed');
+                $failover = $this->failoverPolicy->shouldFailover($status, $message);
 
                 return ProviderFulfillmentResult::failed(
                     $ms,
                     $status,
                     $failover,
-                    $response['message'] ?? 'VIP order failed',
+                    $message,
                     $response['raw'] ?? []
                 );
             }
@@ -70,10 +74,15 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             }
 
             if (in_array($orderStatus, ['error', 'failed', 'gagal'], true)) {
+                $reason = $this->failoverPolicy->messageLooksCustomer($message)
+                    ? 'customer_validation'
+                    : 'provider_rejected';
+                $failover = $this->failoverPolicy->shouldFailover($reason, $message);
+
                 return ProviderFulfillmentResult::failed(
                     $ms,
-                    'provider_rejected',
-                    true,
+                    $reason,
+                    $failover,
                     $message ?: 'VIP reported failed',
                     $response['raw'] ?? []
                 );

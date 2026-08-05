@@ -202,7 +202,12 @@ class MultiProductProviderControlTest extends TestCase
 
         $registry = new \App\Services\ProductProviders\ProductProviderRegistry($digiAdapter, $vipAdapter);
         $this->app->instance(\App\Services\ProductProviders\ProductProviderRegistry::class, $registry);
-        $this->app->instance(ProductProviderSelectionService::class, new ProductProviderSelectionService($registry));
+        $routing = new \App\Services\ProductProviders\ProductRoutingService(
+            $registry,
+            new \App\Services\ProductProviders\ProviderFailoverPolicy()
+        );
+        $this->app->instance(\App\Services\ProductProviders\ProductRoutingService::class, $routing);
+        $this->app->instance(ProductProviderSelectionService::class, new ProductProviderSelectionService($registry, $routing));
 
         $service = app(ProductProviderFulfillmentService::class);
         $service->fulfill($tx->fresh(['items']));

@@ -7,6 +7,7 @@ use App\Actions\Admin\Operations\SyncVipCatalogAction;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -107,6 +108,8 @@ class ProductProviderControlService
             'fresh_is_active' => $fresh?->is_active,
         ]);
 
+        $this->flushProductCatalogCache();
+
         return $fresh;
     }
 
@@ -118,6 +121,8 @@ class ProductProviderControlService
         $provider->save();
 
         $this->audit($provider, 'disable', true, 'Provider disabled — traffic auto-switches to next priority');
+
+        $this->flushProductCatalogCache();
 
         return $provider->fresh();
     }
@@ -132,6 +137,8 @@ class ProductProviderControlService
         $provider->save();
 
         $this->audit($provider, 'set_priority', true, "Priority set to {$priority}", ['priority' => $priority]);
+
+        $this->flushProductCatalogCache();
 
         return $provider->fresh();
     }
@@ -158,6 +165,8 @@ class ProductProviderControlService
         });
 
         $this->audit($provider, 'set_primary', true, 'Set as primary product provider');
+
+        $this->flushProductCatalogCache();
 
         return $provider->fresh();
     }
@@ -197,12 +206,15 @@ class ProductProviderControlService
                 'meta' => $result,
             ]);
 
+            $this->flushProductCatalogCache();
+
             return array_merge($result, ['provider' => $this->toCard($provider->fresh())]);
         }
 
         if ($provider->code === ProductProvider::CODE_VIP) {
             try {
                 $result = $this->syncVip->execute($options);
+                $this->flushProductCatalogCache();
 
                 return array_merge($result, ['provider' => $this->toCard($provider->fresh())]);
             } catch (\Throwable $e) {
@@ -259,5 +271,19 @@ class ProductProviderControlService
             'reason' => $reason,
             'meta' => $meta,
         ]);
+    }
+
+    /**
+     * Enable/Disable/Priority must affect user catalog immediately (no deploy / restart).
+     */
+    protected function flushProductCatalogCache(): void
+    {
+        try {
+            Cache::tags(['products', 'active_products'])->flush();
+        } catch (\BadMethodCallException) {
+            // File/array cache drivers do not support tags.
+        }
+
+        Cache::forget('products_active_all');
     }
 }

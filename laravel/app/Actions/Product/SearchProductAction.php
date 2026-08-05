@@ -22,7 +22,7 @@ class SearchProductAction
         // or just use the repository optimized query directly.
         // Let's cache the specific active products filter queries or just general searches.
         $cacheKey = 'products_search_' . md5(serialize($filters));
-        $ttl = 600; // 10 minutes
+        $ttl = 30; // Control Center enable/disable must reflect quickly even without tag flush
 
         try {
             return Cache::tags(['products', 'active_products'])->remember($cacheKey, $ttl, function () use ($filters) {

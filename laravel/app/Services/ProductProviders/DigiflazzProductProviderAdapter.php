@@ -13,7 +13,10 @@ use Illuminate\Support\Facades\Log;
  */
 class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
 {
-    public function __construct(protected DigiflazzService $digiflazz) {}
+    public function __construct(
+        protected DigiflazzService $digiflazz,
+        protected ProviderFailoverPolicy $failoverPolicy,
+    ) {}
 
     public function code(): string
     {
@@ -66,11 +69,15 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             }
 
             if ($status === 'failed') {
-                $failover = $this->shouldFailoverOnFailedMessage($message);
+                $reason = $this->classifyFailureReason($message);
+                if ($this->failoverPolicy->messageLooksCustomer($message)) {
+                    $reason = 'customer_validation';
+                }
+                $failover = $this->failoverPolicy->shouldFailover($reason, $message);
 
                 return ProviderFulfillmentResult::failed(
                     $ms,
-                    $failover ? $this->classifyFailureReason($message) : 'provider_rejected',
+                    $failover ? $reason : ($reason === 'customer_validation' ? 'customer_validation' : 'provider_rejected'),
                     $failover,
                     $message ?: 'Digiflazz reported failed.',
                     $response
@@ -129,25 +136,6 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 'message' => $e->getMessage(),
             ];
         }
-    }
-
-    protected function shouldFailoverOnFailedMessage(string $message): bool
-    {
-        $m = strtolower($message);
-
-        foreach ([
-            'saldo', 'balance', 'insufficient',
-            'timeout', 'maintenance', 'gangguan',
-            'offline', 'server', 'internal',
-            'cut off', 'sedang gangguan',
-        ] as $needle) {
-            if (str_contains($m, $needle)) {
-                return true;
-            }
-        }
-
-        // rc-style / empty — allow failover so secondary provider can try
-        return $message === '' || preg_match('/\b5\d{2}\b/', $message) === 1;
     }
 
     protected function classifyFailureReason(string $message): string
