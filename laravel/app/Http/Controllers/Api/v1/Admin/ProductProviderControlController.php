@@ -8,6 +8,7 @@ use App\Services\ProductProviders\ProductProviderControlService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -38,7 +39,7 @@ class ProductProviderControlController extends Controller
 
     public function enable(int $id, ProductProviderControlService $service): JsonResponse
     {
-        $dbBefore = \Illuminate\Support\Facades\DB::table('product_providers')->where('id', $id)->first(['id', 'is_active', 'api_status', 'code']);
+        $dbBefore = DB::table('product_providers')->where('id', $id)->first(['id', 'is_active', 'api_status', 'code']);
 
         Log::info('EXEC TRACE — ENTER Controller Enable', [
             'Provider ID' => $id,
@@ -69,7 +70,7 @@ class ProductProviderControlController extends Controller
 
     public function disable(int $id, ProductProviderControlService $service): JsonResponse
     {
-        $dbBefore = \Illuminate\Support\Facades\DB::table('product_providers')->where('id', $id)->first(['id', 'is_active', 'api_status', 'code']);
+        $dbBefore = DB::table('product_providers')->where('id', $id)->first(['id', 'is_active', 'api_status', 'code']);
 
         Log::info('EXEC TRACE — ENTER Controller Disable', [
             'Provider ID' => $id,
@@ -96,7 +97,7 @@ class ProductProviderControlController extends Controller
             'JSON apiStatus' => $card['apiStatus'] ?? null,
             'Fresh DB is_active' => $fresh->is_active,
             'Fresh DB api_status' => $fresh->api_status,
-            'db_is_active_raw' => \Illuminate\Support\Facades\DB::table('product_providers')->where('id', $fresh->id)->value('is_active'),
+            'db_is_active_raw' => DB::table('product_providers')->where('id', $fresh->id)->value('is_active'),
             'response_status' => $response->getStatusCode(),
         ]);
 

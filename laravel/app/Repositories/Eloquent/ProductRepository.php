@@ -22,6 +22,28 @@ class ProductRepository implements ProductRepositoryInterface
 {
     public function getPaginatedProducts(array $filters = []): LengthAwarePaginator
     {
+        Log::info('CATALOG TRACE — product_providers', [
+            'rows' => ProductProvider::query()->get(['id', 'code', 'is_active', 'priority'])->map(fn (ProductProvider $p) => [
+                'id' => $p->id,
+                'code' => $p->code,
+                'is_active' => $p->is_active,
+                'priority' => $p->priority,
+            ])->all(),
+        ]);
+
+        Log::info('CATALOG TRACE — product_provider_skus active counts', [
+            'rows' => ProductProviderSku::query()
+                ->where('is_active', 1)
+                ->selectRaw('product_provider_id, COUNT(*) as total')
+                ->groupBy('product_provider_id')
+                ->get()
+                ->map(fn ($r) => [
+                    'product_provider_id' => $r->product_provider_id,
+                    'total' => (int) $r->total,
+                ])
+                ->all(),
+        ]);
+
         $this->repairAndReportLegacyUnmapped();
 
         $query = Product::query()->with(['category', 'provider', 'productProvider', 'providerSkus.productProvider']);
@@ -32,12 +54,37 @@ class ProductRepository implements ProductRepositoryInterface
         $perPage = (int) ($filters['per_page'] ?? 15);
         $page = max(1, (int) ($filters['page'] ?? request()->input('page', 1)));
 
+        Log::info('CATALOG TRACE — Raw SQL', [
+            'sql' => $query->toSql(),
+        ]);
+
+        Log::info('CATALOG TRACE — Bindings', [
+            'bindings' => $query->getBindings(),
+        ]);
+
         $all = $query->orderBy('name')->orderBy('id')->get();
+
+        Log::info('CATALOG TRACE — count($all) after get()', [
+            'count' => $all->count(),
+        ]);
+
         $merged = $this->mergeDuplicateCatalogProducts($all);
+
+        Log::info('CATALOG TRACE — count after mergeDuplicateCatalogProducts()', [
+            'count' => $merged->count(),
+        ]);
+
         $this->logFilterTraceForCollection($merged, 'getPaginatedProducts');
 
         $total = $merged->count();
         $slice = $merged->slice(($page - 1) * $perPage, $perPage)->values();
+
+        Log::info('CATALOG TRACE — final count before paginator', [
+            'total' => $total,
+            'slice_count' => $slice->count(),
+            'page' => $page,
+            'per_page' => $perPage,
+        ]);
 
         return new LengthAwarePaginator(
             $slice,
