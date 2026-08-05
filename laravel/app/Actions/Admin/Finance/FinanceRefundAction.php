@@ -17,6 +17,11 @@ class FinanceRefundAction
         return $this->financeRepository->getRefundClaims($filters);
     }
 
+    public function find(string|int $id): ?Transaction
+    {
+        return $this->financeRepository->findTransaction($id);
+    }
+
     public function approve(string|int $id, ?string $notes = null): Transaction
     {
         $transaction = $this->financeRepository->findTransaction($id);

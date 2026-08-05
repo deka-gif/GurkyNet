@@ -46,10 +46,11 @@ class CreateTransactionAction
 
     /**
      * Execute the create transaction flow atomically.
+     * Status and pricing are always server-controlled (never client-supplied).
      */
-    public function execute(User $user, string $skuCode, string $targetNumber, string $pin, float $adminFeeOverride = 0.00, string $status = 'success'): Transaction
+    public function execute(User $user, string $skuCode, string $targetNumber, string $pin): Transaction
     {
-        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $adminFeeOverride, $status) {
+        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin) {
             
             // 1. Create Draft
             $invoiceNumber = $this->generateUniqueInvoice();
@@ -60,7 +61,7 @@ class CreateTransactionAction
                 'service_name' => 'Draft Transaction',
                 'target_number' => $targetNumber,
                 'amount' => 0.00,
-                'admin_fee' => $adminFeeOverride,
+                'admin_fee' => 0.00,
                 'total_payment' => 0.00,
                 'payment_method' => 'wallet',
                 'status' => TransactionStatus::DRAFT->value,
@@ -93,10 +94,11 @@ class CreateTransactionAction
                 ]);
             }
 
-            // 3. Calculate Price
+            // 3. Calculate Price (server-side only)
             $pricingDetails = $this->pricingService->calculateForProduct($product);
-            $sellPrice = $pricingDetails['sell_price'];
-            $totalPayment = $sellPrice + $adminFeeOverride;
+            $sellPrice = (float) $pricingDetails['sell_price'];
+            $adminFee = (float) $pricingDetails['admin_fee'];
+            $totalPayment = $sellPrice + $adminFee;
 
             // 4. Validate Wallet (Lock Wallet)
             $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
@@ -127,7 +129,7 @@ class CreateTransactionAction
             $wallet->balance -= $totalPayment;
             $wallet->save();
 
-            // 7. Update Transaction from Draft to Final State
+            // 7. Update Transaction from Draft to Final State (always pending for Digiflazz)
             $categoryName = $product->category->name ?? 'Produk PPOB';
             $providerName = $product->provider->name ?? '';
             $serviceName = trim($categoryName . ' ' . $providerName);
@@ -135,8 +137,9 @@ class CreateTransactionAction
             $transaction->update([
                 'service_name' => $serviceName,
                 'amount' => $sellPrice,
+                'admin_fee' => $adminFee,
                 'total_payment' => $totalPayment,
-                'status' => $status,
+                'status' => TransactionStatus::PENDING->value,
                 'notes' => 'Pembelian ' . $product->name . ' untuk nomor ' . $targetNumber,
             ]);
 
@@ -150,7 +153,7 @@ class CreateTransactionAction
                 'custom_metadata' => [
                     'base_price' => $pricingDetails['base_price'],
                     'margin' => $pricingDetails['margin'],
-                    'admin_fee' => $pricingDetails['admin_fee'],
+                    'admin_fee' => $adminFee,
                     'provider' => $providerName,
                     'sku' => $product->sku_code,
                 ],
@@ -174,20 +177,11 @@ class CreateTransactionAction
             return $transaction;
         });
 
-        // Dispatch Transaction Created & state events
+        // Dispatch Transaction Created & processing events
         event(new \App\Events\TransactionCreated($transaction));
+        event(new \App\Events\TransactionProcessing($transaction));
 
-        if (in_array($transaction->status, ['pending', 'processing'])) {
-            event(new \App\Events\TransactionProcessing($transaction));
-        } elseif (in_array($transaction->status, ['success', 'sukses'])) {
-            event(new \App\Events\TransactionSuccess($transaction));
-        } elseif (in_array($transaction->status, ['failed', 'cancel', 'canceled'])) {
-            event(new \App\Events\TransactionFailed($transaction));
-        }
-
-        if ($transaction->status === \App\Enums\TransactionStatus::PENDING->value || $transaction->status === 'pending') {
-            \App\Jobs\ProcessDigiflazzTransaction::dispatch($transaction->id);
-        }
+        \App\Jobs\ProcessDigiflazzTransaction::dispatch($transaction->id);
 
         return $transaction;
     }

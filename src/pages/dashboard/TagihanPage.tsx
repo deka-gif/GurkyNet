@@ -87,35 +87,10 @@ export const TagihanPage = () => {
 
   const handleInquiryBill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId) {
-      setErrorMsg('Mohon isi nomor pelanggan / nomor kartu.');
-      return;
-    }
-
-    if (!selectedProduct) {
-      setErrorMsg('Produk tagihan belum tersedia untuk kategori ini.');
-      return;
-    }
-
-    setQuerying(true);
     setBillDetails(null);
-    setErrorMsg(null);
-
-    // Bill details are built strictly from the real product catalog price.
-    // Live bill inquiry (customer name / outstanding amount from the biller)
-    // requires provider inquiry integration, which is not yet available.
-    const billAmount = selectedProduct.price;
-    const monthLabel = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
-
-    setBillDetails({
-      productName: selectedProduct.name,
-      month: monthLabel,
-      billAmount,
-      adminFee: 0,
-      totalAmount: billAmount
-    });
-
+    setCheckoutData(null);
     setQuerying(false);
+    setErrorMsg('Provider inquiry not available.');
   };
 
   const handlePayBill = async () => {
@@ -293,7 +268,8 @@ export const TagihanPage = () => {
                   {activeTab === 'internet' && 'Form Tagihan Internet Pascabayar'}
                   {activeTab === 'pln_pasca' && 'Form Tagihan Listrik PLN Pascabayar'}
                 </h4>
-                <p className="text-xs text-gray-500 mt-1">Sistem akan menarik data tunggakan billing terbaru dari server pusat rekanan.</p>
+                <p className="text-xs text-amber-700 mt-1 font-semibold">Provider inquiry not available.</p>
+                <p className="text-xs text-gray-500 mt-1">Inquiry dinonaktifkan — sistem tidak akan membuat tagihan dari harga katalog.</p>
               </div>
 
               {/* Dynamic Product Dropdown (PDAM / Internet / BPJS) */}
@@ -343,19 +319,9 @@ export const TagihanPage = () => {
 
               <button
                 type="submit"
-                disabled={querying}
-                className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-gray-400 cursor-not-allowed text-white rounded-2xl font-bold text-sm tracking-wide transition-all flex items-center justify-center gap-2"
               >
-                {querying ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Mencari Invoice Tagihan...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Cek Tagihan Sekarang</span>
-                  </>
-                )}
+                <span>Inquiry Unavailable</span>
               </button>
             </form>
           </div>

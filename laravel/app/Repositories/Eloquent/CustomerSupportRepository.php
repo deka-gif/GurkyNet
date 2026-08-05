@@ -515,56 +515,29 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
 
     protected function approveRefund(string|int $id, ?string $note = null): Transaction
     {
-        return DB::transaction(function () use ($id, $note) {
-            $transaction = $this->getRefundById($id);
+        $transaction = $this->getRefundById($id);
+        $refundService = app(\App\Services\WalletRefundService::class);
 
-            if (!str_contains(strtolower((string) $transaction->notes), 'refund disetujui')) {
-                $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
-                if ($wallet) {
-                    $refundAmount = $transaction->total_payment;
-                    $wallet->balance += $refundAmount;
-                    $wallet->save();
+        $result = $refundService->refundOnce(
+            $transaction,
+            'Refund Customer Support: ' . $transaction->invoice_number,
+            'customer_support',
+            'Refund Disetujui CS: ' . ($note ?? 'Diproses oleh Customer Support'),
+            TransactionStatus::CANCELED->value
+        );
 
-                    WalletHistory::create([
-                        'wallet_id' => $wallet->id,
-                        'amount' => $refundAmount,
-                        'type' => WalletHistoryType::CREDIT->value,
-                        'description' => 'Refund Customer Support: ' . $transaction->invoice_number,
-                        'reference_id' => $transaction->id,
-                    ]);
+        $refundService->writeAudit(
+            Auth::id(),
+            $result['already_refunded'] ? 'CUSTOMER_SUPPORT_REFUND_ALREADY_PROCESSED' : 'CUSTOMER_SUPPORT_APPROVE_REFUND',
+            [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'note' => $note,
+                'credited' => $result['credited'],
+            ]
+        );
 
-                    event(new \App\Events\WalletCredited(
-                        $wallet,
-                        (float) $refundAmount,
-                        'Refund Customer Support: ' . $transaction->invoice_number,
-                        $transaction->id
-                    ));
-                }
-            }
-
-            $transaction->status = TransactionStatus::CANCELED->value;
-            $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Disetujui CS: ' . ($note ?? 'Diproses oleh Customer Support'));
-            $transaction->save();
-
-            \App\Models\PaymentHistory::recordFor(
-                $transaction,
-                'wallet_refund',
-                'refund',
-                ['approved_by' => 'customer_support', 'note' => $note]
-            );
-
-            ActivityLog::create([
-                'user_id' => Auth::id(),
-                'activity' => 'CUSTOMER_SUPPORT_APPROVE_REFUND',
-                'payload' => [
-                    'transaction_id' => $transaction->id,
-                    'invoice_number' => $transaction->invoice_number,
-                    'note' => $note,
-                ],
-            ]);
-
-            return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
-        });
+        return $result['transaction'];
     }
 
     protected function rejectRefund(string|int $id, ?string $note = null): Transaction

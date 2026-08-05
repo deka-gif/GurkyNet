@@ -301,11 +301,11 @@ export const openapiSpec = {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["target_wallet_number", "amount", "transaction_pin"],
+                "required": ["recipient_wallet_number", "amount", "pin"],
                 "properties": {
-                  "target_wallet_number": { "type": "string", "example": "104200000003" },
+                  "recipient_wallet_number": { "type": "string", "example": "104200000003" },
                   "amount": { "type": "number", "example": 25000.00 },
-                  "transaction_pin": { "type": "string", "example": "123456" }
+                  "pin": { "type": "string", "example": "123456", "description": "6-digit transaction PIN. Server ignores client status/admin_fee." }
                 }
               }
             }
@@ -397,11 +397,11 @@ export const openapiSpec = {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["sku_code", "target_number", "transaction_pin"],
+                "required": ["sku_code", "target_number", "pin"],
                 "properties": {
                   "sku_code": { "type": "string", "example": "tsel10000" },
                   "target_number": { "type": "string", "example": "081234567890" },
-                  "transaction_pin": { "type": "string", "example": "123456" }
+                  "pin": { "type": "string", "example": "123456", "description": "6-digit transaction PIN. Do not send status or admin_fee — server calculates pricing and always starts as pending." }
                 }
               }
             }

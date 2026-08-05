@@ -65,16 +65,12 @@ class TransactionController extends Controller
         }
 
         try {
-            $adminFeeOverride = $request->input('admin_fee', 0.00);
-            $status = $request->input('status', 'pending'); // Allow setting default status e.g. for testing 'pending'
-
+            // status / admin_fee / settlement values are never accepted from the client.
             $transaction = $createAction->execute(
                 $user,
                 $request->input('sku_code'),
                 $request->input('target_number'),
-                $request->input('pin'),
-                (float) $adminFeeOverride,
-                $status
+                $request->input('pin')
             );
 
             return response()->json([
@@ -300,35 +296,22 @@ class TransactionController extends Controller
                     event(new \App\Events\TransactionSuccess($transaction));
                     event(new \App\Events\PaymentSettled($transaction, is_array($payload) ? $payload : []));
                 } elseif ($status === 'failed') {
-                    \Illuminate\Support\Facades\DB::transaction(function () use ($transaction) {
-                        $transaction->update([
-                            'status' => \App\Enums\TransactionStatus::FAILED->value,
-                            'notes' => 'Transaksi gagal dari operator.',
-                        ]);
+                    $refundService = app(\App\Services\WalletRefundService::class);
+                    $result = $refundService->refundOnce(
+                        $transaction,
+                        'Refund Gagal Transaksi (Callback): ' . $transaction->invoice_number,
+                        'digiflazz_webhook',
+                        'Transaksi gagal dari operator.',
+                        \App\Enums\TransactionStatus::FAILED->value
+                    );
 
-                        $wallet = \App\Models\Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
-                        if ($wallet) {
-                            $wallet->balance += $transaction->total_payment;
-                            $wallet->save();
+                    $refundService->writeAudit(null, 'DIGIFLAZZ_WEBHOOK_FAILED_REFUND', [
+                        'transaction_id' => $transaction->id,
+                        'credited' => $result['credited'],
+                        'already_refunded' => $result['already_refunded'],
+                    ]);
 
-                            \App\Models\WalletHistory::create([
-                                'wallet_id' => $wallet->id,
-                                'amount' => $transaction->total_payment,
-                                'type' => \App\Enums\WalletHistoryType::CREDIT->value,
-                                'description' => 'Refund Gagal Transaksi (Callback): ' . $transaction->invoice_number,
-                                'reference_id' => $transaction->id,
-                            ]);
-
-                            event(new \App\Events\WalletCredited(
-                                $wallet,
-                                (float) $transaction->total_payment,
-                                'Refund Gagal Transaksi (Callback): ' . $transaction->invoice_number,
-                                $transaction->id
-                            ));
-                        }
-                    });
-
-                    event(new \App\Events\TransactionFailed($transaction));
+                    event(new \App\Events\TransactionFailed($result['transaction']));
                 } else {
                     $transaction->update([
                         'status' => \App\Enums\TransactionStatus::PROCESSING->value,

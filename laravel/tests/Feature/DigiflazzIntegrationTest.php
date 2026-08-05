@@ -107,15 +107,13 @@ class DigiflazzIntegrationTest extends TestCase
             'TSEL10K',
             '081234567890',
             '123456',
-            0.00,
-            'pending'
         );
 
         $this->assertEquals('pending', $transaction->status);
 
         // 3. Execute the job manually
         $job = new ProcessDigiflazzTransaction($transaction->id);
-        $job->handle(resolve(DigiflazzService::class));
+        app()->call([$job, 'handle']);
 
         // 4. Assert transaction and digiflazz transaction status
         $transaction->refresh();
@@ -156,8 +154,6 @@ class DigiflazzIntegrationTest extends TestCase
             'TSEL10K',
             '081234567890',
             '123456',
-            0.00,
-            'pending'
         );
 
         $this->wallet->refresh();
@@ -165,7 +161,7 @@ class DigiflazzIntegrationTest extends TestCase
 
         // 2. Execute job
         $job = new ProcessDigiflazzTransaction($transaction->id);
-        $job->handle(resolve(DigiflazzService::class));
+        app()->call([$job, 'handle']);
 
         // 3. Assert states
         $transaction->refresh();
@@ -233,8 +229,6 @@ class DigiflazzIntegrationTest extends TestCase
             'TSEL10K',
             '081234567890',
             '123456',
-            0.00,
-            'pending'
         );
 
         $digiTx = DigiflazzTransaction::create([
@@ -295,8 +289,6 @@ class DigiflazzIntegrationTest extends TestCase
             'TSEL10K',
             '081234567890',
             '123456',
-            0.00,
-            'pending'
         );
 
         $digiTx = DigiflazzTransaction::create([

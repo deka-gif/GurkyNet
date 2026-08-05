@@ -434,40 +434,28 @@ class FinanceRepository implements FinanceRepositoryInterface
 
     public function approveRefund(Transaction $transaction, ?string $notes = null): Transaction
     {
-        return DB::transaction(function () use ($transaction, $notes) {
-            $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
-            if ($wallet) {
-                $refundAmount = $transaction->total_payment;
-                $wallet->balance += $refundAmount;
-                $wallet->save();
+        $refundService = app(\App\Services\WalletRefundService::class);
 
-                WalletHistory::create([
-                    'wallet_id' => $wallet->id,
-                    'amount' => $refundAmount,
-                    'type' => WalletHistoryType::CREDIT->value,
-                    'description' => 'Refund Finance: ' . $transaction->invoice_number,
-                    'reference_id' => $transaction->id,
-                ]);
+        $result = $refundService->refundOnce(
+            $transaction,
+            'Refund Finance: ' . $transaction->invoice_number,
+            'finance',
+            'Refund Disetujui: ' . ($notes ?? 'Diproses oleh Finance'),
+            TransactionStatus::CANCELED->value
+        );
 
-                event(new \App\Events\WalletCredited(
-                    $wallet,
-                    $refundAmount,
-                    'Refund Finance: ' . $transaction->invoice_number,
-                    $transaction->id
-                ));
-            }
-
-            $transaction->status = TransactionStatus::CANCELED->value;
-            $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Disetujui: ' . ($notes ?? 'Diproses oleh Finance'));
-            $transaction->save();
-
-            PaymentHistory::recordFor($transaction, 'wallet_refund', 'refund', [
+        $refundService->writeAudit(
+            auth()->id(),
+            $result['already_refunded'] ? 'FINANCE_REFUND_ALREADY_PROCESSED' : 'FINANCE_APPROVE_REFUND',
+            [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
                 'notes' => $notes,
-                'approved_by' => 'finance',
-            ]);
+                'credited' => $result['credited'],
+            ]
+        );
 
-            return $transaction->fresh(['user', 'paymentHistory']);
-        });
+        return $result['transaction'];
     }
 
     public function rejectRefund(Transaction $transaction, ?string $reason = null): Transaction

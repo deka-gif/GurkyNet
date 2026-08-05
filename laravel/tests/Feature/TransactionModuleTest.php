@@ -18,6 +18,7 @@ use App\Actions\Transaction\GetReceiptAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -35,6 +36,9 @@ class TransactionModuleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Keep Digiflazz fulfillment queued so create-transaction unit assertions stay deterministic.
+        Queue::fake();
 
         // 1. Create User
         $this->user = User::create([
@@ -107,7 +111,7 @@ class TransactionModuleTest extends TestCase
         );
 
         $this->assertInstanceOf(Transaction::class, $transaction);
-        $this->assertEquals('success', $transaction->status);
+        $this->assertEquals('pending', $transaction->status);
         $this->assertEquals(11500.00, $transaction->total_payment);
         $this->assertStringStartsWith('GRK-', $transaction->invoice_number);
 
@@ -125,7 +129,7 @@ class TransactionModuleTest extends TestCase
         // Verify database state
         $this->assertDatabaseHas('transactions', [
             'id' => $transaction->id,
-            'status' => 'success',
+            'status' => 'pending',
             'total_payment' => 11500.00,
         ]);
 
@@ -318,7 +322,7 @@ class TransactionModuleTest extends TestCase
         // 2. Verify subfields are populated correctly
         $this->assertEquals('GurkyPay', $receipt['header']['company_name']);
         $this->assertEquals($transaction->invoice_number, $receipt['transaction_details']['invoice_number']);
-        $this->assertEquals('success', $receipt['transaction_details']['status']);
+        $this->assertEquals($transaction->status, $receipt['transaction_details']['status']);
         $this->assertEquals('081234567890', $receipt['transaction_details']['target_number']);
         
         // 3. Verify price totals match
@@ -338,9 +342,7 @@ class TransactionModuleTest extends TestCase
             $this->user,
             'TSEL10K',
             '081234567890',
-            '123456',
-            0.00,
-            'pending'
+            '123456'
         );
 
         $this->assertEquals('pending', $transaction->status);

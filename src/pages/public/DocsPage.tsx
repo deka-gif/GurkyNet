@@ -130,7 +130,7 @@ export class GurkyPayClient {
     return this.request<any>('POST', '/wallet/topup', { amount });
   }
 
-  async transfer(data: { target_wallet_number: string; amount: number; transaction_pin: string }) {
+  async transfer(data: { recipient_wallet_number: string; amount: number; pin: string }) {
     return this.request<any>('POST', '/wallet/transfer', data);
   }
 
@@ -143,7 +143,7 @@ export class GurkyPayClient {
     return this.request<any>('GET', '/products', undefined, params);
   }
 
-  async checkoutOrder(data: { sku_code: string; target_number: string; transaction_pin: string }) {
+  async checkoutOrder(data: { sku_code: string; target_number: string; pin: string }) {
     return this.request<any>('POST', '/transactions', data);
   }
 }`;
@@ -296,9 +296,9 @@ export const DocsPage: React.FC = () => {
     } else if (path.includes('/wallet/topup')) {
       setPlaygroundBody(JSON.stringify({ amount: 50000 }, null, 2));
     } else if (path.includes('/wallet/transfer')) {
-      setPlaygroundBody(JSON.stringify({ target_wallet_number: "104200000003", amount: 15000, transaction_pin: "123456" }, null, 2));
+      setPlaygroundBody(JSON.stringify({ recipient_wallet_number: "104200000003", amount: 15000, pin: "123456" }, null, 2));
     } else if (path.includes('/transactions') && method.toLowerCase() === 'post') {
-      setPlaygroundBody(JSON.stringify({ sku_code: "tsel10000", target_number: "081234567890", transaction_pin: "123456" }, null, 2));
+      setPlaygroundBody(JSON.stringify({ sku_code: "tsel10000", target_number: "081234567890", pin: "123456" }, null, 2));
     } else {
       setPlaygroundBody('');
     }

@@ -19,8 +19,21 @@ class CreateTransactionRequest extends FormRequest
             'sku_code' => 'required|string',
             'target_number' => 'required|string',
             'pin' => 'required|string|size:6|regex:/^\d{6}$/',
-            'admin_fee' => 'nullable|numeric|min:0',
+            // Intentionally omit status, admin_fee, amount, total_payment — server-calculated only.
         ];
+    }
+
+    /**
+     * Strip any client-supplied settlement / pricing controls before validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->request->remove('status');
+        $this->request->remove('admin_fee');
+        $this->request->remove('amount');
+        $this->request->remove('total_payment');
+        $this->request->remove('sell_price');
+        $this->request->remove('settlement');
     }
 
     public function messages(): array

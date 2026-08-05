@@ -71,8 +71,19 @@ class FinanceController extends Controller
     {
         try {
             $notes = $request->input('notes');
+            $existing = $action->find($id);
+            if (!$existing) {
+                return $this->errorResponse('Transaksi tidak ditemukan.', 404);
+            }
+
+            $alreadyRefunded = app(\App\Services\WalletRefundService::class)->hasExistingRefund($existing);
             $transaction = $action->approve($id, $notes);
-            return $this->successResponse('Pengajuan refund berhasil disetujui dan saldo telah dikembalikan.', $transaction);
+
+            $message = $alreadyRefunded
+                ? 'Refund sudah pernah diproses. Saldo tidak dikreditkan ulang.'
+                : 'Pengajuan refund berhasil disetujui dan saldo telah dikembalikan.';
+
+            return $this->successResponse($message, $transaction);
         } catch (\Exception $e) {
             $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 400;
             return $this->errorResponse($e->getMessage(), $code);
