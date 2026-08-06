@@ -179,6 +179,84 @@ class TelkomselDataTaxonomyService
             || $this->matchesAnyKeyword($product, $this->keywordsForGroup($group));
     }
 
+    /**
+     * Marketplace badge from taxonomy / recency — not hardcoded SKUs.
+     * Priority: PROMO > TERLARIS > FAVORIT > BARU
+     */
+    public function badgeFor(Product $product, ?array $classified = null): ?string
+    {
+        if (!$this->isTelkomselBrand($product->provider?->name)) {
+            return null;
+        }
+
+        $classified ??= $this->classifyProduct($product);
+        $group = (string) ($classified['group'] ?? '');
+        $hay = Str::lower(trim($product->name.' '.($this->descriptionFor($product) ?? '')));
+
+        if ($group === 'promo' || str_contains($hay, 'promo') || str_contains($hay, 'surprise') || str_contains($hay, 'flash')) {
+            return 'PROMO';
+        }
+
+        $terlarisHints = ['omg', 'terbaik untukmu', 'super seru', 'hotrod'];
+        foreach ($terlarisHints as $hint) {
+            if (str_contains($hay, $hint)) {
+                return 'TERLARIS';
+            }
+        }
+
+        if (in_array($group, ['favorit', 'internet-sakti', 'combo-sakti'], true)) {
+            return 'FAVORIT';
+        }
+
+        $created = $product->created_at ?? $product->updated_at;
+        if ($created && $created->greaterThan(now()->subDays(14))) {
+            return 'BARU';
+        }
+
+        return null;
+    }
+
+    /** Numeric MB for sorting (Unlimited = high). */
+    public function quotaValueMb(string $productName, ?string $description = null): float
+    {
+        $meta = $this->parseMeta($productName, $description);
+        $quota = (string) ($meta['quota'] ?? '');
+        if ($quota === '' || Str::lower($quota) === 'unlimited') {
+            return $quota !== '' ? 1_000_000.0 : 0.0;
+        }
+        if (preg_match('/([\d.]+)\s*(GB|MB)/i', $quota, $m)) {
+            $n = (float) $m[1];
+
+            return Str::upper($m[2]) === 'GB' ? $n * 1024 : $n;
+        }
+
+        return 0.0;
+    }
+
+    /** Approximate days for sorting. */
+    public function validityValueDays(string $productName, ?string $description = null): float
+    {
+        $meta = $this->parseMeta($productName, $description);
+        $validity = (string) ($meta['validity'] ?? '');
+        if ($validity === '') {
+            return 0.0;
+        }
+        if (preg_match('/(\d+)\s*(Hari|Bulan|Minggu)/iu', $validity, $m)) {
+            $n = (float) $m[1];
+            $unit = Str::lower($m[2]);
+            if (str_starts_with($unit, 'bulan')) {
+                return $n * 30;
+            }
+            if (str_starts_with($unit, 'minggu')) {
+                return $n * 7;
+            }
+
+            return $n;
+        }
+
+        return 0.0;
+    }
+
     protected function matchesAnyKeyword(Product $product, array $keywords): bool
     {
         if ($keywords === []) {

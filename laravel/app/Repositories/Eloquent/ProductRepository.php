@@ -414,6 +414,30 @@ class ProductRepository implements ProductRepositoryInterface
                 ->values();
         }
 
+        if (in_array($sort, ['quota_desc', 'kuota_terbesar'], true)) {
+            /** @var \App\Services\Catalog\TelkomselDataTaxonomyService $taxonomy */
+            $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+
+            return $products
+                ->sortByDesc(fn (Product $p) => $taxonomy->quotaValueMb(
+                    (string) $p->name,
+                    $taxonomy->descriptionFor($p)
+                ))
+                ->values();
+        }
+
+        if (in_array($sort, ['validity_desc', 'masa_aktif_terlama'], true)) {
+            /** @var \App\Services\Catalog\TelkomselDataTaxonomyService $taxonomy */
+            $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+
+            return $products
+                ->sortByDesc(fn (Product $p) => $taxonomy->validityValueDays(
+                    (string) $p->name,
+                    $taxonomy->descriptionFor($p)
+                ))
+                ->values();
+        }
+
         return $products
             ->sort(function (Product $a, Product $b) {
                 $ta = LogicalProductKey::sortTuple($a);
@@ -567,7 +591,16 @@ class ProductRepository implements ProductRepositoryInterface
             $keyword = $filters['keyword'];
             $query->where(function ($q) use ($keyword) {
                 $q->where('name', 'like', "%{$keyword}%")
-                    ->orWhere('sku_code', 'like', "%{$keyword}%");
+                    ->orWhere('sku_code', 'like', "%{$keyword}%")
+                    ->orWhereExists(function ($sub) use ($keyword) {
+                        $sub->selectRaw('1')
+                            ->from('digiflazz_products')
+                            ->whereColumn('digiflazz_products.buyer_sku_code', 'products.sku_code')
+                            ->where(function ($d) use ($keyword) {
+                                $d->where('desc', 'like', "%{$keyword}%")
+                                    ->orWhere('product_name', 'like', "%{$keyword}%");
+                            });
+                    });
             });
         }
     }

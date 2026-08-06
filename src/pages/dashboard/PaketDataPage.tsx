@@ -8,6 +8,7 @@ import {
   CreditCard,
   Wallet,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
 import { useProductStore } from '../../store/product.store';
@@ -25,6 +26,7 @@ export const PaketDataPage = () => {
   const [phoneNo, setPhoneNo] = useState<string>('');
   const [provider, setProvider] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showCheckoutPanel, setShowCheckoutPanel] = useState(false);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [resumePin, setResumePin] = useState(false);
   const [regionDialog, setRegionDialog] = useState<Product | null>(null);
@@ -38,7 +40,6 @@ export const PaketDataPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    // Non-Telkomsel still uses store catalog; Telkomsel loads via dedicated API filters.
     fetchProducts({ category: 'data' });
     const pending = consumePendingCheckout('/dashboard/paket-data');
     if (pending?.data) {
@@ -69,6 +70,7 @@ export const PaketDataPage = () => {
     } else {
       setProvider(null);
       setSelectedProduct(null);
+      setShowCheckoutPanel(false);
     }
   }, [phoneNo]);
 
@@ -111,18 +113,22 @@ export const PaketDataPage = () => {
     ? products.filter((p) => operatorsMatch(p.operatorName, provider) && p.status === 'tersedia')
     : [];
 
+  const showSidePanel = Boolean(selectedProduct && showCheckoutPanel);
+
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="paket-data-page-root">
+    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-7xl" id="paket-data-page-root">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Paket Data Internet</h2>
-          <p className="text-sm text-gray-500">
-            Masukkan nomor HP — operator terdeteksi otomatis. Telkomsel memakai katalog bertingkat (filter kategori).
+          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
+            Paket Data Internet
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Pilih paket terbaik untuk nomor Anda. Operator terdeteksi otomatis dari prefix.
           </p>
         </div>
-        <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 flex items-center gap-2">
-          <Wallet className="w-4 h-4 text-indigo-600" />
-          <span className="text-xs font-black text-indigo-950">
+        <div className="bg-primary-50 px-4 py-2 rounded-2xl border border-primary-100 flex items-center gap-2">
+          <Wallet className="w-4 h-4 text-primary-600" />
+          <span className="text-xs font-black text-primary-950">
             Saldo: {wallet ? formatIDR(wallet.balance) : 'Loading...'}
           </span>
         </div>
@@ -165,28 +171,31 @@ export const PaketDataPage = () => {
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6">
+      <div className={`grid grid-cols-1 gap-6 ${showSidePanel ? 'lg:grid-cols-12' : ''}`}>
+        <div
+          className={`${showSidePanel ? 'lg:col-span-8' : ''} bg-white rounded-3xl p-5 md:p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5`}
+        >
           <div className="space-y-1.5">
-            <label className="text-xs font-black text-gray-700">Nomor Handphone Penerima</label>
+            <label className="text-xs font-black text-gray-700">Nomor Handphone</label>
             <div className="relative">
               <Smartphone className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
                 type="tel"
-                placeholder="Contoh: 081234567890"
+                placeholder="081234567890"
                 value={phoneNo}
                 onChange={(e) => {
                   setPhoneNo(e.target.value.replace(/\D/g, ''));
                   setSelectedProduct(null);
+                  setShowCheckoutPanel(false);
                 }}
-                className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all tracking-wide"
+                className={`w-full pl-12 py-3.5 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all tracking-wide ${
+                  provider ? 'pr-28' : 'pr-4'
+                }`}
               />
               {provider && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  <span className="bg-indigo-50 text-indigo-700 font-extrabold text-xs px-3 py-1.5 rounded-xl border border-indigo-100">
-                    {provider}
-                  </span>
-                </div>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-primary-50 text-primary-700 font-extrabold text-[11px] px-2.5 py-1 rounded-lg border border-primary-100 uppercase tracking-wide">
+                  {provider === 'Telkomsel' ? 'TELKOMSEL' : provider}
+                </span>
               )}
             </div>
           </div>
@@ -194,17 +203,15 @@ export const PaketDataPage = () => {
           {!provider && (
             <div className="p-12 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
               <Wifi className="w-8 h-8 mx-auto text-gray-300" />
-              <p className="text-xs font-semibold">
-                Ketik nomor HP terlebih dahulu. Jika Telkomsel, katalog filter kategori akan terbuka.
-              </p>
+              <p className="text-xs font-semibold">Masukkan nomor HP untuk melihat paket.</p>
             </div>
           )}
 
           {isTelkomsel && (
             <TelkomselPaketDataCatalog
-              phoneNo={phoneNo}
               selectedProduct={selectedProduct}
               onSelectProduct={setSelectedProduct}
+              onBuy={() => setShowCheckoutPanel(true)}
               onRegionNeeded={(p) => setRegionDialog(p)}
             />
           )}
@@ -212,7 +219,8 @@ export const PaketDataPage = () => {
           {provider && !isTelkomsel && (
             <div className="space-y-3">
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-semibold">
-                UX kategori bertingkat saat ini tersedia untuk Telkomsel. Operator lain menyusul dengan template yang sama.
+                UX marketplace kategori saat ini tersedia untuk Telkomsel. Operator lain menyusul
+                dengan template yang sama.
               </p>
               {productsLoading ? (
                 <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400">
@@ -223,20 +231,26 @@ export const PaketDataPage = () => {
                   Produk tidak tersedia untuk operator ini.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                   {otherOperatorProducts.map((pkg) => (
                     <button
                       key={pkg.id}
                       type="button"
-                      onClick={() => setSelectedProduct(pkg)}
+                      onClick={() => {
+                        setSelectedProduct(pkg);
+                        setShowCheckoutPanel(true);
+                      }}
                       className={`text-left p-4 rounded-2xl border ${
                         selectedProduct?.id === pkg.id
                           ? 'border-primary-500 bg-primary-50/30'
-                          : 'border-gray-100 bg-gray-50'
+                          : 'border-gray-100 bg-white shadow-sm'
                       }`}
                     >
-                      <div className="font-extrabold text-sm text-gray-900">{pkg.name}</div>
-                      <div className="text-sm font-black text-primary-600 mt-2">{formatIDR(pkg.price)}</div>
+                      <div className="font-extrabold text-sm text-gray-900 line-clamp-2">{pkg.name}</div>
+                      <div className="text-sm font-black text-red-600 mt-3">{formatIDR(pkg.price)}</div>
+                      <span className="mt-3 inline-flex w-full justify-center py-2 rounded-xl bg-primary-600 text-white text-xs font-black">
+                        Beli
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -245,13 +259,26 @@ export const PaketDataPage = () => {
           )}
         </div>
 
-        <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6 h-fit">
-          <div className="border-b border-gray-100 pb-4">
-            <h4 className="font-extrabold text-gray-900 text-base">Rincian Belanja</h4>
-            <p className="text-xs text-gray-500 mt-1">Konfirmasi paket lalu lanjut ke PIN.</p>
-          </div>
+        {showSidePanel && selectedProduct && (
+          <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6 h-fit lg:sticky lg:top-6">
+            <div className="border-b border-gray-100 pb-4 flex items-start justify-between gap-3">
+              <div>
+                <h4 className="font-extrabold text-gray-900 text-base">Rincian Belanja</h4>
+                <p className="text-xs text-gray-500 mt-1">Konfirmasi paket lalu lanjut ke PIN.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCheckoutPanel(false);
+                  setSelectedProduct(null);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+                aria-label="Tutup rincian"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-          {selectedProduct ? (
             <div className="space-y-4">
               <div className="flex justify-between text-xs font-bold text-gray-500">
                 <span>Nomor</span>
@@ -272,24 +299,22 @@ export const PaketDataPage = () => {
               </div>
               <div className="border-t border-dashed border-gray-100 pt-4 flex justify-between items-center">
                 <span className="text-xs font-black text-gray-900">Total</span>
-                <span className="text-xl font-black text-primary-600">{formatIDR(selectedProduct.price)}</span>
+                <span className="text-xl font-black text-primary-600">
+                  {formatIDR(selectedProduct.price)}
+                </span>
               </div>
             </div>
-          ) : (
-            <p className="text-xs text-gray-400 text-center py-6">Pilih paket di panel kiri.</p>
-          )}
 
-          <button
-            disabled={loading || !selectedProduct}
-            onClick={handleCheckout}
-            className={`w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 ${
-              selectedProduct ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            Bayar Sekarang
-          </button>
-        </div>
+            <button
+              disabled={loading || !selectedProduct}
+              onClick={handleCheckout}
+              className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700"
+            >
+              <CreditCard className="w-4 h-4" />
+              Bayar Sekarang
+            </button>
+          </div>
+        )}
       </div>
 
       {regionDialog && (
@@ -297,7 +322,8 @@ export const PaketDataPage = () => {
           <div className="w-full max-w-sm bg-white rounded-3xl p-5 space-y-4 border border-gray-100 shadow-2xl">
             <h4 className="font-extrabold text-gray-900 text-sm">Pilih Wilayah</h4>
             <p className="text-xs text-gray-500">
-              Paket ini memiliki varian area. Pilih wilayah yang sesuai (hanya jika provider mewajibkan).
+              Paket ini memiliki varian area. Pilih wilayah yang sesuai (hanya jika provider
+              mewajibkan).
             </p>
             <div className="grid grid-cols-3 gap-2">
               {['Area 1', 'Area 2', 'Area 3'].map((area) => (
@@ -306,7 +332,9 @@ export const PaketDataPage = () => {
                   type="button"
                   onClick={() => setSelectedRegion(area)}
                   className={`py-2.5 rounded-xl text-xs font-bold border ${
-                    selectedRegion === area ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-100'
+                    selectedRegion === area
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-100'
                   }`}
                 >
                   {area}
@@ -317,9 +345,10 @@ export const PaketDataPage = () => {
               type="button"
               onClick={() => {
                 setSelectedProduct(regionDialog);
+                setShowCheckoutPanel(true);
                 setRegionDialog(null);
               }}
-              className="w-full py-3 rounded-2xl bg-red-600 text-white text-sm font-bold"
+              className="w-full py-3 rounded-2xl bg-primary-600 text-white text-sm font-bold"
             >
               Lanjut
             </button>
@@ -338,6 +367,7 @@ export const PaketDataPage = () => {
           onSuccess={() => {
             setSuccessMsg('Pembelian paket data berhasil diproses.');
             setSelectedProduct(null);
+            setShowCheckoutPanel(false);
             setCheckoutData(null);
             setResumePin(false);
             fetchWallet();

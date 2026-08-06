@@ -25,8 +25,10 @@ class ProductResource extends JsonResource
         $description = $taxonomy->descriptionFor($this->resource);
         $meta = $taxonomy->parseMeta((string) $this->name, $description);
         $telkomselGroup = null;
+        $badge = null;
         if ($taxonomy->isTelkomselBrand($this->provider?->name)) {
             $telkomselGroup = $taxonomy->classify((string) $this->name, $description);
+            $badge = $taxonomy->badgeFor($this->resource, $telkomselGroup);
         }
 
         return [
@@ -36,6 +38,7 @@ class ProductResource extends JsonResource
             'description' => $description,
             'quota' => $meta['quota'],
             'validity' => $meta['validity'],
+            'badge' => $badge,
             'telkomselGroup' => $telkomselGroup['group'] ?? null,
             'telkomselGroupLabel' => $telkomselGroup['label'] ?? null,
             'requiresRegion' => $telkomselGroup

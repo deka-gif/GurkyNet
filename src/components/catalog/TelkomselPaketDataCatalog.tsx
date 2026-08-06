@@ -1,20 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Search,
-  Star,
-  Wifi,
-  Package,
-  Flame,
-  Share2,
-  Gamepad2,
-  PlayCircle,
-  Moon,
-  Globe,
-  Briefcase,
-  LayoutGrid,
-  Clock,
-  AlertCircle,
-} from 'lucide-react';
+import { Search, Wifi, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { productService } from '../../services/product/product.service';
 import { Product } from '../../types';
 import { formatIDR } from '../../utils/currency';
@@ -23,88 +8,102 @@ type Chip = {
   key: string;
   label: string;
   group: string | null;
-  icon?: string;
 };
 
 type Props = {
-  phoneNo: string;
   selectedProduct: Product | null;
   onSelectProduct: (p: Product) => void;
+  onBuy: (p: Product) => void;
   onRegionNeeded?: (product: Product) => void;
 };
 
-const CHIP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  all: LayoutGrid,
-  star: Star,
-  wifi: Wifi,
-  package: Package,
-  flame: Flame,
-  share: Share2,
-  game: Gamepad2,
-  play: PlayCircle,
-  moon: Moon,
-  globe: Globe,
-  briefcase: Briefcase,
+const DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'internet-sakti', label: 'Internet Sakti', group: 'internet-sakti' },
+  { key: 'combo-sakti', label: 'Combo Sakti', group: 'combo-sakti' },
+  { key: 'promo', label: 'Promo', group: 'promo' },
+  { key: 'sosial', label: 'Sosial', group: 'sosial' },
+  { key: 'games', label: 'Games', group: 'games' },
+  { key: 'streaming', label: 'Streaming', group: 'streaming' },
+  { key: 'harian', label: 'Harian', group: 'harian' },
+  { key: 'roaming', label: 'Roaming', group: 'roaming' },
+  { key: 'bisnis', label: 'Bisnis', group: 'bisnis' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'price_asc', label: 'Harga Termurah' },
+  { value: 'price_desc', label: 'Harga Termahal' },
+  { value: 'quota_desc', label: 'Kuota Terbesar' },
+  { value: 'validity_desc', label: 'Masa Aktif Terlama' },
+  { value: 'popular', label: 'Terlaris' },
+  { value: 'newest', label: 'Terbaru' },
+];
+
+const BADGE_STYLES: Record<string, string> = {
+  TERLARIS: 'bg-red-500 text-white',
+  FAVORIT: 'bg-rose-500 text-white',
+  PROMO: 'bg-orange-500 text-white',
+  BARU: 'bg-sky-500 text-white',
 };
 
-const DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null, icon: 'all' },
-  { key: 'favorit', label: 'Favorit', group: 'favorit', icon: 'star' },
-  { key: 'internet-sakti', label: 'Internet Sakti', group: 'internet-sakti', icon: 'wifi' },
-  { key: 'combo-sakti', label: 'Combo Sakti', group: 'combo-sakti', icon: 'package' },
-  { key: 'promo', label: 'Promo', group: 'promo', icon: 'flame' },
-  { key: 'sosial', label: 'Sosial', group: 'sosial', icon: 'share' },
-  { key: 'game', label: 'Games', group: 'games', icon: 'game' },
-  { key: 'streaming', label: 'Streaming', group: 'streaming', icon: 'play' },
-  { key: 'harian', label: 'Harian', group: 'harian', icon: 'moon' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming', icon: 'globe' },
-  { key: 'bisnis', label: 'Bisnis', group: 'bisnis', icon: 'briefcase' },
-];
+const PER_PAGE = 20;
 
 function ProductSkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3">
-      <div className="h-4 bg-gray-200 rounded w-3/4" />
-      <div className="h-3 bg-gray-200 rounded w-1/2" />
+    <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-4 space-y-3 h-[200px]">
+      <div className="h-4 bg-gray-100 rounded w-1/3" />
+      <div className="h-4 bg-gray-200 rounded w-4/5" />
       <div className="flex gap-2">
-        <div className="h-5 bg-gray-200 rounded w-16" />
-        <div className="h-5 bg-gray-200 rounded w-20" />
+        <div className="h-5 bg-gray-100 rounded w-14" />
+        <div className="h-5 bg-gray-100 rounded w-16" />
       </div>
-      <div className="h-4 bg-gray-200 rounded w-1/3 ml-auto" />
+      <div className="h-3 bg-gray-100 rounded w-full" />
+      <div className="h-5 bg-gray-200 rounded w-1/2 mt-auto" />
+      <div className="h-9 bg-gray-100 rounded-xl w-full" />
     </div>
   );
 }
 
 /**
- * Telkomsel Paket Data master UX template — filter chips + lazy API loads.
- * Products always from Digiflazz/VIP via GET /products (no hardcode).
+ * Telkomsel Paket Data — marketplace master UX (Tokopedia/Shopee style).
+ * Products from Digiflazz/VIP via GET /products only.
  */
 export function TelkomselPaketDataCatalog({
-  phoneNo,
   selectedProduct,
   onSelectProduct,
+  onBuy,
   onRegionNeeded,
 }: Props) {
   const [chips, setChips] = useState<Chip[]>(DEFAULT_CHIPS);
   const [activeChip, setActiveChip] = useState('semua');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sort, setSort] = useState('default');
+  const [sort, setSort] = useState('price_asc');
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [lastPage, setLastPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    productService.getTelkomselDataTaxonomy().then((res) => {
-      if (res.success && Array.isArray(res.data?.chips) && res.data.chips.length > 0) {
-        setChips(res.data.chips);
-      }
-    }).catch(() => {
-      /* keep DEFAULT_CHIPS */
-    });
+    productService
+      .getTelkomselDataTaxonomy()
+      .then((res) => {
+        if (res.success && Array.isArray(res.data?.chips) && res.data.chips.length > 0) {
+          setChips(
+            res.data.chips.map((c: Chip) => ({
+              key: c.key,
+              label: c.label,
+              group: c.group ?? null,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        /* keep DEFAULT_CHIPS */
+      });
   }, []);
 
   useEffect(() => {
@@ -118,9 +117,8 @@ export function TelkomselPaketDataCatalog({
   }, [chips, activeChip]);
 
   const loadPage = useCallback(
-    async (pageNum: number, append: boolean) => {
-      if (append) setLoadingMore(true);
-      else setLoading(true);
+    async (pageNum: number) => {
+      setLoading(true);
       setError(null);
       try {
         const res = await productService.getProducts({
@@ -128,114 +126,119 @@ export function TelkomselPaketDataCatalog({
           provider: 'Telkomsel',
           keyword: debouncedSearch || undefined,
           telkomsel_group: activeGroup || undefined,
-          sort: sort === 'default' ? undefined : sort,
+          sort,
           page: pageNum,
-          per_page: 24,
+          per_page: PER_PAGE,
         });
         if (!res.success) {
           setError(res.message || 'Gagal memuat produk.');
-          if (!append) setProducts([]);
+          setProducts([]);
+          setTotal(0);
+          setLastPage(1);
           return;
         }
         const rows = Array.isArray(res.data) ? res.data : [];
-        setProducts((prev) => (append ? [...prev, ...rows] : rows));
+        setProducts(rows);
         const pag = res.pagination;
         if (pag) {
-          setHasMore(pag.currentPage < pag.lastPage);
+          const current = pag.currentPage ?? pag.current_page ?? pageNum;
+          const last = pag.lastPage ?? pag.last_page ?? 1;
+          const tot = pag.total ?? rows.length;
+          setPage(current);
+          setLastPage(Math.max(1, last));
+          setTotal(tot);
         } else {
-          setHasMore(rows.length >= 24);
+          setPage(pageNum);
+          setLastPage(1);
+          setTotal(rows.length);
         }
-        setPage(pageNum);
-      } catch (e: any) {
-        setError(e?.message || 'Gagal memuat produk Telkomsel.');
-        if (!append) setProducts([]);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Gagal memuat produk Telkomsel.';
+        setError(msg);
+        setProducts([]);
       } finally {
         setLoading(false);
-        setLoadingMore(false);
       }
     },
     [activeGroup, debouncedSearch, sort]
   );
 
   useEffect(() => {
-    setProducts([]);
     setPage(1);
-    loadPage(1, false);
+    loadPage(1);
   }, [loadPage]);
 
-  const handleSelect = (p: Product) => {
+  const handleBuy = (p: Product) => {
     if (p.requiresRegion && onRegionNeeded) {
       onRegionNeeded(p);
     }
     onSelectProduct(p);
+    onBuy(p);
   };
+
+  const pageNumbers = useMemo(() => {
+    const maxButtons = 7;
+    if (lastPage <= maxButtons) {
+      return Array.from({ length: lastPage }, (_, i) => i + 1);
+    }
+    const start = Math.max(1, Math.min(page - 2, lastPage - maxButtons + 1));
+    return Array.from({ length: maxButtons }, (_, i) => start + i).filter((n) => n <= lastPage);
+  }, [page, lastPage]);
 
   return (
     <div className="space-y-4">
-      {/* Provider header */}
-      <div className="rounded-3xl border border-red-100 bg-gradient-to-br from-red-50 to-white p-5 flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-red-600 text-white flex items-center justify-center font-black text-lg shadow-lg shadow-red-600/20">
-          T
+      {/* Search + Sort */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari paket Telkomsel..."
+            className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-black text-gray-900 text-base tracking-tight">TELKOMSEL</h3>
-          <p className="text-sm font-bold text-gray-700 mt-0.5">{phoneNo || '—'}</p>
-          <p className="text-[11px] text-emerald-700 font-semibold mt-1">Operator terdeteksi otomatis</p>
+        <div className="sm:w-52 shrink-0">
+          <label className="sr-only">Urutkan</label>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="w-full h-full min-h-[48px] text-sm font-semibold bg-white border border-gray-200 rounded-2xl px-3 focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-800"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Cari paket Telkomsel..."
-          className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-gray-100 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500 shadow-sm"
-        />
-      </div>
-
-      {/* Filter chips — horizontal scroll */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
+      {/* Filter chips — text only, horizontal scroll */}
+      <div className="flex gap-2.5 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
         {chips.map((chip) => {
-          const Icon = CHIP_ICONS[chip.icon || 'all'] || LayoutGrid;
           const active = activeChip === chip.key;
           return (
             <button
               key={chip.key}
               type="button"
               onClick={() => setActiveChip(chip.key)}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold border transition-all ${
+              className={`shrink-0 px-5 py-2.5 rounded-full text-sm font-bold border transition-colors ${
                 active
-                  ? 'bg-red-600 border-red-600 text-white shadow-sm'
-                  : 'bg-white border-gray-100 text-gray-600 hover:border-red-200'
+                  ? 'bg-primary-600 border-primary-600 text-white shadow-sm shadow-primary-600/20'
+                  : 'bg-white border-gray-200 text-gray-700 hover:border-primary-300 hover:text-primary-700'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
               {chip.label}
             </button>
           );
         })}
       </div>
 
-      {/* Sort */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] text-gray-400 font-semibold">
-          {loading ? 'Memuat…' : `${products.length} paket`}
-        </p>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-          className="text-xs font-bold bg-white border border-gray-100 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
-        >
-          <option value="default">Urutan default</option>
-          <option value="price_asc">Harga Termurah</option>
-          <option value="price_desc">Harga Tertinggi</option>
-          <option value="popular">Terlaris</option>
-          <option value="newest">Terbaru</option>
-        </select>
-      </div>
+      <p className="text-xs font-semibold text-gray-500">
+        {loading ? 'Memuat paket…' : `${total || products.length} paket ditemukan`}
+      </p>
 
       {error && (
         <div className="p-3 rounded-2xl bg-red-50 border border-red-100 text-xs text-red-700 font-semibold flex gap-2">
@@ -244,74 +247,114 @@ export function TelkomselPaketDataCatalog({
         </div>
       )}
 
-      {/* Product grid */}
+      {/* Responsive marketplace grid: 1 / 2 / 4 / 5 */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+          {Array.from({ length: 10 }).map((_, i) => (
             <ProductSkeleton key={i} />
           ))}
         </div>
       ) : products.length === 0 ? (
-        <div className="py-14 text-center border border-dashed border-gray-200 rounded-3xl bg-white">
+        <div className="py-16 text-center border border-dashed border-gray-200 rounded-3xl bg-white">
           <Wifi className="w-8 h-8 mx-auto text-gray-300" />
           <p className="mt-3 text-sm font-extrabold text-gray-700">Tidak ada produk pada kategori ini.</p>
           <p className="text-xs text-gray-400 mt-1">Coba filter lain atau ubah kata pencarian.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
           {products.map((p) => {
             const active = selectedProduct?.id === p.id || selectedProduct?.code === p.code;
+            const badge = p.badge;
             return (
-              <button
+              <article
                 key={p.id || p.code}
-                type="button"
-                onClick={() => handleSelect(p)}
-                className={`text-left p-4 rounded-2xl border transition-all ${
+                className={`flex flex-col rounded-2xl border bg-white p-4 transition-all ${
                   active
-                    ? 'border-red-500 bg-red-50/50 shadow-sm'
-                    : 'border-gray-100 bg-white hover:border-red-200'
+                    ? 'border-primary-500 ring-2 ring-primary-500/20 shadow-md'
+                    : 'border-gray-100 shadow-sm hover:border-primary-200 hover:shadow-md'
                 }`}
               >
-                <div className="font-extrabold text-gray-900 text-sm leading-snug">{p.name}</div>
-                {(p.quota || p.validity) && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {p.quota && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-100">
-                        {p.quota}
-                      </span>
-                    )}
-                    {p.validity && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-100 inline-flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {p.validity}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {p.description && (
-                  <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 leading-relaxed">{p.description}</p>
-                )}
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">
-                    {p.telkomselGroupLabel || p.telkomselGroup || 'Paket'}
+                {badge ? (
+                  <span
+                    className={`self-start text-[10px] font-black tracking-wide uppercase px-2 py-0.5 rounded-md mb-2 ${
+                      BADGE_STYLES[badge] || 'bg-gray-700 text-white'
+                    }`}
+                  >
+                    {badge}
                   </span>
-                  <span className="text-sm font-black text-red-600">{formatIDR(p.price)}</span>
+                ) : (
+                  <span className="h-5 mb-2" aria-hidden />
+                )}
+
+                <h4 className="font-extrabold text-gray-900 text-sm leading-snug line-clamp-2 min-h-[2.5rem]">
+                  {p.name}
+                </h4>
+
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] font-bold text-gray-600">
+                  {p.quota && <span>{p.quota}</span>}
+                  {p.validity && <span>{p.validity}</span>}
                 </div>
-              </button>
+
+                {p.description ? (
+                  <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 leading-relaxed flex-1">
+                    {p.description}
+                  </p>
+                ) : (
+                  <div className="flex-1" />
+                )}
+
+                <div className="mt-3 flex items-end justify-between gap-2">
+                  <span className="text-base font-black text-red-600 leading-none">{formatIDR(p.price)}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleBuy(p)}
+                  className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black tracking-wide transition-colors"
+                >
+                  Beli
+                </button>
+              </article>
             );
           })}
         </div>
       )}
 
-      {hasMore && !loading && (
-        <button
-          type="button"
-          disabled={loadingMore}
-          onClick={() => loadPage(page + 1, true)}
-          className="w-full py-3 rounded-2xl border border-gray-100 bg-white text-xs font-bold text-gray-700 hover:border-red-200 disabled:opacity-50"
-        >
-          {loadingMore ? 'Memuat…' : 'Muat lebih banyak'}
-        </button>
+      {lastPage > 1 && !loading && (
+        <div className="flex items-center justify-center gap-1.5 pt-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => loadPage(page - 1)}
+            className="p-2 rounded-xl border border-gray-200 bg-white disabled:opacity-40 hover:border-primary-300"
+            aria-label="Halaman sebelumnya"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          {pageNumbers.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => loadPage(n)}
+              className={`min-w-9 h-9 px-2 rounded-xl text-xs font-bold border transition-colors ${
+                n === page
+                  ? 'bg-primary-600 border-primary-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-700 hover:border-primary-300'
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={page >= lastPage}
+            onClick={() => loadPage(page + 1)}
+            className="p-2 rounded-xl border border-gray-200 bg-white disabled:opacity-40 hover:border-primary-300"
+            aria-label="Halaman berikutnya"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </div>
   );

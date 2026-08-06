@@ -35,4 +35,11 @@ class TelkomselDataTaxonomyServiceTest extends TestCase
         $this->assertTrue($svc->isTelkomselBrand('Telkomsel'));
         $this->assertFalse($svc->isTelkomselBrand('XL'));
     }
+
+    public function test_quota_and_validity_sort_values(): void
+    {
+        $svc = app(TelkomselDataTaxonomyService::class);
+        $this->assertSame(25 * 1024.0, $svc->quotaValueMb('Internet Sakti 25GB 30 Hari'));
+        $this->assertSame(30.0, $svc->validityValueDays('Internet Sakti 25GB 30 Hari'));
+    }
 }

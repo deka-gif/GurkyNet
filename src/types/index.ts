@@ -81,6 +81,7 @@ export interface Product {
   description?: string | null;
   quota?: string | null;
   validity?: string | null;
+  badge?: string | null;
   telkomselGroup?: string | null;
   telkomselGroupLabel?: string | null;
   requiresRegion?: boolean;
