@@ -79,10 +79,15 @@ class TransactionController extends Controller
                 'data' => new TransactionResource($transaction),
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            $errors = $e->errors();
+            $firstMessage = collect($errors)->flatten()->first();
+
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
-                'errors' => $e->errors(),
+                'message' => is_string($firstMessage) && $firstMessage !== ''
+                    ? $firstMessage
+                    : 'Data transaksi tidak valid.',
+                'errors' => $errors,
             ], 422);
         } catch (\Exception $e) {
             return response()->json([

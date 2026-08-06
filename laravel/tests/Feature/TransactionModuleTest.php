@@ -167,6 +167,60 @@ class TransactionModuleTest extends TestCase
         $this->assertEquals(38500.00, $this->wallet->balance);
     }
 
+    public function test_create_transaction_api_returns_specific_pin_error(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/transactions', [
+                'sku_code' => 'TSEL10K',
+                'target_number' => '081234567890',
+                'pin' => '000000',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'PIN transaksi salah.');
+    }
+
+    public function test_create_transaction_allows_control_center_sellable_when_product_status_false(): void
+    {
+        $vip = \App\Models\ProductProvider::vip();
+        $this->assertNotNull($vip);
+        $vip->forceFill(['is_active' => true])->save();
+
+        $product = Product::create([
+            'product_category_id' => $this->category->id,
+            'provider_id' => $this->provider->id,
+            'product_provider_id' => $vip->id,
+            'sku_code' => 'VIP-TSEL10K',
+            'name' => 'VIP Telkomsel 10K',
+            'base_price' => 10000.00,
+            'sell_price' => 11500.00,
+            'admin_fee' => 0.00,
+            'status' => false, // Digi-style inactive master; VIP offer still sellable
+        ]);
+
+        \App\Models\ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'VIP-TSEL10K',
+            'provider_name' => 'VIP Telkomsel 10K',
+            'base_price' => 10000.00,
+            'provider_price' => 10000.00,
+            'provider_status' => 'available',
+            'is_preferred' => true,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/transactions', [
+                'sku_code' => 'VIP-TSEL10K',
+                'target_number' => '081234567890',
+                'pin' => '123456',
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.status', 'pending');
+    }
+
     /**
      * Test Invalid Product handling.
      */

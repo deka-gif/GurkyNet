@@ -68,7 +68,7 @@ class CreateTransactionAction
                 'notes' => 'Transaksi draf baru',
             ]);
 
-            // 2. Validate Product
+            // 2. Validate Product (findBySku already applies Control Center visibility)
             $product = $this->productRepository->findBySku($skuCode);
             if (!$product) {
                 throw ValidationException::withMessages([
@@ -76,12 +76,7 @@ class CreateTransactionAction
                 ]);
             }
 
-            if (!$product->status) {
-                throw ValidationException::withMessages([
-                    'product_code' => ['Produk sedang tidak aktif.'],
-                ]);
-            }
-
+            // Sellability follows Control Center (active provider SKU), not Digi products.status alone.
             if (!$this->availabilityService->isAvailable($product)) {
                 $statusAvailability = $this->availabilityService->getStatus($product);
                 if ($statusAvailability === 'maintenance') {

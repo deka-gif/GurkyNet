@@ -204,7 +204,6 @@ export const DashboardLayout = () => {
           { path: '/dashboard/tagihan', label: 'Bills', icon: FileText },
           { path: '/dashboard/riwayat', label: 'History', icon: History },
           { path: '/dashboard/account', label: 'Akun', icon: User },
-          { path: '/dashboard/account/settings', label: 'Pengaturan', icon: Settings },
         ];
     }
   };

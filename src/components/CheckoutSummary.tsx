@@ -54,6 +54,8 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const [step, setStep] = useState<CheckoutStep>(() => (initialStep === 'PIN' && !user?.hasPin ? 'CONFIRM' : initialStep));
   const [pin, setPin] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
+  const [pinErrorMessage, setPinErrorMessage] = useState<string>('PIN Salah! Silakan coba kembali.');
+  const [failureMessage, setFailureMessage] = useState<string | null>(null);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
   const [loadingStatus, setLoadingStatus] = useState<string>('Memproses Transaksi...');
   const [finalStatus, setFinalStatus] = useState<'sukses' | 'success' | 'pending' | 'gagal'>('sukses');
@@ -63,6 +65,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
   const totalPayment = data.amount + data.adminFee;
   const pinInputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     fetchUser();
@@ -90,53 +93,60 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     }, 300);
   }, [step, user?.hasPin, data, location.pathname, navigate]);
 
-  // Handle PIN input key changes (virtual keypad calls this or physical keyboard does)
-  const handlePinChange = (val: string) => {
-    if (val.length > 6) return;
-    setPin(val);
-    setPinError(false);
-
-    if (val.length === 6) {
-      // Transition to loading, backend will validate the PIN
-      setStep('LOADING');
-      startLoadingProcess();
+  const resolveErrorMessage = (): string => {
+    const state = useTransactionStore.getState();
+    if (state.validationErrors) {
+      const vals = Object.values(state.validationErrors).flat().filter(Boolean);
+      if (vals.length > 0) {
+        return String(vals[0]);
+      }
     }
+    return state.error || 'Gagal membuat transaksi.';
   };
 
-  // Keyboard events listener fallback
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      handlePinChange(pin.slice(0, -1));
-    } else if (/^[0-9]$/.test(e.key)) {
-      handlePinChange(pin + e.key);
-    }
+  const isPinRelatedError = (message: string): boolean => {
+    const state = useTransactionStore.getState();
+    if (state.validationErrors?.pin?.length) return true;
+    return /pin/i.test(message);
   };
 
-  const startLoadingProcess = async () => {
+  const finalizeTransaction = async (completedPin: string) => {
     setLoadingProgress(50);
-    setLoadingStatus('Memproses transaksi...');
-    await finalizeTransaction();
-    setLoadingProgress(100);
-  };
+    setLoadingStatus('Mengirim permintaan ke server...');
 
-  const finalizeTransaction = async () => {
-    setLoadingStatus("Mengirim permintaan ke server...");
-    
+    if (!data.skuCode) {
+      setFailureMessage('SKU produk wajib dipilih. Silakan pilih ulang produk.');
+      setFinalStatus('gagal');
+      setCreatedTrx({ invoice_number: 'TRX-GAGAL', note: 'SKU produk wajib dipilih.' });
+      setStep('RESULT');
+      submittingRef.current = false;
+      return;
+    }
+
     const requestPayload = {
-      sku_code: data.skuCode || "",
+      sku_code: data.skuCode,
       target_number: data.targetNo,
-      pin: pin,
-      admin_fee: data.adminFee
+      pin: completedPin,
     };
 
     const trx = await createTransaction(requestPayload);
+    setLoadingProgress(100);
+
     if (trx) {
       setCreatedTrx(trx);
-      setFinalStatus(trx.status || "sukses");
-      setStep("RESULT");
-      
+      const status = trx.status || 'pending';
+      if (status === 'failed' || status === 'gagal') {
+        setFinalStatus('gagal');
+        setFailureMessage(trx.notes || trx.note || 'Transaksi gagal diproses.');
+      } else if (status === 'success' || status === 'sukses') {
+        setFinalStatus('sukses');
+      } else {
+        setFinalStatus('pending');
+      }
+      setStep('RESULT');
+
       try {
-        const receiptRes = await transactionService.getReceipt(trx.id || trx.invoice_number);
+        const receiptRes = await transactionService.getReceipt(trx.id || trx.invoice_number || trx.transactionCode);
         if (receiptRes.success && receiptRes.data) {
           setReceiptData(receiptRes.data);
         }
@@ -148,22 +158,44 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
         onSuccess(trx);
       }
       fetchWallet();
-    } else {
-      const state = useTransactionStore.getState();
-      const errorMessage = state.error || "Gagal membuat transaksi.";
-      let fullMessage = errorMessage;
-      if (state.validationErrors) {
-        const vals = Object.values(state.validationErrors).flat().join(", ");
-        if (vals) {
-           fullMessage += ` - ${vals}`;
-        }
-      }
-      if (state.errorCode) {
-        fullMessage = `[${state.errorCode}] ${fullMessage}`;
-      }
-      setFinalStatus("gagal");
-      setCreatedTrx({ invoice_number: "TRX-GAGAL", note: fullMessage });
-      setStep("RESULT");
+      submittingRef.current = false;
+      return;
+    }
+
+    const errorMessage = resolveErrorMessage();
+
+    if (isPinRelatedError(errorMessage)) {
+      setPin('');
+      setPinError(true);
+      setPinErrorMessage(errorMessage);
+      setStep('PIN');
+      submittingRef.current = false;
+      setTimeout(() => pinInputRef.current?.focus(), 200);
+      return;
+    }
+
+    setFailureMessage(errorMessage);
+    setFinalStatus('gagal');
+    setCreatedTrx({ invoice_number: 'TRX-GAGAL', note: errorMessage });
+    setStep('RESULT');
+    submittingRef.current = false;
+  };
+
+  /**
+   * Single source of truth for PIN digits.
+   * Keyboard uses controlled input onChange only (no onKeyDown append).
+   * On-screen keypad calls this with the next full PIN string.
+   */
+  const handlePinChange = (val: string) => {
+    const cleaned = String(val).replace(/\D/g, '').slice(0, 6);
+    setPin(cleaned);
+    setPinError(false);
+
+    if (cleaned.length === 6) {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setStep('LOADING');
+      void finalizeTransaction(cleaned);
     }
   };
 
@@ -392,17 +424,18 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
               <p className="text-xs text-gray-500">Masukkan 6 digit kode PIN GurkyPay Anda untuk memverifikasi pembayaran.</p>
             </div>
 
-            {/* Invisible input to catch keyboard events on desktop */}
+            {/* Invisible input — keyboard digits via onChange only (no onKeyDown append) */}
             <input 
               ref={pinInputRef}
               type="text"
               pattern="[0-9]*"
               inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               value={pin}
-              onChange={(e) => handlePinChange(e.target.value.replace(/\D/g, ''))}
-              onKeyDown={handleKeyDown}
+              onChange={(e) => handlePinChange(e.target.value)}
               className="absolute opacity-0 w-0 h-0"
+              aria-label="PIN Transaksi"
             />
 
             {/* Dots Display */}
@@ -429,7 +462,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
             {pinError && (
               <p className="text-center text-xs font-extrabold text-red-500 animate-pulse">
-                PIN Salah! Silakan coba kembali.
+                {pinErrorMessage}
               </p>
             )}
 
@@ -438,25 +471,32 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <button
                   key={num}
-                  onClick={() => handlePinChange(pin + num)}
+                  type="button"
+                  onClick={() => handlePinChange(pin + String(num))}
                   className="w-14 h-14 mx-auto rounded-full bg-gray-50 hover:bg-gray-100 text-gray-800 font-extrabold text-lg flex items-center justify-center active:scale-95 transition-all"
                 >
                   {num}
                 </button>
               ))}
               <button 
-                onClick={() => setPin('')}
+                type="button"
+                onClick={() => {
+                  setPin('');
+                  setPinError(false);
+                }}
                 className="w-14 h-14 mx-auto rounded-full text-gray-400 hover:text-gray-600 font-bold text-xs flex items-center justify-center"
               >
                 Clear
               </button>
               <button
+                type="button"
                 onClick={() => handlePinChange(pin + '0')}
                 className="w-14 h-14 mx-auto rounded-full bg-gray-50 hover:bg-gray-100 text-gray-800 font-extrabold text-lg flex items-center justify-center active:scale-95 transition-all"
               >
                 0
               </button>
               <button
+                type="button"
                 onClick={() => handlePinChange(pin.slice(0, -1))}
                 className="w-14 h-14 mx-auto rounded-full text-gray-500 hover:text-gray-800 font-bold text-xs flex items-center justify-center"
               >
@@ -521,7 +561,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                 </button>
               </div>
 
-              {finalStatus === 'sukses' && (
+              {(finalStatus === 'sukses' || finalStatus === 'success') && (
                 <div className="space-y-3">
                   <div className="w-14 h-14 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
                     <Check className="w-7 h-7 stroke-[3]" />
@@ -552,7 +592,9 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                   </div>
                   <div>
                     <h3 className="text-xl font-extrabold text-red-950">Transaksi Gagal</h3>
-                    <p className="text-xs text-red-700 font-medium">Gerbang pembayaran mengalami gangguan atau saldo tidak mencukupi.</p>
+                    <p className="text-xs text-red-700 font-medium">
+                      {failureMessage || createdTrx?.note || 'Transaksi gagal diproses.'}
+                    </p>
                   </div>
                 </div>
               )}
@@ -646,6 +688,13 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                     </p>
                   </div>
                 </>
+              ) : finalStatus === 'gagal' ? (
+                <div className="flex flex-col items-center justify-center p-6 text-center min-h-[200px] space-y-2">
+                  <AlertCircle className="w-8 h-8 text-red-500 mb-1" />
+                  <span className="text-xs font-bold text-red-700">
+                    {failureMessage || createdTrx?.note || 'Transaksi gagal diproses.'}
+                  </span>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center p-6 text-gray-400 min-h-[300px]">
                   <RefreshCw className="w-8 h-8 animate-spin mb-3 text-primary-500" />

@@ -9,20 +9,27 @@ class AvailabilityService
     /**
      * Determine availability status of a product.
      * Returns: 'active', 'inactive', or 'maintenance'
+     *
+     * Control Center (active product_provider_skus on an enabled Product Provider)
+     * is the sellability source of truth — same rule as catalog ProductResource.
+     * Digiflazz may leave products.status=false while VIP (or another provider) remains sellable.
      */
     public function getStatus(Product $product): string
     {
-        if (!$product->status) {
-            return 'inactive';
-        }
-
         // Simulating maintenance mode for specific SKUs or categories for sandbox/testing purposes
         if (str_contains(strtoupper($product->sku_code), 'MAINTENANCE')) {
             return 'maintenance';
         }
 
-        // Default to active if status is true
-        return 'active';
+        if ($this->isSellableViaControlCenter($product)) {
+            return 'active';
+        }
+
+        if ($product->status) {
+            return 'active';
+        }
+
+        return 'inactive';
     }
 
     /**
@@ -31,5 +38,21 @@ class AvailabilityService
     public function isAvailable(Product $product): bool
     {
         return $this->getStatus($product) === 'active';
+    }
+
+    /**
+     * Mirrors ProductResource / ProductRepository Control Center visibility.
+     */
+    public function isSellableViaControlCenter(Product $product): bool
+    {
+        $product->loadMissing('providerSkus.productProvider');
+
+        foreach ($product->providerSkus as $sku) {
+            if ($sku->is_active && $sku->productProvider && $sku->productProvider->is_active) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
