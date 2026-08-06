@@ -8,7 +8,8 @@ export const EwalletPage = () => (
     serviceName="Top Up Digital"
     returnPath="/dashboard/topup-digital"
     targetMode="phone"
-    targetLabel="Nomor HP E-Wallet"
+    targetLabel="Nomor HP"
     targetPlaceholder="08xxxxxxxxxx"
+    inquiryMode="ewallet"
   />
 );

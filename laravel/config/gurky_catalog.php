@@ -257,7 +257,7 @@ return [
         'undawn' => 'game',
         'blood strike' => 'game',
 
-        // Voucher Digital (gift cards / wallet codes — NOT game diamonds)
+        // Voucher Digital (gift cards / wallet codes / e-gift — NOT game diamonds)
         'google play' => 'voucher-digital',
         'google play gift card' => 'voucher-digital',
         'apple' => 'voucher-digital',
@@ -273,8 +273,21 @@ return [
         'unipin' => 'voucher-digital',
         'battlenet' => 'voucher-digital',
         'nintendo' => 'voucher-digital',
+        'tokopedia' => 'voucher-digital',
+        'alfamart' => 'voucher-digital',
+        'alfamart voucher' => 'voucher-digital',
+        'indomaret' => 'voucher-digital',
+        'grab voucher' => 'voucher-digital',
+        'map e-gift' => 'voucher-digital',
+        'map egift' => 'voucher-digital',
+        'map voucher' => 'voucher-digital',
+        'traveloka' => 'voucher-digital',
+        'traveloka e-voucher' => 'voucher-digital',
+        'e-gift' => 'voucher-digital',
+        'egift' => 'voucher-digital',
+        'voucher belanja' => 'voucher-digital',
 
-        // Langganan Digital
+        // Langganan Digital (streaming / productivity subscriptions)
         'netflix' => 'langganan-digital',
         'spotify' => 'langganan-digital',
         'youtube' => 'langganan-digital',
@@ -297,6 +310,11 @@ return [
         'zoom' => 'langganan-digital',
         'microsoft 365' => 'langganan-digital',
         'office 365' => 'langganan-digital',
+        'genflix' => 'langganan-digital',
+        'norton' => 'langganan-digital',
+        'norton 360' => 'langganan-digital',
+        'apple music' => 'langganan-digital',
+        'itunes music' => 'langganan-digital',
 
         // Tagihan brands
         'pln' => 'pln',
@@ -310,15 +328,27 @@ return [
     |--------------------------------------------------------------------------
     */
     'name_keywords' => [
-        'langganan-digital' => ['netflix', 'spotify', 'youtube premium', 'canva', 'capcut', 'vidio', 'wetv', 'viu', 'iqiyi', 'vision+', 'prime video', 'gemini'],
-        'voucher-digital' => ['google play', 'gift card', 'steam wallet', 'garena shell', 'razer gold', 'playstation', 'xbox', 'unipin'],
+        'langganan-digital' => [
+            'netflix', 'spotify', 'youtube premium', 'canva', 'capcut', 'vidio', 'wetv', 'viu', 'iqiyi',
+            'vision+', 'prime video', 'gemini', 'genflix', 'norton', 'apple music',
+        ],
+        'voucher-digital' => [
+            'google play', 'gift card', 'steam wallet', 'garena shell', 'razer gold', 'playstation', 'xbox', 'unipin',
+            'alfamart', 'indomaret', 'tokopedia', 'traveloka', 'e-gift', 'egift', 'voucher belanja', 'map e-gift',
+        ],
         'game' => ['diamond', 'diamonds', 'uc pubg', 'weekly pass', 'starlight', 'membership ml', 'ff member'],
         'topup-digital' => ['gopay', 'ovo', 'dana', 'shopeepay', 'linkaja'],
         'international' => ['internasional', 'international', 'malaysia', 'singapore', 'thailand', 'vietnam', 'philippines', 'china'],
         'voucher-internet' => ['voucher internet', 'voucher kuota', 'aktivasi voucher'],
-        'sms-telepon' => ['sms', 'nelpon', 'telepon'],
-        'masa-aktif' => ['masa aktif', 'perpanjang masa'],
-        'esim' => ['esim', 'e-sim'],
+        'sms-telepon' => [
+            'sms', 'nelpon', 'telepon', 'kring', 'pronto', 'combo nelpon', 'combo sms',
+            'nelpon nasional', 'nelpon sesama', 'sms nasional', 'telepon sms',
+        ],
+        'masa-aktif' => ['masa aktif', 'perpanjang masa', 'perpanjang aktif', 'aktif 30', 'aktif 60', 'aktif 90'],
+        'aktivasi-perdana' => [
+            'aktivasi perdana', 'perdana', 'aktivasi sim', 'starter pack', 'kartu perdana',
+        ],
+        'esim' => ['esim', 'e-sim', 'e sim'],
     ],
 
     /*

@@ -1,4 +1,9 @@
+import { PhoneOperatorCatalogFlow } from '../../components/catalog/PhoneOperatorCatalogFlow';
+import { AktivasiPerdanaFlow } from '../../components/catalog/AktivasiPerdanaFlow';
+import { EsimCatalogFlow } from '../../components/catalog/EsimCatalogFlow';
 import { ProviderCatalogFlow } from '../../components/catalog/ProviderCatalogFlow';
+import { BillPaymentFlow } from '../../components/catalog/BillPaymentFlow';
+import { PajakNegaraFlow } from '../../components/catalog/PajakNegaraFlow';
 
 /** Thin wrappers: category slug is GurkyNet-mapped, products from API only. */
 
@@ -10,8 +15,9 @@ export const TopUpDigitalPage = () => (
     serviceName="Top Up Digital"
     returnPath="/dashboard/topup-digital"
     targetMode="phone"
-    targetLabel="Nomor HP E-Wallet"
+    targetLabel="Nomor HP"
     targetPlaceholder="08xxxxxxxxxx"
+    inquiryMode="ewallet"
   />
 );
 
@@ -22,9 +28,9 @@ export const LanggananDigitalPage = () => (
     subtitle="Netflix, Spotify, YouTube Premium, Vidio, WeTV, Canva, dan layanan berlangganan lain."
     serviceName="Langganan Digital"
     returnPath="/dashboard/langganan-digital"
-    targetMode="customer"
-    targetLabel="Email / Akun"
-    targetPlaceholder="email@contoh.com atau ID akun"
+    targetMode="none"
+    providerSearchPlaceholder="Ketik nama aplikasi streaming atau produktivitas..."
+    inquiryMode="langganan"
   />
 );
 
@@ -42,48 +48,30 @@ export const InternationalTopUpPage = () => (
 );
 
 export const TelcoSmsTeleponPage = () => (
-  <ProviderCatalogFlow
+  <PhoneOperatorCatalogFlow
     category="sms-telepon"
     title="Paket SMS & Telepon"
-    subtitle="Paket nelpon dan SMS dari katalog provider."
+    subtitle="Masukkan nomor HP — operator terdeteksi otomatis. Produk dari katalog Digiflazz/VIP."
     serviceName="Paket SMS & Telepon"
     returnPath="/dashboard/telekomunikasi/sms-telepon"
-    targetMode="phone"
+    searchPlaceholder="Cari paket SMS / nelpon..."
   />
 );
 
 export const TelcoMasaAktifPage = () => (
-  <ProviderCatalogFlow
+  <PhoneOperatorCatalogFlow
     category="masa-aktif"
     title="Masa Aktif"
-    subtitle="Perpanjang masa aktif kartu dari katalog provider."
+    subtitle="Perpanjang masa aktif kartu. Operator terdeteksi dari nomor HP Anda."
     serviceName="Masa Aktif"
     returnPath="/dashboard/telekomunikasi/masa-aktif"
-    targetMode="phone"
+    searchPlaceholder="Cari masa aktif..."
   />
 );
 
-export const TelcoAktivasiPerdanaPage = () => (
-  <ProviderCatalogFlow
-    category="aktivasi-perdana"
-    title="Aktivasi Perdana"
-    subtitle="Aktivasi kartu perdana dari katalog provider."
-    serviceName="Aktivasi Perdana"
-    returnPath="/dashboard/telekomunikasi/aktivasi-perdana"
-    targetMode="phone"
-  />
-);
+export const TelcoAktivasiPerdanaPage = () => <AktivasiPerdanaFlow />;
 
-export const TelcoEsimPage = () => (
-  <ProviderCatalogFlow
-    category="esim"
-    title="eSIM"
-    subtitle="Produk eSIM dari katalog provider."
-    serviceName="eSIM"
-    returnPath="/dashboard/telekomunikasi/esim"
-    targetMode="phone"
-  />
-);
+export const TelcoEsimPage = () => <EsimCatalogFlow />;
 
 export const TagihanSubPage = ({
   category,
@@ -95,15 +83,27 @@ export const TagihanSubPage = ({
   title: string;
   subtitle: string;
   path: string;
-}) => (
-  <ProviderCatalogFlow
-    category={category}
-    title={title}
-    subtitle={subtitle}
-    serviceName={title}
-    returnPath={path}
-    targetMode="customer"
-    targetLabel="ID Pelanggan / No. Meter"
-    targetPlaceholder="Masukkan ID pelanggan"
-  />
-);
+}) => {
+  if (category === 'pbb' || category === 'samsat') {
+    return (
+      <PajakNegaraFlow
+        category={category}
+        title={title}
+        subtitle={subtitle}
+        returnPath={path}
+      />
+    );
+  }
+
+  return (
+    <BillPaymentFlow
+      category={category}
+      title={title}
+      subtitle={subtitle}
+      serviceName={title}
+      returnPath={path}
+      targetLabel="Nomor / ID Pelanggan"
+      targetPlaceholder="Masukkan nomor atau ID pelanggan"
+    />
+  );
+};

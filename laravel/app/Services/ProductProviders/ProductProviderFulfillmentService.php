@@ -62,7 +62,20 @@ class ProductProviderFulfillmentService
             return;
         }
 
+        $itemMeta = $firstItem?->custom_metadata ?? [];
+        if (!is_array($itemMeta)) {
+            $itemMeta = [];
+        }
+        $isPasca = !empty($itemMeta['is_pasca']) || !empty($itemMeta['inquiry_ref_id']);
+        $providerRef = $this->resolveProviderRef($transaction, $itemMeta);
+
         $candidates = $this->selection->candidatesForProduct($product, $transaction->id);
+        // Digiflazz inquiry ref_id cannot be fulfilled by another provider.
+        if ($isPasca) {
+            $candidates = $candidates->filter(
+                fn (ProductProviderSku $o) => $o->productProvider?->code === ProductProvider::CODE_DIGIFLAZZ
+            )->values();
+        }
         if ($candidates->isEmpty()) {
             Log::warning('PRODUCT ROUTING — no enabled providers', [
                 'transaction_id' => $transaction->id,
@@ -76,6 +89,8 @@ class ProductProviderFulfillmentService
         Log::info('PRODUCT ROUTING — fulfill start', [
             'transaction_id' => $transaction->id,
             'candidates' => $candidates->map(fn (ProductProviderSku $o) => $o->productProvider?->code)->values()->all(),
+            'is_pasca' => $isPasca,
+            'provider_ref' => $providerRef,
         ]);
 
         $attempt = 0;
@@ -122,13 +137,17 @@ class ProductProviderFulfillmentService
                 continue;
             }
 
+            $fulfillSku = $isPasca && !empty($itemMeta['provider_sku'])
+                ? (string) $itemMeta['provider_sku']
+                : $offer->provider_sku;
+
             // Digiflazz mirror row (preserve existing DigiflazzTransaction tracking)
             if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
                 DigiflazzTransaction::firstOrCreate(
                     ['transaction_id' => $transaction->id],
                     [
-                        'ref_id' => $transaction->invoice_number,
-                        'buyer_sku_code' => $offer->provider_sku,
+                        'ref_id' => $providerRef,
+                        'buyer_sku_code' => $fulfillSku,
                         'customer_no' => $transaction->target_number,
                         'digiflazz_status' => 'pending',
                     ]
@@ -140,7 +159,7 @@ class ProductProviderFulfillmentService
                 'provider_code' => $provider->code,
                 'attempt' => $attempt,
                 'of' => $total,
-                'provider_sku' => $offer->provider_sku,
+                'provider_sku' => $fulfillSku,
                 'previous_provider' => $previousCode,
             ]);
 
@@ -152,16 +171,16 @@ class ProductProviderFulfillmentService
                 [
                     'attempt' => $attempt,
                     'previous_provider' => $previousCode,
-                    'provider_sku' => $offer->provider_sku,
+                    'provider_sku' => $fulfillSku,
                     'internal_sku' => $internalSku,
                 ]
             );
 
             $result = $adapter->fulfill(
                 $transaction,
-                $offer->provider_sku,
+                $fulfillSku,
                 (string) $transaction->target_number,
-                (string) $transaction->invoice_number
+                $providerRef
             );
             $lastResult = $result;
 
@@ -375,10 +394,15 @@ class ProductProviderFulfillmentService
             }
         }
 
+        $skuUsed = $transaction->items->first()?->custom_metadata['provider_sku']
+            ?? $offer->provider_sku;
+
         $transaction->forceFill([
             'fulfillment_provider_code' => $provider->code,
-            'provider_sku_used' => $offer->provider_sku,
-            'provider_ref' => $providerRef ? (string) $providerRef : $transaction->provider_ref,
+            'provider_sku_used' => $skuUsed,
+            // Prefer existing inquiry/provider_ref for pasca; Digiflazz echoes same ref_id.
+            'provider_ref' => $transaction->provider_ref
+                ?: ($providerRef ? (string) $providerRef : null),
             'provider_response' => $raw !== [] ? $raw : $transaction->provider_response,
             'provider_transaction_time' => $providerTime ?? $transaction->provider_transaction_time ?? now(),
         ])->save();
@@ -386,10 +410,28 @@ class ProductProviderFulfillmentService
         Log::info('STORE PROVIDER REF', [
             'transaction_id' => $transaction->id,
             'provider_code' => $provider->code,
-            'provider_sku' => $offer->provider_sku,
+            'provider_sku' => $skuUsed,
             'provider_ref' => $transaction->fresh()?->provider_ref,
             'provider_transaction_time' => optional($transaction->fresh()?->provider_transaction_time)->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Digiflazz pay-pasca must reuse inquiry ref_id; prepaid uses invoice_number.
+     *
+     * @param  array<string, mixed>  $itemMeta
+     */
+    protected function resolveProviderRef(Transaction $transaction, array $itemMeta = []): string
+    {
+        $inquiryRef = $itemMeta['inquiry_ref_id'] ?? null;
+        if (is_string($inquiryRef) && trim($inquiryRef) !== '') {
+            return trim($inquiryRef);
+        }
+        if (!empty($transaction->provider_ref)) {
+            return (string) $transaction->provider_ref;
+        }
+
+        return (string) $transaction->invoice_number;
     }
 
     protected function failAndRefund(Transaction $transaction, string $userMessage, string $reason): void

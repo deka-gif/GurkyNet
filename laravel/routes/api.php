@@ -103,6 +103,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/catalog/axis-data/taxonomy', [CatalogController::class, 'axisDataTaxonomy']);
         Route::get('/catalog/byu-data/taxonomy', [CatalogController::class, 'byuDataTaxonomy']);
         Route::get('/catalog/providers/{category}', [CatalogController::class, 'providersByCategory']);
+        Route::get('/catalog/pajak-regions/{category}', [CatalogController::class, 'pajakRegions']);
     });
 
     // Digiflazz Webhook Callback
@@ -208,6 +209,27 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/transactions/{id_or_invoice}', [TransactionController::class, 'show']);
             Route::post('/transactions/{id_or_invoice}/cancel', [TransactionController::class, 'cancel']);
             Route::get('/transactions/{id_or_invoice}/receipt', [TransactionController::class, 'receipt']);
+        });
+
+        // Postpaid bill inquiry (Digiflazz inq-pasca) — no wallet debit
+        Route::middleware('throttle:20,1')->group(function () {
+            Route::post('/tagihan/inquiry', [\App\Http\Controllers\Api\v1\TagihanController::class, 'inquiry']);
+        });
+
+        // E-Wallet / E-Money inquiry (Digiflazz inq-pasca + amount) — no wallet debit
+        Route::middleware('throttle:20,1')->group(function () {
+            Route::post('/ewallet/inquiry', [\App\Http\Controllers\Api\v1\EwalletController::class, 'inquiry']);
+        });
+
+        // Game nickname validation (VIP Payment get-nickname) — no wallet debit
+        Route::middleware('throttle:20,1')->group(function () {
+            Route::get('/game/account-schema', [\App\Http\Controllers\Api\v1\GameController::class, 'accountSchema']);
+            Route::post('/game/inquiry', [\App\Http\Controllers\Api\v1\GameController::class, 'inquiry']);
+        });
+
+        // Prepaid PLN meter inquiry (Digiflazz /inquiry-pln) — no wallet debit
+        Route::middleware('throttle:20,1')->group(function () {
+            Route::post('/pln/inquiry', [\App\Http\Controllers\Api\v1\PlnController::class, 'inquiry']);
         });
 
         // Finance Administration Module

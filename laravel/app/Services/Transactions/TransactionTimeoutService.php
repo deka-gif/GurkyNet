@@ -251,7 +251,13 @@ class TransactionTimeoutService
         }
 
         $adapter = $this->registry->get($code);
-        $refId = (string) ($transaction->invoice_number ?? '');
+        // Postpaid Digiflazz must probe with inquiry ref_id (provider_ref), not invoice.
+        $refId = (string) (
+            $transaction->provider_ref
+            ?: $transaction->digiflazzTransaction?->ref_id
+            ?: $transaction->invoice_number
+            ?: ''
+        );
 
         Log::info('CHECK STATUS — provider request', [
             'transaction_id' => $transaction->id,

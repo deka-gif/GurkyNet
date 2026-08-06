@@ -19,6 +19,8 @@ class CreateTransactionRequest extends FormRequest
             'sku_code' => 'required|string',
             'target_number' => 'required|string',
             'pin' => 'required|string|size:6|regex:/^\d{6}$/',
+            // Digiflazz inq-pasca session ref — required for postpaid bill payment.
+            'inquiry_ref_id' => 'nullable|string|max:64',
             // Intentionally omit status, admin_fee, amount, total_payment — server-calculated only.
         ];
     }

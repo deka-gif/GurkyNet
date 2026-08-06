@@ -70,7 +70,8 @@ class TransactionController extends Controller
                 $user,
                 $request->input('sku_code'),
                 $request->input('target_number'),
-                $request->input('pin')
+                $request->input('pin'),
+                $request->input('inquiry_ref_id')
             );
 
             return response()->json([

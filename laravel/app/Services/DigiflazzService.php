@@ -27,11 +27,71 @@ class DigiflazzService
     }
 
     /**
-     * Call Digiflazz Inquiry.
+     * Prepaid PLN meter validation (inquiry-pln). Does not charge Digiflazz deposit.
+     * Signature uses customer_no (not ref_id) per Digiflazz docs.
+     */
+    public function inquiryPln(string $customerNo): array
+    {
+        $this->assertConfigured();
+
+        $payload = [
+            'username' => $this->username,
+            'customer_no' => $customerNo,
+            'sign' => $this->sign($customerNo),
+        ];
+
+        return $this->postRequest('/inquiry-pln', $payload);
+    }
+
+    /**
+     * Postpaid / e-money inquiry (inq-pasca). Does not charge Digiflazz deposit.
+     * Optional $year — Digiflazz PBB (tahun pajak).
+     * Optional $amount — Digiflazz E-Money denomination.
+     */
+    public function inquiryPasca(
+        string $sku,
+        string $customerNo,
+        string $refId,
+        ?int $year = null,
+        ?int $amount = null
+    ): array {
+        $this->assertConfigured();
+
+        $payload = [
+            'commands' => 'inq-pasca',
+            'username' => $this->username,
+            'buyer_sku_code' => $sku,
+            'customer_no' => $customerNo,
+            'ref_id' => $refId,
+            'sign' => $this->sign($refId),
+        ];
+        if ($year !== null && $year >= 2000 && $year <= 2100) {
+            $payload['year'] = $year;
+        }
+        if ($amount !== null && $amount > 0) {
+            $payload['amount'] = $amount;
+        }
+
+        return $this->postRequest('/transaction', $payload);
+    }
+
+    /**
+     * Alias — postpaid inquiry must use inq-pasca.
      */
     public function inquiry(string $sku, string $customerNo, string $refId): array
     {
+        return $this->inquiryPasca($sku, $customerNo, $refId);
+    }
+
+    /**
+     * Postpaid bill payment (pay-pasca). Must reuse the same ref_id as inquiry.
+     */
+    public function payPasca(string $sku, string $customerNo, string $refId): array
+    {
+        $this->assertConfigured();
+
         $payload = [
+            'commands' => 'pay-pasca',
             'username' => $this->username,
             'buyer_sku_code' => $sku,
             'customer_no' => $customerNo,
@@ -61,7 +121,7 @@ class DigiflazzService
     }
 
     /**
-     * Check transaction status.
+     * Check prepaid transaction status.
      */
     public function checkStatus(string $sku, string $customerNo, string $refId): array
     {
@@ -71,6 +131,25 @@ class DigiflazzService
             'customer_no' => $customerNo,
             'ref_id' => $refId,
             'cmd' => 'status',
+            'sign' => $this->sign($refId),
+        ];
+
+        return $this->postRequest('/transaction', $payload);
+    }
+
+    /**
+     * Check postpaid transaction status (status-pasca).
+     */
+    public function checkStatusPasca(string $sku, string $customerNo, string $refId): array
+    {
+        $this->assertConfigured();
+
+        $payload = [
+            'commands' => 'status-pasca',
+            'username' => $this->username,
+            'buyer_sku_code' => $sku,
+            'customer_no' => $customerNo,
+            'ref_id' => $refId,
             'sign' => $this->sign($refId),
         ];
 

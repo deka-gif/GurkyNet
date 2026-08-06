@@ -46,7 +46,10 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 );
             }
 
-            $response = $this->digiflazz->buy($providerSku, $customerNo, $refId);
+            $isPasca = $this->isPascaTransaction($transaction);
+            $response = $isPasca
+                ? $this->digiflazz->payPasca($providerSku, $customerNo, $refId)
+                : $this->digiflazz->buy($providerSku, $customerNo, $refId);
             $ms = (int) ((microtime(true) - $started) * 1000);
             $data = $response['data'] ?? null;
 
@@ -54,7 +57,7 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 return ProviderFulfillmentResult::failed(
                     $ms,
                     'invalid_response',
-                    true,
+                    !$isPasca,
                     'Invalid or empty Digiflazz response.',
                     is_array($response) ? $response : []
                 );
@@ -64,16 +67,17 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             $sn = isset($data['sn']) ? (string) $data['sn'] : null;
             $message = (string) ($data['message'] ?? $data['rc'] ?? '');
 
-            if ($status === 'success') {
+            if ($status === 'success' || $status === 'sukses') {
                 return ProviderFulfillmentResult::success($ms, $sn, $response, $message ?: 'OK');
             }
 
-            if ($status === 'failed') {
+            if ($status === 'failed' || $status === 'gagal') {
                 $reason = $this->classifyFailureReason($message);
                 if ($this->failoverPolicy->messageLooksCustomer($message)) {
                     $reason = 'customer_validation';
                 }
-                $failover = $this->failoverPolicy->shouldFailover($reason, $message);
+                // pay-pasca ref_id is bound to Digiflazz inquiry — never failover to another provider.
+                $failover = !$isPasca && $this->failoverPolicy->shouldFailover($reason, $message);
 
                 return ProviderFulfillmentResult::failed(
                     $ms,
@@ -93,10 +97,12 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 'error' => $e->getMessage(),
             ]);
 
+            $isPasca = $this->isPascaTransaction($transaction);
+
             return ProviderFulfillmentResult::error(
                 $ms,
                 $this->classifyException($e),
-                true,
+                !$isPasca,
                 $e->getMessage()
             );
         }
@@ -120,7 +126,10 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 );
             }
 
-            $response = $this->digiflazz->checkStatus($providerSku, $customerNo, $refId);
+            $isPasca = $this->isPascaTransaction($transaction);
+            $response = $isPasca
+                ? $this->digiflazz->checkStatusPasca($providerSku, $customerNo, $refId)
+                : $this->digiflazz->checkStatus($providerSku, $customerNo, $refId);
             $ms = (int) ((microtime(true) - $started) * 1000);
             $data = $response['data'] ?? null;
 
@@ -132,11 +141,11 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             $sn = isset($data['sn']) ? (string) $data['sn'] : null;
             $message = (string) ($data['message'] ?? $data['rc'] ?? '');
 
-            if ($status === 'success') {
+            if ($status === 'success' || $status === 'sukses') {
                 return ProviderFulfillmentResult::success($ms, $sn, $response, $message ?: 'OK');
             }
 
-            if ($status === 'failed') {
+            if ($status === 'failed' || $status === 'gagal') {
                 return ProviderFulfillmentResult::failed(
                     $ms,
                     'provider_rejected',
@@ -154,6 +163,17 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 'Status check error: ' . $e->getMessage()
             );
         }
+    }
+
+    protected function isPascaTransaction(Transaction $transaction): bool
+    {
+        $transaction->loadMissing('items');
+        $meta = $transaction->items->first()?->custom_metadata ?? [];
+        if (!is_array($meta)) {
+            return false;
+        }
+
+        return !empty($meta['is_pasca']) || !empty($meta['inquiry_ref_id']);
     }
 
     public function healthCheck(): array

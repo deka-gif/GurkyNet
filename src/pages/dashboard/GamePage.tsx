@@ -8,9 +8,7 @@ export const GamePage = () => (
     serviceName="Game"
     returnPath="/dashboard/game"
     targetMode="game"
-    targetLabel="ID Game"
-    targetPlaceholder="Masukkan User ID"
-    secondaryLabel="Server / Zone ID"
-    secondaryPlaceholder="Contoh: 1234 (opsional jika game tidak membutuhkan)"
+    providerSearchPlaceholder="Ketik nama game yang ingin Anda top up..."
+    inquiryMode="game"
   />
 );

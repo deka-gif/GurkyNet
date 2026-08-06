@@ -477,7 +477,7 @@ export const router = createBrowserRouter([
           <TagihanSubPage
             category="pbb"
             title="PBB"
-            subtitle="Bayar PBB dari katalog provider."
+            subtitle="Pilih wilayah, cek pajak ke provider, lalu bayar PBB."
             path="/dashboard/tagihan/pbb"
           />
         ),
@@ -488,7 +488,7 @@ export const router = createBrowserRouter([
           <TagihanSubPage
             category="samsat"
             title="SAMSAT"
-            subtitle="Bayar pajak kendaraan dari katalog provider."
+            subtitle="Pilih wilayah, cek pajak kendaraan ke provider, lalu bayar."
             path="/dashboard/tagihan/samsat"
           />
         ),

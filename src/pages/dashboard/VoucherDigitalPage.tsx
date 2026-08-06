@@ -4,11 +4,11 @@ export const VoucherDigitalPage = () => (
   <ProviderCatalogFlow
     category="voucher-digital"
     title="Voucher Digital"
-    subtitle="Google Play, Apple Gift Card, Steam Wallet, Garena Shell, Razer Gold, PlayStation, Xbox, UniPin."
+    subtitle="Voucher belanja, e-gift, Google Play, Steam, dan brand voucher lain dari katalog provider."
     serviceName="Voucher Digital"
     returnPath="/dashboard/voucher-digital"
-    targetMode="phone"
-    targetLabel="Nomor HP Penerima"
-    targetPlaceholder="08xxxxxxxxxx"
+    targetMode="none"
+    providerSearchPlaceholder="Ketik nama voucher belanja atau e-gift yang Anda cari..."
+    inquiryMode="voucher"
   />
 );

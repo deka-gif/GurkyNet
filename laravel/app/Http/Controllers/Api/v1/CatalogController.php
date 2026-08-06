@@ -8,6 +8,7 @@ use App\Http\Resources\ProductResource;
 use App\Models\ProductCategory;
 use App\Models\Provider;
 use App\Services\Catalog\ProductMappingService;
+use App\Services\Pajak\PajakRegionService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,8 @@ class CatalogController extends Controller
 
     public function __construct(
         protected ProductMappingService $mapping,
-        protected SearchProductAction $searchProductAction
+        protected SearchProductAction $searchProductAction,
+        protected PajakRegionService $pajakRegions,
     ) {}
 
     /**
@@ -207,6 +209,27 @@ class CatalogController extends Controller
         return $this->successResponse('Daftar provider kategori.', [
             'category' => $this->mapping->canonicalizeSlug($category),
             'providers' => $providers,
+        ]);
+    }
+
+    /**
+     * Provinsi → Kabupaten/Kota for PBB/SAMSAT, derived from live catalog SKUs.
+     */
+    public function pajakRegions(string $category): JsonResponse
+    {
+        $canonical = $this->mapping->canonicalizeSlug($category);
+        if (!in_array($canonical, ['pbb', 'samsat'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kategori pajak tidak valid.',
+            ], 422);
+        }
+
+        $data = $this->pajakRegions->regionsForCategory($canonical);
+
+        return $this->successResponse('Wilayah layanan pajak dari katalog provider.', [
+            'category' => $canonical,
+            'provinces' => $data['provinces'],
         ]);
     }
 }

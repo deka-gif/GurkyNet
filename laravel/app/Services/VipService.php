@@ -176,6 +176,29 @@ class VipService
     }
 
     /**
+     * Real VIP game nickname check (game-feature type=get-nickname). Does not place an order.
+     *
+     * @return array{success:bool,api_status:string,http_status:?int,latency_ms:int,message:string,raw:array}
+     */
+    public function getNickname(string $code, string $target, ?string $additionalTarget = null): array
+    {
+        $this->assertConfigured();
+
+        $params = [
+            'key' => $this->apiKey,
+            'sign' => $this->signature,
+            'type' => 'get-nickname',
+            'code' => $code,
+            'target' => $target,
+        ];
+        if ($additionalTarget !== null && trim($additionalTarget) !== '') {
+            $params['additional_target'] = trim($additionalTarget);
+        }
+
+        return $this->request('game-feature', $params, 'get_nickname');
+    }
+
+    /**
      * Place prepaid order (fulfillment path — not used by this task's UI changes).
      */
     public function orderPrepaid(string $serviceCode, string $customerNo, ?string $refId = null): array
