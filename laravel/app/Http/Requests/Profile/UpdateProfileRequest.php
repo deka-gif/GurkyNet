@@ -16,9 +16,9 @@ class UpdateProfileRequest extends FormRequest
         $userId = $this->user()?->id;
 
         return [
-            'name' => 'required|string|max:255',
-            'phone_number' => 'required|string|unique:users,phone_number,' . $userId,
-            'email' => 'required|email|unique:users,email,' . $userId,
+            'name' => 'sometimes|required|string|max:255',
+            'phone_number' => 'sometimes|required|string|unique:users,phone_number,' . $userId,
+            // Email must not be changed directly — use OTP verification flow.
             'birth_date' => 'nullable|date_format:Y-m-d',
             'gender' => 'nullable|string|in:Laki-laki,Perempuan,Male,Female',
             'address' => 'nullable|string',

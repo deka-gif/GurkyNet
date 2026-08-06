@@ -124,7 +124,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/finance/financial-report', label: 'Financial Report', icon: FileSpreadsheet },
           { path: '/dashboard/finance/settlement', label: 'Settlement', icon: Building },
           { path: '/dashboard/finance/refund-approval', label: 'Refund Approval', icon: Receipt },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
 
@@ -136,7 +136,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/operations/providers', label: 'Provider Management', icon: Server },
           { path: '/dashboard/operations/monitoring', label: 'Service Monitoring', icon: Activity },
           { path: '/dashboard/operations/pricing', label: 'Pricing & Margin', icon: Tag },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
 
@@ -152,7 +152,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/marketing/website/menus', label: 'Website Menu', icon: Menu },
           { path: '/dashboard/marketing/website/static-pages', label: 'Static Pages', icon: FileText },
           { path: '/dashboard/marketing/website/media-library', label: 'Media Library', icon: ImageIcon },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
 
@@ -163,7 +163,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/customer-support/customer-profile', label: 'Customer', icon: UserCheck },
           { path: '/dashboard/customer-support/refund-center', label: 'Refund', icon: Receipt },
           { path: '/dashboard/customer-support/knowledge-base', label: 'Knowledge Base', icon: FileText },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
 
@@ -174,7 +174,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/operations', label: 'Operations', icon: Server },
           { path: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
           { path: '/dashboard/customer-support', label: 'Customer Support', icon: Headset },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
 
@@ -186,7 +186,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/marketing', label: 'Marketing CMS', icon: Megaphone },
           { path: '/dashboard/customer-support', label: 'Customer Support CMS', icon: Headset },
           { path: '/dashboard', label: 'User Website', icon: Home },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
 
@@ -203,7 +203,8 @@ export const DashboardLayout = () => {
           { path: '/dashboard/transfer', label: 'Transfer', icon: Send },
           { path: '/dashboard/tagihan', label: 'Bills', icon: FileText },
           { path: '/dashboard/riwayat', label: 'History', icon: History },
-          { path: '/dashboard/profil', label: 'Profile', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
+          { path: '/dashboard/account/settings', label: 'Pengaturan', icon: Settings },
         ];
     }
   };
@@ -219,7 +220,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/finance/financial-report', label: 'Report', icon: FileSpreadsheet },
           { path: '/dashboard/finance/settlement', label: 'Settlement', icon: Building },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'Operations':
         return [
@@ -228,7 +229,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/operations/products', label: 'Products', icon: Layers },
           { path: '/dashboard/operations/monitoring', label: 'Monitoring', icon: Activity },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'Marketing':
         return [
@@ -236,7 +237,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/marketing/banners', label: 'Banner', icon: ImageIcon },
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'Customer Support':
         return [
@@ -244,7 +245,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/customer-support/tickets', label: 'Tickets', icon: FileText },
           { path: '/dashboard/customer-support/refund-center', label: 'Refund', icon: Receipt },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'Owner':
         return [
@@ -252,14 +253,14 @@ export const DashboardLayout = () => {
           { path: '/dashboard/finance', label: 'Finance', icon: DollarSign },
           { path: '/dashboard/operations', label: 'Operations', icon: Server },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'Super Admin':
         return [
           { path: '/dashboard/owner', label: 'Executive', icon: Crown },
           { path: '/dashboard', label: 'User Site', icon: Home },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'User':
       default:
@@ -268,7 +269,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/wallet', label: 'Wallet', icon: Wallet },
           { path: '/dashboard/riwayat', label: 'Riwayat', icon: History },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
-          { path: '/dashboard/profil', label: 'Profil', icon: User },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
     }
   };
@@ -279,6 +280,9 @@ export const DashboardLayout = () => {
   const isActive = (path: string) => {
     if (path === '/dashboard') {
       return location.pathname === '/dashboard';
+    }
+    if (path === '/dashboard/account') {
+      return location.pathname === '/dashboard/account';
     }
     return location.pathname.startsWith(path);
   };
@@ -515,7 +519,7 @@ export const DashboardLayout = () => {
             </div>
 
             {/* Profile Avatar & Name */}
-            <Link to="/dashboard/profil" className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 p-1.5 pr-3.5 rounded-2xl border border-gray-100 transition-all group">
+            <Link to="/dashboard/account" className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 p-1.5 pr-3.5 rounded-2xl border border-gray-100 transition-all group">
               <img 
                 src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'} 
                 alt={currentUser.name} 

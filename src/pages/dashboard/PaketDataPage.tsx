@@ -18,6 +18,7 @@ import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
+import { consumePendingCheckout } from '../../utils/pinGate';
 
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -28,6 +29,7 @@ export const PaketDataPage = () => {
   const [provider, setProvider] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+  const [resumePin, setResumePin] = useState(false);
 
   // Status Banners
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -37,6 +39,11 @@ export const PaketDataPage = () => {
   useEffect(() => {
     fetchWallet();
     fetchProducts({ category: 'data' });
+    const pending = consumePendingCheckout('/dashboard/paket-data');
+    if (pending?.data) {
+      setCheckoutData(pending.data);
+      setResumePin(!!pending.resumePin);
+    }
   }, [fetchWallet, fetchProducts]);
 
   // Operator Detection
@@ -307,11 +314,16 @@ export const PaketDataPage = () => {
       {checkoutData && (
         <CheckoutSummary
           data={checkoutData}
-          onClose={() => setCheckoutData(null)}
+          initialStep={resumePin ? 'PIN' : 'SUMMARY'}
+          onClose={() => {
+            setCheckoutData(null);
+            setResumePin(false);
+          }}
           onSuccess={() => {
             setPhoneNo('');
             setSelectedProduct(null);
             setCheckoutData(null);
+            setResumePin(false);
           }}
         />
       )}

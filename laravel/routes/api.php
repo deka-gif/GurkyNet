@@ -16,6 +16,9 @@ use App\Http\Controllers\Api\v1\Admin\HomepageSectionController;
 use App\Http\Controllers\Api\v1\Admin\WebsiteMenuController;
 use App\Http\Controllers\Api\v1\Admin\StaticPageController;
 use App\Http\Controllers\Api\v1\Admin\MediaController;
+use App\Http\Controllers\Api\v1\AccountController;
+use App\Http\Controllers\Api\v1\AccountContentController;
+use App\Http\Controllers\Api\v1\ComplaintController;
 use App\Http\Controllers\Api\v1\ProfileController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
 use App\Http\Controllers\Api\v1\Public\PublicMediaController;
@@ -121,12 +124,29 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::put('/', [ProfileController::class, 'update']);
             Route::put('/password', [ProfileController::class, 'updatePassword']);
             Route::put('/pin', [ProfileController::class, 'updatePin']);
+            Route::post('/avatar', [AccountController::class, 'uploadAvatar']);
             Route::get('/security', [ProfileController::class, 'security']);
             Route::delete('/sessions/{id}', [ProfileController::class, 'revokeSession']);
             Route::delete('/sessions', [ProfileController::class, 'revokeOtherSessions']);
         });
-        
-        // PIN Verification / Settings
+
+        // Transaction PIN (Account Center)
+        Route::post('/pin/create', [AccountController::class, 'createPin']);
+        Route::put('/pin/change', [AccountController::class, 'changePin']);
+        Route::post('/pin/forgot', [AccountController::class, 'forgotPin']);
+
+        // Complaint Center (end-user)
+        Route::get('/complaints', [ComplaintController::class, 'index']);
+        Route::post('/complaints', [ComplaintController::class, 'store']);
+        Route::get('/complaints/{id}', [ComplaintController::class, 'show']);
+
+        // Help / Legal / About (CMS-backed)
+        Route::get('/help', [AccountContentController::class, 'help']);
+        Route::get('/privacy', [AccountContentController::class, 'privacy']);
+        Route::get('/terms', [AccountContentController::class, 'terms']);
+        Route::get('/about', [AccountContentController::class, 'about']);
+
+        // PIN Verification / Settings (legacy alias)
         Route::post('/auth/pin', [AuthController::class, 'changePin']);
 
         // Device management (authenticated)

@@ -19,6 +19,9 @@ import {
   Send
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
+import { useAuth } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { buildCreatePinUrl, PENDING_WALLET_ACTION_KEY } from '../../utils/pinGate';
 
 declare global {
   interface Window {
@@ -28,6 +31,8 @@ declare global {
 
 export const WalletPage = () => {
   const { wallet, history, loading, fetchWallet, fetchHistory, topUp, transfer, withdraw } = useWalletStore();
+  const { user, fetchUser } = useAuth();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>('index');
   
@@ -56,7 +61,25 @@ export const WalletPage = () => {
   useEffect(() => {
     fetchWallet();
     fetchHistory();
-  }, [fetchWallet, fetchHistory]);
+    fetchUser();
+    try {
+      const raw = sessionStorage.getItem(PENDING_WALLET_ACTION_KEY);
+      if (raw) {
+        const pending = JSON.parse(raw);
+        sessionStorage.removeItem(PENDING_WALLET_ACTION_KEY);
+        if (pending?.activeTab) setActiveTab(pending.activeTab);
+        if (pending?.targetAccount) setTargetAccount(pending.targetAccount);
+        if (pending?.transferAmount) setTransferAmount(pending.transferAmount);
+        if (pending?.transferNote) setTransferNote(pending.transferNote);
+        if (pending?.transferType) setTransferType(pending.transferType);
+        if (pending?.withdrawBank) setWithdrawBank(pending.withdrawBank);
+        if (pending?.withdrawAccount) setWithdrawAccount(pending.withdrawAccount);
+        if (pending?.withdrawAmount) setWithdrawAmount(pending.withdrawAmount);
+      }
+    } catch {
+      sessionStorage.removeItem(PENDING_WALLET_ACTION_KEY);
+    }
+  }, [fetchWallet, fetchHistory, fetchUser]);
 
   const formatIDR = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -129,6 +152,21 @@ export const WalletPage = () => {
       return;
     }
 
+    if (!user?.hasPin) {
+      sessionStorage.setItem(
+        PENDING_WALLET_ACTION_KEY,
+        JSON.stringify({
+          activeTab: 'transfer',
+          targetAccount,
+          transferAmount,
+          transferNote,
+          transferType,
+        })
+      );
+      navigate(buildCreatePinUrl('/dashboard/wallet'));
+      return;
+    }
+
     if (!/^\d{6}$/.test(transferPin)) {
       setErrorMsg('PIN transaksi harus 6 digit.');
       return;
@@ -156,6 +194,19 @@ export const WalletPage = () => {
     }
     if (!withdrawAccount.trim()) {
       setErrorMsg('Nomor rekening wajib diisi.');
+      return;
+    }
+    if (!user?.hasPin) {
+      sessionStorage.setItem(
+        PENDING_WALLET_ACTION_KEY,
+        JSON.stringify({
+          activeTab: 'withdraw',
+          withdrawBank,
+          withdrawAccount,
+          withdrawAmount,
+        })
+      );
+      navigate(buildCreatePinUrl('/dashboard/wallet'));
       return;
     }
     if (!/^\d{6}$/.test(withdrawPin)) {

@@ -22,8 +22,10 @@ class User extends Authenticatable
         'birth_date',
         'gender',
         'address',
+        'avatar_path',
         'role',
         'transaction_pin',
+        'pin_updated_at',
     ];
 
     protected $hidden = [
@@ -36,8 +38,29 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'transaction_pin' => 'hashed',
+        'pin_updated_at' => 'datetime',
         'role' => \App\Enums\UserRole::class,
     ];
+
+    /**
+     * Whether the user has a transaction PIN configured.
+     */
+    public function hasPin(): bool
+    {
+        return $this->transaction_pin !== null && $this->transaction_pin !== '';
+    }
+
+    /**
+     * Public avatar URL from Laravel Storage (or null).
+     */
+    public function avatarUrl(): ?string
+    {
+        if (!$this->avatar_path) {
+            return null;
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
+    }
 
     protected static function booted(): void
     {

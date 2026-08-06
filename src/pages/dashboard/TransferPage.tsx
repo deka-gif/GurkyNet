@@ -10,6 +10,9 @@ import {
   Building2
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
+import { useAuth } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { buildCreatePinUrl, PENDING_TRANSFER_KEY } from '../../utils/pinGate';
 
 /**
  * Transfer page — P2P wallet transfer only.
@@ -17,6 +20,8 @@ import { useWalletStore } from '../../store/wallet.store';
  */
 export const TransferPage = () => {
   const { wallet, fetchWallet, transfer, loading } = useWalletStore();
+  const { user, fetchUser } = useAuth();
+  const navigate = useNavigate();
 
   const [transferType, setTransferType] = useState<'bank' | 'p2p'>('p2p');
   const [accountNo, setAccountNo] = useState('');
@@ -27,7 +32,20 @@ export const TransferPage = () => {
 
   useEffect(() => {
     fetchWallet();
-  }, [fetchWallet]);
+    fetchUser();
+    try {
+      const raw = sessionStorage.getItem(PENDING_TRANSFER_KEY);
+      if (raw) {
+        const pending = JSON.parse(raw);
+        sessionStorage.removeItem(PENDING_TRANSFER_KEY);
+        if (pending?.accountNo) setAccountNo(pending.accountNo);
+        if (pending?.amount) setAmount(pending.amount);
+        if (pending?.transferType) setTransferType(pending.transferType);
+      }
+    } catch {
+      sessionStorage.removeItem(PENDING_TRANSFER_KEY);
+    }
+  }, [fetchWallet, fetchUser]);
 
   const formatIDR = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -44,6 +62,15 @@ export const TransferPage = () => {
 
     if (transferType === 'bank') {
       setErrorMsg('Transfer ke rekening bank belum tersedia. Gunakan transfer sesama GurkyPay (P2P).');
+      return;
+    }
+
+    if (!user?.hasPin) {
+      sessionStorage.setItem(
+        PENDING_TRANSFER_KEY,
+        JSON.stringify({ accountNo, amount, transferType })
+      );
+      navigate(buildCreatePinUrl('/dashboard/transfer'));
       return;
     }
 

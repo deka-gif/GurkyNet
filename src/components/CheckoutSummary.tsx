@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   CheckCircle2, 
@@ -19,6 +20,8 @@ import {
 import { useWalletStore } from '../store/wallet.store';
 import { useTransactionStore } from '../store/transaction.store';
 import { transactionService } from '../services/transaction/transaction.service';
+import { useAuth } from '../hooks/useAuth';
+import { buildCreatePinUrl, savePendingCheckout } from '../utils/pinGate';
 
 // Dynamic transaction properties
 export interface CheckoutData {
@@ -35,15 +38,20 @@ interface CheckoutSummaryProps {
   data: CheckoutData;
   onClose: () => void;
   onSuccess?: (transaction: any) => void;
+  /** Resume after Create PIN redirect */
+  initialStep?: CheckoutStep;
 }
 
 type CheckoutStep = 'SUMMARY' | 'CONFIRM' | 'PIN' | 'LOADING' | 'RESULT';
 
-export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose, onSuccess }) => {
+export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose, onSuccess, initialStep = 'SUMMARY' }) => {
   const { wallet, deductBalance, fetchWallet } = useWalletStore();
   const { createTransaction } = useTransactionStore();
+  const { user, fetchUser } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [step, setStep] = useState<CheckoutStep>('SUMMARY');
+  const [step, setStep] = useState<CheckoutStep>(() => (initialStep === 'PIN' && !user?.hasPin ? 'CONFIRM' : initialStep));
   const [pin, setPin] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
@@ -56,14 +64,31 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const totalPayment = data.amount + data.adminFee;
   const pinInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  const goToPinStep = () => {
+    if (!user?.hasPin) {
+      savePendingCheckout(data, location.pathname);
+      navigate(buildCreatePinUrl(location.pathname));
+      return;
+    }
+    setStep('PIN');
+  };
+
   // Focus invisible input for keyboard typing on desktop
   useEffect(() => {
-    if (step === 'PIN') {
-      setTimeout(() => {
-        pinInputRef.current?.focus();
-      }, 300);
+    if (step !== 'PIN') return;
+    if (!user?.hasPin) {
+      savePendingCheckout(data, location.pathname);
+      navigate(buildCreatePinUrl(location.pathname));
+      return;
     }
-  }, [step]);
+    setTimeout(() => {
+      pinInputRef.current?.focus();
+    }, 300);
+  }, [step, user?.hasPin, data, location.pathname, navigate]);
 
   // Handle PIN input key changes (virtual keypad calls this or physical keyboard does)
   const handlePinChange = (val: string) => {
@@ -342,7 +367,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
               </button>
               <button 
                 disabled={wallet ? wallet.balance < totalPayment : true}
-                onClick={() => setStep('PIN')}
+                onClick={goToPinStep}
                 className={`flex-1 py-3 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 ${
                   wallet && wallet.balance >= totalPayment 
                     ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-600/15' 

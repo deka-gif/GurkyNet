@@ -12,6 +12,7 @@ import { useWalletStore } from '../../store/wallet.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
+import { consumePendingCheckout } from '../../utils/pinGate';
 
 export const TokenPlnPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -20,6 +21,7 @@ export const TokenPlnPage = () => {
   const [customerId, setCustomerId] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+  const [resumePin, setResumePin] = useState(false);
 
   // Status Alerts
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -30,6 +32,11 @@ export const TokenPlnPage = () => {
   useEffect(() => {
     fetchWallet();
     fetchProducts({ category: 'pln' });
+    const pending = consumePendingCheckout('/dashboard/token-pln');
+    if (pending?.data) {
+      setCheckoutData(pending.data);
+      setResumePin(!!pending.resumePin);
+    }
   }, [fetchWallet, fetchProducts]);
 
   const displayProducts = products.filter(p => p.status === 'tersedia' && p.name.toLowerCase().includes('token'));
@@ -238,12 +245,17 @@ export const TokenPlnPage = () => {
       {checkoutData && (
         <CheckoutSummary
           data={checkoutData}
-          onClose={() => setCheckoutData(null)}
+          initialStep={resumePin ? 'PIN' : 'SUMMARY'}
+          onClose={() => {
+            setCheckoutData(null);
+            setResumePin(false);
+          }}
           onSuccess={() => {
             setSuccessMsg('Pembelian token sedang diproses. Nomor token (SN) akan tersedia pada struk transaksi di halaman Riwayat setelah diterbitkan oleh provider.');
             setCustomerId('');
             setSelectedProduct(null);
             setCheckoutData(null);
+            setResumePin(false);
           }}
         />
       )}

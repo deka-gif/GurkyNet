@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { PublicLayout } from '../layouts/PublicLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
 import { DashboardLayout } from '../layouts/DashboardLayout';
@@ -22,7 +22,19 @@ import { TransferPage } from '../pages/dashboard/TransferPage';
 import { TagihanPage } from '../pages/dashboard/TagihanPage';
 import { RiwayatPage } from '../pages/dashboard/RiwayatPage';
 import { NotifikasiPage } from '../pages/dashboard/NotifikasiPage';
-import { ProfilPage } from '../pages/dashboard/ProfilPage';
+import {
+  AccountHubPage,
+  AccountSettingsPage,
+  AccountEditPage,
+  AccountPinPage,
+  AccountSecurityPage,
+  AccountWalletPage,
+  AccountComplaintsPage,
+  AccountComplaintCreatePage,
+  AccountComplaintDetailPage,
+  AccountHelpPage,
+  AccountCmsPage,
+} from '../pages/dashboard/account';
 import { CustomerSupportDashboard } from '../pages/dashboard/CustomerSupportDashboard';
 import { CustomerSupportTickets } from '../pages/dashboard/CustomerSupportTickets';
 import { CustomerSupportTicketDetail } from '../pages/dashboard/CustomerSupportTicketDetail';
@@ -328,7 +340,67 @@ export const router = createBrowserRouter([
       },
       {
         path: 'profil',
-        element: <ProfilPage />
+        element: <Navigate to="/dashboard/account" replace />
+      },
+      {
+        path: 'account',
+        element: <AccountHubPage />
+      },
+      {
+        path: 'account/settings',
+        element: <AccountSettingsPage />
+      },
+      {
+        path: 'account/edit',
+        element: <AccountEditPage />
+      },
+      {
+        path: 'account/security',
+        element: <AccountSecurityPage />
+      },
+      {
+        path: 'account/wallet',
+        element: <AccountWalletPage />
+      },
+      {
+        path: 'account/pin/create',
+        element: <AccountPinPage mode="create" />
+      },
+      {
+        path: 'account/pin/change',
+        element: <AccountPinPage mode="change" />
+      },
+      {
+        path: 'account/pin/forgot',
+        element: <AccountPinPage mode="forgot" />
+      },
+      {
+        path: 'account/complaints',
+        element: <AccountComplaintsPage />
+      },
+      {
+        path: 'account/complaints/new',
+        element: <AccountComplaintCreatePage />
+      },
+      {
+        path: 'account/complaints/:id',
+        element: <AccountComplaintDetailPage />
+      },
+      {
+        path: 'account/help',
+        element: <AccountHelpPage />
+      },
+      {
+        path: 'account/privacy',
+        element: <AccountCmsPage kind="privacy" />
+      },
+      {
+        path: 'account/terms',
+        element: <AccountCmsPage kind="terms" />
+      },
+      {
+        path: 'account/about',
+        element: <AccountCmsPage kind="about" />
       },
       {
         path: 'customer-support',

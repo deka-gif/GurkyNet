@@ -23,6 +23,7 @@ import { useTransactionStore } from '../../store/transaction.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
+import { consumePendingCheckout } from '../../utils/pinGate';
 
 export const VoucherPage = () => {
   const { wallet, fetchWallet, deductBalance } = useWalletStore();
@@ -35,6 +36,7 @@ export const VoucherPage = () => {
   const [selectedVoucher, setSelectedVoucher] = useState<Product | null>(null);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+  const [resumePin, setResumePin] = useState(false);
 
   // Status Banners
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -44,6 +46,11 @@ export const VoucherPage = () => {
   useEffect(() => {
     fetchWallet();
     fetchProducts({ category: 'voucher' }); // Fetch products with category voucher
+    const pending = consumePendingCheckout('/dashboard/voucher');
+    if (pending?.data) {
+      setCheckoutData(pending.data);
+      setResumePin(!!pending.resumePin);
+    }
   }, [fetchWallet, fetchProducts]);
 
 
@@ -274,9 +281,14 @@ export const VoucherPage = () => {
       {checkoutData && (
         <CheckoutSummary
           data={checkoutData}
-          onClose={() => setCheckoutData(null)}
+          initialStep={resumePin ? 'PIN' : 'SUMMARY'}
+          onClose={() => {
+            setCheckoutData(null);
+            setResumePin(false);
+          }}
           onSuccess={() => {
             setCheckoutData(null);
+            setResumePin(false);
           }}
         />
       )}

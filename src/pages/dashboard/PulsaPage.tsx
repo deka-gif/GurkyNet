@@ -18,6 +18,7 @@ import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
+import { consumePendingCheckout } from '../../utils/pinGate';
 
 export const PulsaPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -28,6 +29,7 @@ export const PulsaPage = () => {
   const [provider, setProvider] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+  const [resumePin, setResumePin] = useState(false);
 
   // Status Alerts
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -37,6 +39,11 @@ export const PulsaPage = () => {
   useEffect(() => {
     fetchWallet();
     fetchProducts({ category: 'pulsa' });
+    const pending = consumePendingCheckout('/dashboard/pulsa');
+    if (pending?.data) {
+      setCheckoutData(pending.data);
+      setResumePin(!!pending.resumePin);
+    }
   }, [fetchWallet, fetchProducts]);
 
   // Prefix check to auto-detect operator/provider
@@ -312,11 +319,16 @@ export const PulsaPage = () => {
       {checkoutData && (
         <CheckoutSummary
           data={checkoutData}
-          onClose={() => setCheckoutData(null)}
+          initialStep={resumePin ? 'PIN' : 'SUMMARY'}
+          onClose={() => {
+            setCheckoutData(null);
+            setResumePin(false);
+          }}
           onSuccess={() => {
             setPhoneNo('');
             setSelectedProduct(null);
             setCheckoutData(null);
+            setResumePin(false);
           }}
         />
       )}

@@ -17,8 +17,16 @@ class SupportTicket extends Model
         'user_id',
         'transaction_id',
         'category',
+        'subject',
+        'description',
+        'attachment',
         'priority',
         'status',
+        'closed_at',
+    ];
+
+    protected $casts = [
+        'closed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

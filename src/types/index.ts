@@ -9,7 +9,14 @@ export interface User {
   avatar: string;
   role: string;
   isVerified: boolean;
+  hasPin?: boolean;
   createdAt?: string;
+  wallet?: {
+    walletNo?: string;
+    wallet_number?: string;
+    balance?: number;
+    status?: string;
+  } | null;
 }
 
 export interface Wallet {
@@ -19,6 +26,7 @@ export interface Wallet {
   points: number;
   currency: string;
   lastUpdated: string;
+  status?: string;
 }
 
 export interface Banner {
@@ -66,10 +74,21 @@ export interface Notification {
 }
 
 export interface Profile {
-  user: User;
-  kycStatus: 'unverified' | 'pending' | 'verified';
-  whatsappLinked: boolean;
-  twoFactorEnabled: boolean;
+  id?: string | number;
+  name?: string;
+  email?: string;
+  phone?: string;
+  phone_number?: string;
+  avatar?: string | null;
+  hasPin?: boolean;
+  has_pin?: boolean;
+  pinUpdatedAt?: string | null;
+  wallet?: User['wallet'];
+  user?: User;
+  kycStatus?: 'unverified' | 'pending' | 'verified';
+  whatsappLinked?: boolean;
+  twoFactorEnabled?: boolean;
+  createdAt?: string;
 }
 
 export interface Pagination {

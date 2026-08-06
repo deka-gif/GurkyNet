@@ -49,6 +49,7 @@ class UserRepository implements UserRepositoryInterface
     {
         return $user->update([
             'transaction_pin' => Hash::make($pin),
+            'pin_updated_at' => now(),
         ]);
     }
 }

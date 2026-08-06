@@ -35,6 +35,31 @@ function normalizeRole(role: string | undefined | null): string {
   return map[role.toLowerCase()] ?? role;
 }
 
+/** Flatten ProfileResource / nested user payloads into the frontend User shape. */
+function normalizeUserPayload(raw: any): User {
+  const profile = raw?.user && typeof raw.user === 'object' && (raw.name || raw.hasPin !== undefined || raw.wallet)
+    ? { ...raw.user, ...raw, ...(raw.user || {}) }
+    : (raw?.user ?? raw);
+  const nested = raw?.user && typeof raw.user === 'object' ? raw.user : null;
+  const src = {
+    ...(nested || {}),
+    ...(typeof profile === 'object' ? profile : {}),
+  };
+
+  return {
+    id: String(src.id ?? ''),
+    name: src.name ?? '',
+    email: src.email ?? '',
+    phone: src.phone ?? src.phone_number ?? '',
+    avatar: src.avatar ?? src.avatar_url ?? '',
+    role: normalizeRole(src.role),
+    isVerified: !!(src.isVerified ?? src.is_verified),
+    hasPin: !!(src.hasPin ?? src.has_pin),
+    createdAt: src.createdAt ?? src.created_at,
+    wallet: src.wallet ?? null,
+  };
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -69,8 +94,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authService.login(payload);
       if (response.success && response.data) {
         const { token, user } = response.data;
-        // Normalize role from API format ("finance") to frontend format ("Finance")
-        const normalizedUser: User = { ...user, role: normalizeRole(user.role) };
+        const normalizedUser = normalizeUserPayload(user);
         storageService.setToken(token, remember);
         storageService.setUser(normalizedUser as unknown as Record<string, unknown>, remember);
         if (remember) {
@@ -163,10 +187,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authService.me();
 
       if (response.success) {
-        // response.data is ApiResponse<User>, so the user object is in response.data.data
-        const rawUser = (response.data as any).data ?? (response.data as any).user ?? response.data;
-        // Normalize role from API format ("finance") to frontend format ("Finance")
-        const normalizedUser: User = { ...rawUser, role: normalizeRole(rawUser?.role) };
+        // response.data is ApiResponse; me() returns { user: ProfileResource }
+        const payload = (response.data as any).data ?? response.data;
+        const normalizedUser = normalizeUserPayload(payload?.user ?? payload);
 
         storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
 

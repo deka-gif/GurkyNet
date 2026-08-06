@@ -81,6 +81,7 @@ class ProfileRepository implements ProfileRepositoryInterface
 
         $user->update([
             'transaction_pin' => Hash::make($newPin),
+            'pin_updated_at' => now(),
         ]);
 
         ActivityLog::create([
@@ -138,7 +139,9 @@ class ProfileRepository implements ProfileRepositoryInterface
             ] : null,
             'registered_devices' => $registeredDevices,
             'active_tokens' => $activeTokens,
-            'two_factor_status' => false, // Default is false/not_configured
+            'has_pin' => $user->hasPin(),
+            'pin_updated_at' => $user->pin_updated_at?->toIso8601String(),
+            'two_factor_status' => false,
         ];
     }
 

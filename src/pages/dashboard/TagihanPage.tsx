@@ -19,6 +19,7 @@ import { useTransactionStore } from '../../store/transaction.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
+import { consumePendingCheckout } from '../../utils/pinGate';
 
 interface BillDetail {
   productName: string;
@@ -41,6 +42,7 @@ export const TagihanPage = () => {
   // Query Result
   const [billDetails, setBillDetails] = useState<BillDetail | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+  const [resumePin, setResumePin] = useState(false);
 
   // Status indicators
   const [querying, setQuerying] = useState(false);
@@ -50,6 +52,11 @@ export const TagihanPage = () => {
 
   useEffect(() => {
     fetchWallet();
+    const pending = consumePendingCheckout('/dashboard/tagihan');
+    if (pending?.data) {
+      setCheckoutData(pending.data);
+      setResumePin(!!pending.resumePin);
+    }
   }, [fetchWallet]);
 
   useEffect(() => {
@@ -401,11 +408,16 @@ export const TagihanPage = () => {
       {checkoutData && (
         <CheckoutSummary
           data={checkoutData}
-          onClose={() => setCheckoutData(null)}
+          initialStep={resumePin ? 'PIN' : 'SUMMARY'}
+          onClose={() => {
+            setCheckoutData(null);
+            setResumePin(false);
+          }}
           onSuccess={() => {
             setCustomerId('');
             setBillDetails(null);
             setCheckoutData(null);
+            setResumePin(false);
           }}
         />
       )}
