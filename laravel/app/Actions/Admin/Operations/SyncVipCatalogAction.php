@@ -240,12 +240,17 @@ class SyncVipCatalogAction
                     if ($matched->trashed()) {
                         $matched->restore();
                     }
-                    $product = $matched;
+                    // Digi often left products.status=false. VIP can still sell — reopen the master.
+                    if ($isActive && !$matched->status) {
+                        $matched->forceFill(['status' => true])->save();
+                    }
+                    $product = $matched->fresh();
                     $updated++;
                     Log::info('VIP SYNC TRACE — Stage 5 Matched existing master product (no duplicate Product)', [
                         'product_id' => $product->id,
                         'sku_code' => $product->sku_code,
                         'vip_provider_sku' => $providerSku,
+                        'product_status' => (bool) $product->status,
                     ]);
                 } else {
                     $existing = Product::withTrashed()->where('sku_code', $internalSku)->first();
@@ -336,9 +341,15 @@ class SyncVipCatalogAction
 
                 $skuRow = ProductProviderSku::updateOrCreate($skuAttributes, $skuValues);
 
+                // Keep master sellable whenever VIP has an active offer (frontend filters status=tersedia).
+                if ($isActive && $product && !(bool) $product->status) {
+                    $product->forceFill(['status' => true])->save();
+                }
+
                 Log::info('VIP SYNC TRACE — Stage 7 After ProductProviderSku::updateOrCreate()', [
                     'Inserted Mapping ID' => $skuRow->id,
                     'was_recently_created' => $skuRow->wasRecentlyCreated,
+                    'product_status' => (bool) $product->fresh()?->status,
                 ]);
 
                 if ($firstSkuId === null) {
@@ -656,6 +667,7 @@ class SyncVipCatalogAction
 
     /**
      * Find an existing non-VIP master product to attach a VIP offer (enables failover + catalog merge).
+     * Prefer same category, but allow cross-category match (Digi "pulsa" vs VIP historical "prepaid").
      */
     protected function findMatchingMasterProduct(int $categoryId, int $operatorId, string $name): ?Product
     {
@@ -665,10 +677,10 @@ class SyncVipCatalogAction
         }
 
         return Product::withTrashed()
-            ->where('product_category_id', $categoryId)
             ->where('provider_id', $operatorId)
             ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
             ->where('sku_code', 'not like', 'VIP-%')
+            ->orderByRaw('CASE WHEN product_category_id = ? THEN 0 ELSE 1 END', [$categoryId])
             ->orderBy('id')
             ->first();
     }

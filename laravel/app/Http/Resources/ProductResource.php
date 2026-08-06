@@ -19,6 +19,7 @@ class ProductResource extends JsonResource
 
         $pricingDetails = $pricingService->calculateForProduct($this->resource);
         $availabilityStatus = $availabilityService->getStatus($this->resource);
+        $sellable = $this->isSellableViaControlCenter();
 
         return [
             'id' => $this->id,
@@ -30,8 +31,10 @@ class ProductResource extends JsonResource
             'adminFee' => (float) $pricingDetails['admin_fee'],
             'price' => (float) $pricingDetails['sell_price'],
             'sellingPrice' => (float) ($pricingDetails['selling_price'] ?? $pricingDetails['sell_price']),
-            'status' => $this->status ? 'tersedia' : 'gangguan', // Frontend expected enum string
-            'isActive' => (bool) $this->status, // Raw boolean status
+            // Dashboard filters status === 'tersedia'. Digi may leave products.status=false
+            // even when an enabled VIP (or Digi) SKU offer is active — prefer Control Center.
+            'status' => $sellable ? 'tersedia' : 'gangguan',
+            'isActive' => $sellable,
             'availabilityStatus' => $availabilityStatus, // Engine calculated: active, inactive, maintenance
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
@@ -47,5 +50,22 @@ class ProductResource extends JsonResource
             'createdAt' => $this->created_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Sellable when any active product_provider_skus row belongs to an enabled Product Provider.
+     * Falls back to products.status when SKU relations are not loaded.
+     */
+    protected function isSellableViaControlCenter(): bool
+    {
+        $this->resource->loadMissing('providerSkus.productProvider');
+
+        foreach ($this->providerSkus as $sku) {
+            if ($sku->is_active && $sku->productProvider && $sku->productProvider->is_active) {
+                return true;
+            }
+        }
+
+        return (bool) $this->status;
     }
 }

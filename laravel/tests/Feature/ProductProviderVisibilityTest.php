@@ -118,6 +118,30 @@ class ProductProviderVisibilityTest extends TestCase
         $this->assertContains('VIP-XL5K', $codes);
     }
 
+    public function test_digi_status_false_with_active_vip_sku_is_visible_when_vip_on(): void
+    {
+        // Production shape: VIP SKU attached to Digi master that Digi marked status=false.
+        $this->digiProduct->update(['status' => false]);
+        ProductProviderSku::create([
+            'product_id' => $this->digiProduct->id,
+            'product_provider_id' => $this->vip->id,
+            'provider_sku' => 'XL_5K_VIP_ON_DIGI',
+            'base_price' => 5400,
+            'is_active' => true,
+        ]);
+
+        $this->digi->update(['is_active' => false]);
+        $this->vip->update(['is_active' => true]);
+        ProductCatalogCache::bump();
+
+        $res = $this->getJson('/api/v1/products?per_page=100');
+        $res->assertOk();
+        $row = collect($res->json('data'))->firstWhere('code', 'XL5K_DIGI');
+
+        $this->assertNotNull($row);
+        $this->assertSame('tersedia', $row['status']);
+    }
+
     public function test_digiflazz_off_vip_on_prepaid_category_appears_under_pulsa_filter(): void
     {
         // VIP sync historically stores category slug "prepaid"; User Dashboard requests "pulsa".

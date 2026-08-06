@@ -153,8 +153,7 @@ class ProductRepository implements ProductRepositoryInterface
         $this->repairAndReportLegacyUnmapped();
 
         $query = Product::query()
-            ->with(['category', 'provider', 'productProvider', 'providerSkus.productProvider'])
-            ->where('status', true);
+            ->with(['category', 'provider', 'productProvider', 'providerSkus.productProvider']);
 
         $this->applyControlCenterVisibility($query);
 
@@ -210,22 +209,13 @@ class ProductRepository implements ProductRepositoryInterface
 
     /**
      * Product is user-visible iff at least one active SKU mapping belongs to an enabled Product Provider.
+     *
+     * Do NOT gate on products.status — Digiflazz sync sets status=false on masters that VIP later
+     * attaches to. Control Center (product_providers.is_active + product_provider_skus.is_active)
+     * is the single source of truth for catalog visibility.
      */
     protected function isVisibleViaControlCenter(Product $product): bool
     {
-        if (!$product->status) {
-            if (static::$visibilityTraceBudget > 0) {
-                static::$visibilityTraceBudget--;
-                Log::info('VIP CATALOG TRACE — isVisibleViaControlCenter', [
-                    'Product ID' => $product->id,
-                    'Final decision' => false,
-                    'reason' => 'product_status_false',
-                ]);
-            }
-
-            return false;
-        }
-
         $product->loadMissing('providerSkus.productProvider');
 
         $visible = false;
@@ -245,6 +235,7 @@ class ProductRepository implements ProductRepositoryInterface
                     'sku enabled' => (bool) $sku->is_active,
                     'provider priority' => $pp?->priority,
                     'visible' => $skuVisible,
+                    'product_status' => (bool) $product->status,
                 ]);
             }
         }
@@ -483,9 +474,10 @@ class ProductRepository implements ProductRepositoryInterface
 
     protected function applyListFilters(Builder $query, array $filters): void
     {
-        if (!isset($filters['status'])) {
-            $query->where('status', true);
-        } else {
+        // Only apply products.status when the client explicitly asks for it.
+        // Default catalog visibility is Control Center SKU gate (applyControlCenterVisibility),
+        // so Digi-marked status=false masters with an active VIP offer remain visible.
+        if (array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== '') {
             $status = filter_var($filters['status'], FILTER_VALIDATE_BOOLEAN);
             $query->where('status', $status);
         }
