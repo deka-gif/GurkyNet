@@ -46,16 +46,16 @@ class ProductProviderControlService
     public function toCard(ProductProvider $p): array
     {
         $api = strtolower((string) ($p->api_status ?? 'unknown'));
-        // API status is health-only — never derived from is_active (power).
-        $statusLabel = match ($api) {
-            'online' => 'ONLINE',
-            'degraded', 'syncing' => 'SYNCING',
-            'auth_failed' => 'AUTH ERROR',
-            'timeout' => 'TIMEOUT',
-            'not_configured' => 'NOT CONFIGURED',
-            'no_response', 'unknown' => 'NO RESPONSE',
-            'offline' => 'OFFLINE',
-            default => strtoupper(str_replace('_', ' ', $api)),
+        // Friendly API label for metrics only — never used as the top power badge.
+        $apiStatusLabel = match ($api) {
+            'online' => 'Online',
+            'degraded', 'syncing' => 'Syncing',
+            'auth_failed' => 'Auth Error',
+            'timeout' => 'Timeout',
+            'not_configured' => 'Not Configured',
+            'no_response', 'unknown' => 'No Response',
+            'offline' => 'Offline',
+            default => ucwords(str_replace('_', ' ', $api)),
         };
         $healthColor = strtolower((string) ($p->health_color ?? 'yellow'));
         if (!in_array($healthColor, ['green', 'yellow', 'red'], true)) {
@@ -65,25 +65,22 @@ class ProductProviderControlService
                 default => 'red',
             };
         }
-        // Friendly health label (dot + text) — never "Health Yellow/Green/Red".
-        $healthLabel = match ($healthColor) {
-            'green' => 'Online',
-            'yellow' => 'Syncing',
-            default => 'Offline',
-        };
         $apiOnline = in_array($api, ['online', 'degraded', 'syncing'], true);
+        $poweredOn = (bool) $p->is_active;
 
         return [
             'id' => $p->id,
             'code' => $p->code,
             'name' => $p->name,
             'logo' => $p->logo,
-            'enabled' => (bool) $p->is_active,
-            'status' => $statusLabel,
+            'enabled' => $poweredOn,
+            // Top-badge power state — mirrors product_providers.is_active only.
+            'status' => $poweredOn ? 'ON' : 'OFF',
             'priority' => (int) $p->priority,
             'apiStatus' => $p->api_status,
+            'apiStatusLabel' => $apiStatusLabel,
             'healthColor' => $healthColor,
-            'healthLabel' => $healthLabel,
+            'healthLabel' => $apiStatusLabel,
             'balance' => $p->balance !== null ? (float) $p->balance : null,
             'productCount' => (int) ($p->product_count ?? ProductProviderSku::where('product_provider_id', $p->id)->count()),
             'lastSyncAt' => optional($p->last_sync_at)?->toIso8601String(),
@@ -97,7 +94,7 @@ class ProductProviderControlService
             'lastError' => $p->last_error,
             'isPrimary' => (int) $p->priority === 1,
             'online' => $apiOnline,
-            'apiWarning' => (bool) $p->is_active && !$apiOnline,
+            'apiWarning' => $poweredOn && !$apiOnline,
         ];
     }
 

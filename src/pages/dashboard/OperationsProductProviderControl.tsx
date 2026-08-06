@@ -26,6 +26,7 @@ type ProviderCard = {
   status: string;
   priority: number;
   apiStatus: string;
+  apiStatusLabel?: string;
   healthColor: string;
   healthLabel?: string;
   balance: number | null;
@@ -71,42 +72,21 @@ const formatTs = (iso: string | null | undefined) => {
   }
 };
 
-const apiStatusTone = (status: string) => {
-  const s = (status || '').toUpperCase();
-  if (s === 'ONLINE') {
-    return {
-      wrap: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      dot: 'bg-emerald-500 animate-pulse',
-    };
-  }
-  if (s === 'SYNCING' || s === 'DEGRADED' || s === 'TIMEOUT') {
-    return {
-      wrap: 'bg-amber-50 text-amber-800 border-amber-200',
-      dot: 'bg-amber-500',
-    };
-  }
-  if (s === 'OFFLINE' || s === 'AUTH ERROR' || s === 'NOT CONFIGURED' || s === 'NO RESPONSE') {
-    return {
-      wrap: 'bg-rose-50 text-rose-700 border-rose-200',
-      dot: 'bg-rose-500',
-    };
-  }
-  return {
-    wrap: 'bg-slate-100 text-slate-600 border-slate-200',
-    dot: 'bg-slate-400',
+const formatApiStatus = (card: ProviderCard) => {
+  if (card.apiStatusLabel) return card.apiStatusLabel;
+  const raw = (card.apiStatus || '').toLowerCase();
+  const map: Record<string, string> = {
+    online: 'Online',
+    offline: 'Offline',
+    degraded: 'Syncing',
+    syncing: 'Syncing',
+    timeout: 'Timeout',
+    auth_failed: 'Auth Error',
+    not_configured: 'Not Configured',
+    no_response: 'No Response',
+    unknown: 'No Response',
   };
-};
-
-const healthDotLabel = (card: ProviderCard) => {
-  const color = (card.healthColor || 'yellow').toLowerCase();
-  const label =
-    card.healthLabel ||
-    (color === 'green' ? 'Online' : color === 'yellow' ? 'Syncing' : 'Offline');
-  const dot =
-    color === 'green' ? 'bg-emerald-500' : color === 'red' ? 'bg-rose-500' : 'bg-amber-500';
-  const text =
-    color === 'green' ? 'text-emerald-700' : color === 'red' ? 'text-rose-700' : 'text-amber-800';
-  return { label, dot, text };
+  return map[raw] || (card.apiStatus ? String(card.apiStatus) : '—');
 };
 
 export const OperationsProductProviderControl: React.FC = () => {
@@ -237,33 +217,27 @@ export const OperationsProductProviderControl: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">
-                    {(() => {
-                      const tone = apiStatusTone(card.status);
-                      return (
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${tone.wrap}`}
-                          title="API health status (does not control product visibility)"
-                        >
-                          <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
-                          {card.status}
-                        </span>
-                      );
-                    })()}
-                    {(() => {
-                      const h = healthDotLabel(card);
-                      return (
-                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold ${h.text}`}>
-                          <span className={`w-2 h-2 rounded-full ${h.dot}`} />
-                          {h.label}
-                        </span>
-                      );
-                    })()}
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${
+                        card.enabled
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                      }`}
+                      title="Provider power — controls product visibility"
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          card.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                        }`}
+                      />
+                      {card.enabled ? 'ON' : 'OFF'}
+                    </span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
                   <Metric icon={<Shield className="w-3.5 h-3.5" />} label="Priority" value={String(card.priority)} />
-                  <Metric icon={<Activity className="w-3.5 h-3.5" />} label="API Status" value={card.apiStatus || '—'} />
+                  <Metric icon={<Activity className="w-3.5 h-3.5" />} label="API Status" value={formatApiStatus(card)} />
                   <Metric icon={<Wallet className="w-3.5 h-3.5" />} label="Balance" value={formatIdr(card.balance)} />
                   <Metric icon={<LayersIcon />} label="Products" value={String(card.productCount ?? 0)} />
                   <Metric icon={<Timer className="w-3.5 h-3.5" />} label="Avg Response" value={card.avgResponseMs != null ? `${card.avgResponseMs} ms` : '—'} />
@@ -301,22 +275,22 @@ export const OperationsProductProviderControl: React.FC = () => {
                   {card.enabled ? (
                     <ActionBtn
                       disabled={busy}
-                      tone="powerOn"
+                      tone="warn"
                       onClick={() =>
                         runAction(card.id, () => operationsService.disableProductProvider(card.id), 'Provider OFF — products hidden')
                       }
                     >
-                      <Power className="w-3.5 h-3.5" /> ON
+                      <PowerOff className="w-3.5 h-3.5" /> Turn OFF
                     </ActionBtn>
                   ) : (
                     <ActionBtn
                       disabled={busy}
-                      tone="powerOff"
+                      tone="ok"
                       onClick={() =>
                         runAction(card.id, () => operationsService.enableProductProvider(card.id), 'Provider ON — products visible')
                       }
                     >
-                      <PowerOff className="w-3.5 h-3.5" /> OFF
+                      <Power className="w-3.5 h-3.5" /> Turn ON
                     </ActionBtn>
                   )}
                   <ActionBtn
@@ -389,18 +363,14 @@ const ActionBtn: React.FC<{
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  tone?: 'default' | 'ok' | 'warn' | 'powerOn' | 'powerOff';
+  tone?: 'default' | 'ok' | 'warn';
 }> = ({ children, onClick, disabled, tone = 'default' }) => {
   const tones =
     tone === 'ok'
       ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
       : tone === 'warn'
         ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
-        : tone === 'powerOn'
-          ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
-          : tone === 'powerOff'
-            ? 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
-            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
+        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
 
   return (
     <button

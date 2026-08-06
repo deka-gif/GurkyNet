@@ -96,8 +96,8 @@ class MultiProductProviderControlTest extends TestCase
 
         $card = $res->json('data');
         $this->assertFalse($card['enabled']);
-        $this->assertSame('ONLINE', $card['status']);
-        $this->assertSame('Online', $card['healthLabel']);
+        $this->assertSame('OFF', $card['status']);
+        $this->assertSame('Online', $card['apiStatusLabel']);
         $this->assertFalse($card['apiWarning']);
     }
 
@@ -123,8 +123,8 @@ class MultiProductProviderControlTest extends TestCase
 
         $card = $res->json('data');
         $this->assertTrue($card['enabled']);
-        $this->assertSame('OFFLINE', $card['status']);
-        $this->assertSame('Offline', $card['healthLabel']);
+        $this->assertSame('ON', $card['status']);
+        $this->assertSame('Offline', $card['apiStatusLabel']);
         $this->assertTrue($card['apiWarning']);
     }
 
