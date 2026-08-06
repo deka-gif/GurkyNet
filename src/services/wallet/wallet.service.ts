@@ -1,9 +1,9 @@
 import { apiClient } from '../api';
-import { Wallet, ApiResponse } from '../../types';
+import { Wallet, WalletOverview, ApiResponse } from '../../types';
 
 export const walletService = {
-  getWallet: async (): Promise<ApiResponse<Wallet>> => {
-    const response = await apiClient.get<ApiResponse<Wallet>>('/wallet');
+  getWallet: async (): Promise<ApiResponse<WalletOverview | Wallet>> => {
+    const response = await apiClient.get<ApiResponse<WalletOverview | Wallet>>('/wallet');
     return response.data;
   },
 
@@ -42,7 +42,6 @@ export const walletService = {
     return response.data;
   },
 
-  // Extra helper: Top up wallet
   topUp: async (amount: number, paymentMethod: string): Promise<ApiResponse<any>> => {
     const response = await apiClient.post<ApiResponse<any>>('/wallet/topup', { amount, paymentMethod });
     return response.data;
@@ -73,4 +72,3 @@ export const walletService = {
     return response.data;
   },
 };
-

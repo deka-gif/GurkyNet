@@ -72,11 +72,62 @@ class WalletModuleTest extends TestCase
                 'success' => true,
                 'message' => 'Detail data dompet digital berhasil didapatkan.',
                 'data' => [
-                    'walletNo' => '104211111111',
-                    'balance' => 100000,
-                    'status' => 'active',
+                    'wallet' => [
+                        'walletNo' => '104211111111',
+                        'wallet_id' => '104211111111',
+                        'balance' => 100000,
+                        'status' => 'active',
+                    ],
+                    'summary' => [
+                        'income_this_month' => 0,
+                        'expense_this_month' => 0,
+                        'transaction_count' => 0,
+                    ],
+                    'recent_transactions' => [],
                 ],
             ]);
+    }
+
+    public function test_wallet_overview_aggregates_monthly_income_expense_and_mutations(): void
+    {
+        WalletHistory::create([
+            'wallet_id' => $this->senderWallet->id,
+            'amount' => 100000.00,
+            'type' => WalletHistoryType::CREDIT->value,
+            'description' => 'Top Up Saldo',
+        ]);
+        WalletHistory::create([
+            'wallet_id' => $this->senderWallet->id,
+            'amount' => 74550.00,
+            'type' => WalletHistoryType::DEBIT->value,
+            'description' => 'Pembelian Pulsa',
+        ]);
+        WalletHistory::create([
+            'wallet_id' => $this->senderWallet->id,
+            'amount' => 5000.00,
+            'type' => WalletHistoryType::CREDIT->value,
+            'description' => 'Refund Transaksi',
+        ]);
+
+        // Outside current month — must not affect summary
+        $old = WalletHistory::create([
+            'wallet_id' => $this->senderWallet->id,
+            'amount' => 999999.00,
+            'type' => WalletHistoryType::CREDIT->value,
+            'description' => 'Top Up lama',
+        ]);
+        $old->forceFill(['created_at' => now()->subMonths(2)])->save();
+
+        $response = $this->actingAs($this->sender)
+            ->getJson('/api/v1/wallet');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.wallet.balance', 100000)
+            ->assertJsonPath('data.summary.income_this_month', 105000)
+            ->assertJsonPath('data.summary.expense_this_month', 74550)
+            ->assertJsonPath('data.summary.transaction_count', 3);
+
+        $this->assertCount(4, $response->json('data.recent_transactions'));
     }
 
     /**

@@ -29,6 +29,35 @@ export interface Wallet {
   status?: string;
 }
 
+export interface WalletOverviewSummary {
+  income_this_month: number;
+  expense_this_month: number;
+  transaction_count: number;
+}
+
+export interface WalletLedgerEntry {
+  id: number | string;
+  amount: number;
+  type: string;
+  direction?: string;
+  description?: string;
+  reference_id?: string | number | null;
+  invoice_number?: string | null;
+  service_name?: string | null;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WalletOverview {
+  wallet: Wallet & {
+    wallet_id?: string;
+    reward_points?: number;
+  };
+  summary: WalletOverviewSummary;
+  recent_transactions: WalletLedgerEntry[];
+}
+
 export interface Banner {
   id: string;
   title: string;

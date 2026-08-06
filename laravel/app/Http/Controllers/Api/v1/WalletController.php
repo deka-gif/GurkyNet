@@ -12,6 +12,7 @@ use App\Http\Requests\Api\v1\TopUpRequest;
 use App\Http\Requests\Api\v1\TransferRequest;
 use App\Http\Requests\Api\v1\WithdrawRequest;
 use App\Repositories\Contracts\WalletRepositoryInterface;
+use App\Services\Wallet\WalletSummaryService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,7 @@ class WalletController extends Controller
     protected TransferWalletAction $transferWalletAction;
     protected WithdrawWalletAction $withdrawWalletAction;
     protected WalletRepositoryInterface $walletRepository;
+    protected WalletSummaryService $walletSummaryService;
 
     public function __construct(
         GetWalletAction $getWalletAction,
@@ -34,7 +36,8 @@ class WalletController extends Controller
         TopUpWalletAction $topUpWalletAction,
         TransferWalletAction $transferWalletAction,
         WithdrawWalletAction $withdrawWalletAction,
-        WalletRepositoryInterface $walletRepository
+        WalletRepositoryInterface $walletRepository,
+        WalletSummaryService $walletSummaryService
     ) {
         $this->getWalletAction = $getWalletAction;
         $this->getWalletHistoryAction = $getWalletHistoryAction;
@@ -42,10 +45,11 @@ class WalletController extends Controller
         $this->transferWalletAction = $transferWalletAction;
         $this->withdrawWalletAction = $withdrawWalletAction;
         $this->walletRepository = $walletRepository;
+        $this->walletSummaryService = $walletSummaryService;
     }
 
     /**
-     * Get wallet details for the authenticated user.
+     * Get wallet overview for the authenticated user (balance + monthly summary + recent ledger).
      */
     public function show(Request $request): JsonResponse
     {
@@ -65,7 +69,9 @@ class WalletController extends Controller
             return $this->errorResponse('Anda tidak diizinkan untuk mengakses dompet digital ini.', 403);
         }
 
-        return $this->successResponse('Detail data dompet digital berhasil didapatkan.', new \App\Http\Resources\WalletResource($wallet));
+        $overview = $this->walletSummaryService->buildOverview($wallet);
+
+        return $this->successResponse('Detail data dompet digital berhasil didapatkan.', $overview);
     }
 
     /**

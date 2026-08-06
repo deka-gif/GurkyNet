@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { walletService } from '../services/wallet/wallet.service';
-import { Wallet } from '../types';
+import { Wallet, WalletOverviewSummary, WalletLedgerEntry } from '../types';
 
 interface WalletState {
   wallet: Wallet | null;
-  history: any[];
+  summary: WalletOverviewSummary | null;
+  history: WalletLedgerEntry[];
   loading: boolean;
   error: string | null;
   fetchWallet: () => Promise<void>;
@@ -23,8 +24,48 @@ interface WalletState {
   deductBalance: (amount: number) => Promise<boolean>;
 }
 
+function normalizeWallet(raw: any): Wallet | null {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    id: String(raw.id ?? ''),
+    balance: Number(raw.balance ?? 0),
+    walletNo: String(raw.walletNo ?? raw.wallet_id ?? raw.wallet_number ?? ''),
+    points: Number(raw.points ?? raw.reward_points ?? 0),
+    currency: String(raw.currency ?? 'IDR'),
+    lastUpdated: String(raw.lastUpdated ?? raw.updated_at ?? ''),
+    status: raw.status,
+  };
+}
+
+function normalizeOverviewPayload(data: any): {
+  wallet: Wallet | null;
+  summary: WalletOverviewSummary | null;
+  recent: WalletLedgerEntry[];
+} {
+  // New overview shape: { wallet, summary, recent_transactions }
+  if (data?.wallet && data?.summary) {
+    return {
+      wallet: normalizeWallet(data.wallet),
+      summary: {
+        income_this_month: Number(data.summary.income_this_month ?? 0),
+        expense_this_month: Number(data.summary.expense_this_month ?? 0),
+        transaction_count: Number(data.summary.transaction_count ?? 0),
+      },
+      recent: Array.isArray(data.recent_transactions) ? data.recent_transactions : [],
+    };
+  }
+
+  // Legacy flat wallet resource fallback
+  return {
+    wallet: normalizeWallet(data),
+    summary: null,
+    recent: [],
+  };
+}
+
 export const useWalletStore = create<WalletState>((set, get) => ({
   wallet: null,
+  summary: null,
   history: [],
   loading: false,
   error: null,
@@ -34,7 +75,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const response = await walletService.getWallet();
       if (response.success && response.data) {
-        set({ wallet: response.data, loading: false });
+        const parsed = normalizeOverviewPayload(response.data);
+        set({
+          wallet: parsed.wallet,
+          summary: parsed.summary,
+          history: parsed.recent.length > 0 ? parsed.recent : get().history,
+          loading: false,
+        });
       } else {
         set({ error: response.message || 'Gagal memuat dompet.', loading: false });
       }
@@ -64,7 +111,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const response = await walletService.updateWallet(current.id, data);
       if (response.success) {
-        set({ wallet: response.data, loading: false });
+        const parsed = normalizeOverviewPayload(response.data);
+        set({
+          wallet: parsed.wallet ?? { ...current, ...data },
+          summary: parsed.summary ?? get().summary,
+          loading: false,
+        });
         return true;
       } else {
         set({ error: response.message, loading: false });
@@ -100,7 +152,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       if (response.success && response.data) {
         set({ loading: false });
         await get().fetchWallet();
-        await get().fetchHistory();
         return response.data;
       } else {
         set({ error: response.message, loading: false });
@@ -119,7 +170,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       if (response.success && response.data) {
         set({ loading: false });
         await get().fetchWallet();
-        await get().fetchHistory();
         return response.data;
       }
       set({ error: response.message, loading: false });

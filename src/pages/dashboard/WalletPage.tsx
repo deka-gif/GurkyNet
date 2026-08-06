@@ -30,7 +30,7 @@ declare global {
 }
 
 export const WalletPage = () => {
-  const { wallet, history, loading, fetchWallet, fetchHistory, topUp, transfer, withdraw } = useWalletStore();
+  const { wallet, summary, history, loading, fetchWallet, topUp, transfer, withdraw } = useWalletStore();
   const { user, fetchUser } = useAuth();
   const navigate = useNavigate();
 
@@ -60,7 +60,6 @@ export const WalletPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchHistory();
     fetchUser();
     try {
       const raw = sessionStorage.getItem(PENDING_WALLET_ACTION_KEY);
@@ -79,7 +78,7 @@ export const WalletPage = () => {
     } catch {
       sessionStorage.removeItem(PENDING_WALLET_ACTION_KEY);
     }
-  }, [fetchWallet, fetchHistory, fetchUser]);
+  }, [fetchWallet, fetchUser]);
 
   const formatIDR = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -233,22 +232,11 @@ export const WalletPage = () => {
     }
   };
 
-  // Live wallet ledger from /wallet/history
+  // Live ledger + monthly summary from GET /wallet (backend-calculated)
   const walletHistory = Array.isArray(history) ? history : [];
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const monthEntries = walletHistory.filter((row: any) => {
-    const raw = row.created_at || row.date || row.createdAt;
-    if (!raw) return true;
-    return new Date(raw) >= monthStart;
-  });
-  const monthIn = monthEntries
-    .filter((row: any) => String(row.type || '').toLowerCase().includes('credit'))
-    .reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
-  const monthOut = monthEntries
-    .filter((row: any) => String(row.type || '').toLowerCase().includes('debit'))
-    .reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+  const monthIn = Number(summary?.income_this_month ?? 0);
+  const monthOut = Number(summary?.expense_this_month ?? 0);
+  const mutationCount = Number(summary?.transaction_count ?? 0);
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="wallet-page-root">
@@ -260,7 +248,7 @@ export const WalletPage = () => {
           <p className="text-sm text-gray-500">Kelola saldo GurkyPay, transfer bank, dan riwayat mutasi keuangan Anda secara real-time.</p>
         </div>
         <button 
-          onClick={() => { fetchWallet(); fetchHistory(); }}
+          onClick={() => { fetchWallet(); }}
           className="flex items-center gap-2 text-xs font-bold text-gray-600 bg-white border border-gray-100 hover:border-primary-200 px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all"
         >
           <RefreshCw className="w-3.5 h-3.5 animate-spin-hover" />
@@ -416,7 +404,7 @@ export const WalletPage = () => {
                   </div>
                   <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100/50 col-span-2 md:col-span-1">
                     <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Mutasi Tercatat</span>
-                    <h5 className="text-lg font-black text-amber-900 mt-1">{walletHistory.length} transaksi</h5>
+                    <h5 className="text-lg font-black text-amber-900 mt-1">{mutationCount} transaksi</h5>
                   </div>
                 </div>
 
@@ -435,10 +423,12 @@ export const WalletPage = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {walletHistory.slice(0, 8).map((row: any) => {
-                        const isCredit = String(row.type || '').toLowerCase().includes('credit');
-                        const title = row.description || row.note || (isCredit ? 'Kredit Saldo' : 'Debit Saldo');
+                      {walletHistory.slice(0, 20).map((row: any) => {
+                        const isCredit = String(row.type || row.direction || '').toLowerCase().includes('credit');
+                        const title = row.service_name || row.description || row.note || (isCredit ? 'Kredit Saldo' : 'Debit Saldo');
                         const when = row.created_at || row.date || row.createdAt;
+                        const invoice = row.invoice_number || row.reference_id;
+                        const statusLabel = String(row.status || 'success');
                         return (
                           <div key={row.id} className="p-4 rounded-2xl border border-gray-100 hover:border-gray-200 flex items-center justify-between transition-all">
                             <div className="flex items-center gap-3.5">
@@ -450,8 +440,10 @@ export const WalletPage = () => {
                               <div>
                                 <p className="text-xs font-black text-gray-900">{title}</p>
                                 <p className="text-[10px] text-gray-400 mt-0.5">
-                                  {String(row.type || 'mutasi').toUpperCase()}
-                                  {when ? ` • ${new Date(when).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}` : ''}
+                                  {isCredit ? 'CREDIT' : 'DEBIT'}
+                                  {invoice ? ` • ${invoice}` : ''}
+                                  {when ? ` • ${new Date(when).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                                  {` • ${statusLabel}`}
                                 </p>
                               </div>
                             </div>
