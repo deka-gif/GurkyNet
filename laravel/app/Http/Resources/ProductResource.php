@@ -21,14 +21,18 @@ class ProductResource extends JsonResource
         $availabilityStatus = $availabilityService->getStatus($this->resource);
         $sellable = $this->isSellableViaControlCenter();
 
-        $taxonomy = resolve(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
-        $description = $taxonomy->descriptionFor($this->resource);
-        $meta = $taxonomy->parseMeta((string) $this->name, $description);
-        $telkomselGroup = null;
+        $resolver = resolve(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
+        $metaSvc = $resolver->meta();
+        $description = $metaSvc->descriptionFor($this->resource);
+        $meta = $metaSvc->parseMeta((string) $this->name, $description);
+        $operatorTaxonomy = $resolver->forBrand($this->provider?->name);
+        $dataGroup = null;
         $badge = null;
-        if ($taxonomy->isTelkomselBrand($this->provider?->name)) {
-            $telkomselGroup = $taxonomy->classify((string) $this->name, $description);
-            $badge = $taxonomy->badgeFor($this->resource, $telkomselGroup);
+        $requiresRegion = false;
+        if ($operatorTaxonomy) {
+            $dataGroup = $operatorTaxonomy->classify((string) $this->name, $description);
+            $badge = $operatorTaxonomy->badgeFor($this->resource, $dataGroup);
+            $requiresRegion = $operatorTaxonomy->mentionsRegion((string) $this->name, $description);
         }
 
         return [
@@ -39,11 +43,12 @@ class ProductResource extends JsonResource
             'quota' => $meta['quota'],
             'validity' => $meta['validity'],
             'badge' => $badge,
-            'telkomselGroup' => $telkomselGroup['group'] ?? null,
-            'telkomselGroupLabel' => $telkomselGroup['label'] ?? null,
-            'requiresRegion' => $telkomselGroup
-                ? $taxonomy->mentionsRegion((string) $this->name, $description)
-                : false,
+            // Legacy keys kept for Telkomsel master template consumers.
+            'telkomselGroup' => $dataGroup['group'] ?? null,
+            'telkomselGroupLabel' => $dataGroup['label'] ?? null,
+            'dataGroup' => $dataGroup['group'] ?? null,
+            'dataGroupLabel' => $dataGroup['label'] ?? null,
+            'requiresRegion' => $requiresRegion,
             'basePrice' => (float) $pricingDetails['base_price'],
             'providerCost' => (float) ($pricingDetails['provider_cost'] ?? $pricingDetails['base_price']),
             'margin' => (float) $pricingDetails['margin'],

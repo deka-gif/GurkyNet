@@ -9,6 +9,7 @@ export interface ProductFilters {
   per_page?: number;
   page?: number;
   telkomsel_group?: string;
+  data_group?: string;
   sort?: string;
 }
 
@@ -25,6 +26,7 @@ export const productService = {
       if (filters.provider) params.append('provider', filters.provider);
       if (filters.status) params.append('status', filters.status);
       if (filters.keyword) params.append('keyword', filters.keyword);
+      if (filters.data_group) params.append('data_group', filters.data_group);
       if (filters.telkomsel_group) params.append('telkomsel_group', filters.telkomsel_group);
       if (filters.sort) params.append('sort', filters.sort);
       if (filters.page) params.append('page', String(filters.page));
@@ -38,9 +40,25 @@ export const productService = {
     return response.data;
   },
 
-  getTelkomselDataTaxonomy: async (): Promise<ApiResponse<{ chips: any[]; operator: string }>> => {
-    const response = await apiClient.get<ApiResponse<{ chips: any[]; operator: string }>>(
-      '/catalog/telkomsel-data/taxonomy'
+  getTelkomselDataTaxonomy: async (): Promise<ApiResponse<{ chips: any[]; operator: string; regionOptions?: string[] }>> => {
+    return productService.getOperatorDataTaxonomy('telkomsel');
+  },
+
+  getOperatorDataTaxonomy: async (
+    key: 'telkomsel' | 'xl' | 'indosat' | 'tri' | 'smartfren' | 'axis' | 'byu'
+  ): Promise<ApiResponse<{ chips: any[]; operator: string; regionOptions?: string[] }>> => {
+    const pathMap: Record<string, string> = {
+      telkomsel: '/catalog/telkomsel-data/taxonomy',
+      xl: '/catalog/xl-data/taxonomy',
+      indosat: '/catalog/indosat-data/taxonomy',
+      tri: '/catalog/tri-data/taxonomy',
+      smartfren: '/catalog/smartfren-data/taxonomy',
+      axis: '/catalog/axis-data/taxonomy',
+      byu: '/catalog/byu-data/taxonomy',
+    };
+    const path = pathMap[key] ?? pathMap.telkomsel;
+    const response = await apiClient.get<ApiResponse<{ chips: any[]; operator: string; regionOptions?: string[] }>>(
+      path
     );
     return response.data;
   },

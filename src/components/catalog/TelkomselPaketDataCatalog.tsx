@@ -10,14 +10,27 @@ type Chip = {
   group: string | null;
 };
 
+export type OperatorPaketCatalogConfig = {
+  /** Display / badge label, e.g. Telkomsel | XL */
+  operatorLabel: string;
+  /** Provider name passed to GET /products (LIKE match) */
+  providerApiName: string;
+  /** Taxonomy API key for operator Paket Data */
+  taxonomyKey: 'telkomsel' | 'xl' | 'indosat' | 'tri' | 'smartfren' | 'axis' | 'byu';
+  searchPlaceholder: string;
+  defaultChips: Chip[];
+};
+
 type Props = {
   selectedProduct: Product | null;
   onSelectProduct: (p: Product) => void;
   onBuy: (p: Product) => void;
   onRegionNeeded?: (product: Product) => void;
+  /** Master template config — defaults to Telkomsel */
+  config?: OperatorPaketCatalogConfig;
 };
 
-const DEFAULT_CHIPS: Chip[] = [
+const TELKOMSEL_DEFAULT_CHIPS: Chip[] = [
   { key: 'semua', label: 'Semua', group: null },
   { key: 'favorit', label: 'Favorit', group: 'favorit' },
   { key: 'internet-sakti', label: 'Internet Sakti', group: 'internet-sakti' },
@@ -30,6 +43,127 @@ const DEFAULT_CHIPS: Chip[] = [
   { key: 'roaming', label: 'Roaming', group: 'roaming' },
   { key: 'bisnis', label: 'Bisnis', group: 'bisnis' },
 ];
+
+const XL_DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'paket-akrab', label: 'Paket Akrab', group: 'paket-akrab' },
+  { key: 'xtra-combo', label: 'Xtra Combo', group: 'xtra-combo' },
+  { key: 'combo-lite', label: 'Combo Lite', group: 'combo-lite' },
+  { key: 'murah', label: 'Murah', group: 'murah' },
+  { key: 'kuota-tambahan', label: 'Kuota Tambahan', group: 'kuota-tambahan' },
+  { key: 'gift', label: 'Gift', group: 'gift' },
+  { key: '5g', label: '5G', group: '5g' },
+  { key: 'roaming', label: 'Roaming', group: 'roaming' },
+];
+
+const INDOSAT_DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'freedom', label: 'Freedom', group: 'freedom' },
+  { key: 'freedom-apps', label: 'Freedom Apps', group: 'freedom-apps' },
+  { key: 'gift', label: 'Gift', group: 'gift' },
+  { key: '5g', label: '5G', group: '5g' },
+  { key: 'bisnis', label: 'Bisnis', group: 'bisnis' },
+  { key: 'roaming', label: 'Roaming', group: 'roaming' },
+];
+
+export const TELKOMSEL_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'Telkomsel',
+  providerApiName: 'Telkomsel',
+  taxonomyKey: 'telkomsel',
+  searchPlaceholder: 'Cari paket Telkomsel...',
+  defaultChips: TELKOMSEL_DEFAULT_CHIPS,
+};
+
+export const XL_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'XL',
+  providerApiName: 'XL',
+  taxonomyKey: 'xl',
+  searchPlaceholder: 'Cari paket XL...',
+  defaultChips: XL_DEFAULT_CHIPS,
+};
+
+export const INDOSAT_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'Indosat',
+  providerApiName: 'Indosat',
+  taxonomyKey: 'indosat',
+  searchPlaceholder: 'Cari paket Indosat...',
+  defaultChips: INDOSAT_DEFAULT_CHIPS,
+};
+
+const TRI_DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'alwayson', label: 'AlwaysOn', group: 'alwayson' },
+  { key: 'happy', label: 'Happy', group: 'happy' },
+  { key: 'paket-harian', label: 'Paket Harian', group: 'paket-harian' },
+  { key: 'unlimited', label: 'Unlimited', group: 'unlimited' },
+  { key: 'hiburan', label: 'Hiburan', group: 'hiburan' },
+  { key: 'khusus', label: 'Khusus', group: 'khusus' },
+  { key: 'roaming', label: 'Roaming', group: 'roaming' },
+];
+
+export const TRI_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'Tri',
+  providerApiName: 'Tri',
+  taxonomyKey: 'tri',
+  searchPlaceholder: 'Cari paket Tri...',
+  defaultChips: TRI_DEFAULT_CHIPS,
+};
+
+const SMARTFREN_DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'unlimited', label: 'Unlimited', group: 'unlimited' },
+  { key: 'aplikasi', label: 'Aplikasi', group: 'aplikasi' },
+  { key: 'hiburan', label: 'Hiburan', group: 'hiburan' },
+  { key: 'router', label: 'Router', group: 'router' },
+  { key: 'roaming', label: 'Roaming', group: 'roaming' },
+];
+
+export const SMARTFREN_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'Smartfren',
+  providerApiName: 'Smartfren',
+  taxonomyKey: 'smartfren',
+  searchPlaceholder: 'Cari paket Smartfren...',
+  defaultChips: SMARTFREN_DEFAULT_CHIPS,
+};
+
+const AXIS_DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'warnet', label: 'Warnet', group: 'warnet' },
+  { key: 'aplikasi', label: 'Aplikasi', group: 'aplikasi' },
+  { key: 'hiburan', label: 'Hiburan', group: 'hiburan' },
+  { key: 'produktivitas', label: 'Produktivitas', group: 'produktivitas' },
+  { key: 'umroh', label: 'Umroh', group: 'umroh' },
+];
+
+export const AXIS_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'AXIS',
+  providerApiName: 'AXIS',
+  taxonomyKey: 'axis',
+  searchPlaceholder: 'Cari paket AXIS...',
+  defaultChips: AXIS_DEFAULT_CHIPS,
+};
+
+const BYU_DEFAULT_CHIPS: Chip[] = [
+  { key: 'semua', label: 'Semua', group: null },
+  { key: 'favorit', label: 'Favorit', group: 'favorit' },
+  { key: 'unlimited', label: 'Unlimited', group: 'unlimited' },
+  { key: 'topping', label: 'Topping', group: 'topping' },
+  { key: 'jajan', label: 'Jajan', group: 'jajan' },
+  { key: 'roaming', label: 'Roaming', group: 'roaming' },
+];
+
+export const BYU_PAKET_CONFIG: OperatorPaketCatalogConfig = {
+  operatorLabel: 'by.U',
+  providerApiName: 'by.U',
+  taxonomyKey: 'byu',
+  searchPlaceholder: 'Cari paket by.U...',
+  defaultChips: BYU_DEFAULT_CHIPS,
+};
 
 const SORT_OPTIONS = [
   { value: 'price_asc', label: 'Harga Termurah' },
@@ -66,16 +200,17 @@ function ProductSkeleton() {
 }
 
 /**
- * Telkomsel Paket Data — marketplace master UX (Tokopedia/Shopee style).
- * Products from Digiflazz/VIP via GET /products only.
+ * Operator Paket Data marketplace master UX (Telkomsel template).
+ * Products from Digiflazz/VIP via GET /products only — no dummy SKUs.
  */
 export function TelkomselPaketDataCatalog({
   selectedProduct,
   onSelectProduct,
   onBuy,
   onRegionNeeded,
+  config = TELKOMSEL_PAKET_CONFIG,
 }: Props) {
-  const [chips, setChips] = useState<Chip[]>(DEFAULT_CHIPS);
+  const [chips, setChips] = useState<Chip[]>(config.defaultChips);
   const [activeChip, setActiveChip] = useState('semua');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -88,8 +223,17 @@ export function TelkomselPaketDataCatalog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setChips(config.defaultChips);
+    setActiveChip('semua');
+    setSearch('');
+    setDebouncedSearch('');
+    setSort('price_asc');
+    setProducts([]);
+  }, [config.taxonomyKey, config.defaultChips]);
+
+  useEffect(() => {
     productService
-      .getTelkomselDataTaxonomy()
+      .getOperatorDataTaxonomy(config.taxonomyKey)
       .then((res) => {
         if (res.success && Array.isArray(res.data?.chips) && res.data.chips.length > 0) {
           setChips(
@@ -102,9 +246,9 @@ export function TelkomselPaketDataCatalog({
         }
       })
       .catch(() => {
-        /* keep DEFAULT_CHIPS */
+        /* keep defaultChips */
       });
-  }, []);
+  }, [config.taxonomyKey]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -123,8 +267,9 @@ export function TelkomselPaketDataCatalog({
       try {
         const res = await productService.getProducts({
           category: 'data',
-          provider: 'Telkomsel',
+          provider: config.providerApiName,
           keyword: debouncedSearch || undefined,
+          data_group: activeGroup || undefined,
           telkomsel_group: activeGroup || undefined,
           sort,
           page: pageNum,
@@ -153,14 +298,15 @@ export function TelkomselPaketDataCatalog({
           setTotal(rows.length);
         }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Gagal memuat produk Telkomsel.';
+        const msg =
+          e instanceof Error ? e.message : `Gagal memuat produk ${config.operatorLabel}.`;
         setError(msg);
         setProducts([]);
       } finally {
         setLoading(false);
       }
     },
-    [activeGroup, debouncedSearch, sort]
+    [activeGroup, debouncedSearch, sort, config.providerApiName, config.operatorLabel]
   );
 
   useEffect(() => {
@@ -187,7 +333,6 @@ export function TelkomselPaketDataCatalog({
 
   return (
     <div className="space-y-4">
-      {/* Search + Sort */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -195,7 +340,7 @@ export function TelkomselPaketDataCatalog({
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari paket Telkomsel..."
+            placeholder={config.searchPlaceholder}
             className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
@@ -215,7 +360,6 @@ export function TelkomselPaketDataCatalog({
         </div>
       </div>
 
-      {/* Filter chips — text only, horizontal scroll */}
       <div className="flex gap-2.5 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
         {chips.map((chip) => {
           const active = activeChip === chip.key;
@@ -247,7 +391,6 @@ export function TelkomselPaketDataCatalog({
         </div>
       )}
 
-      {/* Responsive marketplace grid: 1 / 2 / 4 / 5 */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
           {Array.from({ length: 10 }).map((_, i) => (

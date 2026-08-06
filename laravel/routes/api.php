@@ -96,6 +96,12 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/catalog/taxonomy', [CatalogController::class, 'taxonomy']);
         Route::get('/catalog/search', [CatalogController::class, 'search']);
         Route::get('/catalog/telkomsel-data/taxonomy', [CatalogController::class, 'telkomselDataTaxonomy']);
+        Route::get('/catalog/xl-data/taxonomy', [CatalogController::class, 'xlDataTaxonomy']);
+        Route::get('/catalog/indosat-data/taxonomy', [CatalogController::class, 'indosatDataTaxonomy']);
+        Route::get('/catalog/tri-data/taxonomy', [CatalogController::class, 'triDataTaxonomy']);
+        Route::get('/catalog/smartfren-data/taxonomy', [CatalogController::class, 'smartfrenDataTaxonomy']);
+        Route::get('/catalog/axis-data/taxonomy', [CatalogController::class, 'axisDataTaxonomy']);
+        Route::get('/catalog/byu-data/taxonomy', [CatalogController::class, 'byuDataTaxonomy']);
         Route::get('/catalog/providers/{category}', [CatalogController::class, 'providersByCategory']);
     });
 

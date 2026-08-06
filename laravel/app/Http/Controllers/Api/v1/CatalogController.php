@@ -97,6 +97,91 @@ class CatalogController extends Controller
         return $this->successResponse('Taksonomi Paket Data Telkomsel.', [
             'chips' => $taxonomy->chips(),
             'operator' => 'Telkomsel',
+            'regionOptions' => $taxonomy->regionOptions(),
+        ]);
+    }
+
+    /**
+     * XL Paket Data UX chips / taxonomy (same master template as Telkomsel).
+     */
+    public function xlDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\XlDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data XL.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'XL',
+            'regionOptions' => $taxonomy->regionOptions(),
+        ]);
+    }
+
+    /**
+     * Indosat Paket Data UX chips / taxonomy (same master template as Telkomsel).
+     */
+    public function indosatDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\IndosatDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data Indosat.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'Indosat',
+            'regionOptions' => $taxonomy->regionOptions(),
+        ]);
+    }
+
+    /**
+     * Tri Paket Data UX chips / taxonomy (same master template as Telkomsel).
+     */
+    public function triDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\TriDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data Tri.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'Tri',
+            'regionOptions' => $taxonomy->regionOptions(),
+        ]);
+    }
+
+    /**
+     * Smartfren Paket Data UX chips / taxonomy (same master template as Telkomsel).
+     */
+    public function smartfrenDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\SmartfrenDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data Smartfren.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'Smartfren',
+            'regionOptions' => $taxonomy->regionOptions(),
+        ]);
+    }
+
+    /**
+     * AXIS Paket Data UX chips / taxonomy (same master template as Telkomsel).
+     */
+    public function axisDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\AxisDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data AXIS.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'AXIS',
+            'regionOptions' => $taxonomy->regionOptions(),
+        ]);
+    }
+
+    /**
+     * by.U Paket Data UX chips / taxonomy (same master template as Telkomsel).
+     */
+    public function byuDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\ByuDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data by.U.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'by.U',
+            'regionOptions' => $taxonomy->regionOptions(),
         ]);
     }
 

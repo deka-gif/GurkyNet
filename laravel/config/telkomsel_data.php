@@ -8,6 +8,8 @@ return [
 
     'operator_keys' => ['telkomsel', 'tsel'],
 
+    'display_name' => 'Telkomsel',
+
     /*
     | Filter chips shown in UI (order = display order).
     | `group` null = Semua (no group filter).
@@ -26,9 +28,31 @@ return [
         ['key' => 'bisnis', 'label' => 'Bisnis', 'group' => 'bisnis', 'icon' => 'briefcase'],
     ],
 
-    /*
-    | Taxonomy groups → match keywords (OR). Longer/more specific first when classifying.
-    */
+    'classify_priority' => [
+        'internet-sakti', 'combo-sakti', 'roaming', 'games', 'streaming', 'sosial',
+        'bisnis', 'harian', 'promo', 'favorit', 'umum',
+    ],
+
+    'favorit_match_groups' => [
+        'favorit', 'internet-sakti', 'combo-sakti', 'umum',
+    ],
+
+    'favorit_keyword_union' => [
+        'favorit', 'internet-sakti', 'combo-sakti',
+    ],
+
+    'badge_favorit_groups' => [
+        'favorit', 'internet-sakti', 'combo-sakti',
+    ],
+
+    'badge_terlaris_hints' => [
+        'omg', 'terbaik untukmu', 'super seru', 'hotrod',
+    ],
+
+    'badge_promo_hints' => [
+        'promo', 'surprise', 'flash',
+    ],
+
     'groups' => [
         'favorit' => [
             'label' => 'Favorit',
@@ -103,14 +127,15 @@ return [
         ],
     ],
 
-    /*
-    | Region / Area — Telkomsel often encodes area in name (Area 1/2/3).
-    | Prefer auto-select via phone prefix map; only prompt user when ambiguous.
-    */
     'region_required_keywords' => ['area 1', 'area 2', 'area 3', 'area1', 'area2', 'area3'],
 
+    'region_options' => [
+        'Area 1',
+        'Area 2',
+        'Area 3',
+    ],
+
     'region_prefix_hints' => [
-        // Soft hints only — not hard product locks. Used when multiple area variants exist.
         '0811' => null,
         '0812' => null,
         '0813' => null,

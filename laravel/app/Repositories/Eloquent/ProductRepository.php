@@ -415,8 +415,9 @@ class ProductRepository implements ProductRepositoryInterface
         }
 
         if (in_array($sort, ['quota_desc', 'kuota_terbesar'], true)) {
-            /** @var \App\Services\Catalog\TelkomselDataTaxonomyService $taxonomy */
-            $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+            /** @var \App\Services\Catalog\OperatorDataTaxonomyResolver $resolver */
+            $resolver = app(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
+            $taxonomy = $resolver->meta();
 
             return $products
                 ->sortByDesc(fn (Product $p) => $taxonomy->quotaValueMb(
@@ -427,8 +428,9 @@ class ProductRepository implements ProductRepositoryInterface
         }
 
         if (in_array($sort, ['validity_desc', 'masa_aktif_terlama'], true)) {
-            /** @var \App\Services\Catalog\TelkomselDataTaxonomyService $taxonomy */
-            $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+            /** @var \App\Services\Catalog\OperatorDataTaxonomyResolver $resolver */
+            $resolver = app(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
+            $taxonomy = $resolver->meta();
 
             return $products
                 ->sortByDesc(fn (Product $p) => $taxonomy->validityValueDays(
@@ -449,24 +451,30 @@ class ProductRepository implements ProductRepositoryInterface
     }
 
     /**
-     * Filter Telkomsel data products by UX taxonomy group (keyword classification).
+     * Filter operator data products by UX taxonomy group (keyword classification).
+     * Accepts telkomsel_group (legacy) or data_group.
      *
      * @param  \Illuminate\Support\Collection<int, Product>  $products
      * @return \Illuminate\Support\Collection<int, Product>
      */
     protected function applyTelkomselGroupFilter(\Illuminate\Support\Collection $products, array $filters): \Illuminate\Support\Collection
     {
-        $group = Str::lower(trim((string) ($filters['telkomsel_group'] ?? '')));
+        $group = Str::lower(trim((string) (
+            $filters['data_group']
+            ?? $filters['telkomsel_group']
+            ?? ''
+        )));
         if ($group === '' || $group === 'semua' || $group === 'all') {
             return $products;
         }
 
-        /** @var \App\Services\Catalog\TelkomselDataTaxonomyService $taxonomy */
-        $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+        /** @var \App\Services\Catalog\OperatorDataTaxonomyResolver $resolver */
+        $resolver = app(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
 
         return $products
-            ->filter(function (Product $product) use ($taxonomy, $group) {
-                if (!$taxonomy->isTelkomselBrand($product->provider?->name)) {
+            ->filter(function (Product $product) use ($resolver, $group) {
+                $taxonomy = $resolver->forBrand($product->provider?->name);
+                if (!$taxonomy) {
                     return false;
                 }
 

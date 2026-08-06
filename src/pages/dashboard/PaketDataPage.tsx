@@ -13,11 +13,47 @@ import {
 import { useWalletStore } from '../../store/wallet.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
-import { TelkomselPaketDataCatalog } from '../../components/catalog/TelkomselPaketDataCatalog';
+import {
+  TelkomselPaketDataCatalog,
+  TELKOMSEL_PAKET_CONFIG,
+  XL_PAKET_CONFIG,
+  INDOSAT_PAKET_CONFIG,
+  TRI_PAKET_CONFIG,
+  SMARTFREN_PAKET_CONFIG,
+  AXIS_PAKET_CONFIG,
+  BYU_PAKET_CONFIG,
+} from '../../components/catalog/TelkomselPaketDataCatalog';
 import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
+
+const XL_REGIONS = ['Sumatera', 'West', 'Central', 'East', 'East Kalsul'];
+const TELKOMSEL_REGIONS = ['Area 1', 'Area 2', 'Area 3'];
+const INDOSAT_REGIONS = [
+  'Jabodetabek',
+  'Jawa Barat',
+  'Jawa Tengah',
+  'EJBN',
+  'Sumatera',
+  'Kalisumapa',
+];
+const TRI_REGIONS = ['Jakarta Raya', 'Jawa Barat', 'Jawa Tengah', 'EJBN', 'Lokal'];
+const AXIS_REGIONS = [
+  'Jawa Timur',
+  'Jawa Bali Nusra',
+  'Non Jawa Bali Nusra',
+  'Sukabumi',
+  'Semarang-Salatiga',
+  'Salatiga',
+  'Kendal',
+  'Banyuwangi Probolinggo',
+  'Madura Sidoarjo Malang Sumbawa',
+  'Salatiga Jatim Sulawesi',
+  'Sulawesi Ewako',
+  'Sulutra',
+  'NTT',
+];
 
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -31,12 +67,34 @@ export const PaketDataPage = () => {
   const [resumePin, setResumePin] = useState(false);
   const [regionDialog, setRegionDialog] = useState<Product | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string>('Area 1');
+  const [regionOptions, setRegionOptions] = useState<string[]>(TELKOMSEL_REGIONS);
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const isTelkomsel = provider === 'Telkomsel';
+  const isXl = provider === 'XL Axiata';
+  const isIndosat = provider === 'Indosat';
+  const isTri = provider === 'Tri (3)';
+  const isSmartfren = provider === 'Smartfren';
+  const isAxis = provider === 'Axis';
+  const isByu = provider === 'by.U';
+  const usesMasterCatalog =
+    isTelkomsel || isXl || isIndosat || isTri || isSmartfren || isAxis || isByu;
+  const catalogConfig = isByu
+    ? BYU_PAKET_CONFIG
+    : isAxis
+      ? AXIS_PAKET_CONFIG
+      : isSmartfren
+        ? SMARTFREN_PAKET_CONFIG
+        : isTri
+          ? TRI_PAKET_CONFIG
+          : isIndosat
+            ? INDOSAT_PAKET_CONFIG
+            : isXl
+              ? XL_PAKET_CONFIG
+              : TELKOMSEL_PAKET_CONFIG;
 
   useEffect(() => {
     fetchWallet();
@@ -52,18 +110,32 @@ export const PaketDataPage = () => {
     const cleanNo = phoneNo.replace(/\D/g, '');
     if (cleanNo.length >= 4) {
       const prefix = cleanNo.slice(0, 4);
-      if (['0811', '0812', '0813', '0821', '0822', '0852', '0853', '0823'].includes(prefix)) {
+      if (['0851'].includes(prefix)) {
+        setProvider('by.U');
+        setRegionOptions([]);
+      } else if (['0811', '0812', '0813', '0821', '0822', '0852', '0853', '0823'].includes(prefix)) {
         setProvider('Telkomsel');
+        setRegionOptions(TELKOMSEL_REGIONS);
+        setSelectedRegion(TELKOMSEL_REGIONS[0]);
       } else if (['0814', '0815', '0816', '0855', '0856', '0857', '0858'].includes(prefix)) {
         setProvider('Indosat');
+        setRegionOptions(INDOSAT_REGIONS);
+        setSelectedRegion(INDOSAT_REGIONS[0]);
       } else if (['0817', '0818', '0819', '0859', '0877', '0878'].includes(prefix)) {
         setProvider('XL Axiata');
+        setRegionOptions(XL_REGIONS);
+        setSelectedRegion(XL_REGIONS[0]);
       } else if (['0895', '0896', '0897', '0898', '0899'].includes(prefix)) {
         setProvider('Tri (3)');
+        setRegionOptions(TRI_REGIONS);
+        setSelectedRegion(TRI_REGIONS[0]);
       } else if (['0831', '0832', '0833', '0838'].includes(prefix)) {
         setProvider('Axis');
+        setRegionOptions(AXIS_REGIONS);
+        setSelectedRegion(AXIS_REGIONS[0]);
       } else if (['0881', '0882', '0883', '0884', '0885', '0886', '0887', '0888', '0889'].includes(prefix)) {
         setProvider('Smartfren');
+        setRegionOptions([]);
       } else {
         setProvider(null);
       }
@@ -109,11 +181,28 @@ export const PaketDataPage = () => {
     }
   };
 
-  const otherOperatorProducts = provider && !isTelkomsel
+  const otherOperatorProducts = provider && !usesMasterCatalog
     ? products.filter((p) => operatorsMatch(p.operatorName, provider) && p.status === 'tersedia')
     : [];
 
   const showSidePanel = Boolean(selectedProduct && showCheckoutPanel);
+
+  const providerBadgeLabel =
+    provider === 'Telkomsel'
+      ? 'TELKOMSEL'
+      : provider === 'XL Axiata'
+        ? 'XL'
+        : provider === 'Indosat'
+          ? 'INDOSAT'
+          : provider === 'Tri (3)'
+            ? 'TRI'
+            : provider === 'Smartfren'
+              ? 'SMARTFREN'
+              : provider === 'Axis'
+                ? 'AXIS'
+                : provider === 'by.U'
+                  ? 'by.U'
+                  : provider;
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-7xl" id="paket-data-page-root">
@@ -194,7 +283,7 @@ export const PaketDataPage = () => {
               />
               {provider && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-primary-50 text-primary-700 font-extrabold text-[11px] px-2.5 py-1 rounded-lg border border-primary-100 uppercase tracking-wide">
-                  {provider === 'Telkomsel' ? 'TELKOMSEL' : provider}
+                  {providerBadgeLabel}
                 </span>
               )}
             </div>
@@ -207,8 +296,10 @@ export const PaketDataPage = () => {
             </div>
           )}
 
-          {isTelkomsel && (
+          {usesMasterCatalog && (
             <TelkomselPaketDataCatalog
+              key={catalogConfig.taxonomyKey}
+              config={catalogConfig}
               selectedProduct={selectedProduct}
               onSelectProduct={setSelectedProduct}
               onBuy={() => setShowCheckoutPanel(true)}
@@ -216,11 +307,11 @@ export const PaketDataPage = () => {
             />
           )}
 
-          {provider && !isTelkomsel && (
+          {provider && !usesMasterCatalog && (
             <div className="space-y-3">
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-semibold">
-                UX marketplace kategori saat ini tersedia untuk Telkomsel. Operator lain menyusul
-                dengan template yang sama.
+                UX marketplace kategori tersedia untuk seluruh operator utama (Telkomsel, XL,
+                Indosat, Tri, Smartfren, AXIS, by.U).
               </p>
               {productsLoading ? (
                 <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400">
@@ -325,8 +416,8 @@ export const PaketDataPage = () => {
               Paket ini memiliki varian area. Pilih wilayah yang sesuai (hanya jika provider
               mewajibkan).
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {['Area 1', 'Area 2', 'Area 3'].map((area) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {regionOptions.map((area) => (
                 <button
                   key={area}
                   type="button"
