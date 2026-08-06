@@ -107,6 +107,7 @@ class ProductProviderControlService
             'Current model api_status' => $provider->api_status,
         ]);
 
+        // Power ON — visibility only. Health fields are refreshed by the probe below.
         $provider->is_active = true;
 
         Log::info('EXEC TRACE — Before save() Enable', [
@@ -140,19 +141,45 @@ class ProductProviderControlService
         ]);
 
         $this->audit($provider, 'enable', true, 'Provider power ON — products visible in catalog');
+        $this->flushProductCatalogCache();
 
-        $fresh = $provider->fresh();
-        $dbRow = DB::table('product_providers')->where('id', $provider->id)->first(['is_active', 'api_status']);
-
-        Log::info('EXEC TRACE — Fresh model Enable', [
-            'Provider ID' => $fresh?->id,
-            'Fresh model is_active' => $fresh?->is_active,
-            'Fresh model api_status' => $fresh?->api_status,
-            'Fresh DB is_active' => $dbRow->is_active ?? null,
-            'Fresh DB api_status' => $dbRow->api_status ?? null,
+        // Root-cause fix: routing trusts product_providers.api_status.
+        // Power ON must immediately probe the live API and persist health so
+        // stale offline rows cannot block Digi→VIP failover after power restore.
+        $beforeHealth = DB::table('product_providers')->where('id', $provider->id)->first([
+            'api_status', 'health_color', 'last_error', 'last_health_check_at',
         ]);
 
-        $this->flushProductCatalogCache();
+        Log::info('POWER ON — automatic health check starting', [
+            'Provider ID' => $provider->id,
+            'Provider Code' => $provider->code,
+            'Old api_status' => $beforeHealth->api_status ?? null,
+            'Old health_color' => $beforeHealth->health_color ?? null,
+            'Old last_error' => $beforeHealth->last_error ?? null,
+            'Old last_health_check_at' => $beforeHealth->last_health_check_at ?? null,
+        ]);
+
+        try {
+            $fresh = $this->health->check($provider->fresh() ?? $provider);
+        } catch (\Throwable $e) {
+            Log::error('POWER ON — automatic health check threw', [
+                'Provider ID' => $provider->id,
+                'Provider Code' => $provider->code,
+                'error' => $e->getMessage(),
+            ]);
+            // Power remains ON; keep last known health rather than inventing status.
+            $fresh = $provider->fresh() ?? $provider;
+        }
+
+        Log::info('POWER ON — automatic health check finished', [
+            'Provider ID' => $fresh->id,
+            'Provider Code' => $fresh->code,
+            'Fresh is_active' => $fresh->is_active,
+            'New api_status' => $fresh->api_status,
+            'New health_color' => $fresh->health_color,
+            'New last_error' => $fresh->last_error,
+            'New last_health_check_at' => optional($fresh->last_health_check_at)?->toIso8601String(),
+        ]);
 
         return $fresh;
     }

@@ -125,6 +125,15 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
         $apiStatus = (string) ($result['api_status'] ?? 'offline');
         $success = (bool) ($result['success'] ?? false);
 
+        Log::info('VIP ADAPTER — profile() result for health', [
+            'success' => $success,
+            'api_status' => $apiStatus,
+            'health_color' => $result['health_color'] ?? null,
+            'http_status' => $result['http_status'] ?? null,
+            'latency_ms' => $result['latency_ms'] ?? null,
+            'message' => $result['message'] ?? null,
+        ]);
+
         return [
             'reachable' => $success || in_array($apiStatus, ['online', 'degraded'], true),
             'authenticated' => $success && $apiStatus === 'online',
@@ -134,6 +143,7 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'api_status' => $apiStatus,
             'health_color' => (string) ($result['health_color'] ?? 'red'),
             'http_status' => $result['http_status'] ?? null,
+            'success' => $success,
             'raw' => $result['raw'] ?? [],
         ];
     }

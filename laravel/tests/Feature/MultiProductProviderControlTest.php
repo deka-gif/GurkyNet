@@ -101,25 +101,89 @@ class MultiProductProviderControlTest extends TestCase
         $this->assertFalse($card['apiWarning']);
     }
 
-    public function test_power_on_with_api_offline_keeps_products_flag_and_warns(): void
+    public function test_power_on_runs_automatic_health_check_and_refreshes_api_status(): void
     {
         $this->actingAsOps();
 
-        $digi = ProductProvider::digiflazz();
-        $this->assertNotNull($digi);
+        $vip = ProductProvider::vip();
+        $this->assertNotNull($vip);
 
-        $digi->update([
+        $vip->update([
             'is_active' => false,
             'api_status' => 'offline',
-            'health_color' => 'red',
+            'health_color' => 'yellow',
+            'last_error' => 'stale offline from previous outage',
         ]);
 
-        $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$digi->id}/enable")
+        $this->mock(\App\Services\ProductProviders\ProductProviderHealthService::class, function ($mock) {
+            $mock->shouldReceive('check')
+                ->once()
+                ->andReturnUsing(function (ProductProvider $provider) {
+                    $provider->forceFill([
+                        'api_status' => 'online',
+                        'health_color' => 'green',
+                        'last_error' => null,
+                        'last_health_check_at' => now(),
+                    ])->save();
+
+                    return $provider->fresh();
+                });
+            $mock->shouldReceive('refreshStats')->zeroOrMoreTimes();
+        });
+
+        $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$vip->id}/enable")
             ->assertOk();
 
-        $fresh = $digi->fresh();
+        $fresh = $vip->fresh();
+        $this->assertTrue((bool) $fresh->is_active);
+        $this->assertSame('online', $fresh->api_status);
+        $this->assertSame('green', $fresh->health_color);
+        $this->assertNull($fresh->last_error);
+
+        $card = $res->json('data');
+        $this->assertTrue($card['enabled']);
+        $this->assertSame('ON', $card['status']);
+        $this->assertSame('Online', $card['apiStatusLabel']);
+        $this->assertFalse($card['apiWarning']);
+    }
+
+    public function test_power_on_with_unreachable_api_keeps_power_on_and_persists_offline(): void
+    {
+        $this->actingAsOps();
+
+        $vip = ProductProvider::vip();
+        $this->assertNotNull($vip);
+
+        $vip->update([
+            'is_active' => false,
+            'api_status' => 'online',
+            'health_color' => 'green',
+            'last_error' => null,
+        ]);
+
+        $this->mock(\App\Services\ProductProviders\ProductProviderHealthService::class, function ($mock) {
+            $mock->shouldReceive('check')
+                ->once()
+                ->andReturnUsing(function (ProductProvider $provider) {
+                    $provider->forceFill([
+                        'api_status' => 'offline',
+                        'health_color' => 'red',
+                        'last_error' => 'VIP API unreachable',
+                        'last_health_check_at' => now(),
+                    ])->save();
+
+                    return $provider->fresh();
+                });
+            $mock->shouldReceive('refreshStats')->zeroOrMoreTimes();
+        });
+
+        $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$vip->id}/enable")
+            ->assertOk();
+
+        $fresh = $vip->fresh();
         $this->assertTrue((bool) $fresh->is_active);
         $this->assertSame('offline', $fresh->api_status);
+        $this->assertSame('red', $fresh->health_color);
 
         $card = $res->json('data');
         $this->assertTrue($card['enabled']);
@@ -309,5 +373,40 @@ class MultiProductProviderControlTest extends TestCase
         // Covered indirectly: job class exists and is dispatchable
         ProcessProductProviderTransaction::dispatch(1);
         Queue::assertPushed(ProcessProductProviderTransaction::class);
+    }
+
+    public function test_health_service_persists_vip_profile_online_to_database(): void
+    {
+        $vip = ProductProvider::vip();
+        $this->assertNotNull($vip);
+
+        $vip->update([
+            'is_active' => true,
+            'api_status' => 'offline',
+            'health_color' => 'yellow',
+            'last_error' => 'stale',
+        ]);
+
+        $this->mock(\App\Services\VipService::class, function ($mock) {
+            $mock->shouldReceive('isConfigured')->andReturn(true);
+            $mock->shouldReceive('profile')->once()->andReturn([
+                'success' => true,
+                'api_status' => 'online',
+                'health_color' => 'green',
+                'http_status' => 200,
+                'latency_ms' => 321,
+                'balance' => 150000.0,
+                'message' => 'OK',
+                'raw' => ['result' => true],
+            ]);
+        });
+
+        $fresh = app(\App\Services\ProductProviders\ProductProviderHealthService::class)->check($vip->fresh());
+
+        $this->assertSame('online', $fresh->api_status);
+        $this->assertSame('green', $fresh->health_color);
+        $this->assertNull($fresh->last_error);
+        $this->assertNotNull($fresh->last_health_check_at);
+        $this->assertSame(321, (int) $fresh->avg_response_ms);
     }
 }

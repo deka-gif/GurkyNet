@@ -18,15 +18,26 @@ class ProductProviderHealthService
      */
     public function check(ProductProvider $provider): ProductProvider
     {
-        Log::info('EXEC TRACE — HealthService::check() enter', [
-            'provider_code' => $provider->code,
+        $provider->refresh();
+
+        $oldApiStatus = $provider->api_status;
+        $oldHealthColor = $provider->health_color;
+        $oldLastError = $provider->last_error;
+        $oldLastCheck = optional($provider->last_health_check_at)?->toIso8601String();
+
+        Log::info('HEALTH CHECK — before update', [
+            'Provider ID' => $provider->id,
+            'Provider Code' => $provider->code,
+            'Old api_status' => $oldApiStatus,
+            'Old health_color' => $oldHealthColor,
+            'Old last_error' => $oldLastError,
+            'Old last_health_check_at' => $oldLastCheck,
             'is_active' => $provider->is_active,
-            'api_status' => $provider->api_status,
         ]);
 
         if (!$this->registry->has($provider->code)) {
-            Log::info('EXEC TRACE — HealthService early return: Adapter not found', [
-                'provider_code' => $provider->code,
+            Log::info('HEALTH CHECK — adapter missing', [
+                'Provider Code' => $provider->code,
             ]);
 
             $provider->forceFill([
@@ -40,13 +51,16 @@ class ProductProviderHealthService
                 'api_status' => 'offline',
             ]);
 
-            return $provider->fresh();
+            $fresh = $provider->fresh();
+            $this->logAfterUpdate($fresh, $oldApiStatus, $oldHealthColor, $oldLastError);
+
+            return $fresh;
         }
 
         $adapter = $this->registry->get($provider->code);
 
-        Log::info('EXEC TRACE — HealthService: Adapter selected', [
-            'provider_code' => $provider->code,
+        Log::info('HEALTH CHECK — adapter selected', [
+            'Provider Code' => $provider->code,
             'adapter_class' => $adapter::class,
         ]);
 
@@ -55,11 +69,23 @@ class ProductProviderHealthService
         $result = $adapter->healthCheck();
         $probeStatus = (string) ($result['api_status'] ?? '');
 
-        if ($probeStatus === 'not_configured') {
-            Log::info('EXEC TRACE — HealthService early return: not_configured', [
-                'provider_code' => $provider->code,
-            ]);
+        Log::info('HEALTH CHECK — adapter/VipService result', [
+            'Provider ID' => $provider->id,
+            'Provider Code' => $provider->code,
+            'success' => (bool) ($result['success'] ?? $result['authenticated'] ?? false)
+                || in_array($probeStatus, ['online', 'degraded'], true),
+            'api_status' => $probeStatus,
+            'health_color' => $result['health_color'] ?? null,
+            'http_status' => $result['http_status'] ?? null,
+            'latency_ms' => $result['latency_ms'] ?? null,
+            'latency' => $result['latency_ms'] ?? null,
+            'message' => $result['message'] ?? null,
+            'authenticated' => $result['authenticated'] ?? null,
+            'reachable' => $result['reachable'] ?? null,
+            'balance' => $result['balance'] ?? null,
+        ]);
 
+        if ($probeStatus === 'not_configured') {
             $message = (string) ($result['message'] ?? 'NOT CONFIGURED');
             $provider->forceFill([
                 'api_status' => 'not_configured',
@@ -74,7 +100,10 @@ class ProductProviderHealthService
                 'missing' => $result['raw']['missing'] ?? null,
             ]);
 
-            return $provider->fresh();
+            $fresh = $provider->fresh();
+            $this->logAfterUpdate($fresh, $oldApiStatus, $oldHealthColor, $oldLastError);
+
+            return $fresh;
         }
 
         $latency = $result['latency_ms'] ?? null;
@@ -137,7 +166,33 @@ class ProductProviderHealthService
             'http_status' => $result['http_status'] ?? null,
         ]);
 
-        return $provider->fresh();
+        $fresh = $provider->fresh();
+        $this->logAfterUpdate($fresh, $oldApiStatus, $oldHealthColor, $oldLastError);
+
+        return $fresh;
+    }
+
+    protected function logAfterUpdate(
+        ?ProductProvider $provider,
+        mixed $oldApiStatus,
+        mixed $oldHealthColor,
+        mixed $oldLastError
+    ): void {
+        if (!$provider) {
+            return;
+        }
+
+        Log::info('HEALTH CHECK — after update', [
+            'Provider ID' => $provider->id,
+            'Provider Code' => $provider->code,
+            'Old api_status' => $oldApiStatus,
+            'Old health_color' => $oldHealthColor,
+            'Old last_error' => $oldLastError,
+            'New api_status' => $provider->api_status,
+            'New health_color' => $provider->health_color,
+            'New last_error' => $provider->last_error,
+            'Updated timestamp' => optional($provider->last_health_check_at)?->toIso8601String(),
+        ]);
     }
 
     public function checkAll(): array
