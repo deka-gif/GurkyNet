@@ -13,6 +13,7 @@ import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
+import { formatIDR } from '../../utils/currency';
 
 export const TokenPlnPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -41,13 +42,7 @@ export const TokenPlnPage = () => {
 
   const displayProducts = products.filter(p => p.status === 'tersedia' && p.name.toLowerCase().includes('token'));
 
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
+  
 
   const handleCheckout = async () => {
     if (!isValidCustomerId) {

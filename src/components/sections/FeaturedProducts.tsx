@@ -1,13 +1,7 @@
 import { motion } from 'motion/react';
 import { Star, ShoppingBag } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
-
-const formatIDR = (value: number) =>
-  new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-  }).format(value || 0);
+import { formatIDR } from '../../utils/currency';
 
 export const FeaturedProducts = () => {
   const { featuredProducts } = useWebsiteStore();

@@ -15,14 +15,16 @@ class MidtransService
 
     public function __construct()
     {
-        $this->serverKey = (string) (config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
-        $this->clientKey = (string) (config('services.midtrans.client_key') ?: env('MIDTRANS_CLIENT_KEY', ''));
-        $this->isProduction = (bool) (config('services.midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
+        // Prefer config values (including empty string) so tests/runtime can override
+        // without falling back to phpunit/env placeholders via `?:`.
+        $this->serverKey = (string) (config('services.midtrans.server_key') ?? '');
+        $this->clientKey = (string) (config('services.midtrans.client_key') ?? '');
+        $this->isProduction = (bool) (config('services.midtrans.is_production') ?? false);
 
-        $configuredBaseUrl = config('services.midtrans.base_url') ?: env('MIDTRANS_BASE_URL');
+        $configuredBaseUrl = config('services.midtrans.base_url');
         if ($configuredBaseUrl) {
-            $this->snapBaseUrl = rtrim($configuredBaseUrl, '/');
-            $this->apiBaseUrl = rtrim($configuredBaseUrl, '/');
+            $this->snapBaseUrl = rtrim((string) $configuredBaseUrl, '/');
+            $this->apiBaseUrl = rtrim((string) $configuredBaseUrl, '/');
         } else {
             $this->snapBaseUrl = $this->isProduction
                 ? 'https://app.midtrans.com/snap/v1'
@@ -50,7 +52,7 @@ class MidtransService
     protected function assertConfigured(): void
     {
         if (!$this->isConfigured()) {
-            throw new \RuntimeException('Midtrans credentials are not configured.');
+            throw new \App\Exceptions\Payment\PaymentGatewayNotConfiguredException();
         }
     }
 

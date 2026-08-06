@@ -24,6 +24,7 @@ import { transactionService } from '../services/transaction/transaction.service'
 import { useAuth } from '../hooks/useAuth';
 import { buildCreatePinUrl, savePendingCheckout } from '../utils/pinGate';
 import { isFailedStatus, isSuccessStatus } from '../utils/transactionStatus';
+import { formatIDR } from '../utils/currency';
 
 // Dynamic transaction properties
 export interface CheckoutData {
@@ -271,14 +272,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     }
   };
 
-
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
+  
 
   const handleShare = () => {
     const shareText = `Struk Pembayaran GurkyPay\nInvoice: ${createdTrx?.invoice_number || 'N/A'}\nProduk: ${data.productName}\nNominal: ${formatIDR(totalPayment)}\nStatus: ${finalStatus.toUpperCase()}`;

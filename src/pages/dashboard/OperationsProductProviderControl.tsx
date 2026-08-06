@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { operationsService } from '../../services/operations.service';
+import { formatIDR } from '../../utils/currency';
 
 type ProviderCard = {
   id: number;
@@ -60,7 +61,7 @@ type ProviderLog = {
 
 const formatIdr = (n: number | null | undefined) => {
   if (n === null || n === undefined) return '—';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
+  return formatIDR(n);
 };
 
 const formatTs = (iso: string | null | undefined) => {

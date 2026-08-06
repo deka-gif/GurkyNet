@@ -98,11 +98,11 @@ export function parseApiError(error: any): StandardApiError {
       }
     }
 
-    // <<< INI YANG HILANG
     return {
       status,
       message: errorMessage,
       errors: data?.errors || {},
+      code: data?.code,
     };
   }
 

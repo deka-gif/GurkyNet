@@ -20,6 +20,7 @@ import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
+import { formatIDR } from '../../utils/currency';
 
 interface BillDetail {
   productName: string;
@@ -83,14 +84,7 @@ export const TagihanPage = () => {
 
   const displayProducts = products.filter(p => p.status === 'tersedia');
 
-
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
+  
 
   const handleInquiryBill = async (e: React.FormEvent) => {
     e.preventDefault();

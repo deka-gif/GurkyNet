@@ -213,6 +213,43 @@ class WalletModuleTest extends TestCase
     }
 
     /**
+     * When Midtrans keys are missing, top-up must return a clean error (not HTTP 500).
+     */
+    public function test_top_up_returns_midtrans_not_configured(): void
+    {
+        config([
+            'services.midtrans.server_key' => '',
+            'services.midtrans.client_key' => '',
+        ]);
+
+        // Rebuild MidtransService bindings that read config in constructor.
+        $this->app->forgetInstance(\App\Services\MidtransService::class);
+        $this->app->forgetInstance(\App\Services\Payment\MidtransPaymentGateway::class);
+        $this->app->forgetInstance(\App\Services\Payment\PaymentGatewayFactory::class);
+        $this->app->forgetInstance(\App\Actions\Wallet\TopUpWalletAction::class);
+
+        $response = $this->actingAs($this->sender)
+            ->postJson('/api/v1/wallet/topup', [
+                'amount' => 50000,
+                'admin_fee' => 0,
+            ]);
+
+        $response->assertStatus(503)
+            ->assertJson([
+                'success' => false,
+                'code' => 'MIDTRANS_NOT_CONFIGURED',
+                'message' => 'Metode pembayaran belum tersedia. Midtrans belum dikonfigurasi.',
+            ]);
+
+        $this->assertDatabaseMissing('transactions', [
+            'user_id' => $this->sender->id,
+            'amount' => 50000.00,
+            'status' => 'pending',
+            'service_name' => 'Top Up Saldo',
+        ]);
+    }
+
+    /**
      * Test internal transfer success with correct details.
      */
     public function test_transfer_success(): void

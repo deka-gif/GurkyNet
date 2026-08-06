@@ -15,9 +15,7 @@ import {
 import { useAuth } from '../../../hooks/useAuth';
 import { useWalletStore } from '../../../store/wallet.store';
 import { AccountCard } from './AccountShell';
-
-const formatIdr = (n?: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
+import { formatIDR as formatIdr } from '../../../utils/currency';
 
 export const AccountHubPage: React.FC = () => {
   const { user, fetchUser } = useAuth();

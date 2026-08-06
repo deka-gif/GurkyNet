@@ -29,6 +29,10 @@ return [
         'base_url' => env('MIDTRANS_BASE_URL'),
     ],
 
+    'payment' => [
+        'default' => env('PAYMENT_GATEWAY', 'midtrans'),
+    ],
+
     'digiflazz' => [
         'username' => env('DIGIFLAZZ_USERNAME'),
         'api_key' => env('DIGIFLAZZ_API_KEY'),

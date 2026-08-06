@@ -19,6 +19,7 @@ import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary'
 import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
+import { formatIDR } from '../../utils/currency';
 
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -70,13 +71,7 @@ export const PaketDataPage = () => {
     }
   }, [phoneNo]);
 
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
+  
 
   const handleCheckout = async () => {
     if (!provider) {

@@ -49,6 +49,7 @@ import { UserRole } from '../constants/auth';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 // @ts-ignore
 import logoImg from '../logo.png';
+import { formatIDR } from '../utils/currency';
 
 export const DashboardLayout = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -101,14 +102,6 @@ export const DashboardLayout = () => {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
-  };
-
-  const formatIDR = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(value);
   };
 
   // Redirect internal CMS users from root /dashboard to their respective default CMS portal

@@ -135,6 +135,7 @@ export interface ApiResponse<T> {
   success: boolean;
   message: string;
   data: T;
+  code?: string;
   pagination?: Pagination;
   errors?: Record<string, string[]>;
 }

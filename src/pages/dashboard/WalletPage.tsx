@@ -22,6 +22,8 @@ import { useWalletStore } from '../../store/wallet.store';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { buildCreatePinUrl, PENDING_WALLET_ACTION_KEY } from '../../utils/pinGate';
+import { formatIDR } from '../../utils/currency';
+import { PaymentPlaceholderModal, PaymentPlaceholderKind } from '../../components/wallet/PaymentPlaceholderModal';
 
 declare global {
   interface Window {
@@ -58,6 +60,11 @@ export const WalletPage = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Payment placeholders (shown when Midtrans is not configured)
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentModalKind, setPaymentModalKind] = useState<PaymentPlaceholderKind | null>(null);
+  const [paymentModalAmount, setPaymentModalAmount] = useState(0);
+
   useEffect(() => {
     fetchWallet();
     fetchUser();
@@ -80,38 +87,52 @@ export const WalletPage = () => {
     }
   }, [fetchWallet, fetchUser]);
 
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
+  const openPaymentPlaceholder = (method: string, amount: number) => {
+    const kind: PaymentPlaceholderKind =
+      method === 'va' ? 'va' : method === 'retail' ? 'retail' : 'qris';
+    setPaymentModalKind(kind);
+    setPaymentModalAmount(amount);
+    setPaymentModalOpen(true);
   };
 
   const handleTopupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseInt(topupAmount);
     if (isNaN(amount) || amount < 10000) {
-      setErrorMsg('Minimal top up adalah Rp 10.000');
+      setErrorMsg('Minimal top up adalah Rp10.000');
       return;
     }
 
     const res = await topUp(amount, topupMethod);
+
+    if (res?.__error) {
+      const msg = res.message || 'Gagal melakukan top up. Silakan coba lagi.';
+      setErrorMsg(msg);
+      if (res.code === 'MIDTRANS_NOT_CONFIGURED') {
+        openPaymentPlaceholder(topupMethod, amount);
+      }
+      return;
+    }
+
     if (res && res.snap_token) {
+      if (typeof window.snap?.pay !== 'function') {
+        setErrorMsg('SDK pembayaran belum siap. Silakan muat ulang halaman.');
+        return;
+      }
       window.snap.pay(res.snap_token, {
-        onSuccess: function (result: any) {
+        onSuccess: function () {
           fetchWallet();
           setSuccessMsg(`Top Up berhasil! Saldo Anda otomatis ditambahkan sebesar ${formatIDR(amount)}.`);
           setTopupAmount('');
           setActiveTab('index');
         },
-        onPending: function (result: any) {
+        onPending: function () {
           fetchWallet();
           setSuccessMsg(`Top up sedang diproses. Silakan selesaikan pembayaran Anda.`);
           setTopupAmount('');
           setActiveTab('index');
         },
-        onError: function (result: any) {
+        onError: function () {
           setErrorMsg('Pembayaran gagal atau dibatalkan.');
         },
         onClose: function () {
@@ -119,7 +140,6 @@ export const WalletPage = () => {
         }
       });
     } else if (res) {
-       // fallback for simulations or if snap_token is missing but res is returned
        setSuccessMsg(`Top Up diajukan. Saldo Anda akan bertambah jika sukses.`);
        setTopupAmount('');
        setActiveTab('index');
@@ -781,6 +801,13 @@ export const WalletPage = () => {
         </div>
 
       </div>
+
+      <PaymentPlaceholderModal
+        open={paymentModalOpen}
+        kind={paymentModalKind}
+        amount={paymentModalAmount}
+        onClose={() => setPaymentModalOpen(false)}
+      />
 
     </div>
   );

@@ -4,9 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useWalletStore } from '../../../store/wallet.store';
 import { AccountShell, AccountCard } from './AccountShell';
-
-const formatIdr = (n?: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
+import { formatIDR as formatIdr } from '../../../utils/currency';
 
 export const AccountWalletPage: React.FC = () => {
   const { user, fetchUser } = useAuth();

@@ -123,6 +123,15 @@ class WalletController extends Controller
                 'snap_token' => $transaction->snap_token ?? null,
                 'redirect_url' => $transaction->redirect_url ?? null,
             ], 201);
+        } catch (\App\Exceptions\Payment\PaymentGatewayNotConfiguredException $e) {
+            return response()->json([
+                'success' => false,
+                'code' => $e->errorCode(),
+                'message' => $e->getMessage(),
+                'data' => null,
+                'meta' => null,
+                'errors' => null,
+            ], 503);
         } catch (\Exception $e) {
             Log::error('Wallet topup failed: ' . $e->getMessage());
             return $this->errorResponse('Terjadi kesalahan saat memproses permintaan top up.', 500);

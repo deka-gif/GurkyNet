@@ -13,6 +13,7 @@ import { useWalletStore } from '../../store/wallet.store';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { buildCreatePinUrl, PENDING_TRANSFER_KEY } from '../../utils/pinGate';
+import { formatIDR } from '../../utils/currency';
 
 /**
  * Transfer page — P2P wallet transfer only.
@@ -47,13 +48,7 @@ export const TransferPage = () => {
     }
   }, [fetchWallet, fetchUser]);
 
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

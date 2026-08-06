@@ -12,6 +12,7 @@ interface WalletState {
   fetchHistory: (params?: Record<string, any>) => Promise<void>;
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
   topUp: (amount: number, paymentMethod: string) => Promise<any | null>;
+  lastTopUpError: { code?: string; message: string } | null;
   transfer: (recipient_wallet_number: string, amount: number, pin: string) => Promise<any | null>;
   withdraw: (payload: {
     amount: number;
@@ -69,6 +70,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   history: [],
   loading: false,
   error: null,
+  lastTopUpError: null,
 
   fetchWallet: async () => {
     set({ loading: true, error: null });
@@ -129,19 +131,27 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   topUp: async (amount, paymentMethod) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, lastTopUpError: null });
     try {
       const response = await walletService.topUp(amount, paymentMethod);
       if (response.success && response.data) {
         set({ loading: false });
         return response.data;
       } else {
-        set({ error: response.message, loading: false });
-        return null;
+        const payload = {
+          code: (response as any).code as string | undefined,
+          message: response.message || 'Gagal melakukan top up.',
+        };
+        set({ error: payload.message, lastTopUpError: payload, loading: false });
+        return { __error: true, ...payload };
       }
     } catch (err: any) {
-      set({ error: err.message || 'Gagal melakukan top up.', loading: false });
-      return null;
+      const payload = {
+        code: err?.code as string | undefined,
+        message: err?.message || 'Gagal melakukan top up.',
+      };
+      set({ error: payload.message, lastTopUpError: payload, loading: false });
+      return { __error: true, ...payload };
     }
   },
 

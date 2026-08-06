@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTransactionStore } from '../../store/transaction.store';
+import { formatIDR } from '../../utils/currency';
 import {
   isFailedStatus,
   isPendingStatus,
@@ -101,13 +102,7 @@ export const RiwayatPage = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(val);
-  };
+  
 
   const filteredTransactions = transactions.filter((tx) => {
     const matchSearch =

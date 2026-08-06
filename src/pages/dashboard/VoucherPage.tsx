@@ -24,6 +24,7 @@ import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
+import { formatIDR } from '../../utils/currency';
 
 export const VoucherPage = () => {
   const { wallet, fetchWallet, deductBalance } = useWalletStore();
@@ -53,14 +54,7 @@ export const VoucherPage = () => {
     }
   }, [fetchWallet, fetchProducts]);
 
-
-  const formatIDR = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
+  
 
   // Filter Catalog using backend products
   const filteredCatalog = useMemo(() => {

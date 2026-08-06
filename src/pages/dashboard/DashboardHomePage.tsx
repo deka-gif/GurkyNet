@@ -40,6 +40,7 @@ import { useTransactionStore } from '../../store/transaction.store';
 import { useNotificationStore } from '../../store/notification.store';
 import { Transaction, Banner } from '../../types';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { formatIDR } from '../../utils/currency';
 import {
   isFailedStatus,
   isPendingStatus,
@@ -90,15 +91,6 @@ export const DashboardHomePage = () => {
       return 'Selamat Malam';
     }
   }, []);
-
-  // Format currency helper
-  const formatIDR = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(value);
-  };
 
   // Auto-play banners carousel with pause on hover
   useEffect(() => {

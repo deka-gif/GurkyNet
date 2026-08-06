@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useFinanceStore } from '../../store/finance.store';
 import { DataTableCard, StatusBadge, EmptyState } from '../common';
 import { Receipt } from 'lucide-react';
+import { formatIDR } from '../../utils/currency';
 
 const getStatusVariant = (status: string) => {
   const lower = (status || '').toLowerCase();
@@ -74,7 +75,7 @@ export const LatestPaymentsTable: React.FC = () => {
                     </span>
                   </td>
                   <td className="py-3 px-4 font-extrabold text-gray-900">
-                    Rp {amount.toLocaleString('id-ID')}
+                    {formatIDR(amount)}
                   </td>
                   <td className="py-3 px-4">
                     <StatusBadge status={status} variant={getStatusVariant(status)} />
