@@ -75,20 +75,30 @@ export const Services: React.FC = () => {
     // If logged in -> redirect directly to transaction page
     if (user && token) {
       const slug = (category.slug || category.name || '').toLowerCase();
-      if (slug.includes('pulsa')) {
+      if (slug.includes('pulsa') && !slug.includes('international')) {
         navigate('/dashboard/pulsa');
+      } else if (slug.includes('telekomunikasi')) {
+        navigate('/dashboard/telekomunikasi');
+      } else if (slug.includes('voucher-internet') || slug.includes('voucher_internet')) {
+        navigate('/dashboard/voucher-internet');
       } else if (slug.includes('paket') || slug.includes('data')) {
         navigate('/dashboard/paket-data');
-      } else if (slug.includes('token') || slug.includes('pln')) {
+      } else if (slug.includes('token') || slug === 'pln') {
         navigate('/dashboard/token-pln');
-      } else if (slug.includes('voucher')) {
-        navigate('/dashboard/voucher');
+      } else if (slug.includes('langganan') || slug.includes('streaming')) {
+        navigate('/dashboard/langganan-digital');
+      } else if (slug.includes('international')) {
+        navigate('/dashboard/international');
       } else if (slug.includes('game')) {
-        navigate('/dashboard/voucher');
-      } else if (slug.includes('wallet') || slug.includes('ewallet') || slug.includes('e-wallet')) {
-        navigate('/dashboard/wallet');
-      } else if (slug.includes('tagihan')) {
+        navigate('/dashboard/game');
+      } else if (slug.includes('voucher')) {
+        navigate('/dashboard/voucher-digital');
+      } else if (slug.includes('wallet') || slug.includes('ewallet') || slug.includes('e-wallet') || slug.includes('topup-digital')) {
+        navigate('/dashboard/topup-digital');
+      } else if (slug.includes('tagihan') || slug.includes('pdam') || slug.includes('bpjs')) {
         navigate('/dashboard/tagihan');
+      } else if (slug.includes('transfer')) {
+        navigate('/dashboard/transfer');
       } else {
         navigate('/dashboard');
       }

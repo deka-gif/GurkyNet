@@ -32,47 +32,16 @@ class LogicalProductKey
     ];
 
     /**
-     * Category family aliases (Digiflazz dashboard slugs + VIP type slugs).
+     * Category family aliases — source of truth is config/gurky_catalog.php.
+     * Kept as a thin facade so existing call sites keep working.
      *
      * @var array<string, list<string>>
      */
-    protected static array $familyAliases = [
-        'pulsa' => [
-            'pulsa', 'prepaid', 'pulsa-reguler', 'pulsa-transfer', 'pulsa-internasional',
-        ],
-        'data' => [
-            'data', 'paket-data', 'paket_data', 'paket-internet', 'paket-lainnya',
-            'paket-telepon', 'paket-sms-telpon', 'internet',
-        ],
-        'pln' => [
-            'pln', 'token-pln', 'token_pln', 'listrik',
-        ],
-        'voucher' => [
-            'voucher', 'game', 'game-feature', 'voucher-game', 'streaming-tv',
-            'games', 'aktivasi-voucher',
-        ],
-        'ewallet' => [
-            'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money',
-        ],
-        'transfer' => [
-            'transfer', 'transfer-uang',
-        ],
-        'tagihan' => [
-            'tagihan', 'pdam', 'bpjs', 'pascabayar',
-        ],
-    ];
+    protected static array $familyAliases = [];
 
     public static function normalizeCategoryFamily(string $slug): string
     {
-        $slug = Str::lower(trim($slug));
-
-        foreach (self::$familyAliases as $family => $aliases) {
-            if (in_array($slug, $aliases, true)) {
-                return $family;
-            }
-        }
-
-        return $slug !== '' ? $slug : 'unknown';
+        return app(\App\Services\Catalog\ProductMappingService::class)->canonicalizeSlug($slug);
     }
 
     /**
@@ -80,9 +49,7 @@ class LogicalProductKey
      */
     public static function categoryFilterSlugs(string $category): array
     {
-        $family = self::normalizeCategoryFamily($category);
-
-        return self::$familyAliases[$family] ?? [Str::lower(trim($category))];
+        return app(\App\Services\Catalog\ProductMappingService::class)->filterSlugs($category);
     }
 
     public static function familyFromProduct(Product $product): string

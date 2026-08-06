@@ -31,12 +31,12 @@ declare global {
   }
 }
 
-export const WalletPage = () => {
+export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 'topup' | 'transfer' | 'withdraw' }) => {
   const { wallet, summary, history, loading, fetchWallet, topUp, transfer, withdraw } = useWalletStore();
   const { user, fetchUser } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>('index');
+  const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>(defaultTab);
   
   // States for Top Up — topupAmount stores pure digits (e.g. "250000")
   const [topupAmount, setTopupAmount] = useState<string>('');

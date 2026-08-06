@@ -30,7 +30,10 @@ import {
   ArrowRight,
   AlertCircle,
   HelpCircle,
-  Receipt
+  Receipt,
+  Send,
+  PlayCircle,
+  Globe,
 } from 'lucide-react';
 
 import { useAuthStore } from '../../store/auth.store';
@@ -41,6 +44,7 @@ import { useNotificationStore } from '../../store/notification.store';
 import { Transaction, Banner } from '../../types';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { formatIDR } from '../../utils/currency';
+import { CatalogSearchBar } from '../../components/catalog/CatalogSearchBar';
 import {
   isFailedStatus,
   isPendingStatus,
@@ -127,15 +131,16 @@ export const DashboardHomePage = () => {
     setTimeout(() => setCopiedPromoId(null), 2000);
   };
 
-  // 8 Quick Menu Items defined strictly according to specifications
+  // Quick launcher — aligns with GurkyNet IA hubs
   const quickMenuItems = [
-    { id: 'pulsa', label: 'Pulsa', icon: Smartphone, path: '/dashboard/pulsa', color: 'bg-blue-50 text-blue-600', badge: 'Populer' },
-    { id: 'data', label: 'Paket Data', icon: Wifi, path: '/dashboard/paket-data', color: 'bg-cyan-50 text-cyan-600', badge: null },
-    { id: 'pln', label: 'Token PLN', icon: Zap, path: '/dashboard/token-pln', color: 'bg-amber-50 text-amber-600', badge: 'Hemat' },
-    { id: 'game', label: 'Topup Game', icon: Gamepad2, path: '/dashboard/voucher', color: 'bg-purple-50 text-purple-600', badge: null },
-    { id: 'ewallet', label: 'E-Wallet', icon: CreditCard, path: '/dashboard/wallet', color: 'bg-emerald-50 text-emerald-600', badge: null },
-    { id: 'voucher', label: 'Voucher', icon: Gift, path: '/dashboard/voucher', color: 'bg-rose-50 text-rose-600', badge: 'Promo' },
+    { id: 'telco', label: 'Telekomunikasi', icon: Smartphone, path: '/dashboard/telekomunikasi', color: 'bg-blue-50 text-blue-600', badge: 'Populer' },
     { id: 'tagihan', label: 'Tagihan', icon: FileText, path: '/dashboard/tagihan', color: 'bg-indigo-50 text-indigo-600', badge: null },
+    { id: 'topup-digital', label: 'Top Up Digital', icon: CreditCard, path: '/dashboard/topup-digital', color: 'bg-emerald-50 text-emerald-600', badge: null },
+    { id: 'game', label: 'Game', icon: Gamepad2, path: '/dashboard/game', color: 'bg-purple-50 text-purple-600', badge: null },
+    { id: 'voucher', label: 'Voucher Digital', icon: Gift, path: '/dashboard/voucher-digital', color: 'bg-rose-50 text-rose-600', badge: null },
+    { id: 'langganan', label: 'Langganan', icon: PlayCircle, path: '/dashboard/langganan-digital', color: 'bg-orange-50 text-orange-600', badge: null },
+    { id: 'international', label: 'International', icon: Globe, path: '/dashboard/international', color: 'bg-sky-50 text-sky-600', badge: null },
+    { id: 'transfer', label: 'Transfer', icon: Send, path: '/dashboard/transfer', color: 'bg-teal-50 text-teal-600', badge: null },
     { id: 'all', label: 'Semua Produk', icon: LayoutGrid, path: '#all-services', color: 'bg-primary-50 text-primary-600', badge: null },
   ];
 
@@ -180,7 +185,7 @@ export const DashboardHomePage = () => {
   const favorites = [
     { id: 'fav-1', name: 'Pulsa Nomor Pribadi', target: user?.phone || '0812-3456-7890', type: 'Pulsa', route: '/dashboard/pulsa' },
     { id: 'fav-2', name: 'Token PLN Rumah', target: '1402-8394-8192', type: 'Token PLN', route: '/dashboard/token-pln' },
-    { id: 'fav-3', name: 'Top Up E-Wallet', target: user?.phone || '0812-9876-5432', type: 'E-Wallet', route: '/dashboard/wallet' }
+    { id: 'fav-3', name: 'Top Up Digital', target: user?.phone || '0812-9876-5432', type: 'Top Up Digital', route: '/dashboard/topup-digital' }
   ];
 
   return (
@@ -487,6 +492,10 @@ export const DashboardHomePage = () => {
           </div>
         </div>
 
+      </div>
+
+      <div className="px-1">
+        <CatalogSearchBar />
       </div>
 
       {/* 4. Quick Menu Layanan PPOB (8 Menu Utama) */}
@@ -920,19 +929,19 @@ export const DashboardHomePage = () => {
                   <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">Hiburan & Keuangan</h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <button
-                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/voucher'); }}
+                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/game'); }}
                       className="p-3 bg-gray-50 hover:bg-purple-50/50 border border-gray-100 rounded-2xl flex items-center gap-3 text-left transition-all group cursor-pointer"
                     >
                       <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105">
                         <Gamepad2 className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-gray-900 group-hover:text-purple-600">Topup Game</div>
+                        <div className="text-xs font-bold text-gray-900 group-hover:text-purple-600">Game</div>
                         <div className="text-[10px] text-gray-400">MLBB, FF, PUBG</div>
                       </div>
                     </button>
                     <button
-                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/wallet'); }}
+                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/ewallet'); }}
                       className="p-3 bg-gray-50 hover:bg-emerald-50/50 border border-gray-100 rounded-2xl flex items-center gap-3 text-left transition-all group cursor-pointer"
                     >
                       <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105">
@@ -941,6 +950,42 @@ export const DashboardHomePage = () => {
                       <div>
                         <div className="text-xs font-bold text-gray-900 group-hover:text-emerald-600">E-Wallet</div>
                         <div className="text-[10px] text-gray-400">DANA, OVO, Gopay</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/voucher-digital'); }}
+                      className="p-3 bg-gray-50 hover:bg-rose-50/50 border border-gray-100 rounded-2xl flex items-center gap-3 text-left transition-all group cursor-pointer"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105">
+                        <Gift className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-gray-900 group-hover:text-rose-600">Voucher Digital</div>
+                        <div className="text-[10px] text-gray-400">Google Play, Netflix</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/voucher-internet'); }}
+                      className="p-3 bg-gray-50 hover:bg-sky-50/50 border border-gray-100 rounded-2xl flex items-center gap-3 text-left transition-all group cursor-pointer"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center shrink-0 group-hover:scale-105">
+                        <Wifi className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-gray-900 group-hover:text-sky-600">Voucher Internet</div>
+                        <div className="text-[10px] text-gray-400">Tembak / E-Voucher / Fisik</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setIsAllServicesModalOpen(false); navigate('/dashboard/transfer'); }}
+                      className="p-3 bg-gray-50 hover:bg-teal-50/50 border border-gray-100 rounded-2xl flex items-center gap-3 text-left transition-all group cursor-pointer"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center shrink-0 group-hover:scale-105">
+                        <Send className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-gray-900 group-hover:text-teal-600">Transfer</div>
+                        <div className="text-[10px] text-gray-400">Sesama GurkyPay</div>
                       </div>
                     </button>
                   </div>

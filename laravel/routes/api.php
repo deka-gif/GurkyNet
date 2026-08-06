@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\v1\AuthController;
 use App\Http\Controllers\Api\v1\WalletController;
 use App\Http\Controllers\Api\v1\ProductController;
+use App\Http\Controllers\Api\v1\CatalogController;
 use App\Http\Controllers\Api\v1\TransactionController;
 use App\Http\Controllers\Api\v1\HealthCheckController;
 use App\Http\Controllers\Api\v1\Admin\FinanceController;
@@ -90,6 +91,11 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/providers', [ProductController::class, 'indexProviders']);
         Route::get('/products', [ProductController::class, 'indexProducts']);
         Route::get('/products/{sku_code}', [ProductController::class, 'showProduct']);
+
+        // GurkyNet Information Architecture (mapped catalog — never Digi/VIP trees)
+        Route::get('/catalog/taxonomy', [CatalogController::class, 'taxonomy']);
+        Route::get('/catalog/search', [CatalogController::class, 'search']);
+        Route::get('/catalog/providers/{category}', [CatalogController::class, 'providersByCategory']);
     });
 
     // Digiflazz Webhook Callback

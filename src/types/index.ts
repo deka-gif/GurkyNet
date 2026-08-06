@@ -74,7 +74,7 @@ export interface Product {
   code: string;
   name: string;
   price: number;
-  category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'game' | 'transfer' | 'tagihan';
+  category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'voucher-internet' | 'game' | 'transfer' | 'tagihan';
   operatorName: string;
   status: 'tersedia' | 'gangguan';
   isActive?: boolean;

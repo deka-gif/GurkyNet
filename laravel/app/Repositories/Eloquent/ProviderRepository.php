@@ -69,12 +69,17 @@ class ProviderRepository implements ProviderRepositoryInterface
                 ]
             );
 
-            // 2. Map & Sync ProductCategory
-            $categorySlug = Str::slug($dp['category']);
+            // 2. Map Digiflazz category/brand → GurkyNet IA category (never store raw Digi trees for UI)
+            $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
+                'digiflazz',
+                (string) ($dp['category'] ?? 'Umum'),
+                (string) ($dp['brand'] ?? ''),
+                (string) ($dp['product_name'] ?? '')
+            );
             $category = ProductCategory::updateOrCreate(
-                ['slug' => $categorySlug],
+                ['slug' => $mapped['slug']],
                 [
-                    'name' => $dp['category'],
+                    'name' => $mapped['name'],
                     'icon' => 'box',
                 ]
             );

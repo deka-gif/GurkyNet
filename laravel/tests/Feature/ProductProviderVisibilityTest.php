@@ -240,7 +240,7 @@ class ProductProviderVisibilityTest extends TestCase
         $data = $this->getJson('/api/v1/products?category=data&per_page=100')->assertOk();
         $this->assertContains('VIP-DATA1', collect($data->json('data'))->pluck('code')->all());
 
-        $voucher = $this->getJson('/api/v1/products?category=voucher&per_page=100')->assertOk();
+        $voucher = $this->getJson('/api/v1/products?category=game&per_page=100')->assertOk();
         $this->assertContains('VIP-VG1', collect($voucher->json('data'))->pluck('code')->all());
 
         $pln = $this->getJson('/api/v1/products?category=pln&per_page=100')->assertOk();

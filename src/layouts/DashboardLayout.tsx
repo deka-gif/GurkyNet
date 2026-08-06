@@ -38,6 +38,9 @@ import {
   Gamepad2,
   Settings,
   Menu,
+  CreditCard,
+  Globe,
+  PlayCircle,
 } from 'lucide-react';
 
 import { storageService } from '../services/storage.service';
@@ -195,14 +198,18 @@ export const DashboardLayout = () => {
         return [
           { path: '/dashboard', label: 'Home', icon: Home },
           { path: '/dashboard/wallet', label: 'Wallet', icon: Wallet },
-          { path: '/dashboard/wallet', label: 'Top Up', icon: PlusCircle },
-          { path: '/dashboard/pulsa', label: 'Pulsa', icon: Smartphone },
-          { path: '/dashboard/paket-data', label: 'Data Package', icon: Wifi },
-          { path: '/dashboard/token-pln', label: 'PLN', icon: Zap },
-          { path: '/dashboard/voucher', label: 'Game', icon: Gamepad2 },
+          { path: '/dashboard/topup', label: 'Top Up Saldo', icon: PlusCircle },
+          { divider: true },
+          { path: '/dashboard/telekomunikasi', label: 'Telekomunikasi', icon: Smartphone },
+          { path: '/dashboard/tagihan', label: 'Pembayaran Tagihan', icon: Zap },
+          { path: '/dashboard/topup-digital', label: 'Top Up Digital', icon: CreditCard },
+          { path: '/dashboard/game', label: 'Game', icon: Gamepad2 },
+          { path: '/dashboard/voucher-digital', label: 'Voucher Digital', icon: Gift },
+          { path: '/dashboard/langganan-digital', label: 'Langganan Digital', icon: PlayCircle },
+          { path: '/dashboard/international', label: 'International Top Up', icon: Globe },
+          { divider: true },
           { path: '/dashboard/transfer', label: 'Transfer', icon: Send },
-          { path: '/dashboard/tagihan', label: 'Bills', icon: FileText },
-          { path: '/dashboard/riwayat', label: 'History', icon: History },
+          { path: '/dashboard/riwayat', label: 'Riwayat', icon: History },
           { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
     }
@@ -283,6 +290,19 @@ export const DashboardLayout = () => {
     if (path === '/dashboard/account') {
       return location.pathname === '/dashboard/account';
     }
+    if (path === '/dashboard/wallet') {
+      return location.pathname === '/dashboard/wallet';
+    }
+    if (path === '/dashboard/topup') {
+      return location.pathname === '/dashboard/topup';
+    }
+    if (path === '/dashboard/tagihan') {
+      return location.pathname === '/dashboard/tagihan' || location.pathname.startsWith('/dashboard/tagihan/');
+    }
+    if (path === '/dashboard/telekomunikasi') {
+      return location.pathname === '/dashboard/telekomunikasi' || location.pathname.startsWith('/dashboard/telekomunikasi/')
+        || ['/dashboard/pulsa', '/dashboard/paket-data', '/dashboard/voucher-internet'].includes(location.pathname);
+    }
     return location.pathname.startsWith(path);
   };
 
@@ -326,13 +346,22 @@ export const DashboardLayout = () => {
 
         {/* Navigation Items */}
         <nav className="flex-1 py-6 px-3 space-y-1.5 overflow-y-auto">
-          {menuItems.map((item) => {
+          {menuItems.map((item: any, index: number) => {
+            if (item.divider) {
+              return (
+                <div
+                  key={`divider-${index}`}
+                  className={`my-2 ${isSidebarCollapsed ? 'mx-2 border-t border-gray-100' : 'mx-3 border-t border-gray-100'}`}
+                />
+              );
+            }
             const active = isActive(item.path);
             const IconComponent = item.icon;
             return (
               <NavLink
-                key={item.path}
+                key={`${item.path}-${item.label}`}
                 to={item.path}
+                end={item.path === '/dashboard' || item.path === '/dashboard/wallet'}
                 className={`flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all relative group ${active ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/10' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
               >
                 <IconComponent className={`w-5 h-5 shrink-0 transition-colors ${active ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />

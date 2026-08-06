@@ -17,9 +17,21 @@ import { WalletPage } from '../pages/dashboard/WalletPage';
 import { PulsaPage } from '../pages/dashboard/PulsaPage';
 import { PaketDataPage } from '../pages/dashboard/PaketDataPage';
 import { TokenPlnPage } from '../pages/dashboard/TokenPlnPage';
-import { VoucherPage } from '../pages/dashboard/VoucherPage';
+import { GamePage } from '../pages/dashboard/GamePage';
+import { VoucherDigitalPage } from '../pages/dashboard/VoucherDigitalPage';
+import { VoucherInternetPage } from '../pages/dashboard/VoucherInternetPage';
 import { TransferPage } from '../pages/dashboard/TransferPage';
-import { TagihanPage } from '../pages/dashboard/TagihanPage';
+import { TelekomunikasiHubPage, TagihanHubPage } from '../pages/dashboard/ServiceHubPages';
+import {
+  TopUpDigitalPage,
+  LanggananDigitalPage,
+  InternationalTopUpPage,
+  TelcoSmsTeleponPage,
+  TelcoMasaAktifPage,
+  TelcoAktivasiPerdanaPage,
+  TelcoEsimPage,
+  TagihanSubPage,
+} from '../pages/dashboard/MappedCatalogPages';
 import { RiwayatPage } from '../pages/dashboard/RiwayatPage';
 import { NotifikasiPage } from '../pages/dashboard/NotifikasiPage';
 import {
@@ -307,6 +319,30 @@ export const router = createBrowserRouter([
         element: <WalletPage />
       },
       {
+        path: 'topup',
+        element: <WalletPage defaultTab="topup" />
+      },
+      {
+        path: 'telekomunikasi',
+        element: <TelekomunikasiHubPage />
+      },
+      {
+        path: 'telekomunikasi/sms-telepon',
+        element: <TelcoSmsTeleponPage />
+      },
+      {
+        path: 'telekomunikasi/masa-aktif',
+        element: <TelcoMasaAktifPage />
+      },
+      {
+        path: 'telekomunikasi/aktivasi-perdana',
+        element: <TelcoAktivasiPerdanaPage />
+      },
+      {
+        path: 'telekomunikasi/esim',
+        element: <TelcoEsimPage />
+      },
+      {
         path: 'pulsa',
         element: <PulsaPage />
       },
@@ -320,7 +356,35 @@ export const router = createBrowserRouter([
       },
       {
         path: 'voucher',
-        element: <VoucherPage />
+        element: <Navigate to="/dashboard/voucher-digital" replace />
+      },
+      {
+        path: 'voucher-digital',
+        element: <VoucherDigitalPage />
+      },
+      {
+        path: 'voucher-internet',
+        element: <VoucherInternetPage />
+      },
+      {
+        path: 'ewallet',
+        element: <Navigate to="/dashboard/topup-digital" replace />
+      },
+      {
+        path: 'topup-digital',
+        element: <TopUpDigitalPage />
+      },
+      {
+        path: 'langganan-digital',
+        element: <LanggananDigitalPage />
+      },
+      {
+        path: 'international',
+        element: <InternationalTopUpPage />
+      },
+      {
+        path: 'game',
+        element: <GamePage />
       },
       {
         path: 'transfer',
@@ -328,7 +392,128 @@ export const router = createBrowserRouter([
       },
       {
         path: 'tagihan',
-        element: <TagihanPage />
+        element: <TagihanHubPage />
+      },
+      {
+        path: 'tagihan/pln-pascabayar',
+        element: (
+          <TagihanSubPage
+            category="pln-pascabayar"
+            title="PLN Pascabayar"
+            subtitle="Bayar tagihan listrik pascabayar dari katalog provider."
+            path="/dashboard/tagihan/pln-pascabayar"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/pdam',
+        element: (
+          <TagihanSubPage
+            category="pdam"
+            title="PDAM"
+            subtitle="Bayar tagihan air PDAM dari katalog provider."
+            path="/dashboard/tagihan/pdam"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/bpjs-kesehatan',
+        element: (
+          <TagihanSubPage
+            category="bpjs-kesehatan"
+            title="BPJS Kesehatan"
+            subtitle="Bayar iuran BPJS Kesehatan dari katalog provider."
+            path="/dashboard/tagihan/bpjs-kesehatan"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/bpjs-tk',
+        element: (
+          <TagihanSubPage
+            category="bpjs-tk"
+            title="BPJS Ketenagakerjaan"
+            subtitle="Bayar iuran BPJS Ketenagakerjaan dari katalog provider."
+            path="/dashboard/tagihan/bpjs-tk"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/internet',
+        element: (
+          <TagihanSubPage
+            category="internet-pascabayar"
+            title="Internet Pascabayar"
+            subtitle="Bayar internet pascabayar dari katalog provider."
+            path="/dashboard/tagihan/internet"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/tv',
+        element: (
+          <TagihanSubPage
+            category="tv-pascabayar"
+            title="TV Pascabayar"
+            subtitle="Bayar TV kabel/satelit dari katalog provider."
+            path="/dashboard/tagihan/tv"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/gas',
+        element: (
+          <TagihanSubPage
+            category="gas"
+            title="Gas Negara"
+            subtitle="Bayar gas negara / PGN dari katalog provider."
+            path="/dashboard/tagihan/gas"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/pbb',
+        element: (
+          <TagihanSubPage
+            category="pbb"
+            title="PBB"
+            subtitle="Bayar PBB dari katalog provider."
+            path="/dashboard/tagihan/pbb"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/samsat',
+        element: (
+          <TagihanSubPage
+            category="samsat"
+            title="SAMSAT"
+            subtitle="Bayar pajak kendaraan dari katalog provider."
+            path="/dashboard/tagihan/samsat"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/multifinance',
+        element: (
+          <TagihanSubPage
+            category="multifinance"
+            title="Multifinance"
+            subtitle="Bayar angsuran multifinance dari katalog provider."
+            path="/dashboard/tagihan/multifinance"
+          />
+        ),
+      },
+      {
+        path: 'tagihan/lainnya',
+        element: (
+          <TagihanSubPage
+            category="tagihan"
+            title="Tagihan Lainnya"
+            subtitle="Katalog tagihan umum dari provider."
+            path="/dashboard/tagihan/lainnya"
+          />
+        ),
       },
       {
         path: 'riwayat',

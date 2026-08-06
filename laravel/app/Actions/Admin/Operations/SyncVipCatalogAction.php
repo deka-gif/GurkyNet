@@ -634,30 +634,34 @@ class SyncVipCatalogAction
      */
     protected function normalizeVipCategoryName(string $categoryName, bool $isGame): string
     {
-        $raw = Str::lower(trim($categoryName));
+        $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
+            'vip',
+            $categoryName,
+            '',
+            '',
+            $isGame
+        );
 
-        if ($isGame || in_array($raw, ['game', 'game-feature', 'voucher'], true)) {
-            return 'Voucher';
-        }
-
-        return match ($raw) {
-            'prepaid', 'pulsa', 'pulse', 'phone credit' => 'Pulsa',
-            'data', 'paket data', 'paket-data', 'internet' => 'Data',
-            'pln', 'token pln', 'token-pln', 'listrik', 'electricity' => 'PLN',
-            'pdam', 'bpjs' => Str::title($raw),
-            default => $categoryName !== '' ? $categoryName : 'Pulsa',
-        };
+        return $mapped['name'];
     }
 
     protected function upsertCategory(string $categoryName): ProductCategory
     {
-        $slug = Str::slug($categoryName) ?: 'vip';
+        $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
+            'vip',
+            $categoryName,
+            '',
+            '',
+            false
+        );
+
+        $slug = $mapped['slug'] ?: 'vip';
         $category = ProductCategory::withTrashed()->firstOrNew(['slug' => $slug]);
         if ($category->trashed()) {
             $category->restore();
         }
         $category->fill([
-            'name' => $categoryName !== '' ? $categoryName : 'VIP',
+            'name' => $mapped['name'] !== '' ? $mapped['name'] : 'VIP',
             'icon' => $category->icon ?: 'box',
         ]);
         $category->save();

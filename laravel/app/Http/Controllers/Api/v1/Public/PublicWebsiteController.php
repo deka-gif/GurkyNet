@@ -359,10 +359,12 @@ class PublicWebsiteController extends Controller
         $familyLabels = [
             'pulsa' => 'Pulsa',
             'data' => 'Paket Data',
-            'voucher' => 'Voucher',
-            'pln' => 'PLN',
+            'topup-digital' => 'Top Up Digital',
             'game' => 'Game',
-            'ewallet' => 'E-Wallet',
+            'voucher-digital' => 'Voucher Digital',
+            'langganan-digital' => 'Langganan Digital',
+            'pln' => 'PLN',
+            'international' => 'International',
             'tagihan' => 'Tagihan',
         ];
 
@@ -386,10 +388,12 @@ class PublicWebsiteController extends Controller
                 ?? match ($family) {
                     'pulsa' => 'smartphone',
                     'data' => 'wifi',
-                    'voucher' => 'gift',
+                    'topup-digital' => 'credit-card',
+                    'voucher-digital' => 'gift',
+                    'langganan-digital' => 'play-circle',
+                    'international' => 'globe',
                     'pln' => 'zap',
                     'game' => 'play-circle',
-                    'ewallet' => 'briefcase',
                     'tagihan' => 'credit-card',
                     default => 'grid',
                 };
