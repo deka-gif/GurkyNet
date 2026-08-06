@@ -17,7 +17,7 @@ class BroadcastEvent implements ShouldQueue
     {
         $eventName = str_replace('App\\Events\\', '', get_class($event));
         
-        Log::info("Broadcasting event via WebSocket (Laravel Reverb / Pusher Prep)", [
+        Log::info('BROADCAST EVENT — WebSocket (Laravel Reverb / Pusher Prep)', [
             'event' => $eventName,
             'channels' => ['user-channel.' . ($event->transaction->user_id ?? $event->wallet->user_id ?? 'global')],
             'payload' => $this->serializeEvent($event),

@@ -47,8 +47,28 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
         }
 
         try {
+            Log::info('CREATE ORDER', [
+                'transaction_id' => $transaction->id,
+                'invoice' => $refId,
+                'provider_sku' => $providerSku,
+                'target' => $customerNo,
+            ]);
+
             $response = $this->vip->orderPrepaid($providerSku, $customerNo, $refId);
             $ms = (int) ($response['latency_ms'] ?? ((microtime(true) - $started) * 1000));
+            $raw = $response['raw'] ?? [];
+            $extracted = VipOrderPayload::extract(is_array($raw) ? $raw : []);
+
+            Log::info('CREATE RESPONSE', [
+                'transaction_id' => $transaction->id,
+                'success' => (bool) ($response['success'] ?? false),
+                'trxid' => $extracted['trxid'],
+                'normalized_status' => $extracted['status'],
+                'message' => $response['message'] ?? null,
+            ]);
+
+            // Persist VIP Transaction ID immediately — status polling depends on it.
+            $this->persistProviderContext($transaction, $extracted, $providerSku, is_array($raw) ? $raw : []);
 
             if (!$response['success']) {
                 $status = (string) ($response['api_status'] ?? 'provider_error');
@@ -60,20 +80,17 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
                     $status,
                     $failover,
                     $message,
-                    $response['raw'] ?? []
+                    $raw
                 );
             }
 
-            $data = $response['raw']['data'] ?? [];
-            $orderStatus = strtolower((string) ($data['status'] ?? 'pending'));
-            $sn = isset($data['sn']) ? (string) $data['sn'] : (isset($data['note']) ? (string) $data['note'] : null);
-            $message = (string) ($response['message'] ?? '');
+            $message = (string) ($response['message'] ?? $extracted['note'] ?? '');
 
-            if (in_array($orderStatus, ['success', 'sukses', 'ok'], true)) {
-                return ProviderFulfillmentResult::success($ms, $sn, $response['raw'] ?? [], $message ?: 'OK');
+            if ($extracted['status'] === 'success') {
+                return ProviderFulfillmentResult::success($ms, $extracted['sn'], $raw, $message ?: 'OK');
             }
 
-            if (in_array($orderStatus, ['error', 'failed', 'gagal'], true)) {
+            if ($extracted['status'] === 'failed') {
                 $reason = $this->failoverPolicy->messageLooksCustomer($message)
                     ? 'customer_validation'
                     : 'provider_rejected';
@@ -84,11 +101,12 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
                     $reason,
                     $failover,
                     $message ?: 'VIP reported failed',
-                    $response['raw'] ?? []
+                    $raw
                 );
             }
 
-            return ProviderFulfillmentResult::pending($ms, $response['raw'] ?? [], $message ?: 'Processing');
+            // waiting / processing — order accepted; timeout engine will poll with provider_ref
+            return ProviderFulfillmentResult::pending($ms, $raw, $message ?: 'Processing');
         } catch (\Throwable $e) {
             Log::warning('VIP adapter fulfill error', [
                 'transaction_id' => $transaction->id,
@@ -123,33 +141,72 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
 
         try {
             $trxId = $transaction->provider_ref ?: null;
+
+            Log::info('CHECK STATUS', [
+                'transaction_id' => $transaction->id,
+                'provider_ref' => $trxId,
+                'invoice' => $refId,
+                'provider_sku' => $providerSku,
+            ]);
+
+            if (!$trxId) {
+                Log::error('CHECK STATUS — missing provider_ref; cannot query VIP accurately', [
+                    'transaction_id' => $transaction->id,
+                    'invoice' => $refId,
+                ]);
+            }
+
             $response = $this->vip->checkPrepaidStatus($trxId, $refId);
             $ms = (int) ($response['latency_ms'] ?? ((microtime(true) - $started) * 1000));
-            $data = $response['data'] ?? [];
-            if (!is_array($data) || $data === []) {
-                return ProviderFulfillmentResult::pending($ms, $response['raw'] ?? [], 'VIP status empty');
+            $raw = $response['raw'] ?? [];
+            $extracted = VipOrderPayload::extract(is_array($raw) ? $raw : [], $trxId);
+
+            // Backfill trxid if we discovered it during polling.
+            if (!$trxId && $extracted['trxid']) {
+                $this->persistProviderContext($transaction, $extracted, $providerSku, is_array($raw) ? $raw : []);
+                $trxId = $extracted['trxid'];
+            } elseif ($trxId) {
+                // Refresh last provider response on every poll.
+                $transaction->forceFill([
+                    'provider_response' => is_array($raw) ? $raw : ['raw' => $raw],
+                    'provider_last_status' => $extracted['status'],
+                    'provider_checked_at' => now(),
+                ])->save();
             }
 
-            $orderStatus = strtolower((string) ($data['status'] ?? $data['stat'] ?? 'pending'));
-            $sn = isset($data['sn']) ? (string) $data['sn'] : (isset($data['note']) ? (string) $data['note'] : null);
-            $message = (string) ($response['message'] ?? $data['note'] ?? '');
+            $status = (string) ($response['normalized_status'] ?? $extracted['status']);
+            $sn = $response['sn'] ?? $extracted['sn'];
+            $message = (string) ($response['message'] ?? $extracted['note'] ?? '');
 
-            if (in_array($orderStatus, ['success', 'sukses', 'ok'], true)) {
-                return ProviderFulfillmentResult::success($ms, $sn, $response['raw'] ?? [], $message ?: 'OK');
+            Log::info('CHECK RESPONSE', [
+                'transaction_id' => $transaction->id,
+                'provider_ref' => $trxId,
+                'normalized_status' => $status,
+                'sn' => $sn,
+                'message' => $message,
+            ]);
+
+            if ($status === 'success') {
+                return ProviderFulfillmentResult::success($ms, $sn ? (string) $sn : null, $raw, $message ?: 'OK');
             }
 
-            if (in_array($orderStatus, ['error', 'failed', 'gagal', 'cancel', 'canceled', 'cancelled'], true)) {
+            if ($status === 'failed') {
                 return ProviderFulfillmentResult::failed(
                     $ms,
                     'provider_rejected',
                     false,
                     $message ?: 'VIP reported failed',
-                    $response['raw'] ?? []
+                    $raw
                 );
             }
 
-            return ProviderFulfillmentResult::pending($ms, $response['raw'] ?? [], $message ?: 'Still processing');
+            return ProviderFulfillmentResult::pending($ms, $raw, $message ?: 'Still processing');
         } catch (\Throwable $e) {
+            Log::error('VIP CHECK STATUS — exception', [
+                'transaction_id' => $transaction->id,
+                'error' => $e->getMessage(),
+            ]);
+
             return ProviderFulfillmentResult::pending(
                 (int) ((microtime(true) - $started) * 1000),
                 ['error' => $e->getMessage()],
@@ -159,17 +216,55 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
     }
 
     /**
-     * @return array{
-     *   reachable:bool,
-     *   authenticated:bool,
-     *   balance:?float,
-     *   latency_ms:?int,
-     *   message:?string,
-     *   api_status:string,
-     *   health_color:string,
-     *   http_status:?int
-     * }
+     * Persist VIP order context so WatchPendingTransactionJob can poll accurately.
+     *
+     * @param  array{trxid:?string,status:string,sn:?string,note:?string,provider_time:?string,row:array<string,mixed>}  $extracted
+     * @param  array<string, mixed>  $raw
      */
+    protected function persistProviderContext(
+        Transaction $transaction,
+        array $extracted,
+        string $providerSku,
+        array $raw
+    ): void {
+        $trxid = $extracted['trxid'] ?? null;
+        if (!$trxid) {
+            Log::error('STORE PROVIDER REF — trxid missing from payload', [
+                'transaction_id' => $transaction->id,
+                'raw_keys' => array_keys($raw),
+            ]);
+
+            return;
+        }
+
+        $providerTime = null;
+        if (!empty($extracted['provider_time'])) {
+            try {
+                $providerTime = \Carbon\Carbon::parse((string) $extracted['provider_time']);
+            } catch (\Throwable) {
+                $providerTime = now();
+            }
+        }
+
+        $transaction->forceFill([
+            'fulfillment_provider_code' => ProductProvider::CODE_VIP,
+            'provider_sku_used' => $providerSku ?: $transaction->provider_sku_used,
+            'provider_ref' => $trxid,
+            'provider_response' => $raw,
+            'provider_transaction_time' => $providerTime ?? $transaction->provider_transaction_time ?? now(),
+            'provider_last_status' => $extracted['status'] ?? $transaction->provider_last_status,
+        ])->save();
+
+        Log::info('STORE PROVIDER REF', [
+            'transaction_id' => $transaction->id,
+            'provider_ref' => $trxid,
+            'provider_code' => ProductProvider::CODE_VIP,
+            'provider_sku' => $providerSku,
+            'provider_transaction_time' => optional($transaction->provider_transaction_time)->toIso8601String(),
+            'normalized_status' => $extracted['status'] ?? null,
+        ]);
+    }
+
     public function healthCheck(): array
     {
         Log::info('EXEC TRACE — ENTER Vip adapter');

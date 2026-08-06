@@ -168,6 +168,7 @@ class TransactionTimeoutEngineTest extends TestCase
         $fresh = $tx->fresh();
         $this->assertSame(TransactionStatus::SUCCESS->value, $fresh->status);
         $this->assertNull($fresh->refunded_at);
+        $this->assertNotNull($fresh->completed_at);
         $this->assertEquals($balanceBefore, (float) $this->wallet->fresh()->balance);
         $this->assertFalse(
             WalletHistory::where('reference_id', $tx->id)->where('type', WalletHistoryType::CREDIT->value)->exists()

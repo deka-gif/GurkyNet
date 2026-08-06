@@ -259,11 +259,25 @@ class ProductProviderFulfillmentService
     {
         $transaction->loadMissing('user');
 
+        Log::info('UPDATE TRANSACTION', [
+            'transaction_id' => $transaction->id,
+            'action' => 'SET SUCCESS',
+            'provider_code' => $provider->code,
+            'provider_ref' => $transaction->provider_ref,
+            'sn' => $result->sn,
+        ]);
+        Log::info('SET SUCCESS', [
+            'transaction_id' => $transaction->id,
+            'provider_ref' => $transaction->provider_ref,
+        ]);
+
         $transaction->update([
             'status' => TransactionStatus::SUCCESS->value,
             'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
             'provider_last_status' => 'success',
             'provider_checked_at' => now(),
+            'completed_at' => now(),
+            'provider_response' => is_array($result->raw) ? $result->raw : $transaction->provider_response,
         ]);
 
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
@@ -283,27 +297,28 @@ class ProductProviderFulfillmentService
             $transaction->invoice_number
         );
 
-        event(new \App\Events\TransactionSuccess($transaction));
-        event(new \App\Events\PaymentSettled($transaction, $result->raw));
+        Log::info('WRITE WALLET HISTORY — debit already finalized (no refund)', [
+            'transaction_id' => $transaction->id,
+            'total_payment' => $transaction->total_payment,
+        ]);
 
-        if ($transaction->user) {
-            $this->notificationService->send(
-                $transaction->user,
-                'Transaksi Berhasil',
-                'Transaksi berhasil.',
-                'transaction_success',
-                ['database']
-            );
-        }
+        // Listeners: SendNotification ("Pembayaran Berhasil"), BroadcastEvent, WriteAuditLog, AnalyticsCollector
+        Log::info('BROADCAST EVENT — dispatch TransactionSuccess + PaymentSettled', [
+            'transaction_id' => $transaction->id,
+        ]);
+        event(new \App\Events\TransactionSuccess($transaction->fresh(['user']) ?? $transaction));
+        event(new \App\Events\PaymentSettled($transaction->fresh(['user']) ?? $transaction, $result->raw));
     }
 
     protected function markPending(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
     {
+        // VIP waiting/processing → keep as PENDING so UI + timeout engine stay in-flight.
         $transaction->update([
-            'status' => TransactionStatus::PROCESSING->value,
+            'status' => TransactionStatus::PENDING->value,
             'notes' => 'Sedang diproses oleh operator.',
             'provider_last_status' => 'pending',
             'provider_checked_at' => now(),
+            'provider_response' => is_array($result->raw) ? $result->raw : $transaction->provider_response,
         ]);
 
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
@@ -313,10 +328,23 @@ class ProductProviderFulfillmentService
             ]);
         }
 
-        Log::info('PRODUCT ROUTING — pending; timeout engine will poll', [
+        Log::info('UPDATE TRANSACTION', [
             'transaction_id' => $transaction->id,
+            'action' => 'SET PENDING (awaiting provider final status)',
             'provider_code' => $provider->code,
+            'provider_ref' => $transaction->fresh()?->provider_ref,
         ]);
+
+        // Ensure an early status poll runs soon after order acceptance (provider_ref must already be saved).
+        try {
+            app(\App\Services\Transactions\TransactionTimeoutService::class)
+                ->scheduleEarlyStatusPoll($transaction->fresh() ?? $transaction);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to schedule early status poll', [
+                'transaction_id' => $transaction->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function rememberFulfillmentContext(
@@ -325,15 +353,43 @@ class ProductProviderFulfillmentService
         ProductProviderSku $offer,
         ProviderFulfillmentResult $result
     ): void {
-        $raw = $result->raw;
-        $data = is_array($raw['data'] ?? null) ? $raw['data'] : (is_array($raw) ? $raw : []);
-        $providerRef = $data['trxid'] ?? $data['trx_id'] ?? $data['id'] ?? $data['ref_id'] ?? null;
+        $raw = is_array($result->raw) ? $result->raw : [];
+        $extracted = $provider->code === ProductProvider::CODE_VIP
+            ? VipOrderPayload::extract($raw, $transaction->provider_ref)
+            : [
+                'trxid' => $raw['data']['trxid']
+                    ?? $raw['data']['trx_id']
+                    ?? $raw['data']['ref_id']
+                    ?? $raw['trxid']
+                    ?? null,
+                'provider_time' => null,
+            ];
+
+        $providerRef = $extracted['trxid'] ?? null;
+        $providerTime = null;
+        if (!empty($extracted['provider_time'])) {
+            try {
+                $providerTime = \Carbon\Carbon::parse((string) $extracted['provider_time']);
+            } catch (\Throwable) {
+                $providerTime = null;
+            }
+        }
 
         $transaction->forceFill([
             'fulfillment_provider_code' => $provider->code,
             'provider_sku_used' => $offer->provider_sku,
             'provider_ref' => $providerRef ? (string) $providerRef : $transaction->provider_ref,
+            'provider_response' => $raw !== [] ? $raw : $transaction->provider_response,
+            'provider_transaction_time' => $providerTime ?? $transaction->provider_transaction_time ?? now(),
         ])->save();
+
+        Log::info('STORE PROVIDER REF', [
+            'transaction_id' => $transaction->id,
+            'provider_code' => $provider->code,
+            'provider_sku' => $offer->provider_sku,
+            'provider_ref' => $transaction->fresh()?->provider_ref,
+            'provider_transaction_time' => optional($transaction->fresh()?->provider_transaction_time)->toIso8601String(),
+        ]);
     }
 
     protected function failAndRefund(Transaction $transaction, string $userMessage, string $reason): void
@@ -359,16 +415,13 @@ class ProductProviderFulfillmentService
 
         event(new \App\Events\TransactionFailed($result['transaction']));
 
-        if ($result['transaction']->user && $result['credited']) {
-            $this->notificationService->send(
-                $result['transaction']->user,
-                'Transaksi Gagal',
-                'Transaksi gagal. Saldo telah dikembalikan.',
-                'transaction_failed',
-                ['database']
-            );
-        }
+        // Notification + broadcast handled by listeners (SendNotification / BroadcastEvent)
 
+        Log::info('SET FAILED', [
+            'transaction_id' => $transaction->id,
+            'reason' => $reason,
+            'credited' => $result['credited'],
+        ]);
         Log::error('ProductProviderFulfillment failed', [
             'transaction_id' => $transaction->id,
             'reason' => $reason,

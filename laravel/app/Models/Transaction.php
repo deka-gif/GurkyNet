@@ -30,8 +30,11 @@ class Transaction extends Model
         'fulfillment_provider_code',
         'provider_sku_used',
         'provider_ref',
+        'provider_response',
+        'provider_transaction_time',
         'refunded_at',
         'refund_reference',
+        'completed_at',
     ];
 
     protected $casts = [
@@ -40,7 +43,10 @@ class Transaction extends Model
         'total_payment' => 'decimal:2',
         'timeout_at' => 'datetime',
         'provider_checked_at' => 'datetime',
+        'provider_response' => 'array',
+        'provider_transaction_time' => 'datetime',
         'refunded_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     /**

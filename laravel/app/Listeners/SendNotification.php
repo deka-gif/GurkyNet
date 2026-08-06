@@ -48,13 +48,40 @@ class SendNotification implements ShouldQueue
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                $this->notificationService->send($user, 'Transaksi Berhasil', "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . " telah berhasil diselesaikan.", 'success', ['database', 'push']);
+                Log::info('SEND NOTIFICATION — Pembayaran Berhasil', [
+                    'transaction_id' => $tx->id,
+                    'user_id' => $user->id,
+                    'invoice' => $tx->invoice_number,
+                ]);
+                $this->notificationService->send(
+                    $user,
+                    'Pembayaran Berhasil',
+                    "Transaksi #{$tx->invoice_number} senilai Rp" . number_format((float) $tx->amount, 0, ',', '.') . ' telah berhasil diselesaikan.',
+                    'transaction_success',
+                    ['database', 'push']
+                );
             }
         } elseif ($event instanceof TransactionFailed) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                $this->notificationService->send($user, 'Transaksi Gagal', "Transaksi #{$tx->invoice_number} telah gagal.", 'error', ['database', 'push']);
+                $isTimeout = str_contains(strtolower((string) ($tx->notes ?? '')), 'batas waktu')
+                    || str_contains(strtolower((string) ($tx->notes ?? '')), 'timeout');
+                $title = $isTimeout ? 'Transaksi Timeout' : 'Transaksi Gagal';
+                $message = $isTimeout
+                    ? ((string) ($tx->notes ?: 'Provider tidak memberikan respon dalam batas waktu. Saldo Anda telah dikembalikan.'))
+                    : ("Transaksi #{$tx->invoice_number} telah gagal.");
+                Log::info('SEND NOTIFICATION — ' . $title, [
+                    'transaction_id' => $tx->id,
+                    'user_id' => $user->id,
+                ]);
+                $this->notificationService->send(
+                    $user,
+                    $title,
+                    $message,
+                    $isTimeout ? 'transaction_timeout' : 'transaction_failed',
+                    ['database', 'push']
+                );
             }
         } elseif ($event instanceof WalletCredited) {
             $user = $event->wallet->user;
@@ -68,11 +95,12 @@ class SendNotification implements ShouldQueue
                 $this->notificationService->send($user, 'Saldo Berkurang', "Saldo Anda berkurang sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'info', ['database', 'push']);
             }
         } elseif ($event instanceof PaymentSettled) {
+            // TransactionSuccess already sends "Pembayaran Berhasil" — avoid duplicate badge noise.
             $tx = $event->transaction;
-            $user = $tx->user;
-            if ($user) {
-                $this->notificationService->send($user, 'Pembayaran Selesai', "Pembayaran untuk transaksi #{$tx->invoice_number} telah diselesaikan.", 'success', ['database', 'push']);
-            }
+            Log::info('SEND NOTIFICATION — skipped PaymentSettled (covered by TransactionSuccess)', [
+                'transaction_id' => $tx->id ?? null,
+                'invoice' => $tx->invoice_number ?? null,
+            ]);
         }
     }
 }

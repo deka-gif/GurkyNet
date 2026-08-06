@@ -93,6 +93,26 @@ class TransactionTimeoutService
             'check_index' => $checkIndex,
             'offset_seconds' => $offsets[$checkIndex],
             'delay_seconds' => $delay,
+            'provider_ref' => $transaction->provider_ref,
+        ]);
+    }
+
+    /**
+     * After provider accepts an order (status waiting/processing), poll ASAP using provider_ref.
+     * Uses the first ladder index so settlement still follows the same handler.
+     */
+    public function scheduleEarlyStatusPoll(Transaction $transaction, int $delaySeconds = 5): void
+    {
+        $delaySeconds = max(1, $delaySeconds);
+
+        WatchPendingTransactionJob::dispatch($transaction->id, 0)
+            ->delay(now()->addSeconds($delaySeconds));
+
+        Log::info('TX TIMEOUT — early CHECK STATUS scheduled', [
+            'transaction_id' => $transaction->id,
+            'delay_seconds' => $delaySeconds,
+            'provider_ref' => $transaction->provider_ref,
+            'fulfillment_provider_code' => $transaction->fulfillment_provider_code,
         ]);
     }
 
@@ -233,7 +253,7 @@ class TransactionTimeoutService
         $adapter = $this->registry->get($code);
         $refId = (string) ($transaction->invoice_number ?? '');
 
-        Log::info('TX TIMEOUT — provider request (status)', [
+        Log::info('CHECK STATUS — provider request', [
             'transaction_id' => $transaction->id,
             'provider_code' => $code,
             'provider_sku' => $sku,
@@ -248,13 +268,14 @@ class TransactionTimeoutService
             $refId
         );
 
-        Log::info('TX TIMEOUT — provider response (status)', [
+        Log::info('STATUS RESPONSE — provider result', [
             'transaction_id' => $transaction->id,
             'provider_code' => $code,
             'status' => $result->status,
             'ok' => $result->ok,
             'message' => $result->message,
             'reason' => $result->reason,
+            'sn' => $result->sn,
         ]);
 
         ProductProviderLog::create([
@@ -298,6 +319,8 @@ class TransactionTimeoutService
                 'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
                 'provider_last_status' => 'success',
                 'provider_checked_at' => now(),
+                'completed_at' => now(),
+                'provider_response' => is_array($result->raw) ? $result->raw : $locked->provider_response,
             ]);
 
             if (($locked->fulfillment_provider_code ?? '') === ProductProvider::CODE_DIGIFLAZZ) {
@@ -317,20 +340,28 @@ class TransactionTimeoutService
                 $locked->invoice_number
             );
 
-            event(new \App\Events\TransactionSuccess($locked->fresh()));
-            event(new \App\Events\PaymentSettled($locked->fresh(), $result->raw));
-        });
+            Log::info('UPDATE TRANSACTION', [
+                'transaction_id' => $locked->id,
+                'action' => 'SET SUCCESS',
+                'provider_ref' => $locked->provider_ref,
+                'sn' => $result->sn,
+            ]);
+            Log::info('SET SUCCESS', [
+                'transaction_id' => $locked->id,
+                'provider_ref' => $locked->provider_ref,
+            ]);
+            Log::info('WRITE WALLET HISTORY — debit already finalized (no refund)', [
+                'transaction_id' => $locked->id,
+            ]);
 
-        $fresh = $transaction->fresh(['user']);
-        if ($fresh?->user) {
-            $this->notificationService->send(
-                $fresh->user,
-                'Transaksi Berhasil',
-                'Transaksi berhasil.',
-                'transaction_success',
-                ['database']
-            );
-        }
+            // Listeners: SendNotification ("Pembayaran Berhasil"), BroadcastEvent, WriteAuditLog, AnalyticsCollector
+            Log::info('BROADCAST EVENT — dispatch TransactionSuccess + PaymentSettled', [
+                'transaction_id' => $locked->id,
+            ]);
+
+            event(new \App\Events\TransactionSuccess($locked->fresh(['user']) ?? $locked));
+            event(new \App\Events\PaymentSettled($locked->fresh(['user']) ?? $locked, $result->raw));
+        });
 
         Log::info('TX TIMEOUT — settled SUCCESS', ['transaction_id' => $transaction->id]);
     }
@@ -341,6 +372,15 @@ class TransactionTimeoutService
         string $reason,
         string $notifyType
     ): void {
+        Log::info('SET FAILED', [
+            'transaction_id' => $transaction->id,
+            'reason' => $reason,
+        ]);
+        Log::info('REFUND — starting refundOnce', [
+            'transaction_id' => $transaction->id,
+            'reason' => $reason,
+        ]);
+
         $result = $this->refundService->refundOnce(
             $transaction,
             'Refund Timeout/Gagal Transaksi: ' . $transaction->invoice_number,
@@ -360,22 +400,22 @@ class TransactionTimeoutService
             'already_refunded' => $result['already_refunded'],
         ]);
 
+        Log::info('WRITE WALLET HISTORY — refund credit', [
+            'transaction_id' => $transaction->id,
+            'credited' => $result['credited'],
+            'already_refunded' => $result['already_refunded'],
+        ]);
+
+        Log::info('BROADCAST EVENT — TransactionFailed', [
+            'transaction_id' => $transaction->id,
+        ]);
         event(new \App\Events\TransactionFailed($result['transaction']));
 
-        if ($result['transaction']->user && $result['credited']) {
-            $title = $notifyType === 'transaction_timeout' ? 'Transaksi Timeout' : 'Transaksi Gagal';
-            $this->notificationService->send(
-                $result['transaction']->user,
-                $title,
-                $userMessage,
-                $notifyType,
-                ['database']
-            );
-        }
-
-        Log::info('TX TIMEOUT — settled FAILED', [
+        Log::info('UPDATE TRANSACTION', [
             'transaction_id' => $transaction->id,
+            'action' => 'SET FAILED',
             'reason' => $reason,
+            'notify_type' => $notifyType,
             'credited' => $result['credited'],
             'already_refunded' => $result['already_refunded'],
         ]);

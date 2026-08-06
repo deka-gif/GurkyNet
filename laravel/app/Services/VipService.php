@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
+use App\Services\ProductProviders\VipOrderPayload;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -198,6 +199,8 @@ class VipService
     /**
      * Inquire prepaid order status (timeout engine — never places a new order).
      *
+     * VIP docs: type=status with optional trxid OR limit. reff_id is NOT a status filter.
+     *
      * @return array{success:bool,api_status:string,http_status:?int,latency_ms:int,message:string,data:array,raw:array}
      */
     public function checkPrepaidStatus(?string $trxId = null, ?string $reffId = null): array
@@ -212,24 +215,48 @@ class VipService
 
         if ($trxId) {
             $params['trxid'] = $trxId;
-        } elseif ($reffId) {
-            // VIP accepts merchant reff when trxid is not yet stored.
-            $params['reff_id'] = $reffId;
         } else {
-            $params['limit'] = 1;
+            // Without provider trxid we can only page recent orders and match client-side.
+            $params['limit'] = 20;
         }
+
+        Log::info('CHECK STATUS — request', [
+            'trxid' => $trxId,
+            'merchant_reff_hint' => $reffId,
+            'params_keys' => array_keys($params),
+        ]);
 
         $result = $this->request('prepaid', $params, 'status_check');
-        $rows = $result['raw']['data'] ?? null;
-        $data = [];
-        if (is_array($rows)) {
-            // Single object or list of orders
-            $data = isset($rows['status']) || isset($rows['trxid']) || isset($rows['id'])
-                ? $rows
-                : (is_array($rows[0] ?? null) ? $rows[0] : []);
+        $extracted = VipOrderPayload::extract($result['raw'] ?? [], $trxId);
+
+        // If limit-mode, try to prefer row matching merchant invoice when VIP echoes it.
+        if (!$trxId && $reffId && is_array($result['raw']['data'] ?? null) && array_is_list($result['raw']['data'])) {
+            foreach ($result['raw']['data'] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $maybeRef = (string) ($item['reff_id'] ?? $item['ref_id'] ?? $item['reff'] ?? '');
+                if ($maybeRef !== '' && $maybeRef === (string) $reffId) {
+                    $extracted = VipOrderPayload::extract(['data' => $item], null);
+                    break;
+                }
+            }
         }
 
-        return array_merge($result, ['data' => is_array($data) ? $data : []]);
+        Log::info('CHECK RESPONSE — normalized', [
+            'trxid' => $extracted['trxid'],
+            'status' => $extracted['status'],
+            'sn' => $extracted['sn'],
+            'message' => $result['message'] ?? null,
+            'http_status' => $result['http_status'] ?? null,
+        ]);
+
+        return array_merge($result, [
+            'data' => $extracted['row'],
+            'normalized_status' => $extracted['status'],
+            'trxid' => $extracted['trxid'],
+            'sn' => $extracted['sn'],
+        ]);
     }
 
     /**

@@ -46,7 +46,7 @@ type CheckoutStep = 'SUMMARY' | 'CONFIRM' | 'PIN' | 'LOADING' | 'RESULT';
 
 export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose, onSuccess, initialStep = 'SUMMARY' }) => {
   const { wallet, deductBalance, fetchWallet } = useWalletStore();
-  const { createTransaction } = useTransactionStore();
+  const { createTransaction, fetchTransactions } = useTransactionStore();
   const { user, fetchUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,10 +66,70 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const totalPayment = data.amount + data.adminFee;
   const pinInputRef = useRef<HTMLInputElement>(null);
   const submittingRef = useRef(false);
+  const statusPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  useEffect(() => {
+    return () => {
+      if (statusPollRef.current) {
+        clearTimeout(statusPollRef.current);
+      }
+    };
+  }, []);
+
+  const applySettledUi = async (trx: any) => {
+    const status = String(trx?.status || 'pending').toLowerCase();
+    setCreatedTrx(trx);
+    if (status === 'failed' || status === 'gagal' || status === 'cancelled' || status === 'canceled') {
+      setFinalStatus('gagal');
+      setFailureMessage(trx.notes || trx.note || 'Transaksi gagal diproses.');
+    } else if (status === 'success' || status === 'sukses') {
+      setFinalStatus('sukses');
+      setFailureMessage(null);
+    } else {
+      setFinalStatus('pending');
+    }
+
+    try {
+      const receiptRes = await transactionService.getReceipt(trx.id || trx.invoice_number || trx.transactionCode);
+      if (receiptRes.success && receiptRes.data) {
+        setReceiptData(receiptRes.data);
+      }
+    } catch {
+      // ignore receipt race while still pending
+    }
+
+    fetchWallet();
+    void fetchTransactions();
+  };
+
+  /** Poll backend until VIP status sync settles SUCCESS/FAILED (aligned with 60s timeout ladder). */
+  const pollTransactionUntilSettled = async (idOrInvoice: string) => {
+    const maxAttempts = 24; // ~60s at 2.5s interval
+    const intervalMs = 2500;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise<void>((resolve) => {
+        statusPollRef.current = setTimeout(() => resolve(), intervalMs);
+      });
+
+      try {
+        const res = await transactionService.getById(idOrInvoice);
+        if (!res.success || !res.data) continue;
+
+        const status = String(res.data.status || '').toLowerCase();
+        if (status === 'success' || status === 'sukses' || status === 'failed' || status === 'gagal' || status === 'cancelled' || status === 'canceled') {
+          await applySettledUi(res.data);
+          return;
+        }
+      } catch {
+        // keep polling on transient errors
+      }
+    }
+  };
 
   const goToPinStep = () => {
     if (!user?.hasPin) {
@@ -152,6 +212,13 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
         }
       } catch {
         // Receipt fetch handled gracefully
+      }
+
+      // Create returns pending while queue fulfills + polls VIP — keep UI in sync automatically.
+      const terminal =
+        status === 'success' || status === 'sukses' || status === 'failed' || status === 'gagal';
+      if (!terminal) {
+        void pollTransactionUntilSettled(String(trx.id || trx.invoice_number || trx.transactionCode));
       }
 
       if (onSuccess) {
