@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Wifi, 
-  Smartphone, 
-  CheckCircle2, 
-  AlertCircle, 
-  CreditCard, 
+import {
+  Wifi,
+  Smartphone,
+  CheckCircle2,
+  AlertCircle,
+  CreditCard,
   Wallet,
-  Clock,
-  Shield,
   RefreshCw,
-  Search
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useTransactionStore } from '../../store/transaction.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
+import { TelkomselPaketDataCatalog } from '../../components/catalog/TelkomselPaketDataCatalog';
 import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
@@ -23,7 +20,6 @@ import { formatIDR } from '../../utils/currency';
 
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
-  const { createTransaction } = useTransactionStore();
   const { products, loading: productsLoading, fetchProducts } = useProductStore();
 
   const [phoneNo, setPhoneNo] = useState<string>('');
@@ -31,14 +27,18 @@ export const PaketDataPage = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [resumePin, setResumePin] = useState(false);
+  const [regionDialog, setRegionDialog] = useState<Product | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string>('Area 1');
 
-  // Status Banners
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+
+  const isTelkomsel = provider === 'Telkomsel';
 
   useEffect(() => {
     fetchWallet();
+    // Non-Telkomsel still uses store catalog; Telkomsel loads via dedicated API filters.
     fetchProducts({ category: 'data' });
     const pending = consumePendingCheckout('/dashboard/paket-data');
     if (pending?.data) {
@@ -47,7 +47,6 @@ export const PaketDataPage = () => {
     }
   }, [fetchWallet, fetchProducts]);
 
-  // Operator Detection
   useEffect(() => {
     const cleanNo = phoneNo.replace(/\D/g, '');
     if (cleanNo.length >= 4) {
@@ -62,16 +61,16 @@ export const PaketDataPage = () => {
         setProvider('Tri (3)');
       } else if (['0831', '0832', '0833', '0838'].includes(prefix)) {
         setProvider('Axis');
-      } else {
+      } else if (['0881', '0882', '0883', '0884', '0885', '0886', '0887', '0888', '0889'].includes(prefix)) {
         setProvider('Smartfren');
+      } else {
+        setProvider(null);
       }
     } else {
       setProvider(null);
       setSelectedProduct(null);
     }
   }, [phoneNo]);
-
-  
 
   const handleCheckout = async () => {
     if (!provider) {
@@ -87,34 +86,39 @@ export const PaketDataPage = () => {
       return;
     }
 
-    const nominalString = selectedProduct.name.replace(/\D/g, '');
-    const nominal = nominalString ? parseInt(nominalString) : selectedProduct.price;
-
-    setCheckoutData({
-      serviceName: 'Paket Data',
-      productName: selectedProduct.name,
-      targetNo: phoneNo,
-      amount: nominal,
-      adminFee: selectedProduct.price - nominal,
-      skuCode: selectedProduct.code,
-      customDetails: {
-        'Operator': provider,
-      }
-    });
+    setLoading(true);
+    try {
+      setCheckoutData({
+        serviceName: 'Paket Data',
+        productName: selectedProduct.name,
+        targetNo: phoneNo,
+        amount: selectedProduct.price,
+        adminFee: 0,
+        skuCode: selectedProduct.code,
+        customDetails: {
+          Operator: provider,
+          ...(selectedProduct.quota ? { Kuota: selectedProduct.quota } : {}),
+          ...(selectedProduct.validity ? { 'Masa Aktif': selectedProduct.validity } : {}),
+          ...(selectedRegion && selectedProduct.requiresRegion ? { Wilayah: selectedRegion } : {}),
+        },
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const displayProducts = provider
+  const otherOperatorProducts = provider && !isTelkomsel
     ? products.filter((p) => operatorsMatch(p.operatorName, provider) && p.status === 'tersedia')
     : [];
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="paket-data-page-root">
-      
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Paket Data Internet</h2>
-          <p className="text-sm text-gray-500">Isi ulang kuota internet, unlimited streaming, call combo, dan paket bundling murah.</p>
+          <p className="text-sm text-gray-500">
+            Masukkan nomor HP — operator terdeteksi otomatis. Telkomsel memakai katalog bertingkat (filter kategori).
+          </p>
         </div>
         <div className="bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 flex items-center gap-2">
           <Wallet className="w-4 h-4 text-indigo-600" />
@@ -124,10 +128,9 @@ export const PaketDataPage = () => {
         </div>
       </div>
 
-      {/* Alert status modals */}
       <AnimatePresence>
         {successMsg && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -138,12 +141,13 @@ export const PaketDataPage = () => {
               <h5 className="font-bold text-emerald-900 text-sm">Paket Internet Aktif!</h5>
               <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
             </div>
-            <button onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500 hover:text-emerald-800">Tutup</button>
+            <button onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500">
+              Tutup
+            </button>
           </motion.div>
         )}
-
         {errorMsg && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -151,27 +155,30 @@ export const PaketDataPage = () => {
           >
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h5 className="font-bold text-red-900 text-sm">Transaksi Gagal</h5>
+              <h5 className="font-bold text-red-900 text-sm">Perhatian</h5>
               <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
             </div>
-            <button onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500 hover:text-red-800">Tutup</button>
+            <button onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500">
+              Tutup
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left pane: Number entry and Operator filter */}
         <div className="lg:col-span-8 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6">
           <div className="space-y-1.5">
             <label className="text-xs font-black text-gray-700">Nomor Handphone Penerima</label>
             <div className="relative">
               <Smartphone className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
-              <input 
+              <input
                 type="tel"
                 placeholder="Contoh: 081234567890"
                 value={phoneNo}
-                onChange={(e) => setPhoneNo(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  setPhoneNo(e.target.value.replace(/\D/g, ''));
+                  setSelectedProduct(null);
+                }}
                 className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all tracking-wide"
               />
               {provider && (
@@ -184,127 +191,141 @@ export const PaketDataPage = () => {
             </div>
           </div>
 
-          {/* Categories Tab selector */}
-          {provider && (
-            <div className="space-y-6">
+          {!provider && (
+            <div className="p-12 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
+              <Wifi className="w-8 h-8 mx-auto text-gray-300" />
+              <p className="text-xs font-semibold">
+                Ketik nomor HP terlebih dahulu. Jika Telkomsel, katalog filter kategori akan terbuka.
+              </p>
+            </div>
+          )}
+
+          {isTelkomsel && (
+            <TelkomselPaketDataCatalog
+              phoneNo={phoneNo}
+              selectedProduct={selectedProduct}
+              onSelectProduct={setSelectedProduct}
+              onRegionNeeded={(p) => setRegionDialog(p)}
+            />
+          )}
+
+          {provider && !isTelkomsel && (
+            <div className="space-y-3">
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-semibold">
+                UX kategori bertingkat saat ini tersedia untuk Telkomsel. Operator lain menyusul dengan template yang sama.
+              </p>
               {productsLoading ? (
-                 <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
-                   <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
-                   <p className="text-xs font-medium">Memuat daftar paket data...</p>
-                 </div>
-              ) : displayProducts.length === 0 ? (
-                 <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
-                   <AlertCircle className="w-8 h-8 mx-auto text-gray-300" />
-                   <p className="text-xs font-medium">Produk tidak tersedia untuk operator ini.</p>
-                 </div>
+                <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400">
+                  <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
+                </div>
+              ) : otherOperatorProducts.length === 0 ? (
+                <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-xs text-gray-400">
+                  Produk tidak tersedia untuk operator ini.
+                </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {displayProducts.map((pkg) => (
-                    <div 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {otherOperatorProducts.map((pkg) => (
+                    <button
                       key={pkg.id}
+                      type="button"
                       onClick={() => setSelectedProduct(pkg)}
-                      className={`p-5 rounded-2xl border cursor-pointer text-left flex flex-col justify-between transition-all ${
-                        selectedProduct?.id === pkg.id 
-                          ? 'bg-indigo-50/20 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md' 
-                          : 'bg-gray-50/50 border-gray-100 hover:border-gray-300 hover:bg-white'
+                      className={`text-left p-4 rounded-2xl border ${
+                        selectedProduct?.id === pkg.id
+                          ? 'border-primary-500 bg-primary-50/30'
+                          : 'border-gray-100 bg-gray-50'
                       }`}
                     >
-                      <div>
-                        <div className="flex justify-between items-start gap-2">
-                          <h4 className="font-extrabold text-gray-900 text-sm">{pkg.name}</h4>
-                          <span className="bg-white px-2.5 py-1 rounded-lg border border-gray-100 text-[10px] font-black text-gray-700 whitespace-nowrap flex items-center gap-1 shrink-0">
-                            <Clock className="w-3 h-3 text-gray-400" />
-                            30 Hari
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 pt-3 border-t border-gray-100/80 flex items-center justify-between">
-                        <span className="text-sm font-black text-indigo-600">{formatIDR(pkg.price)}</span>
-                      </div>
-                    </div>
+                      <div className="font-extrabold text-sm text-gray-900">{pkg.name}</div>
+                      <div className="text-sm font-black text-primary-600 mt-2">{formatIDR(pkg.price)}</div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
           )}
-
-          {!provider && (
-            <div className="p-12 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
-              <Wifi className="w-8 h-8 mx-auto text-gray-300" />
-              <p className="text-xs font-semibold">Tolong ketikkan nomor HP Anda terlebih dahulu untuk memuat paket operator.</p>
-            </div>
-          )}
-
         </div>
 
-        {/* Right pane: Checkout Verification */}
-        <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6 flex flex-col justify-between h-fit">
-          <div className="space-y-5">
-            <div className="border-b border-gray-100 pb-4">
-              <h4 className="font-extrabold text-gray-900 text-base">Rincian Belanja</h4>
-              <p className="text-xs text-gray-500 mt-1">Paket data internet dikirim langsung ke nomor penerima dalam beberapa detik.</p>
-            </div>
-
-            {selectedProduct ? (
-              <div className="space-y-4">
-                <div className="flex justify-between text-xs font-bold text-gray-500">
-                  <span>Nomor Penerima</span>
-                  <span className="text-gray-900">{phoneNo || '-'}</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-gray-500">
-                  <span>Operator</span>
-                  <span className="text-gray-900">{provider}</span>
-                </div>
-                
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Paket Terpilih</span>
-                  <div className="font-bold text-sm text-gray-900">{selectedProduct.name}</div>
-                </div>
-
-                <div className="flex justify-between text-xs font-bold text-gray-500">
-                  <span>Metode Pembayaran</span>
-                  <span className="text-indigo-600">Saldo GurkyPay</span>
-                </div>
-
-                <div className="border-t border-dashed border-gray-100 pt-4 flex justify-between items-center">
-                  <span className="text-xs font-black text-gray-900">Total Pembayaran</span>
-                  <span className="text-xl font-black text-indigo-600">{formatIDR(selectedProduct.price)}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 text-center text-gray-400 space-y-1.5">
-                <p className="text-xs font-medium">Pilih paket kuota internet Anda terlebih dahulu di panel kiri.</p>
-              </div>
-            )}
+        <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6 h-fit">
+          <div className="border-b border-gray-100 pb-4">
+            <h4 className="font-extrabold text-gray-900 text-base">Rincian Belanja</h4>
+            <p className="text-xs text-gray-500 mt-1">Konfirmasi paket lalu lanjut ke PIN.</p>
           </div>
+
+          {selectedProduct ? (
+            <div className="space-y-4">
+              <div className="flex justify-between text-xs font-bold text-gray-500">
+                <span>Nomor</span>
+                <span className="text-gray-900">{phoneNo}</span>
+              </div>
+              <div className="flex justify-between text-xs font-bold text-gray-500">
+                <span>Operator</span>
+                <span className="text-gray-900">{provider}</span>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <span className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Paket</span>
+                <div className="font-bold text-sm text-gray-900">{selectedProduct.name}</div>
+                {(selectedProduct.quota || selectedProduct.validity) && (
+                  <div className="text-[11px] text-gray-500 mt-1">
+                    {[selectedProduct.quota, selectedProduct.validity].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-dashed border-gray-100 pt-4 flex justify-between items-center">
+                <span className="text-xs font-black text-gray-900">Total</span>
+                <span className="text-xl font-black text-primary-600">{formatIDR(selectedProduct.price)}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-6">Pilih paket di panel kiri.</p>
+          )}
 
           <button
             disabled={loading || !selectedProduct}
             onClick={handleCheckout}
-            className={`w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
-              loading 
-                ? 'bg-primary-400 cursor-not-allowed' 
-                : selectedProduct 
-                ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/10' 
-                : 'bg-gray-200 cursor-not-allowed text-gray-400'
+            className={`w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 ${
+              selectedProduct ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Memproses Pembelian...</span>
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-4 h-4" />
-                <span>Bayar Sekarang</span>
-              </>
-            )}
+            <CreditCard className="w-4 h-4" />
+            Bayar Sekarang
           </button>
         </div>
-
       </div>
+
+      {regionDialog && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-5 space-y-4 border border-gray-100 shadow-2xl">
+            <h4 className="font-extrabold text-gray-900 text-sm">Pilih Wilayah</h4>
+            <p className="text-xs text-gray-500">
+              Paket ini memiliki varian area. Pilih wilayah yang sesuai (hanya jika provider mewajibkan).
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {['Area 1', 'Area 2', 'Area 3'].map((area) => (
+                <button
+                  key={area}
+                  type="button"
+                  onClick={() => setSelectedRegion(area)}
+                  className={`py-2.5 rounded-xl text-xs font-bold border ${
+                    selectedRegion === area ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-100'
+                  }`}
+                >
+                  {area}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProduct(regionDialog);
+                setRegionDialog(null);
+              }}
+              className="w-full py-3 rounded-2xl bg-red-600 text-white text-sm font-bold"
+            >
+              Lanjut
+            </button>
+          </div>
+        </div>
+      )}
 
       {checkoutData && (
         <CheckoutSummary
@@ -315,14 +336,14 @@ export const PaketDataPage = () => {
             setResumePin(false);
           }}
           onSuccess={() => {
-            setPhoneNo('');
+            setSuccessMsg('Pembelian paket data berhasil diproses.');
             setSelectedProduct(null);
             setCheckoutData(null);
             setResumePin(false);
+            fetchWallet();
           }}
         />
       )}
-
     </div>
   );
 };

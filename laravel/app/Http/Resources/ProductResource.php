@@ -21,10 +21,26 @@ class ProductResource extends JsonResource
         $availabilityStatus = $availabilityService->getStatus($this->resource);
         $sellable = $this->isSellableViaControlCenter();
 
+        $taxonomy = resolve(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+        $description = $taxonomy->descriptionFor($this->resource);
+        $meta = $taxonomy->parseMeta((string) $this->name, $description);
+        $telkomselGroup = null;
+        if ($taxonomy->isTelkomselBrand($this->provider?->name)) {
+            $telkomselGroup = $taxonomy->classify((string) $this->name, $description);
+        }
+
         return [
             'id' => $this->id,
             'code' => $this->sku_code,
             'name' => $this->name,
+            'description' => $description,
+            'quota' => $meta['quota'],
+            'validity' => $meta['validity'],
+            'telkomselGroup' => $telkomselGroup['group'] ?? null,
+            'telkomselGroupLabel' => $telkomselGroup['label'] ?? null,
+            'requiresRegion' => $telkomselGroup
+                ? $taxonomy->mentionsRegion((string) $this->name, $description)
+                : false,
             'basePrice' => (float) $pricingDetails['base_price'],
             'providerCost' => (float) ($pricingDetails['provider_cost'] ?? $pricingDetails['base_price']),
             'margin' => (float) $pricingDetails['margin'],

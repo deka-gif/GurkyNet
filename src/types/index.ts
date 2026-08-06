@@ -74,10 +74,16 @@ export interface Product {
   code: string;
   name: string;
   price: number;
-  category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'voucher-internet' | 'game' | 'transfer' | 'tagihan';
+  category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'voucher-internet' | 'game' | 'transfer' | 'tagihan' | string;
   operatorName: string;
   status: 'tersedia' | 'gangguan';
   isActive?: boolean;
+  description?: string | null;
+  quota?: string | null;
+  validity?: string | null;
+  telkomselGroup?: string | null;
+  telkomselGroupLabel?: string | null;
+  requiresRegion?: boolean;
 }
 
 export interface Transaction {

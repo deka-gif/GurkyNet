@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * User catalog products — Product Provider Control Center is the single source of truth.
@@ -80,7 +81,8 @@ class ProductRepository implements ProductRepositoryInterface
         $this->logVipCatalogMappings($all);
 
         $merged = $this->mergeDuplicateCatalogProducts($all);
-        $merged = $this->sortCatalogProducts($merged);
+        $merged = $this->applyTelkomselGroupFilter($merged, $filters);
+        $merged = $this->sortCatalogProducts($merged, $filters);
 
         Log::info('CATALOG TRACE — count after mergeDuplicateCatalogProducts()', [
             'count' => $merged->count(),
@@ -384,14 +386,67 @@ class ProductRepository implements ProductRepositoryInterface
      * @param  Collection<int, Product>  $products
      * @return Collection<int, Product>
      */
-    protected function sortCatalogProducts(Collection $products): Collection
+    protected function sortCatalogProducts(\Illuminate\Support\Collection $products, array $filters = []): \Illuminate\Support\Collection
     {
+        $sort = Str::lower((string) ($filters['sort'] ?? ''));
+
+        if (in_array($sort, ['price_asc', 'termurah', 'harga_termurah'], true)) {
+            return $products->sortBy(fn (Product $p) => (float) $p->sell_price)->values();
+        }
+        if (in_array($sort, ['price_desc', 'tertinggi', 'harga_tertinggi'], true)) {
+            return $products->sortByDesc(fn (Product $p) => (float) $p->sell_price)->values();
+        }
+        if (in_array($sort, ['newest', 'terbaru'], true)) {
+            return $products->sortByDesc(fn (Product $p) => $p->updated_at?->timestamp ?? $p->id)->values();
+        }
+        if (in_array($sort, ['popular', 'terlaris'], true)) {
+            // No sales counter yet — prefer shorter / common package names as soft popularity proxy + price mid.
+            return $products
+                ->sort(function (Product $a, Product $b) {
+                    $la = strlen((string) $a->name);
+                    $lb = strlen((string) $b->name);
+                    if ($la !== $lb) {
+                        return $la <=> $lb;
+                    }
+
+                    return ((float) $a->sell_price) <=> ((float) $b->sell_price);
+                })
+                ->values();
+        }
+
         return $products
             ->sort(function (Product $a, Product $b) {
                 $ta = LogicalProductKey::sortTuple($a);
                 $tb = LogicalProductKey::sortTuple($b);
 
                 return $ta <=> $tb;
+            })
+            ->values();
+    }
+
+    /**
+     * Filter Telkomsel data products by UX taxonomy group (keyword classification).
+     *
+     * @param  \Illuminate\Support\Collection<int, Product>  $products
+     * @return \Illuminate\Support\Collection<int, Product>
+     */
+    protected function applyTelkomselGroupFilter(\Illuminate\Support\Collection $products, array $filters): \Illuminate\Support\Collection
+    {
+        $group = Str::lower(trim((string) ($filters['telkomsel_group'] ?? '')));
+        if ($group === '' || $group === 'semua' || $group === 'all') {
+            return $products;
+        }
+
+        /** @var \App\Services\Catalog\TelkomselDataTaxonomyService $taxonomy */
+        $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+
+        return $products
+            ->filter(function (Product $product) use ($taxonomy, $group) {
+                if (!$taxonomy->isTelkomselBrand($product->provider?->name)) {
+                    return false;
+                }
+
+                return $taxonomy->productMatchesGroup($product, $group);
             })
             ->values();
     }

@@ -7,6 +7,9 @@ export interface ProductFilters {
   status?: string;
   keyword?: string;
   per_page?: number;
+  page?: number;
+  telkomsel_group?: string;
+  sort?: string;
 }
 
 export const productService = {
@@ -22,13 +25,23 @@ export const productService = {
       if (filters.provider) params.append('provider', filters.provider);
       if (filters.status) params.append('status', filters.status);
       if (filters.keyword) params.append('keyword', filters.keyword);
-      // User catalog pages must receive the full filtered set (Ops ↔ User parity), not page 1 of 15.
+      if (filters.telkomsel_group) params.append('telkomsel_group', filters.telkomsel_group);
+      if (filters.sort) params.append('sort', filters.sort);
+      if (filters.page) params.append('page', String(filters.page));
+      // Default page size for lazy catalogs; Telkomsel UX passes smaller per_page.
       params.append('per_page', (filters.per_page ?? 5000).toString());
     } else {
       params.append('per_page', '5000');
     }
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await apiClient.get<ApiResponse<Product[]>>(`/products${queryString}`);
+    return response.data;
+  },
+
+  getTelkomselDataTaxonomy: async (): Promise<ApiResponse<{ chips: any[]; operator: string }>> => {
+    const response = await apiClient.get<ApiResponse<{ chips: any[]; operator: string }>>(
+      '/catalog/telkomsel-data/taxonomy'
+    );
     return response.data;
   },
   

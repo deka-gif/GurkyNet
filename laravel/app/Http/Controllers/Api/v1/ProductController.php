@@ -72,7 +72,10 @@ class ProductController extends Controller
      */
     public function indexProducts(Request $request): JsonResponse
     {
-        $filters = $request->only(['category', 'provider', 'status', 'keyword', 'per_page']);
+        $filters = $request->only([
+            'category', 'provider', 'status', 'keyword', 'per_page', 'page',
+            'telkomsel_group', 'sort',
+        ]);
         
         $paginatedProducts = $this->searchProductAction->execute($filters);
 

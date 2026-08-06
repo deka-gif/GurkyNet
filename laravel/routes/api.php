@@ -95,6 +95,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         // GurkyNet Information Architecture (mapped catalog — never Digi/VIP trees)
         Route::get('/catalog/taxonomy', [CatalogController::class, 'taxonomy']);
         Route::get('/catalog/search', [CatalogController::class, 'search']);
+        Route::get('/catalog/telkomsel-data/taxonomy', [CatalogController::class, 'telkomselDataTaxonomy']);
         Route::get('/catalog/providers/{category}', [CatalogController::class, 'providersByCategory']);
     });
 

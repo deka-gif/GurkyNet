@@ -88,6 +88,19 @@ class CatalogController extends Controller
     }
 
     /**
+     * Telkomsel Paket Data UX chips / taxonomy (master template).
+     */
+    public function telkomselDataTaxonomy(): JsonResponse
+    {
+        $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
+
+        return $this->successResponse('Taksonomi Paket Data Telkomsel.', [
+            'chips' => $taxonomy->chips(),
+            'operator' => 'Telkomsel',
+        ]);
+    }
+
+    /**
      * Providers that have sellable products in a GurkyNet category.
      */
     public function providersByCategory(Request $request, string $category): JsonResponse
