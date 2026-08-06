@@ -47,4 +47,20 @@ return [
             'name' => env('ARTAJASA_DISPLAY_NAME', 'Artajasa'),
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Transaction timeout & auto-refund
+    |--------------------------------------------------------------------------
+    | Pending/processing must resolve to SUCCESS or FAILED. Status is checked
+    | at each check_at_seconds mark; after max_seconds a final check runs and
+    | then an idempotent wallet refund is issued if still unresolved.
+    */
+    'timeout' => [
+        'max_seconds' => (int) env('PPOB_TRANSACTION_TIMEOUT_SECONDS', 60),
+        'check_at_seconds' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('PPOB_TRANSACTION_TIMEOUT_CHECKS', '15,30,45,60'))
+        ))),
+    ],
 ];

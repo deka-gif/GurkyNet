@@ -193,12 +193,14 @@ class ProductProviderFulfillmentService
                     'provider_code' => $provider->code,
                     'attempt' => $attempt,
                 ]);
+                $this->rememberFulfillmentContext($transaction, $provider, $offer, $result);
                 $this->markSuccess($transaction, $provider, $result);
 
                 return;
             }
 
             if ($result->ok && $result->status === 'pending') {
+                $this->rememberFulfillmentContext($transaction, $provider, $offer, $result);
                 $this->markPending($transaction, $provider, $result);
 
                 return;
@@ -255,9 +257,13 @@ class ProductProviderFulfillmentService
 
     protected function markSuccess(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
     {
+        $transaction->loadMissing('user');
+
         $transaction->update([
             'status' => TransactionStatus::SUCCESS->value,
-            'notes' => 'Transaksi sukses. SN: ' . ($result->sn ?? '-'),
+            'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
+            'provider_last_status' => 'success',
+            'provider_checked_at' => now(),
         ]);
 
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
@@ -279,6 +285,16 @@ class ProductProviderFulfillmentService
 
         event(new \App\Events\TransactionSuccess($transaction));
         event(new \App\Events\PaymentSettled($transaction, $result->raw));
+
+        if ($transaction->user) {
+            $this->notificationService->send(
+                $transaction->user,
+                'Transaksi Berhasil',
+                'Transaksi berhasil.',
+                'transaction_success',
+                ['database']
+            );
+        }
     }
 
     protected function markPending(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
@@ -286,6 +302,8 @@ class ProductProviderFulfillmentService
         $transaction->update([
             'status' => TransactionStatus::PROCESSING->value,
             'notes' => 'Sedang diproses oleh operator.',
+            'provider_last_status' => 'pending',
+            'provider_checked_at' => now(),
         ]);
 
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
@@ -294,6 +312,28 @@ class ProductProviderFulfillmentService
                 'raw_response' => $result->raw,
             ]);
         }
+
+        Log::info('PRODUCT ROUTING — pending; timeout engine will poll', [
+            'transaction_id' => $transaction->id,
+            'provider_code' => $provider->code,
+        ]);
+    }
+
+    protected function rememberFulfillmentContext(
+        Transaction $transaction,
+        ProductProvider $provider,
+        ProductProviderSku $offer,
+        ProviderFulfillmentResult $result
+    ): void {
+        $raw = $result->raw;
+        $data = is_array($raw['data'] ?? null) ? $raw['data'] : (is_array($raw) ? $raw : []);
+        $providerRef = $data['trxid'] ?? $data['trx_id'] ?? $data['id'] ?? $data['ref_id'] ?? null;
+
+        $transaction->forceFill([
+            'fulfillment_provider_code' => $provider->code,
+            'provider_sku_used' => $offer->provider_sku,
+            'provider_ref' => $providerRef ? (string) $providerRef : $transaction->provider_ref,
+        ])->save();
     }
 
     protected function failAndRefund(Transaction $transaction, string $userMessage, string $reason): void
@@ -319,11 +359,11 @@ class ProductProviderFulfillmentService
 
         event(new \App\Events\TransactionFailed($result['transaction']));
 
-        if ($result['transaction']->user) {
+        if ($result['transaction']->user && $result['credited']) {
             $this->notificationService->send(
                 $result['transaction']->user,
                 'Transaksi Gagal',
-                'Transaksi ' . $result['transaction']->invoice_number . ' gagal diproses. Saldo telah dikembalikan ke dompet Anda.',
+                'Transaksi gagal. Saldo telah dikembalikan.',
                 'transaction_failed',
                 ['database']
             );

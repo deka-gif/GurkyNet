@@ -22,6 +22,17 @@ interface ProductProviderAdapterInterface
     ): ProviderFulfillmentResult;
 
     /**
+     * Inquire latest provider status for an in-flight order (timeout engine).
+     * Must never place a new order — status only.
+     */
+    public function checkStatus(
+        Transaction $transaction,
+        string $providerSku,
+        string $customerNo,
+        string $refId
+    ): ProviderFulfillmentResult;
+
+    /**
      * Health probe: reachability, auth, balance, latency.
      *
      * @return array{reachable:bool,authenticated:bool,balance:?float,latency_ms:?int,message:?string}

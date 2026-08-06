@@ -24,12 +24,23 @@ class Transaction extends Model
         'payment_method',
         'status',
         'notes',
+        'timeout_at',
+        'provider_checked_at',
+        'provider_last_status',
+        'fulfillment_provider_code',
+        'provider_sku_used',
+        'provider_ref',
+        'refunded_at',
+        'refund_reference',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'admin_fee' => 'decimal:2',
         'total_payment' => 'decimal:2',
+        'timeout_at' => 'datetime',
+        'provider_checked_at' => 'datetime',
+        'refunded_at' => 'datetime',
     ];
 
     /**

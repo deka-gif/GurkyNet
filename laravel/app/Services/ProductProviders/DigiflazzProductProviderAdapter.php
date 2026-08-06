@@ -102,6 +102,60 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
         }
     }
 
+    public function checkStatus(
+        Transaction $transaction,
+        string $providerSku,
+        string $customerNo,
+        string $refId
+    ): ProviderFulfillmentResult {
+        $started = microtime(true);
+
+        try {
+            if (!$this->isConfigured()) {
+                return ProviderFulfillmentResult::error(
+                    (int) ((microtime(true) - $started) * 1000),
+                    'provider_not_configured',
+                    false,
+                    'Digiflazz credentials are not configured.'
+                );
+            }
+
+            $response = $this->digiflazz->checkStatus($providerSku, $customerNo, $refId);
+            $ms = (int) ((microtime(true) - $started) * 1000);
+            $data = $response['data'] ?? null;
+
+            if (!$data || !is_array($data)) {
+                return ProviderFulfillmentResult::pending($ms, is_array($response) ? $response : [], 'Status inquiry empty');
+            }
+
+            $status = strtolower((string) ($data['status'] ?? 'pending'));
+            $sn = isset($data['sn']) ? (string) $data['sn'] : null;
+            $message = (string) ($data['message'] ?? $data['rc'] ?? '');
+
+            if ($status === 'success') {
+                return ProviderFulfillmentResult::success($ms, $sn, $response, $message ?: 'OK');
+            }
+
+            if ($status === 'failed') {
+                return ProviderFulfillmentResult::failed(
+                    $ms,
+                    'provider_rejected',
+                    false,
+                    $message ?: 'Digiflazz reported failed.',
+                    $response
+                );
+            }
+
+            return ProviderFulfillmentResult::pending($ms, $response, $message ?: 'Still processing');
+        } catch (\Throwable $e) {
+            return ProviderFulfillmentResult::pending(
+                (int) ((microtime(true) - $started) * 1000),
+                ['error' => $e->getMessage()],
+                'Status check error: ' . $e->getMessage()
+            );
+        }
+    }
+
     public function healthCheck(): array
     {
         $started = microtime(true);

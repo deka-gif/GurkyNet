@@ -196,6 +196,43 @@ class VipService
     }
 
     /**
+     * Inquire prepaid order status (timeout engine — never places a new order).
+     *
+     * @return array{success:bool,api_status:string,http_status:?int,latency_ms:int,message:string,data:array,raw:array}
+     */
+    public function checkPrepaidStatus(?string $trxId = null, ?string $reffId = null): array
+    {
+        $this->assertConfigured();
+
+        $params = [
+            'key' => $this->apiKey,
+            'sign' => $this->signature,
+            'type' => 'status',
+        ];
+
+        if ($trxId) {
+            $params['trxid'] = $trxId;
+        } elseif ($reffId) {
+            // VIP accepts merchant reff when trxid is not yet stored.
+            $params['reff_id'] = $reffId;
+        } else {
+            $params['limit'] = 1;
+        }
+
+        $result = $this->request('prepaid', $params, 'status_check');
+        $rows = $result['raw']['data'] ?? null;
+        $data = [];
+        if (is_array($rows)) {
+            // Single object or list of orders
+            $data = isset($rows['status']) || isset($rows['trxid']) || isset($rows['id'])
+                ? $rows
+                : (is_array($rows[0] ?? null) ? $rows[0] : []);
+        }
+
+        return array_merge($result, ['data' => is_array($data) ? $data : []]);
+    }
+
+    /**
      * @return array{success:bool,api_status:string,health_color:string,http_status:?int,latency_ms:int,balance:?float,message:string,raw:array}
      */
     protected function request(string $path, array $params, string $logEvent): array

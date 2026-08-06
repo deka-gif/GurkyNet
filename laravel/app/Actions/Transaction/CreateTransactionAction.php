@@ -180,6 +180,9 @@ class CreateTransactionAction
         // Digiflazz behavior preserved when it is the selected / only enabled provider.
         \App\Jobs\ProcessProductProviderTransaction::dispatch($transaction->id);
 
+        // Arm timeout ladder immediately after create (async — never blocks HTTP).
+        app(\App\Services\Transactions\TransactionTimeoutService::class)->arm($transaction->fresh() ?? $transaction);
+
         return $transaction;
     }
 

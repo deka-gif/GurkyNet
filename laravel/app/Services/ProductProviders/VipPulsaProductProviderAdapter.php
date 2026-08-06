@@ -104,6 +104,60 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
         }
     }
 
+    public function checkStatus(
+        Transaction $transaction,
+        string $providerSku,
+        string $customerNo,
+        string $refId
+    ): ProviderFulfillmentResult {
+        $started = microtime(true);
+
+        if (!$this->isConfigured()) {
+            return ProviderFulfillmentResult::error(
+                (int) ((microtime(true) - $started) * 1000),
+                'provider_not_configured',
+                false,
+                ProductProvider::vipDisplayName() . ' credentials are not configured.'
+            );
+        }
+
+        try {
+            $trxId = $transaction->provider_ref ?: null;
+            $response = $this->vip->checkPrepaidStatus($trxId, $refId);
+            $ms = (int) ($response['latency_ms'] ?? ((microtime(true) - $started) * 1000));
+            $data = $response['data'] ?? [];
+            if (!is_array($data) || $data === []) {
+                return ProviderFulfillmentResult::pending($ms, $response['raw'] ?? [], 'VIP status empty');
+            }
+
+            $orderStatus = strtolower((string) ($data['status'] ?? $data['stat'] ?? 'pending'));
+            $sn = isset($data['sn']) ? (string) $data['sn'] : (isset($data['note']) ? (string) $data['note'] : null);
+            $message = (string) ($response['message'] ?? $data['note'] ?? '');
+
+            if (in_array($orderStatus, ['success', 'sukses', 'ok'], true)) {
+                return ProviderFulfillmentResult::success($ms, $sn, $response['raw'] ?? [], $message ?: 'OK');
+            }
+
+            if (in_array($orderStatus, ['error', 'failed', 'gagal', 'cancel', 'canceled', 'cancelled'], true)) {
+                return ProviderFulfillmentResult::failed(
+                    $ms,
+                    'provider_rejected',
+                    false,
+                    $message ?: 'VIP reported failed',
+                    $response['raw'] ?? []
+                );
+            }
+
+            return ProviderFulfillmentResult::pending($ms, $response['raw'] ?? [], $message ?: 'Still processing');
+        } catch (\Throwable $e) {
+            return ProviderFulfillmentResult::pending(
+                (int) ((microtime(true) - $started) * 1000),
+                ['error' => $e->getMessage()],
+                'VIP status check error: ' . $e->getMessage()
+            );
+        }
+    }
+
     /**
      * @return array{
      *   reachable:bool,

@@ -13,5 +13,11 @@ Schedule::command('digiflazz:sync')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Safety net: settle overdue pending/processing PPOB txs if delayed jobs were lost.
+Schedule::command('transactions:reconcile-pending')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Operational hygiene
 Schedule::command('queue:prune-failed --hours=168')->daily();

@@ -10,9 +10,11 @@ use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Models\WalletHistory;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
- * Single idempotent wallet refund path for Digiflazz fail, Finance, and CS.
+ * Single idempotent wallet refund path for Digiflazz fail, Finance, CS, and timeout engine.
  * Credits the wallet at most once per transaction.
  */
 class WalletRefundService
@@ -31,7 +33,24 @@ class WalletRefundService
             /** @var Transaction $locked */
             $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
 
-            if ($this->hasExistingRefund($locked)) {
+            // Never reverse a successful settlement.
+            if (in_array($locked->status, [
+                TransactionStatus::SUCCESS->value,
+                'sukses',
+            ], true)) {
+                Log::warning('WalletRefundService — refused refund on SUCCESS', [
+                    'transaction_id' => $locked->id,
+                    'source' => $source,
+                ]);
+
+                return [
+                    'credited' => false,
+                    'already_refunded' => true,
+                    'transaction' => $locked->fresh(['user', 'paymentHistory', 'items']),
+                ];
+            }
+
+            if ($locked->refunded_at || $this->hasExistingRefund($locked)) {
                 if ($notesSuffix) {
                     $locked->notes = trim(($locked->notes ? $locked->notes . ' | ' : '') . $notesSuffix);
                     $locked->save();
@@ -46,6 +65,7 @@ class WalletRefundService
 
             $wallet = Wallet::where('user_id', $locked->user_id)->lockForUpdate()->first();
             $amount = (float) $locked->total_payment;
+            $refundRef = 'RFD-' . $locked->invoice_number . '-' . Str::upper(Str::random(6));
 
             if ($wallet && $amount > 0) {
                 $wallet->balance += $amount;
@@ -69,6 +89,8 @@ class WalletRefundService
 
             $status = $finalStatus ?? TransactionStatus::FAILED->value;
             $locked->status = $status;
+            $locked->refunded_at = now();
+            $locked->refund_reference = $refundRef;
             if ($notesSuffix) {
                 $locked->notes = trim(($locked->notes ? $locked->notes . ' | ' : '') . $notesSuffix);
             }
@@ -78,6 +100,14 @@ class WalletRefundService
                 'source' => $source,
                 'description' => $description,
                 'amount' => $amount,
+                'refund_reference' => $refundRef,
+            ]);
+
+            Log::info('WalletRefundService — refund executed', [
+                'transaction_id' => $locked->id,
+                'source' => $source,
+                'amount' => $amount,
+                'refund_reference' => $refundRef,
             ]);
 
             return [
@@ -90,6 +120,10 @@ class WalletRefundService
 
     public function hasExistingRefund(Transaction $transaction): bool
     {
+        if ($transaction->refunded_at) {
+            return true;
+        }
+
         $historyRefund = WalletHistory::where('reference_id', $transaction->id)
             ->where('type', WalletHistoryType::CREDIT->value)
             ->where(function ($q) {
