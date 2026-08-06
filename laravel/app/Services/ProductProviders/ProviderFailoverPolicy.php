@@ -35,6 +35,7 @@ class ProviderFailoverPolicy
 
     /**
      * Customer / business errors — stop chain, do not failover.
+     * Catalog merge is unrelated: this policy only classifies fulfillment outcomes.
      *
      * @var list<string>
      */

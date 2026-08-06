@@ -18,3 +18,4 @@ laravel/.phpunit.result.cache
 # Backup files
 *.bak
 *.save
+.cursor/

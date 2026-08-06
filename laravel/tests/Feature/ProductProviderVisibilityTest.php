@@ -264,6 +264,99 @@ class ProductProviderVisibilityTest extends TestCase
         $this->assertSame('XL5K_DIGI', $cards->first()['code'] ?? null);
     }
 
+    public function test_both_on_merges_by_operator_and_nominal_despite_name_noise(): void
+    {
+        $this->digi->update(['is_active' => true, 'priority' => 1]);
+        $this->vip->update(['is_active' => true, 'priority' => 2]);
+
+        $pulsa = ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa', 'icon' => 'phone']);
+        $this->digiProduct->update([
+            'product_category_id' => $pulsa->id,
+            'name' => 'XL Pulsa 5.000',
+        ]);
+        $this->vipProduct->update([
+            'product_category_id' => $pulsa->id,
+            'name' => 'XL 5.000',
+        ]);
+
+        ProductCatalogCache::bump();
+        $res = $this->getJson('/api/v1/products?per_page=100&category=pulsa');
+        $res->assertOk();
+
+        $pair = collect($res->json('data'))->filter(
+            fn ($row) => in_array($row['code'] ?? '', ['XL5K_DIGI', 'VIP-XL5K'], true)
+        );
+        $this->assertCount(1, $pair);
+        $this->assertSame('XL5K_DIGI', $pair->first()['code'] ?? null);
+    }
+
+    public function test_catalog_sorts_nominal_numerically_not_as_text(): void
+    {
+        $this->digi->update(['is_active' => true, 'priority' => 1]);
+        $this->vip->update(['is_active' => false]);
+
+        $pulsa = ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa', 'icon' => 'phone']);
+
+        $this->digiProduct->update([
+            'product_category_id' => $pulsa->id,
+            'name' => 'XL Pulsa 100.000',
+            'sku_code' => 'XL100K',
+        ]);
+
+        $p15 = Product::create([
+            'product_category_id' => $pulsa->id,
+            'provider_id' => $this->brand->id,
+            'product_provider_id' => $this->digi->id,
+            'sku_code' => 'XL15K',
+            'name' => 'XL Pulsa 15.000',
+            'base_price' => 15000,
+            'sell_price' => 16000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $p15->id,
+            'product_provider_id' => $this->digi->id,
+            'provider_sku' => 'xl15',
+            'base_price' => 15000,
+            'is_active' => true,
+        ]);
+
+        $p5 = Product::create([
+            'product_category_id' => $pulsa->id,
+            'provider_id' => $this->brand->id,
+            'product_provider_id' => $this->digi->id,
+            'sku_code' => 'XL5K_SORT',
+            'name' => 'XL Pulsa 5.000',
+            'base_price' => 5000,
+            'sell_price' => 5500,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $p5->id,
+            'product_provider_id' => $this->digi->id,
+            'provider_sku' => 'xl5s',
+            'base_price' => 5000,
+            'is_active' => true,
+        ]);
+
+        ProductCatalogCache::bump();
+        $res = $this->getJson('/api/v1/products?per_page=100&category=pulsa');
+        $res->assertOk();
+
+        $codes = collect($res->json('data'))->pluck('code')->values()->all();
+        $idx5 = array_search('XL5K_SORT', $codes, true);
+        $idx15 = array_search('XL15K', $codes, true);
+        $idx100 = array_search('XL100K', $codes, true);
+
+        $this->assertNotFalse($idx5);
+        $this->assertNotFalse($idx15);
+        $this->assertNotFalse($idx100);
+        $this->assertLessThan($idx15, $idx5);
+        $this->assertLessThan($idx100, $idx15);
+    }
+
     public function test_both_on_merges_pulsa_and_prepaid_category_family(): void
     {
         $pulsa = ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa', 'icon' => 'phone']);

@@ -6,12 +6,12 @@ use App\Models\Product;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderSku;
 use App\Repositories\Contracts\ProductRepositoryInterface;
+use App\Services\ProductProviders\LogicalProductKey;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 
 /**
  * User catalog products — Product Provider Control Center is the single source of truth.
@@ -71,7 +71,7 @@ class ProductRepository implements ProductRepositoryInterface
             'bindings' => $query->getBindings(),
         ]);
 
-        $all = $query->orderBy('name')->orderBy('id')->get();
+        $all = $query->orderBy('id')->get();
 
         Log::info('CATALOG TRACE — count($all) after get()', [
             'count' => $all->count(),
@@ -80,6 +80,7 @@ class ProductRepository implements ProductRepositoryInterface
         $this->logVipCatalogMappings($all);
 
         $merged = $this->mergeDuplicateCatalogProducts($all);
+        $merged = $this->sortCatalogProducts($merged);
 
         Log::info('CATALOG TRACE — count after mergeDuplicateCatalogProducts()', [
             'count' => $merged->count(),
@@ -157,8 +158,8 @@ class ProductRepository implements ProductRepositoryInterface
 
         $this->applyControlCenterVisibility($query);
 
-        $all = $query->orderBy('name')->orderBy('id')->get();
-        $merged = $this->mergeDuplicateCatalogProducts($all);
+        $all = $query->orderBy('id')->get();
+        $merged = $this->sortCatalogProducts($this->mergeDuplicateCatalogProducts($all));
         $this->logFilterTraceForCollection($merged, 'getActiveProducts');
 
         return new EloquentCollection($merged->all());
@@ -351,9 +352,11 @@ class ProductRepository implements ProductRepositoryInterface
             $reason = $this->preferCatalogReason($kept, $product, $chosen);
 
             Log::info('VIP CATALOG TRACE — mergeDuplicateCatalogProducts', [
-                'Normalized Name' => Str::lower(preg_replace('/\s+/u', ' ', trim((string) $product->name)) ?? ''),
+                'Normalized Name' => LogicalProductKey::normalizeName((string) $product->name),
+                'Denomination' => LogicalProductKey::extractDenomination((string) $product->name),
+                'Group key' => $key,
                 'Category' => $product->category?->slug,
-                'Category family' => $this->normalizeCategoryFamily((string) ($product->category?->slug ?? '')),
+                'Category family' => LogicalProductKey::familyFromProduct($product),
                 'Provider IDs' => [
                     $kept->product_provider_id,
                     $product->product_provider_id,
@@ -375,15 +378,27 @@ class ProductRepository implements ProductRepositoryInterface
         return collect(array_values($groups))->values();
     }
 
+    /**
+     * Deterministic catalog order: Category → Operator → numeric Nominal → name → id.
+     *
+     * @param  Collection<int, Product>  $products
+     * @return Collection<int, Product>
+     */
+    protected function sortCatalogProducts(Collection $products): Collection
+    {
+        return $products
+            ->sort(function (Product $a, Product $b) {
+                $ta = LogicalProductKey::sortTuple($a);
+                $tb = LogicalProductKey::sortTuple($b);
+
+                return $ta <=> $tb;
+            })
+            ->values();
+    }
+
     protected function catalogGroupKey(Product $product): string
     {
-        $product->loadMissing('category');
-        $name = Str::lower(preg_replace('/\s+/u', ' ', trim((string) $product->name)) ?? '');
-        $family = $this->normalizeCategoryFamily((string) ($product->category?->slug ?? ''));
-
-        return $family
-            . '|' . (int) ($product->provider_id ?? 0)
-            . '|' . $name;
+        return LogicalProductKey::groupKey($product);
     }
 
     /**
@@ -393,34 +408,7 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function normalizeCategoryFamily(string $slug): string
     {
-        $slug = Str::lower(trim($slug));
-
-        return match (true) {
-            in_array($slug, [
-                'pulsa', 'prepaid', 'pulsa-reguler', 'pulsa-transfer', 'pulsa-internasional',
-            ], true) => 'pulsa',
-            in_array($slug, [
-                'data', 'paket-data', 'paket_data', 'paket-internet', 'paket-lainnya',
-                'paket-telepon', 'paket-sms-telpon', 'internet',
-            ], true) => 'data',
-            in_array($slug, [
-                'pln', 'token-pln', 'token_pln', 'listrik',
-            ], true) => 'pln',
-            in_array($slug, [
-                'voucher', 'game', 'game-feature', 'voucher-game', 'streaming-tv',
-                'games', 'aktivasi-voucher',
-            ], true) => 'voucher',
-            in_array($slug, [
-                'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money',
-            ], true) => 'ewallet',
-            in_array($slug, [
-                'transfer', 'transfer-uang',
-            ], true) => 'transfer',
-            in_array($slug, [
-                'tagihan', 'pdam', 'bpjs', 'pascabayar',
-            ], true) => 'tagihan',
-            default => $slug !== '' ? $slug : 'unknown',
-        };
+        return LogicalProductKey::normalizeCategoryFamily($slug);
     }
 
     /**
@@ -428,34 +416,7 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function categoryFilterSlugs(string $category): array
     {
-        $family = $this->normalizeCategoryFamily($category);
-
-        return match ($family) {
-            'pulsa' => [
-                'pulsa', 'prepaid', 'pulsa-reguler', 'pulsa-transfer', 'pulsa-internasional',
-            ],
-            'data' => [
-                'data', 'paket-data', 'paket_data', 'paket-internet', 'paket-lainnya',
-                'paket-telepon', 'paket-sms-telpon', 'internet',
-            ],
-            'pln' => [
-                'pln', 'token-pln', 'token_pln', 'listrik',
-            ],
-            'voucher' => [
-                'voucher', 'game', 'game-feature', 'voucher-game', 'streaming-tv',
-                'games', 'aktivasi-voucher',
-            ],
-            'ewallet' => [
-                'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money',
-            ],
-            'transfer' => [
-                'transfer', 'transfer-uang',
-            ],
-            'tagihan' => [
-                'tagihan', 'pdam', 'bpjs', 'pascabayar',
-            ],
-            default => [Str::lower(trim($category))],
-        };
+        return LogicalProductKey::categoryFilterSlugs($category);
     }
 
     protected function preferCatalogProduct(Product $a, Product $b): Product

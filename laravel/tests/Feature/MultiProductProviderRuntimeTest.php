@@ -252,6 +252,63 @@ class MultiProductProviderRuntimeTest extends TestCase
         $this->assertSame('vip', $offers->first()->productProvider->code);
     }
 
+    public function test_sibling_products_share_failover_candidates(): void
+    {
+        // Digi and VIP on separate product rows (different names, same operator + nominal).
+        $vipProduct = Product::create([
+            'product_category_id' => $this->category->id,
+            'provider_id' => $this->brand->id,
+            'product_provider_id' => $this->vip->id,
+            'sku_code' => 'VIP-XL5K-SIB',
+            'name' => 'XL Pulsa 5.000',
+            'base_price' => 5400,
+            'sell_price' => 5900,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+        ProductProviderSku::where('product_id', $this->product->id)
+            ->where('product_provider_id', $this->vip->id)
+            ->delete();
+        ProductProviderSku::create([
+            'product_id' => $vipProduct->id,
+            'product_provider_id' => $this->vip->id,
+            'provider_sku' => 'XL_5K_VIP_SIB',
+            'base_price' => 5400,
+            'is_active' => true,
+        ]);
+
+        $this->product->update(['name' => 'XL 5.000']);
+
+        $routing = app(ProductRoutingService::class);
+        $offers = $routing->orderedOffersForProduct($this->product->fresh(['category', 'provider']));
+
+        $this->assertGreaterThanOrEqual(2, $offers->count());
+        $this->assertSame('digiflazz', $offers->first()->productProvider->code);
+        $this->assertTrue($offers->contains(fn ($o) => $o->productProvider?->code === 'vip'));
+
+        $tx = $this->makePendingTransaction();
+
+        $digiAdapter = Mockery::mock(DigiflazzProductProviderAdapter::class);
+        $digiAdapter->shouldReceive('code')->andReturn('digiflazz');
+        $digiAdapter->shouldReceive('isConfigured')->andReturn(true);
+        $digiAdapter->shouldReceive('fulfill')->once()->andReturn(
+            ProviderFulfillmentResult::error(900, 'timeout', true, 'Connection timed out')
+        );
+
+        $vipAdapter = Mockery::mock(VipPulsaProductProviderAdapter::class);
+        $vipAdapter->shouldReceive('code')->andReturn('vip');
+        $vipAdapter->shouldReceive('isConfigured')->andReturn(true);
+        $vipAdapter->shouldReceive('fulfill')
+            ->once()
+            ->withArgs(fn ($transaction, $sku) => $sku === 'XL_5K_VIP_SIB')
+            ->andReturn(ProviderFulfillmentResult::success(500, 'SN-SIB', []));
+
+        $this->bindMockedRegistry($digiAdapter, $vipAdapter);
+        app(ProductProviderFulfillmentService::class)->fulfill($tx->fresh(['items']));
+
+        $this->assertSame(TransactionStatus::SUCCESS->value, $tx->fresh()->status);
+    }
+
     protected function makePendingTransaction(): Transaction
     {
         $user = User::factory()->create();

@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * Checkout router — Control Center is the single source of truth.
  * Transaction services must not hardcode provider order.
+ *
+ * Catalog merge may hide VIP rows while Digi is shown; runtime still discovers
+ * sibling products that share the same logical key so failover can reach VIP.
  */
 class ProductRoutingService
 {
@@ -27,15 +30,17 @@ class ProductRoutingService
 
     /**
      * Ordered candidate offers for an internal product (priority ascending).
-     * Ignores disabled providers and offers without SKU mapping.
+     * Includes active SKUs from logical sibling products (same category + operator + denomination).
      *
      * @return Collection<int, ProductProviderSku>
      */
     public function orderedOffersForProduct(Product $product, ?int $transactionId = null): Collection
     {
+        $productIds = $this->logicalSiblingProductIds($product);
+
         $offers = ProductProviderSku::query()
             ->with('productProvider')
-            ->where('product_id', $product->id)
+            ->whereIn('product_id', $productIds)
             ->where('is_active', true)
             ->get();
 
@@ -43,6 +48,8 @@ class ProductRoutingService
             'transaction_id' => $transactionId,
             'product_id' => $product->id,
             'internal_sku' => $product->sku_code,
+            'logical_group' => LogicalProductKey::groupKey($product),
+            'sibling_product_ids' => $productIds,
             'raw_offer_count' => $offers->count(),
         ]);
 
@@ -70,6 +77,8 @@ class ProductRoutingService
         }
 
         $accepted = collect();
+        /** @var array<int, ProductProviderSku> $bestByProvider */
+        $bestByProvider = [];
 
         foreach ($offers as $offer) {
             /** @var ProductProviderSku $offer */
@@ -110,16 +119,36 @@ class ProductRoutingService
                 continue;
             }
 
-            $accepted->push($offer);
+            $providerId = (int) $pp->id;
+            $existing = $bestByProvider[$providerId] ?? null;
+            if ($existing === null) {
+                $bestByProvider[$providerId] = $offer;
+            } else {
+                // Prefer preferred flag, then SKU attached to the purchased product, then lower id.
+                $preferNew = false;
+                if ((bool) $offer->is_preferred && !(bool) $existing->is_preferred) {
+                    $preferNew = true;
+                } elseif ((int) $offer->product_id === (int) $product->id
+                    && (int) $existing->product_id !== (int) $product->id) {
+                    $preferNew = true;
+                }
+                if ($preferNew) {
+                    $bestByProvider[$providerId] = $offer;
+                }
+            }
+
             Log::info('PRODUCT ROUTING — provider selected candidate', [
                 'transaction_id' => $transactionId,
                 'product_id' => $product->id,
+                'offer_product_id' => $offer->product_id,
                 'provider_code' => $pp->code,
                 'priority' => (int) $pp->priority,
                 'provider_sku' => $offer->provider_sku,
                 'is_preferred' => (bool) $offer->is_preferred,
             ]);
         }
+
+        $accepted = collect(array_values($bestByProvider));
 
         $preferred = $accepted->firstWhere('is_preferred', true);
         $sorted = $accepted
@@ -140,10 +169,44 @@ class ProductRoutingService
                 'provider' => $o->productProvider?->code,
                 'priority' => (int) ($o->productProvider?->priority ?? 0),
                 'provider_sku' => $o->provider_sku,
+                'offer_product_id' => $o->product_id,
             ])->all(),
         ]);
 
         return $sorted;
+    }
+
+    /**
+     * Product ids that share the same logical catalog identity (including self).
+     *
+     * @return list<int>
+     */
+    protected function logicalSiblingProductIds(Product $product): array
+    {
+        $product->loadMissing(['category', 'provider']);
+        $key = LogicalProductKey::groupKey($product);
+        $operatorId = (int) ($product->provider_id ?? 0);
+        $family = LogicalProductKey::familyFromProduct($product);
+        $slugs = LogicalProductKey::categoryFilterSlugs($family);
+
+        $candidates = Product::query()
+            ->with(['category', 'provider'])
+            ->where('provider_id', $operatorId)
+            ->whereHas('category', fn ($q) => $q->whereIn('slug', $slugs))
+            ->get(['id', 'name', 'provider_id', 'product_category_id', 'sku_code']);
+
+        $ids = [];
+        foreach ($candidates as $candidate) {
+            if (LogicalProductKey::groupKey($candidate) === $key) {
+                $ids[] = (int) $candidate->id;
+            }
+        }
+
+        if (!in_array((int) $product->id, $ids, true)) {
+            $ids[] = (int) $product->id;
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**
