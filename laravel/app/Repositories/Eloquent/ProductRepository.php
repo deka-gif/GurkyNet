@@ -387,19 +387,38 @@ class ProductRepository implements ProductRepositoryInterface
     }
 
     /**
-     * Dashboard uses Digiflazz-style slugs (pulsa). VIP sync historically stored "prepaid".
-     * Treat aliases as one catalog family so VIP products appear under User Dashboard filters
-     * and merge with Digiflazz cards of the same brand+name.
+     * Dashboard uses Digiflazz-style slugs (pulsa). VIP sync stores provider type slugs
+     * (pulsa-reguler, paket-internet, …). Treat aliases as one catalog family so VIP
+     * products appear under User Dashboard filters and merge with Digiflazz cards.
      */
     protected function normalizeCategoryFamily(string $slug): string
     {
         $slug = Str::lower(trim($slug));
 
         return match (true) {
-            in_array($slug, ['pulsa', 'prepaid'], true) => 'pulsa',
-            in_array($slug, ['data', 'paket-data', 'paket_data'], true) => 'data',
-            in_array($slug, ['pln', 'token-pln', 'token_pln', 'listrik'], true) => 'pln',
-            in_array($slug, ['voucher', 'game', 'game-feature'], true) => 'voucher',
+            in_array($slug, [
+                'pulsa', 'prepaid', 'pulsa-reguler', 'pulsa-transfer', 'pulsa-internasional',
+            ], true) => 'pulsa',
+            in_array($slug, [
+                'data', 'paket-data', 'paket_data', 'paket-internet', 'paket-lainnya',
+                'paket-telepon', 'paket-sms-telpon', 'internet',
+            ], true) => 'data',
+            in_array($slug, [
+                'pln', 'token-pln', 'token_pln', 'listrik',
+            ], true) => 'pln',
+            in_array($slug, [
+                'voucher', 'game', 'game-feature', 'voucher-game', 'streaming-tv',
+                'games', 'aktivasi-voucher',
+            ], true) => 'voucher',
+            in_array($slug, [
+                'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money',
+            ], true) => 'ewallet',
+            in_array($slug, [
+                'transfer', 'transfer-uang',
+            ], true) => 'transfer',
+            in_array($slug, [
+                'tagihan', 'pdam', 'bpjs', 'pascabayar',
+            ], true) => 'tagihan',
             default => $slug !== '' ? $slug : 'unknown',
         };
     }
@@ -412,10 +431,29 @@ class ProductRepository implements ProductRepositoryInterface
         $family = $this->normalizeCategoryFamily($category);
 
         return match ($family) {
-            'pulsa' => ['pulsa', 'prepaid'],
-            'data' => ['data', 'paket-data', 'paket_data'],
-            'pln' => ['pln', 'token-pln', 'token_pln', 'listrik'],
-            'voucher' => ['voucher', 'game', 'game-feature'],
+            'pulsa' => [
+                'pulsa', 'prepaid', 'pulsa-reguler', 'pulsa-transfer', 'pulsa-internasional',
+            ],
+            'data' => [
+                'data', 'paket-data', 'paket_data', 'paket-internet', 'paket-lainnya',
+                'paket-telepon', 'paket-sms-telpon', 'internet',
+            ],
+            'pln' => [
+                'pln', 'token-pln', 'token_pln', 'listrik',
+            ],
+            'voucher' => [
+                'voucher', 'game', 'game-feature', 'voucher-game', 'streaming-tv',
+                'games', 'aktivasi-voucher',
+            ],
+            'ewallet' => [
+                'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money',
+            ],
+            'transfer' => [
+                'transfer', 'transfer-uang',
+            ],
+            'tagihan' => [
+                'tagihan', 'pdam', 'bpjs', 'pascabayar',
+            ],
             default => [Str::lower(trim($category))],
         };
     }

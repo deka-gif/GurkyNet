@@ -163,6 +163,90 @@ class ProductProviderVisibilityTest extends TestCase
         $this->assertContains('VIP-XL5K', $codes);
     }
 
+    public function test_vip_type_slugs_appear_under_dashboard_category_filters(): void
+    {
+        $this->digi->update(['is_active' => false]);
+        $this->vip->update(['is_active' => true]);
+
+        $pulsaReguler = ProductCategory::create(['name' => 'pulsa-reguler', 'slug' => 'pulsa-reguler', 'icon' => 'phone']);
+        $paketInternet = ProductCategory::create(['name' => 'paket-internet', 'slug' => 'paket-internet', 'icon' => 'wifi']);
+        $voucherGame = ProductCategory::create(['name' => 'voucher-game', 'slug' => 'voucher-game', 'icon' => 'game']);
+        $tokenPln = ProductCategory::create(['name' => 'token-pln', 'slug' => 'token-pln', 'icon' => 'bolt']);
+
+        $this->vipProduct->update(['product_category_id' => $pulsaReguler->id, 'name' => 'VIP Pulsa Reguler']);
+
+        $dataProduct = Product::create([
+            'product_category_id' => $paketInternet->id,
+            'provider_id' => $this->brand->id,
+            'product_provider_id' => $this->vip->id,
+            'sku_code' => 'VIP-DATA1',
+            'name' => 'VIP Paket Internet',
+            'base_price' => 10000,
+            'sell_price' => 11000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $dataProduct->id,
+            'product_provider_id' => $this->vip->id,
+            'provider_sku' => 'DATA1',
+            'base_price' => 10000,
+            'is_active' => true,
+        ]);
+
+        $voucherProduct = Product::create([
+            'product_category_id' => $voucherGame->id,
+            'provider_id' => $this->brand->id,
+            'product_provider_id' => $this->vip->id,
+            'sku_code' => 'VIP-VG1',
+            'name' => 'VIP Voucher Game',
+            'base_price' => 20000,
+            'sell_price' => 21000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $voucherProduct->id,
+            'product_provider_id' => $this->vip->id,
+            'provider_sku' => 'VG1',
+            'base_price' => 20000,
+            'is_active' => true,
+        ]);
+
+        $plnProduct = Product::create([
+            'product_category_id' => $tokenPln->id,
+            'provider_id' => $this->brand->id,
+            'product_provider_id' => $this->vip->id,
+            'sku_code' => 'VIP-PLN1',
+            'name' => 'VIP Token PLN',
+            'base_price' => 20000,
+            'sell_price' => 20500,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $plnProduct->id,
+            'product_provider_id' => $this->vip->id,
+            'provider_sku' => 'PLN1',
+            'base_price' => 20000,
+            'is_active' => true,
+        ]);
+
+        ProductCatalogCache::bump();
+
+        $pulsa = $this->getJson('/api/v1/products?category=pulsa&per_page=100')->assertOk();
+        $this->assertContains('VIP-XL5K', collect($pulsa->json('data'))->pluck('code')->all());
+
+        $data = $this->getJson('/api/v1/products?category=data&per_page=100')->assertOk();
+        $this->assertContains('VIP-DATA1', collect($data->json('data'))->pluck('code')->all());
+
+        $voucher = $this->getJson('/api/v1/products?category=voucher&per_page=100')->assertOk();
+        $this->assertContains('VIP-VG1', collect($voucher->json('data'))->pluck('code')->all());
+
+        $pln = $this->getJson('/api/v1/products?category=pln&per_page=100')->assertOk();
+        $this->assertContains('VIP-PLN1', collect($pln->json('data'))->pluck('code')->all());
+    }
+
     public function test_both_on_merges_duplicate_logical_cards(): void
     {
         $this->digi->update(['is_active' => true, 'priority' => 1]);

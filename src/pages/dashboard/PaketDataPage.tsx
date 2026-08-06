@@ -17,6 +17,7 @@ import { useTransactionStore } from '../../store/transaction.store';
 import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { Product } from '../../types';
+import { operatorsMatch } from '../../utils/operatorMatch';
 
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -100,7 +101,9 @@ export const PaketDataPage = () => {
     });
   };
 
-  const displayProducts = provider ? products.filter(p => p.operatorName === provider && p.status === 'tersedia') : [];
+  const displayProducts = provider
+    ? products.filter((p) => operatorsMatch(p.operatorName, provider) && p.status === 'tersedia')
+    : [];
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="paket-data-page-root">

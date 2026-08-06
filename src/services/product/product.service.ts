@@ -22,7 +22,10 @@ export const productService = {
       if (filters.provider) params.append('provider', filters.provider);
       if (filters.status) params.append('status', filters.status);
       if (filters.keyword) params.append('keyword', filters.keyword);
-      if (filters.per_page) params.append('per_page', filters.per_page.toString());
+      // User catalog pages must receive the full filtered set (Ops ↔ User parity), not page 1 of 15.
+      params.append('per_page', (filters.per_page ?? 5000).toString());
+    } else {
+      params.append('per_page', '5000');
     }
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await apiClient.get<ApiResponse<Product[]>>(`/products${queryString}`);
