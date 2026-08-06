@@ -14,12 +14,22 @@ use App\Actions\Auth\LogoutUserAction;
 use App\Actions\Auth\VerifyOtpAction;
 use App\Actions\Auth\ResetPasswordAction;
 use App\Actions\Auth\ChangePinAction;
+use App\Models\ActivityLog;
+use App\Models\OnboardingAttempt;
+use App\Models\User;
+use App\Models\UserDevice;
 use App\Repositories\Contracts\OtpRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
+use App\Services\Security\OtpService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -33,6 +43,7 @@ class AuthController extends Controller
     protected ChangePinAction $changePinAction;
     protected OtpRepositoryInterface $otpRepository;
     protected UserRepositoryInterface $userRepository;
+    protected OtpService $unifiedOtpService;
 
     public function __construct(
         RegisterUserAction $registerAction,
@@ -42,7 +53,8 @@ class AuthController extends Controller
         ResetPasswordAction $resetPasswordAction,
         ChangePinAction $changePinAction,
         OtpRepositoryInterface $otpRepository,
-        UserRepositoryInterface $userRepository
+        UserRepositoryInterface $userRepository,
+        OtpService $unifiedOtpService
     ) {
         $this->registerAction = $registerAction;
         $this->loginAction = $loginAction;
@@ -52,6 +64,7 @@ class AuthController extends Controller
         $this->changePinAction = $changePinAction;
         $this->otpRepository = $otpRepository;
         $this->userRepository = $userRepository;
+        $this->unifiedOtpService = $unifiedOtpService;
     }
 
     /**
@@ -60,11 +73,60 @@ class AuthController extends Controller
     public function register(RegisterRequest $request): JsonResponse
     {
         try {
-            $user = $this->registerAction->execute($request->validated());
-            
-            return $this->successResponse('Registrasi pengguna berhasil dilakukan.', [
-                'user' => new \App\Http\Resources\ProfileResource($user),
-            ], 201);
+            $data = $request->validated();
+
+            $existingAttempt = OnboardingAttempt::query()
+                ->where('email', $data['email'])
+                ->orWhere('phone_number', $data['phone_number'])
+                ->latest()
+                ->first();
+
+            if ($existingAttempt && $existingAttempt->status === 'verified') {
+                $existingAttempt->delete();
+            }
+
+            $attempt = OnboardingAttempt::updateOrCreate(
+                ['email' => $data['email']],
+                [
+                    'name' => $data['name'],
+                    'phone_number' => $data['phone_number'],
+                    'password' => Crypt::encryptString($data['password']),
+                    'otp_code' => null,
+                    'otp_expires_at' => null,
+                    'otp_verified_at' => null,
+                    'status' => 'pending_verification',
+                    'meta' => [
+                        'channel' => 'email',
+                    ],
+                ]
+            );
+            $otp = $this->unifiedOtpService->issue($attempt->email, 'onboarding_registration', 'email', null, [
+                'onboarding_id' => $attempt->id,
+            ], 10);
+            $attempt->forceFill([
+                'otp_code' => $otp->code,
+                'otp_expires_at' => $otp->expires_at,
+            ])->save();
+
+            $payload = [
+                'onboarding_id' => $attempt->id,
+                'email' => $attempt->email,
+                'status' => $attempt->status,
+                'expires_at' => optional($attempt->otp_expires_at)->toIso8601String(),
+                'user' => [
+                    'name' => $attempt->name,
+                    'email' => $attempt->email,
+                    'phone' => $attempt->phone_number,
+                    'isVerified' => false,
+                    'hasPin' => false,
+                ],
+            ];
+
+            if (app()->environment('local', 'testing')) {
+                $payload['dummy_sent_code'] = $otp->code;
+            }
+
+            return $this->successResponse('OTP verifikasi telah dikirim ke email Anda.', $payload, 201);
         } catch (\Exception $e) {
             Log::error('Registration failed: ' . $e->getMessage());
             return $this->errorResponse('Terjadi kesalahan saat registrasi. Silakan coba lagi.', 500);
@@ -85,6 +147,7 @@ class AuthController extends Controller
             );
 
             $result['user'] = new \App\Http\Resources\ProfileResource($result['user']);
+            $this->writeSecurityAudit($result['user']->resource ?? $result['user'], 'login_password');
 
             return $this->successResponse('Login berhasil dilakukan.', $result);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -196,45 +259,27 @@ class AuthController extends Controller
     public function requestOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone_number' => 'required|string|regex:/^08[0-9]{8,11}$/',
-            'action' => 'required|string|in:registration,pin_reset,password_reset,verification',
+            'phone_number' => 'nullable|string',
+            'email' => 'nullable|email',
+            'action' => 'required|string|in:registration,pin_reset,password_reset,verification,forgot_password,forgot_pin,change_password,change_pin,change_phone,change_email_old,change_email_new,onboarding_registration',
         ], [
-            'phone_number.regex' => 'Format nomor handphone tidak valid.',
             'action.in' => 'Format aksi OTP tidak valid.',
         ]);
 
-        $phone = $request->phone_number;
+        $identifier = (string) ($request->input('email') ?: $request->input('phone_number'));
         $action = $request->action;
+        $channel = filter_var($identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'phone';
+        $otp = $this->unifiedOtpService->issue($identifier, $action, $channel);
 
-        // For registration or verification, check if number already exists
-        if ($action === 'registration' && $this->userRepository->findByPhone($phone)) {
-            return $this->errorResponse('Nomor handphone sudah terdaftar di sistem.', 409);
-        }
-
-        // Create 6-digit random code
-        $code = str_pad((string)mt_rand(100000, 999999), 6, '0', STR_PAD_LEFT);
-
-        // Persist OTP; never log or return the plaintext code outside local/testing.
-        $this->otpRepository->create($phone, $code, $action, 5);
-
-        Log::info('OTP generated', [
-            'phone_number' => $phone,
+        return $this->successResponse('Kode OTP berhasil dikirim.', [
+            'identifier' => $identifier,
+            'phone_number' => $channel === 'phone' ? $identifier : null,
+            'email' => $channel === 'email' ? $identifier : null,
             'action' => $action,
-            'expires_minutes' => 5,
+            'expires_at' => $otp->expires_at?->toIso8601String(),
+            'resend_available_at' => $otp->resend_available_at?->toIso8601String(),
+            'dummy_sent_code' => app()->environment('local', 'testing') ? $otp->code : null,
         ]);
-
-        $payload = [
-            'phone_number' => $phone,
-            'action' => $action,
-            'expires_at' => now()->addMinutes(5)->toIso8601String(),
-        ];
-
-        // Sandbox convenience only — never expose OTP in production/staging.
-        if (app()->environment('local', 'testing')) {
-            $payload['dummy_sent_code'] = $code;
-        }
-
-        return $this->successResponse('Kode OTP berhasil dikirim.', $payload);
     }
 
     /**
@@ -243,6 +288,24 @@ class AuthController extends Controller
     public function verifyOtp(VerifyOtpRequest $request): JsonResponse
     {
         try {
+            if ($request->filled('onboarding_id')) {
+                $attempt = OnboardingAttempt::query()->findOrFail((int) $request->input('onboarding_id'));
+                $this->unifiedOtpService->verify($attempt->email, $request->code, 'onboarding_registration', 'email');
+
+                $attempt->forceFill([
+                    'otp_verified_at' => now(),
+                    'otp_code' => null,
+                    'status' => 'verified',
+                ])->save();
+
+                return $this->successResponse('Kode OTP berhasil diverifikasi.', [
+                    'onboarding_id' => $attempt->id,
+                    'verified' => true,
+                    'status' => 'verified',
+                    'next_step' => 'create_pin',
+                ]);
+            }
+
             $this->verifyOtpAction->execute(
                 $request->phone_number,
                 $request->code,
@@ -260,6 +323,63 @@ class AuthController extends Controller
             Log::error('OTP verification failed: ' . $e->getMessage());
             return $this->errorResponse('Terjadi kesalahan saat memverifikasi OTP.', 500);
         }
+    }
+
+    public function finalizeRegistration(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'onboarding_id' => 'required|integer|exists:onboarding_attempts,id',
+            'pin' => 'required|string|regex:/^\d{6}$/',
+            'pin_confirmation' => 'required|same:pin',
+            'remember_device' => 'nullable|boolean',
+        ]);
+
+        if ($this->isWeakPin($data['pin'])) {
+            return $this->errorResponse('PIN terlalu lemah. Gunakan kombinasi 6 digit lain.', 422, [
+                'pin' => ['PIN terlalu lemah. Gunakan kombinasi 6 digit lain.'],
+            ]);
+        }
+
+        /** @var OnboardingAttempt $attempt */
+        $attempt = OnboardingAttempt::query()->findOrFail((int) $data['onboarding_id']);
+        if (!$attempt->otp_verified_at) {
+            return $this->errorResponse('OTP email belum diverifikasi.', 422, [
+                'onboarding_id' => ['OTP email belum diverifikasi.'],
+            ]);
+        }
+
+        $result = DB::transaction(function () use ($attempt, $data, $request) {
+            $user = $this->registerAction->execute([
+                'name' => $attempt->name,
+                'email' => $attempt->email,
+                'phone_number' => $attempt->phone_number,
+                'password' => Crypt::decryptString($attempt->password),
+                'transaction_pin' => $data['pin'],
+                'email_verified_at' => now(),
+            ]);
+
+            $tokenName = $this->deviceTokenName($request);
+            $token = $user->createToken($tokenName)->plainTextToken;
+            $this->rememberTrustedDevice($user, $request, (bool) ($data['remember_device'] ?? true));
+            $this->writeSecurityAudit($user, 'REGISTER_AND_CREATE_PIN', [
+                'channel' => 'email_otp',
+            ]);
+
+            $attempt->forceFill([
+                'status' => 'completed',
+                'otp_code' => null,
+            ])->delete();
+
+            return [
+                'user' => $user->fresh(['wallet']),
+                'token' => $token,
+            ];
+        });
+
+        return $this->successResponse('Akun berhasil diverifikasi dan PIN berhasil dibuat.', [
+            'token' => $result['token'],
+            'user' => new \App\Http\Resources\ProfileResource($result['user']),
+        ]);
     }
 
     /**
@@ -307,5 +427,120 @@ class AuthController extends Controller
             Log::error('PIN modification failed: ' . $e->getMessage());
             return $this->errorResponse('Terjadi kesalahan saat memproses PIN transaksi Anda.', 500);
         }
+    }
+
+    public function pinLogin(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'identity' => 'required|string',
+            'pin' => 'required|string|regex:/^\d{6}$/',
+        ]);
+
+        $user = filter_var($data['identity'], FILTER_VALIDATE_EMAIL)
+            ? User::query()->where('email', $data['identity'])->first()
+            : User::query()->where('phone_number', $data['identity'])->first();
+
+        if (!$user || !$user->hasPin() || !Hash::check($data['pin'], (string) $user->transaction_pin)) {
+            return $this->errorResponse('PIN login tidak valid.', 422, [
+                'pin' => ['PIN login tidak valid.'],
+            ]);
+        }
+
+        if (!$this->isTrustedDevice($user, $request)) {
+            return $this->errorResponse('Perangkat ini belum dipercaya. Gunakan login email + password terlebih dahulu.', 403);
+        }
+
+        $token = $user->createToken($this->deviceTokenName($request))->plainTextToken;
+        $this->rememberTrustedDevice($user, $request, true);
+        $this->writeSecurityAudit($user, 'login_pin');
+
+        return $this->successResponse('Login PIN berhasil dilakukan.', [
+            'token' => $token,
+            'user' => new \App\Http\Resources\ProfileResource($user->fresh(['wallet'])),
+        ]);
+    }
+
+    protected function sendOnboardingOtpEmail(OnboardingAttempt $attempt, string $otpCode): void
+    {
+        $apiKey = config('services.resend.key');
+        if (!$apiKey) {
+            Log::warning('RESEND key missing; onboarding OTP email skipped.', ['email' => $attempt->email]);
+            return;
+        }
+
+        $response = Http::withToken($apiKey)
+            ->acceptJson()
+            ->post('https://api.resend.com/emails', [
+                'from' => 'onboarding@resend.dev',
+                'to' => [$attempt->email],
+                'subject' => 'Kode OTP Verifikasi GurkyNet',
+                'html' => '<p>Halo ' . e($attempt->name) . ',</p>'
+                    . '<p>Kode OTP verifikasi akun GurkyNet Anda adalah:</p>'
+                    . '<p style="font-size:28px;font-weight:700;letter-spacing:4px;">' . e($otpCode) . '</p>'
+                    . '<p>Kode ini berlaku selama 10 menit.</p>',
+            ]);
+
+        Log::info('ONBOARDING OTP EMAIL', [
+            'email' => $attempt->email,
+            'status' => $response->status(),
+        ]);
+    }
+
+    protected function isWeakPin(string $pin): bool
+    {
+        return in_array($pin, ['123456', '111111', '121212', '112233', '987654', '654321'], true);
+    }
+
+    protected function deviceTokenName(Request $request): string
+    {
+        $deviceUuid = $request->header('X-Device-UUID', $request->input('device_uuid', 'web-device'));
+        $platform = strtolower((string) $request->header('X-Platform', $request->input('platform', 'web')));
+
+        return $platform . '|' . $deviceUuid;
+    }
+
+    protected function rememberTrustedDevice(User $user, Request $request, bool $active = true): void
+    {
+        $deviceUuid = $request->header('X-Device-UUID', $request->input('device_uuid'));
+        if (!$deviceUuid) {
+            return;
+        }
+
+        UserDevice::updateOrCreate(
+            ['device_uuid' => $deviceUuid, 'platform' => strtolower((string) $request->header('X-Platform', 'web'))],
+            [
+                'user_id' => $user->id,
+                'app_version' => $request->header('X-App-Version'),
+                'user_agent' => substr((string) $request->userAgent(), 0, 512),
+                'is_active' => $active,
+                'last_seen_at' => now(),
+            ]
+        );
+        $this->writeSecurityAudit($user, 'trusted_device_added');
+    }
+
+    protected function isTrustedDevice(User $user, Request $request): bool
+    {
+        $deviceUuid = $request->header('X-Device-UUID', $request->input('device_uuid'));
+        if (!$deviceUuid) {
+            return false;
+        }
+
+        return UserDevice::query()
+            ->where('user_id', $user->id)
+            ->where('device_uuid', $deviceUuid)
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    protected function writeSecurityAudit(User $user, string $activity, array $payload = []): void
+    {
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'activity' => strtolower($activity),
+            'payload' => array_merge($payload, [
+                'timestamp' => now()->toIso8601String(),
+            ]),
+        ]);
     }
 }

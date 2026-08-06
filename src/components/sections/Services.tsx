@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useProductStore } from '../../store/product.store';
 import { useAuthStore } from '../../store/auth.store';
+import { useWebsiteStore } from '../../store/website.store';
 import { productService } from '../../services/product/product.service';
 import { Product } from '../../types';
 import { ServerErrorState, EmptyState } from '../ui/FeedbackStates';
@@ -42,6 +43,7 @@ export const Services: React.FC = () => {
   const navigate = useNavigate();
   const { categories, fetchCategories } = useProductStore();
   const { user, token } = useAuthStore();
+  const { homepageCategories, fetchHomepage } = useWebsiteStore();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export const Services: React.FC = () => {
 
   useEffect(() => {
     loadCategories();
+    void fetchHomepage();
   }, []);
 
   const handleCategoryClick = async (category: any) => {
@@ -80,6 +83,10 @@ export const Services: React.FC = () => {
         navigate('/dashboard/token-pln');
       } else if (slug.includes('voucher')) {
         navigate('/dashboard/voucher');
+      } else if (slug.includes('game')) {
+        navigate('/dashboard/voucher');
+      } else if (slug.includes('wallet') || slug.includes('ewallet') || slug.includes('e-wallet')) {
+        navigate('/dashboard/wallet');
       } else if (slug.includes('tagihan')) {
         navigate('/dashboard/tagihan');
       } else {
@@ -95,7 +102,7 @@ export const Services: React.FC = () => {
     setModalProducts([]);
 
     try {
-      const response = await productService.getProducts({ category: category.slug });
+      const response = await productService.getProducts({ category: category.slug, per_page: 12 });
       if (response.success && Array.isArray(response.data)) {
         setModalProducts(response.data);
       } else {
@@ -160,7 +167,7 @@ export const Services: React.FC = () => {
               retryText="Coba Lagi"
             />
           </div>
-        ) : categories.length === 0 ? (
+        ) : (homepageCategories.length === 0 && categories.length === 0) ? (
           <div className="max-w-md mx-auto">
             <EmptyState 
               title="Belum Ada Kategori" 
@@ -171,7 +178,14 @@ export const Services: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {categories.map((cat, index) => {
+            {(homepageCategories.length > 0 ? homepageCategories.map((bucket) => ({
+              id: bucket.category?.id || bucket.key,
+              name: bucket.label,
+              slug: bucket.slug || bucket.key,
+              icon: bucket.icon,
+              preview: bucket.previewProduct,
+              productCount: bucket.productCount,
+            })) : categories).map((cat: any, index) => {
               const IconComp = getCategoryIcon(cat.icon, cat.slug);
 
               return (
@@ -193,12 +207,14 @@ export const Services: React.FC = () => {
                       {cat.name}
                     </h3>
                     <p className="text-xs text-gray-500 leading-relaxed">
-                      Layanan transaksi digital otomatis untuk kebutuhan {cat.name.toLowerCase()}.
+                      {cat.preview?.name
+                        ? `${cat.preview.name} dan produk ${cat.name.toLowerCase()} lainnya.`
+                        : `Layanan transaksi digital otomatis untuk kebutuhan ${cat.name.toLowerCase()}.`}
                     </p>
                   </div>
 
                   <div className="mt-6 flex items-center justify-between text-xs font-extrabold text-primary-600 group-hover:translate-x-1 transition-transform">
-                    <span>Lihat Produk</span>
+                    <span>{cat.productCount ? `${cat.productCount} Produk` : 'Lihat Produk'}</span>
                     <ChevronRight className="w-4 h-4" />
                   </div>
                 </motion.div>

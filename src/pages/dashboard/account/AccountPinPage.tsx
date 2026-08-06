@@ -16,7 +16,8 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
   const [otp, setOtp] = useState('');
-  const [phone, setPhone] = useState(user?.phone || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [step, setStep] = useState<'request' | 'confirm'>('request');
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,14 +45,32 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
       if (mode === 'create') {
         res = await profileService.createPin(pin, confirm);
       } else if (mode === 'change') {
-        res = await profileService.changePin(oldPin, pin, confirm);
+        if (step === 'request') {
+          res = await profileService.changePin(oldPin, pin, confirm);
+          if (res.success) {
+            setMsg('OTP dikirim ke email Anda. Masukkan OTP untuk menyelesaikan perubahan PIN.');
+            setStep('confirm');
+            return;
+          }
+        } else {
+          res = await profileService.confirmChangePin(otp, pin, confirm);
+        }
       } else {
-        res = await profileService.forgotPin({
-          phone_number: phone,
-          otp,
-          pin,
-          pin_confirmation: confirm,
-        });
+        if (step === 'request') {
+          res = await profileService.forgotPin({ email });
+          if (res.success) {
+            setMsg('OTP dikirim ke email Anda. Masukkan OTP untuk reset PIN.');
+            setStep('confirm');
+            return;
+          }
+        } else {
+          res = await profileService.confirmForgotPin({
+            email,
+            otp_code: otp,
+            pin,
+            pin_confirmation: confirm,
+          });
+        }
       }
       if (res.success) {
         setMsg(res.message || 'PIN berhasil disimpan.');
@@ -70,9 +89,14 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
     setBusy(true);
     setErr(null);
     try {
-      const { apiClient } = await import('../../../services/api');
-      await apiClient.post('/auth/otp/request', { phone_number: phone, action: 'pin_reset' });
-      setMsg('OTP dikirim. Masukkan kode untuk reset PIN.');
+      if (mode === 'forgot') {
+        await profileService.forgotPin({ email });
+        setMsg('OTP dikirim ke email. Masukkan kode untuk reset PIN.');
+      } else {
+        await profileService.changePin(oldPin, pin, confirm);
+        setMsg('OTP dikirim ke email. Masukkan kode untuk menyelesaikan perubahan PIN.');
+      }
+      setStep('confirm');
     } catch (e: any) {
       setErr(e?.message || 'Gagal mengirim OTP');
     } finally {
@@ -91,10 +115,10 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
           )}
           {mode === 'forgot' && (
             <>
-              <input placeholder="Nomor HP" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm" required />
+              <input placeholder="Email akun" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm" required />
               <div className="flex gap-2">
                 <input placeholder="Kode OTP" value={otp} onChange={(e) => setOtp(e.target.value)} className="flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm" required />
-                <button type="button" disabled={busy} onClick={requestOtp} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white hover:bg-slate-50">
+                <button type="button" disabled={busy || step === 'confirm'} onClick={requestOtp} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white hover:bg-slate-50">
                   Kirim OTP
                 </button>
               </div>

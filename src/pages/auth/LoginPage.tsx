@@ -17,14 +17,16 @@ type LoginFields = z.infer<typeof loginSchema>;
 
 export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [showPinMode, setShowPinMode] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [pin, setPin] = useState('');
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, fetchUser } = useAuthStore();
+  const { login, pinLogin, fetchUser } = useAuthStore();
   const identityInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
@@ -45,6 +47,7 @@ export const LoginPage: React.FC = () => {
     const remembered = storageService.getRememberedIdentity();
     if (remembered) {
       setValue('identity', remembered);
+      setShowPinMode(storageService.isTrustedIdentity(remembered));
     }
 
     if (location.state?.message) {
@@ -90,6 +93,28 @@ export const LoginPage: React.FC = () => {
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Terjadi kesalahan sistem saat mencoba masuk. Silakan coba beberapa saat lagi.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onSubmitPin = async () => {
+    const identity = identityInputRef.current?.value || storageService.getRememberedIdentity();
+    if (!identity) {
+      setErrorMsg('Masukkan email terlebih dahulu.');
+      return;
+    }
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const success = await pinLogin(identity, pin, rememberMe);
+      if (success) {
+        await fetchUser();
+        const currentUser = useAuthStore.getState().user;
+        navigate(getRedirectPathForRole(currentUser?.role || 'User') || '/dashboard', { replace: true });
+      } else {
+        setErrorMsg(useAuthStore.getState().error || 'Login PIN gagal.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -220,7 +245,40 @@ export const LoginPage: React.FC = () => {
             />
             <span className="text-xs font-medium text-gray-700">Ingat Saya di Perangkat Ini</span>
           </label>
+          {storageService.getRememberedIdentity() && (
+            <button
+              type="button"
+              onClick={() => setShowPinMode((prev) => !prev)}
+              className="text-xs font-bold text-primary-600"
+            >
+              {showPinMode ? 'Gunakan Password' : 'Masuk dengan PIN'}
+            </button>
+          )}
         </div>
+
+        {showPinMode && (
+          <div className="space-y-3 rounded-2xl border border-primary-100 bg-primary-50 p-4">
+            <p className="text-xs text-primary-800">
+              Perangkat ini dikenali. Masukkan PIN 6 digit untuk masuk lebih cepat.
+            </p>
+            <input
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full rounded-2xl border border-primary-200 bg-white px-4 py-3 text-center text-base font-black tracking-[0.35em] text-gray-900"
+              placeholder="000000"
+            />
+            <button
+              type="button"
+              disabled={isLoading || pin.length !== 6}
+              onClick={onSubmitPin}
+              className="w-full rounded-full bg-primary-700 text-white py-3 font-bold disabled:opacity-50"
+            >
+              Masuk dengan PIN
+            </button>
+          </div>
+        )}
 
         {/* Submit Button */}
         <button

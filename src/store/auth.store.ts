@@ -67,6 +67,7 @@ interface AuthState {
   error: string | null;
   validationErrors: Record<string, string[]> | null;
   login: (payload: LoginPayload, remember?: boolean) => Promise<boolean>;
+  pinLogin: (identity: string, pin: string, remember?: boolean) => Promise<boolean>;
   register: (payload: RegisterPayload) => Promise<boolean>;
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -102,6 +103,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         } else {
           storageService.setRememberedIdentity('');
         }
+        storageService.markTrustedIdentity(payload.identity);
         set({ token, user: normalizedUser, loading: false });
         return true;
       } else {
@@ -116,6 +118,32 @@ export const useAuthStore = create<AuthState>((set) => ({
         loading: false,
       });
 
+      return false;
+    }
+  },
+
+  pinLogin: async (identity, pin, remember = true) => {
+    set({ loading: true, error: null, validationErrors: null });
+    try {
+      const response = await authService.pinLogin({ identity, pin });
+      if (response.success && response.data) {
+        const { token, user } = response.data;
+        const normalizedUser = normalizeUserPayload(user);
+        storageService.setToken(token, remember);
+        storageService.setUser(normalizedUser as unknown as Record<string, unknown>, remember);
+        storageService.setRememberedIdentity(identity);
+        storageService.markTrustedIdentity(identity);
+        set({ token, user: normalizedUser, loading: false });
+        return true;
+      }
+      set({ error: response.message, loading: false });
+      return false;
+    } catch (err: any) {
+      set({
+        error: err.message || 'Gagal login dengan PIN.',
+        validationErrors: err.errors || null,
+        loading: false,
+      });
       return false;
     }
   },

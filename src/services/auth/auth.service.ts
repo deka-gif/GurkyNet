@@ -14,27 +14,49 @@ export interface RegisterPayload {
   passwordConfirmation: string;
 }
 
+export interface RegisterStartResponse {
+  onboarding_id: number;
+  email: string;
+  status: string;
+  expires_at: string;
+  dummy_sent_code?: string;
+}
+
+export interface VerifyOnboardingPayload {
+  onboarding_id: number;
+  code: string;
+}
+
+export interface FinalizeRegistrationPayload {
+  onboarding_id: number;
+  pin: string;
+  pin_confirmation: string;
+  remember_device?: boolean;
+}
+
 export interface ForgotPasswordPayload {
-  identity: string;
+  email: string;
 }
 
 export interface RequestOtpPayload {
-  phone_number: string;
-  action: 'registration' | 'pin_reset' | 'password_reset' | 'verification';
+  phone_number?: string;
+  email?: string;
+  action: 'registration' | 'pin_reset' | 'password_reset' | 'verification' | 'forgot_password' | 'forgot_pin' | 'change_password' | 'change_pin' | 'change_phone' | 'change_email_old' | 'change_email_new' | 'onboarding_registration';
 }
 
 export interface RequestOtpResponse {
-  phone_number: string;
+  identifier?: string;
   action: string;
   dummy_sent_code?: string;
   expires_at: string;
+  resend_available_at?: string;
 }
 
 export interface ResetPasswordPayload {
-  phone_number: string;
+  email: string;
   otp_code: string;
-  password: string;
-  password_confirmation: string;
+  new_password: string;
+  new_password_confirmation: string;
 }
 
 export interface VerifyOtpPayload {
@@ -58,14 +80,33 @@ export const authService = {
     return response.data;
   },
 
-  register: async (payload: RegisterPayload): Promise<ApiResponse<{ user: User }>> => {
-    const response = await apiClient.post<ApiResponse<{ user: User }>>('/auth/register', {
+  register: async (payload: RegisterPayload): Promise<ApiResponse<RegisterStartResponse>> => {
+    const response = await apiClient.post<ApiResponse<RegisterStartResponse>>('/auth/register', {
       name: payload.fullName,
       email: payload.email,
       phone_number: payload.phone,
       password: payload.password,
       password_confirmation: payload.passwordConfirmation,
     });
+    return response.data;
+  },
+
+  verifyOnboardingOtp: async (payload: VerifyOnboardingPayload): Promise<ApiResponse<{ verified: boolean; onboarding_id: number; next_step: string }>> => {
+    const response = await apiClient.post<ApiResponse<{ verified: boolean; onboarding_id: number; next_step: string }>>('/auth/otp/verify', {
+      onboarding_id: payload.onboarding_id,
+      code: payload.code,
+      action: 'onboarding_registration',
+    });
+    return response.data;
+  },
+
+  finalizeRegistration: async (payload: FinalizeRegistrationPayload): Promise<ApiResponse<{ token: string; user: User }>> => {
+    const response = await apiClient.post<ApiResponse<{ token: string; user: User }>>('/auth/register/finalize', payload);
+    return response.data;
+  },
+
+  pinLogin: async (payload: { identity: string; pin: string }): Promise<ApiResponse<{ token: string; user: User }>> => {
+    const response = await apiClient.post<ApiResponse<{ token: string; user: User }>>('/auth/login/pin', payload);
     return response.data;
   },
 
@@ -80,12 +121,12 @@ export const authService = {
   },
 
   resetPassword: async (payload: ResetPasswordPayload): Promise<ApiResponse<null>> => {
-    const response = await apiClient.post<ApiResponse<null>>('/auth/password/reset', payload);
+    const response = await apiClient.post<ApiResponse<null>>('/auth/password/forgot/confirm', payload);
     return response.data;
   },
 
   forgotPassword: async (payload: ForgotPasswordPayload): Promise<ApiResponse<null>> => {
-    const response = await apiClient.post<ApiResponse<null>>('/auth/password/reset', payload);
+    const response = await apiClient.post<ApiResponse<null>>('/auth/password/forgot/request', payload);
     return response.data;
   },
 

@@ -47,11 +47,11 @@ class PublicWebsiteApiTest extends TestCase
                 ],
             ]);
 
-        // Self-healed
+        // Self-healed (do not hard-require id=1; MySQL auto-increment can advance across suites)
         $this->assertDatabaseHas('website_settings', [
-            'id' => 1,
             'website_name' => 'GurkyNet',
         ]);
+        $this->assertGreaterThanOrEqual(1, (int) WebsiteSetting::query()->value('id'));
     }
 
     public function test_public_menus_endpoint_returns_success_and_self_heals(): void

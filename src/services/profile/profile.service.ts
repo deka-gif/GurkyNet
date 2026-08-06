@@ -50,8 +50,15 @@ export const profileService = {
   },
 
   changePin: async (oldPin: string, pin: string, pinConfirmation: string): Promise<ApiResponse<Profile>> => {
-    const response = await apiClient.put<ApiResponse<Profile>>('/pin/change', {
+    const response = await apiClient.post<ApiResponse<Profile>>('/account-security/pin/change/request', {
       old_pin: oldPin,
+    });
+    return response.data;
+  },
+
+  confirmChangePin: async (otpCode: string, pin: string, pinConfirmation: string): Promise<ApiResponse<Profile>> => {
+    const response = await apiClient.post<ApiResponse<Profile>>('/account-security/pin/change/confirm', {
+      otp_code: otpCode,
       pin,
       pin_confirmation: pinConfirmation,
     });
@@ -59,12 +66,19 @@ export const profileService = {
   },
 
   forgotPin: async (payload: {
-    phone_number: string;
-    otp: string;
+    email: string;
+  }): Promise<ApiResponse<Profile>> => {
+    const response = await apiClient.post<ApiResponse<Profile>>('/auth/pin/forgot/request', payload);
+    return response.data;
+  },
+
+  confirmForgotPin: async (payload: {
+    email: string;
+    otp_code: string;
     pin: string;
     pin_confirmation: string;
   }): Promise<ApiResponse<Profile>> => {
-    const response = await apiClient.post<ApiResponse<Profile>>('/pin/forgot', payload);
+    const response = await apiClient.post<ApiResponse<Profile>>('/auth/pin/forgot/confirm', payload);
     return response.data;
   },
 

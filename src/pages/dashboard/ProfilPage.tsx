@@ -63,7 +63,6 @@ export const ProfilPage = () => {
     try {
       const res = await profileService.updateProfile({
         name,
-        email,
         phone_number: phone,
       });
 

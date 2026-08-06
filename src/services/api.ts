@@ -142,6 +142,11 @@ apiClient.interceptors.request.use(
       }
     }
 
+    if (config.headers) {
+      config.headers['X-Device-UUID'] = storageService.getDeviceUuid();
+      config.headers['X-Platform'] = 'web';
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

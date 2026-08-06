@@ -4,6 +4,7 @@ import { Hero } from '../../components/sections/Hero';
 import { About } from '../../components/sections/About';
 import { Features } from '../../components/sections/Features';
 import { Services } from '../../components/sections/Services';
+import { FeaturedProducts } from '../../components/sections/FeaturedProducts';
 import { HowItWorks } from '../../components/sections/HowItWorks';
 import { AppPreview } from '../../components/sections/AppPreview';
 import { DownloadApp } from '../../components/sections/DownloadApp';
@@ -18,16 +19,11 @@ export const HomePage = () => {
     fetchSections, 
     loadingSections, 
     errorSections,
-    fetchSettings,
-    fetchPages,
-    fetchBanners
+    fetchHomepage,
   } = useWebsiteStore();
 
   useEffect(() => {
-    fetchSections();
-    fetchSettings();
-    fetchPages();
-    fetchBanners();
+    fetchHomepage();
   }, []);
 
   if (loadingSections) {
@@ -72,6 +68,7 @@ export const HomePage = () => {
         <About />
         <Features />
         <Services />
+        <FeaturedProducts />
         <HowItWorks />
         <AppPreview />
         <DownloadApp />
@@ -103,13 +100,9 @@ export const HomePage = () => {
               </React.Fragment>
             );
           case 'categories':
+            return <Services key={sec.id} />;
           case 'product_grid':
-            return (
-              <React.Fragment key={sec.id}>
-                <Services key={`${sec.id}-services`} />
-                <HowItWorks key={`${sec.id}-how`} />
-              </React.Fragment>
-            );
+            return <FeaturedProducts key={sec.id} />;
           case 'banner':
             return (
               <React.Fragment key={sec.id}>
@@ -121,6 +114,8 @@ export const HomePage = () => {
             return <Faq key={sec.id} />;
           case 'announcement':
             return <Contact key={sec.id} />;
+          case 'footer':
+            return <CallToAction key={sec.id} />;
           default:
             return null;
         }

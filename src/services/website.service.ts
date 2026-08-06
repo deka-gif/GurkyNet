@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { ApiResponse, WebsiteSetting, HomepageSection, WebsiteMenu, StaticPage, PublicBanner } from '../types';
+import { ApiResponse, WebsiteSetting, HomepageSection, WebsiteMenu, StaticPage, PublicBanner, HomepagePayload } from '../types';
 
 // Helper to convert setting keys from Camel to Snake
 function settingToBackend(s: Partial<WebsiteSetting>): any {
@@ -152,8 +152,8 @@ export const websiteService = {
     }
   },
 
-  async getPublicHomepage(): Promise<ApiResponse<any>> {
-    const res = await apiClient.get<ApiResponse<any>>('/public/homepage');
+  async getPublicHomepage(): Promise<ApiResponse<HomepagePayload>> {
+    const res = await apiClient.get<ApiResponse<HomepagePayload>>('/public/homepage');
     return res.data;
   },
 

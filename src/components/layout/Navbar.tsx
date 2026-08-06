@@ -154,15 +154,6 @@ export const Navbar = () => {
                 );
               })}
 
-              {/* Mandatory Dev tools Links */}
-              <li>
-                <Link
-                  to="/docs"
-                  className="text-indigo-600 hover:text-indigo-700 font-extrabold transition-colors text-sm bg-indigo-50 px-3 py-1.5 rounded-full"
-                >
-                  API Docs
-                </Link>
-              </li>
             </ul>
 
             <div className="flex items-center gap-3">
@@ -268,17 +259,6 @@ export const Navbar = () => {
                   </li>
                 );
               })}
-
-              {/* Mandatory Mobile Dev tools Links */}
-              <li className="flex gap-4 pt-2">
-                <Link
-                  to="/docs"
-                  className="flex-1 text-center text-indigo-600 font-bold text-sm bg-indigo-50 py-2.5 rounded-xl"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  API Docs
-                </Link>
-              </li>
 
               <li className="pt-4 border-t border-gray-100 flex flex-col gap-3">
                 <Link

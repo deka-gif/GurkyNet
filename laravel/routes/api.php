@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\v1\Admin\MediaController;
 use App\Http\Controllers\Api\v1\AccountController;
 use App\Http\Controllers\Api\v1\AccountContentController;
 use App\Http\Controllers\Api\v1\ComplaintController;
+use App\Http\Controllers\Api\v1\AccountSecurityController;
 use App\Http\Controllers\Api\v1\ProfileController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
 use App\Http\Controllers\Api\v1\Public\PublicMediaController;
@@ -101,7 +102,13 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     Route::middleware('throttle:20,1')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         Route::post('/auth/login', [AuthController::class, 'login']);
+        Route::post('/auth/login/pin', [AuthController::class, 'pinLogin']);
+        Route::post('/auth/register/finalize', [AuthController::class, 'finalizeRegistration']);
         Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
+        Route::post('/auth/password/forgot/request', [AccountSecurityController::class, 'requestForgotPassword']);
+        Route::post('/auth/password/forgot/confirm', [AccountSecurityController::class, 'confirmForgotPassword']);
+        Route::post('/auth/pin/forgot/request', [AccountSecurityController::class, 'requestForgotPin']);
+        Route::post('/auth/pin/forgot/confirm', [AccountSecurityController::class, 'confirmForgotPin']);
     });
 
     Route::middleware('throttle:5,1')->group(function () {
@@ -134,6 +141,17 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::post('/pin/create', [AccountController::class, 'createPin']);
         Route::put('/pin/change', [AccountController::class, 'changePin']);
         Route::post('/pin/forgot', [AccountController::class, 'forgotPin']);
+        Route::prefix('account-security')->group(function () {
+            Route::post('/password/change/request', [AccountSecurityController::class, 'requestPasswordChange']);
+            Route::post('/password/change/confirm', [AccountSecurityController::class, 'confirmPasswordChange']);
+            Route::post('/pin/change/request', [AccountSecurityController::class, 'requestPinChange']);
+            Route::post('/pin/change/confirm', [AccountSecurityController::class, 'confirmPinChange']);
+            Route::post('/email/change/request', [AccountSecurityController::class, 'requestEmailChange']);
+            Route::post('/email/change/verify-old', [AccountSecurityController::class, 'verifyEmailChangeOld']);
+            Route::post('/email/change/verify-new', [AccountSecurityController::class, 'verifyEmailChangeNew']);
+            Route::post('/phone/change/request', [AccountSecurityController::class, 'requestPhoneChange']);
+            Route::post('/phone/change/confirm', [AccountSecurityController::class, 'confirmPhoneChange']);
+        });
 
         // Complaint Center (end-user)
         Route::get('/complaints', [ComplaintController::class, 'index']);
@@ -218,6 +236,10 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         // Marketing Administration Module
         Route::prefix('admin/marketing')->middleware([EnsureRole::class . ':marketing,owner'])->group(function () {
             Route::get('/dashboard', [MarketingController::class, 'dashboard']);
+            Route::get('/featured-products', [MarketingController::class, 'featuredProducts']);
+            Route::post('/featured-products', [MarketingController::class, 'storeFeaturedProduct']);
+            Route::put('/featured-products/{id}', [MarketingController::class, 'updateFeaturedProduct']);
+            Route::delete('/featured-products/{id}', [MarketingController::class, 'destroyFeaturedProduct']);
 
             Route::get('/banners', [MarketingController::class, 'banners']);
             Route::post('/banners', [MarketingController::class, 'storeBanner']);

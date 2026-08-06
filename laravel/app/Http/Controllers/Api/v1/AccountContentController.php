@@ -18,7 +18,7 @@ class AccountContentController extends Controller
 
     public function help(): JsonResponse
     {
-        $settings = WebsiteSetting::query()->pluck('value', 'key');
+        $settings = WebsiteSetting::query()->first();
         $faqs = Faq::query()->orderBy('order')->orderBy('id')->get(['id', 'question', 'answer', 'order']);
 
         return $this->successResponse('Help Center berhasil dimuat.', [
@@ -27,12 +27,12 @@ class AccountContentController extends Controller
                 'question' => $f->question,
                 'answer' => $f->answer,
             ])->all(),
-            'whatsapp' => $settings['support_whatsapp'] ?? $settings['whatsapp'] ?? null,
-            'telegram' => $settings['support_telegram'] ?? $settings['telegram'] ?? null,
-            'email' => $settings['support_email'] ?? $settings['contact_email'] ?? null,
-            'phone' => $settings['support_phone'] ?? $settings['contact_phone'] ?? null,
-            'operatingHours' => $settings['operating_hours'] ?? $settings['support_hours'] ?? null,
-            'contact' => $settings['contact_address'] ?? null,
+            'whatsapp' => $settings?->whatsapp,
+            'telegram' => null,
+            'email' => $settings?->support_email,
+            'phone' => $settings?->support_phone,
+            'operatingHours' => null,
+            'contact' => $settings?->office_address,
         ]);
     }
 
@@ -49,17 +49,17 @@ class AccountContentController extends Controller
     public function about(): JsonResponse
     {
         $page = StaticPage::query()->where('slug', 'about-us')->first();
-        $settings = WebsiteSetting::query()->pluck('value', 'key');
+        $settings = WebsiteSetting::query()->first();
 
         return $this->successResponse('About berhasil dimuat.', [
             'title' => $page?->title ?? (config('app.name') ?: 'GurkyNet'),
             'content' => $page?->content ?? '',
-            'appName' => $settings['app_name'] ?? config('app.name'),
-            'version' => $settings['app_version'] ?? config('app.version', config('app.env') === 'production' ? '1.0.0' : 'dev'),
-            'buildNumber' => $settings['build_number'] ?? config('app.build', null),
-            'developer' => $settings['developer'] ?? $settings['company_name'] ?? null,
-            'website' => $settings['website_url'] ?? $settings['site_url'] ?? null,
-            'email' => $settings['support_email'] ?? $settings['contact_email'] ?? null,
+            'appName' => $settings?->website_name ?? config('app.name'),
+            'version' => config('app.version', config('app.env') === 'production' ? '1.0.0' : 'dev'),
+            'buildNumber' => config('app.build', null),
+            'developer' => null,
+            'website' => config('app.url'),
+            'email' => $settings?->support_email,
         ]);
     }
 

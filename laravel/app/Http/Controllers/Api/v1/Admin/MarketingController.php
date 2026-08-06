@@ -22,6 +22,10 @@ use App\Http\Resources\BannerResource;
 use App\Http\Resources\PromotionResource;
 use App\Http\Resources\VoucherResource;
 use App\Http\Resources\AnnouncementResource;
+use App\Http\Resources\ProductResource;
+use App\Models\HomepageFeaturedProduct;
+use App\Models\Product;
+use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class MarketingController extends Controller
@@ -300,5 +304,93 @@ class MarketingController extends Controller
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
+    }
+
+    public function featuredProducts(Request $request): JsonResponse
+    {
+        $items = HomepageFeaturedProduct::query()
+            ->with([
+                'product.category',
+                'product.provider',
+                'product.productProvider',
+                'product.providerSkus.productProvider',
+            ])
+            ->orderBy('display_order')
+            ->get();
+
+        return $this->successResponse('Daftar featured products berhasil dimuat.', $items->map(function (HomepageFeaturedProduct $item) {
+            return [
+                'id' => $item->id,
+                'display_order' => (int) $item->display_order,
+                'is_active' => (bool) $item->is_active,
+                'product' => $item->product ? (new ProductResource($item->product))->resolve() : null,
+                'product_id' => $item->product_id,
+            ];
+        })->values());
+    }
+
+    public function storeFeaturedProduct(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'display_order' => 'nullable|integer|min:1',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $featured = HomepageFeaturedProduct::updateOrCreate(
+            ['product_id' => $data['product_id']],
+            [
+                'display_order' => $data['display_order'] ?? (HomepageFeaturedProduct::max('display_order') + 1),
+                'is_active' => $data['is_active'] ?? true,
+            ]
+        )->load([
+            'product.category',
+            'product.provider',
+            'product.productProvider',
+            'product.providerSkus.productProvider',
+        ]);
+
+        return $this->successResponse('Featured product berhasil ditambahkan.', [
+            'id' => $featured->id,
+            'display_order' => (int) $featured->display_order,
+            'is_active' => (bool) $featured->is_active,
+            'product' => $featured->product ? (new ProductResource($featured->product))->resolve() : null,
+            'product_id' => $featured->product_id,
+        ], 201);
+    }
+
+    public function updateFeaturedProduct(string|int $id, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'display_order' => 'nullable|integer|min:1',
+            'is_active' => 'nullable|boolean',
+            'product_id' => 'nullable|exists:products,id',
+        ]);
+
+        /** @var HomepageFeaturedProduct $featured */
+        $featured = HomepageFeaturedProduct::query()->findOrFail($id);
+        $featured->fill($data)->save();
+        $featured->load([
+            'product.category',
+            'product.provider',
+            'product.productProvider',
+            'product.providerSkus.productProvider',
+        ]);
+
+        return $this->successResponse('Featured product berhasil diperbarui.', [
+            'id' => $featured->id,
+            'display_order' => (int) $featured->display_order,
+            'is_active' => (bool) $featured->is_active,
+            'product' => $featured->product ? (new ProductResource($featured->product))->resolve() : null,
+            'product_id' => $featured->product_id,
+        ]);
+    }
+
+    public function destroyFeaturedProduct(string|int $id): JsonResponse
+    {
+        $featured = HomepageFeaturedProduct::query()->findOrFail($id);
+        $featured->delete();
+
+        return $this->successResponse('Featured product berhasil dihapus.');
     }
 }

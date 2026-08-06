@@ -41,35 +41,12 @@ const initialFaqs = [
 
 export const Faq = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
-  const { pages, fetchPages } = useWebsiteStore();
+  const { faqs, fetchHomepage } = useWebsiteStore();
 
   useEffect(() => {
-    fetchPages();
+    void fetchHomepage();
   }, []);
-
-  // Parse FAQs from dynamic static page with slug 'faq'
-  const faqPage = pages.find(p => p.slug === 'faq' || p.slug === 'faqs');
-  
-  let faqs = initialFaqs;
-  if (faqPage && faqPage.content) {
-    const parsedFaqs: { question: string; answer: string }[] = [];
-    const sections = faqPage.content.split(/(?:^|\n)\s*(?:##|###)\s+/);
-    
-    sections.forEach((section) => {
-      const lines = section.trim().split('\n');
-      if (lines.length >= 2) {
-        const question = lines[0].replace(/^[\s#*:-]+/, '').trim();
-        const answer = lines.slice(1).join('\n').trim();
-        if (question && answer) {
-          parsedFaqs.push({ question, answer });
-        }
-      }
-    });
-
-    if (parsedFaqs.length > 0) {
-      faqs = parsedFaqs;
-    }
-  }
+  const resolvedFaqs = faqs.length > 0 ? faqs : initialFaqs;
 
   return (
     <section id="faq" className="py-20 md:py-32 bg-gray-50">
@@ -95,7 +72,7 @@ export const Faq = () => {
         </div>
 
         <div className="space-y-4">
-          {faqs.map((faq, index) => {
+          {resolvedFaqs.map((faq, index) => {
             const isOpen = openIndex === index;
             
             return (

@@ -62,4 +62,9 @@ class Product extends Model
     {
         return $this->hasMany(ProductProviderSku::class, 'product_id');
     }
+
+    public function homepageFeatured(): HasMany
+    {
+        return $this->hasMany(HomepageFeaturedProduct::class, 'product_id');
+    }
 }

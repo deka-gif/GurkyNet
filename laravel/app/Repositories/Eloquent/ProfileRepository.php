@@ -6,6 +6,7 @@ use App\Repositories\Contracts\ProfileRepositoryInterface;
 use App\Models\User;
 use App\Models\ActivityLog;
 use App\Models\LoginLog;
+use App\Models\UserDevice;
 use Illuminate\Support\Facades\Hash;
 
 class ProfileRepository implements ProfileRepositoryInterface
@@ -170,6 +171,10 @@ class ProfileRepository implements ProfileRepositoryInterface
     public function revokeOtherSessions(User $user, string $currentTokenId): bool
     {
         $user->tokens()->where('id', '!=', $currentTokenId)->delete();
+        UserDevice::query()
+            ->where('user_id', $user->id)
+            ->where('device_uuid', '!=', request()->header('X-Device-UUID'))
+            ->update(['is_active' => false]);
 
         ActivityLog::create([
             'user_id' => $user->id,

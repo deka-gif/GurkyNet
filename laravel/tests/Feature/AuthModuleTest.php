@@ -13,7 +13,7 @@ class AuthModuleTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Test successful user registration and wallet creation.
+     * Test successful pending registration onboarding.
      */
     public function test_register_success(): void
     {
@@ -30,29 +30,20 @@ class AuthModuleTest extends TestCase
                 'success',
                 'message',
                 'data' => [
-                    'user' => [
-                        'id',
-                        'name',
-                        'email',
-                        'phone_number',
-                        'role',
-                        'wallet' => [
-                            'id',
-                            'wallet_number',
-                            'balance',
-                            'status',
-                        ],
-                    ],
+                    'onboarding_id',
+                    'email',
+                    'status',
+                    'expires_at',
+                    'user' => ['name', 'email'],
                 ],
             ]);
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('onboarding_attempts', [
             'email' => 'budi@gurkypay.com',
             'phone_number' => '081234567890',
         ]);
-
-        $this->assertDatabaseHas('wallets', [
-            'balance' => '0.00',
+        $this->assertDatabaseMissing('users', [
+            'email' => 'budi@gurkypay.com',
         ]);
     }
 

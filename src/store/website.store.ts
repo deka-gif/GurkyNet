@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { websiteService } from '../services/website.service';
-import { WebsiteSetting, HomepageSection, WebsiteMenu, StaticPage, PublicBanner } from '../types';
+import { WebsiteSetting, HomepageSection, WebsiteMenu, StaticPage, PublicBanner, HomepageCatalogBucket, HomepagePayload } from '../types';
 
 interface WebsiteState {
   settings: WebsiteSetting | null;
@@ -8,6 +8,9 @@ interface WebsiteState {
   menus: WebsiteMenu[];
   pages: StaticPage[];
   banners: PublicBanner[];
+  homepageCategories: HomepageCatalogBucket[];
+  featuredProducts: HomepagePayload['featuredProducts'];
+  faqs: HomepagePayload['faqs'];
   
   loadingSettings: boolean;
   loadingSections: boolean;
@@ -26,6 +29,7 @@ interface WebsiteState {
   fetchMenus: (force?: boolean) => Promise<void>;
   fetchPages: (force?: boolean) => Promise<void>;
   fetchBanners: (force?: boolean) => Promise<void>;
+  fetchHomepage: (force?: boolean) => Promise<void>;
 }
 
 export const useWebsiteStore = create<WebsiteState>((set, get) => ({
@@ -34,6 +38,9 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   menus: [],
   pages: [],
   banners: [],
+  homepageCategories: [],
+  featuredProducts: [],
+  faqs: [],
 
   loadingSettings: false,
   loadingSections: false,
@@ -46,6 +53,42 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   errorMenus: null,
   errorPages: null,
   errorBanners: null,
+  fetchHomepage: async (force = false) => {
+    if (get().settings && get().sections.length > 0 && get().homepageCategories.length > 0 && !force) return;
+    set({
+      loadingSettings: true,
+      loadingSections: true,
+      loadingBanners: true,
+      errorSettings: null,
+      errorSections: null,
+      errorBanners: null,
+    });
+    try {
+      const response = await websiteService.getPublicHomepage();
+      const payload = response.data;
+      set({
+        settings: payload?.settings ?? null,
+        sections: payload?.sections ?? [],
+        banners: payload?.banners ?? [],
+        homepageCategories: payload?.homepageCategories ?? [],
+        featuredProducts: payload?.featuredProducts ?? [],
+        faqs: payload?.faqs ?? [],
+        loadingSettings: false,
+        loadingSections: false,
+        loadingBanners: false,
+      });
+    } catch (err: any) {
+      const message = err?.message || 'Gagal memuat homepage publik.';
+      set({
+        errorSettings: message,
+        errorSections: message,
+        errorBanners: message,
+        loadingSettings: false,
+        loadingSections: false,
+        loadingBanners: false,
+      });
+    }
+  },
 
   fetchSettings: async (force = false) => {
     if (get().settings && !force) return; // Cache hit - avoid duplicate requests!

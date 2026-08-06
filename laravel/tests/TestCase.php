@@ -3,13 +3,19 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 abstract class TestCase extends BaseTestCase
 {
     protected function setUp(): void
     {
+        // Cached bootstrap config/routes from `artisan config:cache` override phpunit.xml
+        // (APP_ENV, DB_CONNECTION, CACHE_STORE, etc.) and poison the suite against MySQL.
+        $this->forgetCachedBootstrapFiles();
+
         parent::setUp();
+        Cache::flush();
 
         // Prevent accidental live Digiflazz/Midtrans HTTP during sync-queue tests.
         // Individual tests may call Http::fake() again to override these defaults.
@@ -45,5 +51,17 @@ abstract class TestCase extends BaseTestCase
                 'transaction_status' => 'settlement',
             ], 200),
         ]);
+    }
+
+    protected function forgetCachedBootstrapFiles(): void
+    {
+        $cacheDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'bootstrap' . DIRECTORY_SEPARATOR . 'cache';
+
+        foreach (['config.php', 'routes-v7.php', 'routes.php', 'events.php'] as $file) {
+            $path = $cacheDir . DIRECTORY_SEPARATOR . $file;
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
     }
 }

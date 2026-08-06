@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Wallet;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class RegisterUserAction
 {
@@ -21,6 +22,18 @@ class RegisterUserAction
         return DB::transaction(function () use ($data) {
             // Create user
             $user = $this->userRepository->create($data);
+
+            if (!empty($data['transaction_pin'])) {
+                $user->forceFill([
+                    'transaction_pin' => Hash::make((string) $data['transaction_pin']),
+                    'pin_updated_at' => now(),
+                    'email_verified_at' => $data['email_verified_at'] ?? now(),
+                ])->save();
+            } elseif (!empty($data['email_verified_at'])) {
+                $user->forceFill([
+                    'email_verified_at' => $data['email_verified_at'],
+                ])->save();
+            }
 
             // Generate unique wallet number: 1042 + random numbers
             $walletNumber = '1042' . mt_rand(1000000000, 9999999999);

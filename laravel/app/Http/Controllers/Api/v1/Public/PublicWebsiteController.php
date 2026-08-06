@@ -16,11 +16,17 @@ use App\Http\Resources\BannerResource;
 use App\Http\Resources\PromotionResource;
 use App\Http\Resources\VoucherResource;
 use App\Http\Resources\AnnouncementResource;
+use App\Http\Resources\CategoryResource;
+use App\Http\Resources\ProductResource;
 use App\Models\BannerPromotion;
 use App\Models\Faq;
+use App\Models\HomepageFeaturedProduct;
 use App\Models\Notification;
 use App\Models\Provider;
 use App\Models\WebsiteSetting;
+use App\Actions\Product\GetCategoryAction;
+use App\Actions\Product\SearchProductAction;
+use App\Services\ProductProviders\LogicalProductKey;
 use App\Services\DigiflazzService;
 use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
@@ -39,6 +45,8 @@ class PublicWebsiteController extends Controller
         protected HomepageSectionAction $sectionAction,
         protected WebsiteMenuAction     $menuAction,
         protected StaticPageAction      $pageAction,
+        protected GetCategoryAction     $categoryAction,
+        protected SearchProductAction   $searchProductAction,
     ) {}
 
     public function settings(): JsonResponse
@@ -151,11 +159,24 @@ class PublicWebsiteController extends Controller
             ->latest()
             ->take(10)
             ->get();
+        $heroSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'hero');
+        $homepageCategories = $this->homepageCatalogBuckets();
+        $featuredProducts = $this->featuredProducts();
+        $faqs = Faq::orderBy('order')->get()->map(fn (Faq $faq) => [
+            'id' => $faq->id,
+            'question' => $faq->question,
+            'answer' => $faq->answer,
+            'order' => (int) $faq->order,
+        ])->values();
 
         return $this->successResponse('Homepage berhasil dimuat.', [
             'settings' => $settings ? new WebsiteSettingResource($settings) : null,
             'sections' => HomepageSectionResource::collection($sections),
             'banners' => BannerResource::collection($banners),
+            'hero' => $heroSection ? new HomepageSectionResource($heroSection) : null,
+            'homepageCategories' => $homepageCategories,
+            'featuredProducts' => ProductResource::collection($featuredProducts),
+            'faqs' => $faqs,
         ]);
     }
 
@@ -331,5 +352,75 @@ class PublicWebsiteController extends Controller
             'total_providers' => $totalProviders,
             'updated_at' => now()->toIso8601String(),
         ]);
+    }
+
+    protected function homepageCatalogBuckets(): array
+    {
+        $familyLabels = [
+            'pulsa' => 'Pulsa',
+            'data' => 'Paket Data',
+            'voucher' => 'Voucher',
+            'pln' => 'PLN',
+            'game' => 'Game',
+            'ewallet' => 'E-Wallet',
+            'tagihan' => 'Tagihan',
+        ];
+
+        $categories = collect($this->categoryAction->execute());
+
+        return collect($familyLabels)->map(function (string $label, string $family) use ($categories) {
+            $category = $categories->first(function ($item) use ($family) {
+                $slug = (string) ($item->slug ?? '');
+
+                return LogicalProductKey::normalizeCategoryFamily($slug) === $family;
+            });
+
+            $productPaginator = $this->searchProductAction->execute([
+                'category' => $family,
+                'per_page' => 8,
+            ]);
+
+            $items = collect($productPaginator->items())->values();
+            $representative = $items->first();
+            $icon = $category?->icon
+                ?? match ($family) {
+                    'pulsa' => 'smartphone',
+                    'data' => 'wifi',
+                    'voucher' => 'gift',
+                    'pln' => 'zap',
+                    'game' => 'play-circle',
+                    'ewallet' => 'briefcase',
+                    'tagihan' => 'credit-card',
+                    default => 'grid',
+                };
+
+            return [
+                'key' => $family,
+                'label' => $label,
+                'category' => $category ? (new CategoryResource($category))->resolve() : null,
+                'slug' => $category?->slug ?? $family,
+                'icon' => $icon,
+                'productCount' => $productPaginator->total(),
+                'products' => ProductResource::collection($items)->resolve(),
+                'previewProduct' => $representative ? (new ProductResource($representative))->resolve() : null,
+            ];
+        })->values()->all();
+    }
+
+    protected function featuredProducts()
+    {
+        return HomepageFeaturedProduct::query()
+            ->with([
+                'product.category',
+                'product.provider',
+                'product.productProvider',
+                'product.providerSkus.productProvider',
+            ])
+            ->where('is_active', true)
+            ->orderBy('display_order')
+            ->get()
+            ->pluck('product')
+            ->filter()
+            ->values();
     }
 }

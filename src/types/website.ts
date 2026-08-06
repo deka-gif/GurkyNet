@@ -1,5 +1,16 @@
 import { Media } from './media';
 
+export interface HomepageProduct {
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  category: string;
+  operatorName: string;
+  status: string;
+  isActive?: boolean;
+}
+
 export interface WebsiteSetting {
   id: number;
   websiteName: string;
@@ -106,5 +117,44 @@ export interface PublicBanner {
   isActive: boolean;
   createdAt?: string;
   lastUpdated?: string;
+}
+
+export interface HomepageCatalogBucket {
+  key: string;
+  label: string;
+  slug: string;
+  icon?: string;
+  productCount: number;
+  category?: {
+    id: number;
+    name: string;
+    slug: string;
+    icon?: string;
+  } | null;
+  products: HomepageProduct[];
+  previewProduct?: HomepageProduct | null;
+}
+
+export interface HomepageFeaturedProduct {
+  id: number;
+  display_order: number;
+  is_active: boolean;
+  product_id: number;
+  product: HomepageProduct | null;
+}
+
+export interface HomepagePayload {
+  settings: WebsiteSetting | null;
+  sections: HomepageSection[];
+  banners: PublicBanner[];
+  hero: HomepageSection | null;
+  homepageCategories: HomepageCatalogBucket[];
+  featuredProducts: HomepageProduct[];
+  faqs: Array<{
+    id: number;
+    question: string;
+    answer: string;
+    order: number;
+  }>;
 }
 

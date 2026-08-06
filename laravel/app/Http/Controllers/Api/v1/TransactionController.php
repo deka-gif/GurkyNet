@@ -352,7 +352,9 @@ class TransactionController extends Controller
         }
 
         $serverKey = (string) (config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
-        if (!app()->environment('testing') && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
+        $isTestRuntime = app()->runningUnitTests() || app()->environment('testing');
+
+        if (!$isTestRuntime && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
             \Illuminate\Support\Facades\Log::error('Midtrans webhook rejected: server key not configured');
             return response()->json([
                 'success' => false,
@@ -360,7 +362,7 @@ class TransactionController extends Controller
             ], 503);
         }
 
-        if (app()->environment('testing') && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
+        if ($isTestRuntime && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
             $serverKey = 'testing_server_key';
         }
         
@@ -368,7 +370,7 @@ class TransactionController extends Controller
         // SHA512(order_id + status_code + gross_amount + ServerKey)
         $expectedSignature = hash('sha512', $orderId . $statusCode . $grossAmount . $serverKey);
         
-        if (!app()->environment('testing') && !hash_equals($expectedSignature, (string) $signatureKey)) {
+        if (!$isTestRuntime && !hash_equals($expectedSignature, (string) $signatureKey)) {
             \Illuminate\Support\Facades\Log::warning('Midtrans Webhook Signature Mismatch', [
                 'order_id' => $orderId,
             ]);

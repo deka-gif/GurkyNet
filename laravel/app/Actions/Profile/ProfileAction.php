@@ -18,9 +18,6 @@ class ProfileAction
 
     public function updateProfile(User $user, array $data): User
     {
-        // Email changes require OTP verification — never mass-update email here.
-        unset($data['email']);
-
         return $this->profileRepository->updateProfile($user, $data);
     }
 }

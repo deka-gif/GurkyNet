@@ -2,13 +2,26 @@ import { motion } from 'motion/react';
 import { Button } from '../ui/Button';
 import { Download, ArrowRight } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
+import { resolveMediaSrc } from '../../utils/mediaUrl';
 
 export const Hero = () => {
   const { settings, sections } = useWebsiteStore();
   const heroSection = sections.find((s) => s.componentType === 'hero');
+  const desktopBg = heroSection?.heroBackgroundMedia ? resolveMediaSrc(heroSection.heroBackgroundMedia) : '';
+  const mobileBg = heroSection?.heroMobileImageMedia ? resolveMediaSrc(heroSection.heroMobileImageMedia) : desktopBg;
+  const illustration = heroSection?.heroIllustrationMedia ? resolveMediaSrc(heroSection.heroIllustrationMedia) : '';
+  const ctaLabel = heroSection?.slug?.includes('download') ? 'Download Aplikasi' : 'Mulai Sekarang';
+  const ctaTarget = heroSection?.slug?.includes('contact') ? '#contact' : '#download-app';
 
   return (
     <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-gray-50 min-h-screen flex items-center">
+      {desktopBg && (
+        <picture className="absolute inset-0 z-0">
+          {mobileBg ? <source media="(max-width: 767px)" srcSet={mobileBg} /> : null}
+          <img src={desktopBg} alt={heroSection?.title || settings?.websiteName || 'GurkyNet'} className="w-full h-full object-cover" />
+        </picture>
+      )}
+      <div className="absolute inset-0 bg-white/78 z-0" />
       {/* Background Decorations */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-200/30 rounded-full blur-3xl" />
@@ -43,18 +56,18 @@ export const Hero = () => {
             </h1>
 
             <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-              {settings?.tagline || 'Top up saldo, beli pulsa, paket data, token PLN, voucher digital, hingga pembayaran tagihan dengan cepat, aman, dan nyaman.'}
+              {heroSection?.description || settings?.tagline || 'Top up saldo, beli pulsa, paket data, token PLN, voucher digital, hingga pembayaran tagihan dengan cepat, aman, dan nyaman.'}
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
               <a
-                href="#download-app"
-                onClick={(e) => { e.preventDefault(); document.getElementById('download-app')?.scrollIntoView({ behavior: 'smooth' }); }}
+                href={ctaTarget}
+                onClick={(e) => { e.preventDefault(); document.getElementById(ctaTarget.replace('#', ''))?.scrollIntoView({ behavior: 'smooth' }); }}
                 className="w-full sm:w-auto"
               >
                 <Button variant="primary" className="w-full">
                   <Download className="w-5 h-5" />
-                  Download Aplikasi
+                  {ctaLabel}
                 </Button>
               </a>
               <a
@@ -85,7 +98,7 @@ export const Hero = () => {
             </div>
           </motion.div>
 
-          {/* Mockup */}
+          {/* Mockup / CMS Illustration */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
@@ -93,7 +106,12 @@ export const Hero = () => {
             className="relative mx-auto lg:ml-auto w-full max-w-sm lg:max-w-md"
             style={{ perspective: "1000px" }}
           >
-            {/* Phone Frame Placeholder */}
+            {illustration ? (
+              <div className="rounded-[2.5rem] overflow-hidden border border-white/60 shadow-2xl bg-white/70 backdrop-blur-sm">
+                <img src={illustration} alt={heroSection?.title || 'Hero'} className="w-full h-full object-cover aspect-[4/5]" />
+              </div>
+            ) : (
+            /* Phone Frame Placeholder */
             <div
               className="relative rounded-[2.5rem] border-[8px] border-gray-900 bg-gray-900 shadow-2xl overflow-hidden aspect-[9/19] flex flex-col transition-transform duration-700"
               style={{ transform: "rotateY(-10deg) rotateX(5deg)" }}
@@ -143,6 +161,7 @@ export const Hero = () => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Floating Elements for 3D effect */}
             <motion.div
