@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Wallet, 
@@ -22,7 +22,7 @@ import { useWalletStore } from '../../store/wallet.store';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { buildCreatePinUrl, PENDING_WALLET_ACTION_KEY } from '../../utils/pinGate';
-import { formatIDR } from '../../utils/currency';
+import { caretFromDigitIndex, formatIDR, formatIDRInput, parseIDRDigits } from '../../utils/currency';
 import { PaymentPlaceholderModal, PaymentPlaceholderKind } from '../../components/wallet/PaymentPlaceholderModal';
 
 declare global {
@@ -38,9 +38,11 @@ export const WalletPage = () => {
 
   const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>('index');
   
-  // States for Top Up
+  // States for Top Up — topupAmount stores pure digits (e.g. "250000")
   const [topupAmount, setTopupAmount] = useState<string>('');
   const [topupMethod, setTopupMethod] = useState<string>('qris');
+  const topupAmountInputRef = useRef<HTMLInputElement>(null);
+  const topupCaretDigitsRef = useRef<number | null>(null);
   
   // States for Transfer
   const [transferType, setTransferType] = useState<'bank' | 'p2p'>('p2p');
@@ -95,10 +97,29 @@ export const WalletPage = () => {
     setPaymentModalOpen(true);
   };
 
+  // Restore caret after IDR reformat so the cursor does not jump to the end.
+  useLayoutEffect(() => {
+    if (topupCaretDigitsRef.current === null || !topupAmountInputRef.current) return;
+    const el = topupAmountInputRef.current;
+    const formatted = formatIDRInput(topupAmount);
+    const pos = caretFromDigitIndex(formatted, topupCaretDigitsRef.current);
+    el.setSelectionRange(pos, pos);
+    topupCaretDigitsRef.current = null;
+  }, [topupAmount]);
+
+  const handleTopupAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = e.target;
+    const caret = el.selectionStart ?? el.value.length;
+    const digitsBeforeCaret = el.value.slice(0, caret).replace(/\D/g, '').length;
+    const digits = parseIDRDigits(el.value);
+    topupCaretDigitsRef.current = Math.min(digitsBeforeCaret, digits.length);
+    setTopupAmount(digits);
+  };
+
   const handleTopupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseInt(topupAmount);
-    if (isNaN(amount) || amount < 10000) {
+    const amount = Number(topupAmount);
+    if (!topupAmount || !Number.isFinite(amount) || amount < 10000) {
       setErrorMsg('Minimal top up adalah Rp10.000');
       return;
     }
@@ -515,13 +536,15 @@ export const WalletPage = () => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-gray-700">Atau Masukkan Nominal Manual</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-extrabold text-gray-400">Rp</span>
                       <input 
-                        type="number"
-                        placeholder="Minimal Rp 10.000"
-                        value={topupAmount}
-                        onChange={(e) => setTopupAmount(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+                        ref={topupAmountInputRef}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="Minimal Rp10.000"
+                        value={formatIDRInput(topupAmount)}
+                        onChange={handleTopupAmountChange}
+                        className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
                       />
                     </div>
                   </div>
