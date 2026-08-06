@@ -40,6 +40,11 @@ import { useTransactionStore } from '../../store/transaction.store';
 import { useNotificationStore } from '../../store/notification.store';
 import { Transaction, Banner } from '../../types';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import {
+  isFailedStatus,
+  isPendingStatus,
+  isSuccessStatus,
+} from '../../utils/transactionStatus';
 
 export const DashboardHomePage = () => {
   const navigate = useNavigate();
@@ -595,9 +600,9 @@ export const DashboardHomePage = () => {
                 </div>
               ) : (
                 (Array.isArray(transactions) ? transactions : []).slice(0, 5).map((tx) => {
-                  const isSuccess = tx.status === 'sukses';
-                  const isPending = tx.status === 'pending';
-                  const isFailed = tx.status === 'gagal';
+                  const isSuccess = isSuccessStatus(tx.status);
+                  const isPending = isPendingStatus(tx.status);
+                  const isFailed = isFailedStatus(tx.status);
 
                   return (
                     <div
@@ -755,7 +760,7 @@ export const DashboardHomePage = () => {
 
               {/* Status Badge */}
               <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-2xl mb-4 border border-gray-100">
-                {selectedTransaction.status === 'sukses' || selectedTransaction.status === 'success' ? (
+                {isSuccessStatus(selectedTransaction.status) ? (
                   <>
                     <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
                     <div>
@@ -763,7 +768,7 @@ export const DashboardHomePage = () => {
                       <div className="text-[10px] text-green-700/80">Pembayaran telah terverifikasi dan layanan telah terkirim.</div>
                     </div>
                   </>
-                ) : selectedTransaction.status === 'pending' ? (
+                ) : isPendingStatus(selectedTransaction.status) ? (
                   <>
                     <Clock className="w-5 h-5 text-amber-600 shrink-0" />
                     <div>

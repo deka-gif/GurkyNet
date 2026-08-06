@@ -19,9 +19,11 @@ import {
 } from 'lucide-react';
 import { useWalletStore } from '../store/wallet.store';
 import { useTransactionStore } from '../store/transaction.store';
+import { useNotificationStore } from '../store/notification.store';
 import { transactionService } from '../services/transaction/transaction.service';
 import { useAuth } from '../hooks/useAuth';
 import { buildCreatePinUrl, savePendingCheckout } from '../utils/pinGate';
+import { isFailedStatus, isSuccessStatus } from '../utils/transactionStatus';
 
 // Dynamic transaction properties
 export interface CheckoutData {
@@ -46,8 +48,9 @@ type CheckoutStep = 'SUMMARY' | 'CONFIRM' | 'PIN' | 'LOADING' | 'RESULT';
 
 export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose, onSuccess, initialStep = 'SUMMARY' }) => {
   const { wallet, deductBalance, fetchWallet } = useWalletStore();
-  const { createTransaction, fetchTransactions } = useTransactionStore();
+  const { createTransaction, fetchTransactions, upsertTransaction } = useTransactionStore();
   const { user, fetchUser } = useAuth();
+  const { fetchNotifications } = useNotificationStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -82,11 +85,12 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
   const applySettledUi = async (trx: any) => {
     const status = String(trx?.status || 'pending').toLowerCase();
+    upsertTransaction(trx);
     setCreatedTrx(trx);
-    if (status === 'failed' || status === 'gagal' || status === 'cancelled' || status === 'canceled') {
+    if (isFailedStatus(status)) {
       setFinalStatus('gagal');
       setFailureMessage(trx.notes || trx.note || 'Transaksi gagal diproses.');
-    } else if (status === 'success' || status === 'sukses') {
+    } else if (isSuccessStatus(status)) {
       setFinalStatus('sukses');
       setFailureMessage(null);
     } else {
@@ -104,6 +108,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
     fetchWallet();
     void fetchTransactions();
+    void fetchNotifications();
   };
 
   /** Poll backend until VIP status sync settles SUCCESS/FAILED (aligned with 60s timeout ladder). */

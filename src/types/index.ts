@@ -60,8 +60,9 @@ export interface Transaction {
   targetNo: string;
   amount: number;
   date: string;
-  status: 'sukses' | 'success' | 'pending' | 'gagal';
+  status: 'sukses' | 'success' | 'pending' | 'gagal' | 'failed' | 'cancelled';
   note?: string;
+  notes?: string;
 }
 
 export interface Notification {

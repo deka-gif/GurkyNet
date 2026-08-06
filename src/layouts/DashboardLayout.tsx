@@ -38,7 +38,6 @@ import {
   Gamepad2,
   Settings,
   Menu,
-  Zap
 } from 'lucide-react';
 
 import { storageService } from '../services/storage.service';
@@ -82,6 +81,14 @@ export const DashboardLayout = () => {
     fetchNotifications();
     fetchSettings();
   }, [fetchWallet, fetchNotifications, fetchSettings]);
+
+  // Soft-poll notifications so badge + history stay aligned with backend settlement.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchNotifications();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [fetchNotifications]);
 
   // Redirect if session is cleared manually
   useEffect(() => {
@@ -447,7 +454,13 @@ export const DashboardLayout = () => {
             {/* Notification Badge Button */}
             <div className="relative">
               <button 
-                onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                onClick={() => {
+                  const next = !isNotificationOpen;
+                  setIsNotificationOpen(next);
+                  if (next) {
+                    void fetchNotifications();
+                  }
+                }}
                 className="w-10 h-10 rounded-2xl bg-gray-50 hover:bg-gray-100 border border-gray-100 flex items-center justify-center text-gray-600 transition-colors relative"
                 aria-label="Notifikasi"
               >
