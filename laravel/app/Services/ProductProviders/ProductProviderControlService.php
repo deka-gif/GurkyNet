@@ -46,17 +46,32 @@ class ProductProviderControlService
     public function toCard(ProductProvider $p): array
     {
         $api = strtolower((string) ($p->api_status ?? 'unknown'));
-        // not_configured must win over disabled/offline so missing env is never shown as OFFLINE.
-        $statusLabel = match (true) {
-            $api === 'not_configured' => 'NOT_CONFIGURED',
-            !$p->is_active => 'OFFLINE',
-            $api === 'online' => 'ONLINE',
-            $api === 'degraded' => 'DEGRADED',
-            $api === 'auth_failed' => 'AUTH_FAILED',
-            $api === 'timeout' => 'TIMEOUT',
-            default => 'OFFLINE',
+        // API status is health-only — never derived from is_active (power).
+        $statusLabel = match ($api) {
+            'online' => 'ONLINE',
+            'degraded', 'syncing' => 'SYNCING',
+            'auth_failed' => 'AUTH ERROR',
+            'timeout' => 'TIMEOUT',
+            'not_configured' => 'NOT CONFIGURED',
+            'no_response', 'unknown' => 'NO RESPONSE',
+            'offline' => 'OFFLINE',
+            default => strtoupper(str_replace('_', ' ', $api)),
         };
-        $isOnline = $p->is_active && in_array($api, ['online', 'degraded'], true);
+        $healthColor = strtolower((string) ($p->health_color ?? 'yellow'));
+        if (!in_array($healthColor, ['green', 'yellow', 'red'], true)) {
+            $healthColor = match ($api) {
+                'online' => 'green',
+                'degraded', 'syncing', 'timeout' => 'yellow',
+                default => 'red',
+            };
+        }
+        // Friendly health label (dot + text) — never "Health Yellow/Green/Red".
+        $healthLabel = match ($healthColor) {
+            'green' => 'Online',
+            'yellow' => 'Syncing',
+            default => 'Offline',
+        };
+        $apiOnline = in_array($api, ['online', 'degraded', 'syncing'], true);
 
         return [
             'id' => $p->id,
@@ -67,7 +82,8 @@ class ProductProviderControlService
             'status' => $statusLabel,
             'priority' => (int) $p->priority,
             'apiStatus' => $p->api_status,
-            'healthColor' => $p->health_color,
+            'healthColor' => $healthColor,
+            'healthLabel' => $healthLabel,
             'balance' => $p->balance !== null ? (float) $p->balance : null,
             'productCount' => (int) ($p->product_count ?? ProductProviderSku::where('product_provider_id', $p->id)->count()),
             'lastSyncAt' => optional($p->last_sync_at)?->toIso8601String(),
@@ -80,7 +96,8 @@ class ProductProviderControlService
             'lastFailureAt' => optional($p->last_failure_at)?->toIso8601String(),
             'lastError' => $p->last_error,
             'isPrimary' => (int) $p->priority === 1,
-            'online' => $isOnline,
+            'online' => $apiOnline,
+            'apiWarning' => (bool) $p->is_active && !$apiOnline,
         ];
     }
 
@@ -125,7 +142,7 @@ class ProductProviderControlService
             'model api_status' => $provider->api_status,
         ]);
 
-        $this->audit($provider, 'enable', true, 'Provider enabled');
+        $this->audit($provider, 'enable', true, 'Provider power ON — products visible in catalog');
 
         $fresh = $provider->fresh();
         $dbRow = DB::table('product_providers')->where('id', $provider->id)->first(['is_active', 'api_status']);
@@ -152,9 +169,8 @@ class ProductProviderControlService
             'Current model api_status' => $provider->api_status,
         ]);
 
+        // Power OFF only — do not mutate api_status / health_color.
         $provider->is_active = false;
-        $provider->api_status = 'offline';
-        $provider->health_color = 'yellow';
 
         Log::info('EXEC TRACE — Before save() Disable', [
             'Provider ID' => $provider->id,
@@ -186,7 +202,7 @@ class ProductProviderControlService
             'model api_status' => $provider->api_status,
         ]);
 
-        $this->audit($provider, 'disable', true, 'Provider disabled — traffic auto-switches to next priority');
+        $this->audit($provider, 'disable', true, 'Provider power OFF — products hidden from catalog');
 
         $fresh = $provider->fresh();
         $dbRow = DB::table('product_providers')->where('id', $provider->id)->first(['is_active', 'api_status']);
@@ -258,15 +274,10 @@ class ProductProviderControlService
     /**
      * Sync catalog for a specific product provider.
      * Digiflazz uses existing sync pipeline; others require their own adapter sync.
+     * Power (is_active) does not gate sync — operators may prepare catalog while hidden.
      */
     public function syncNow(ProductProvider $provider, array $options = []): array
     {
-        if (!$provider->is_active) {
-            throw ValidationException::withMessages([
-                'provider' => ['Provider dinonaktifkan. Aktifkan terlebih dahulu sebelum sync.'],
-            ]);
-        }
-
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
             $result = $this->syncDigiflazz->execute($options);
             $provider->forceFill([

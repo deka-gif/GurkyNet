@@ -53,7 +53,7 @@ class ProductProviderControlController extends Controller
         $fresh = $service->enable($provider);
         $card = $service->toCard($fresh);
 
-        $response = $this->successResponse('Product provider diaktifkan.', $card);
+        $response = $this->successResponse('Product provider power ON. Products visible in catalog.', $card);
 
         Log::info('EXEC TRACE — RETURN JSON Enable', [
             'Provider ID' => $fresh->id,
@@ -86,7 +86,7 @@ class ProductProviderControlController extends Controller
         $card = $service->toCard($fresh);
 
         $response = $this->successResponse(
-            'Product provider dinonaktifkan. Trafik otomatis dialihkan ke provider aktif berikutnya.',
+            'Product provider power OFF. Products hidden from catalog.',
             $card
         );
 

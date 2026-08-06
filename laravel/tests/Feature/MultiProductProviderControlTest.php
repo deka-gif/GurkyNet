@@ -73,6 +73,88 @@ class MultiProductProviderControlTest extends TestCase
         $this->assertGreaterThan(1, (int) $digi->fresh()->priority);
     }
 
+    public function test_power_off_does_not_mutate_api_status(): void
+    {
+        $this->actingAsOps();
+
+        $digi = ProductProvider::digiflazz();
+        $this->assertNotNull($digi);
+
+        $digi->update([
+            'is_active' => true,
+            'api_status' => 'online',
+            'health_color' => 'green',
+        ]);
+
+        $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$digi->id}/disable")
+            ->assertOk();
+
+        $fresh = $digi->fresh();
+        $this->assertFalse((bool) $fresh->is_active);
+        $this->assertSame('online', $fresh->api_status);
+        $this->assertSame('green', $fresh->health_color);
+
+        $card = $res->json('data');
+        $this->assertFalse($card['enabled']);
+        $this->assertSame('ONLINE', $card['status']);
+        $this->assertSame('Online', $card['healthLabel']);
+        $this->assertFalse($card['apiWarning']);
+    }
+
+    public function test_power_on_with_api_offline_keeps_products_flag_and_warns(): void
+    {
+        $this->actingAsOps();
+
+        $digi = ProductProvider::digiflazz();
+        $this->assertNotNull($digi);
+
+        $digi->update([
+            'is_active' => false,
+            'api_status' => 'offline',
+            'health_color' => 'red',
+        ]);
+
+        $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$digi->id}/enable")
+            ->assertOk();
+
+        $fresh = $digi->fresh();
+        $this->assertTrue((bool) $fresh->is_active);
+        $this->assertSame('offline', $fresh->api_status);
+
+        $card = $res->json('data');
+        $this->assertTrue($card['enabled']);
+        $this->assertSame('OFFLINE', $card['status']);
+        $this->assertSame('Offline', $card['healthLabel']);
+        $this->assertTrue($card['apiWarning']);
+    }
+
+    public function test_sync_allowed_while_power_off_and_does_not_force_power_on(): void
+    {
+        $this->actingAsOps();
+
+        $digi = ProductProvider::digiflazz();
+        $this->assertNotNull($digi);
+        $digi->update(['is_active' => false, 'api_status' => 'online', 'health_color' => 'green']);
+
+        $this->mock(\App\Actions\Admin\Operations\SyncDigiflazzCatalogAction::class, function ($mock) {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->andReturn([
+                    'success' => true,
+                    'message' => 'Sync ok while power off',
+                    'synced_count' => 3,
+                    'failed_count' => 0,
+                ]);
+        });
+
+        $res = $this->postJson("/api/v1/admin/operations/product-provider-control/{$digi->id}/sync")
+            ->assertOk();
+
+        $this->assertFalse((bool) $digi->fresh()->is_active);
+        $this->assertStringContainsString('Sync ok', (string) $res->json('message'));
+        $this->assertFalse($res->json('data.provider.enabled'));
+    }
+
     public function test_sku_mapping_and_priority_selection(): void
     {
         $digi = ProductProvider::digiflazz();

@@ -397,7 +397,7 @@ class SyncVipCatalogAction
             'health_color' => 'green',
             'avg_response_ms' => $totalLatency > 0 ? $totalLatency : $vipProvider->avg_response_ms,
             'last_error' => null,
-            'is_active' => true,
+            // Do not touch is_active — Power is visibility-only; sync must not force Power ON.
         ])->save();
 
         $result = [

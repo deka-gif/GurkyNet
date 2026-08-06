@@ -50,7 +50,8 @@ class ProductProviderHealthService
             'adapter_class' => $adapter::class,
         ]);
 
-        // Credential / API probe first so missing config is NOT CONFIGURED (never OFFLINE).
+        // Always probe API — power (is_active) must never override health status.
+        // Power OFF + API Online is valid: products hidden, API still healthy.
         $result = $adapter->healthCheck();
         $probeStatus = (string) ($result['api_status'] ?? '');
 
@@ -71,27 +72,6 @@ class ProductProviderHealthService
             $this->log($provider, false, $result['latency_ms'] ?? null, $message, [
                 'api_status' => 'not_configured',
                 'missing' => $result['raw']['missing'] ?? null,
-            ]);
-
-            return $provider->fresh();
-        }
-
-        // Disabled providers are marked offline for routing only after config is present.
-        if (!$provider->is_active) {
-            Log::info('EXEC TRACE — HealthService early return: Provider disabled', [
-                'provider_code' => $provider->code,
-                'is_active' => $provider->is_active,
-            ]);
-
-            $provider->forceFill([
-                'api_status' => 'offline',
-                'health_color' => 'yellow',
-                'last_health_check_at' => now(),
-                'last_error' => 'Provider disabled',
-            ])->save();
-
-            $this->log($provider, false, null, 'Provider disabled', [
-                'api_status' => 'offline',
             ]);
 
             return $provider->fresh();
