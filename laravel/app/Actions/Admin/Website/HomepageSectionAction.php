@@ -32,7 +32,7 @@ class HomepageSectionAction
     public function create(array $data): HomepageSection
     {
         $section = $this->repository->create($data);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_HOMEPAGE, 'section_create');
 
         return $section;
     }
@@ -40,7 +40,7 @@ class HomepageSectionAction
     public function update(int $id, array $data): HomepageSection
     {
         $section = $this->repository->update($id, $data);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_HOMEPAGE, 'section_update');
 
         return $section;
     }
@@ -48,7 +48,7 @@ class HomepageSectionAction
     public function delete(int $id): bool
     {
         $ok = $this->repository->delete($id);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_HOMEPAGE, 'section_delete');
 
         return $ok;
     }

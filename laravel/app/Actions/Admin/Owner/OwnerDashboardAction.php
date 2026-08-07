@@ -2,16 +2,16 @@
 
 namespace App\Actions\Admin\Owner;
 
-use App\Repositories\Contracts\OwnerRepositoryInterface;
+use App\Services\Executive\ExecutiveCommandCenterService;
 
 class OwnerDashboardAction
 {
     public function __construct(
-        protected OwnerRepositoryInterface $ownerRepository
+        protected ExecutiveCommandCenterService $executive
     ) {}
 
     public function execute(): array
     {
-        return $this->ownerRepository->getDashboardMetrics();
+        return $this->executive->overview();
     }
 }

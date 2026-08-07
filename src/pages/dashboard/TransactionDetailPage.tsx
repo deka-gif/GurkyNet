@@ -212,7 +212,7 @@ export function TransactionDetailPage() {
             {copied ? 'Tersalin' : 'Salin Invoice'}
           </button>
           <Link
-            to="/dashboard/chat"
+            to={`/dashboard/help?tab=chat${tx?.id ? `&transactionId=${tx.id}` : ''}`}
             className="flex flex-1 items-center justify-center rounded-xl bg-primary-600 py-2.5 text-xs font-bold text-white hover:bg-primary-700"
           >
             Chat CS

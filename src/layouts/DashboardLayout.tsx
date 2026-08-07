@@ -43,6 +43,10 @@ import {
   CreditCard,
   Globe,
   PlayCircle,
+  Share2,
+  AlertCircle,
+  MessageSquare,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { storageService } from '../services/storage.service';
@@ -54,7 +58,8 @@ import { UserRole } from '../constants/auth';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 import { NotificationToast } from '../components/notifications/NotificationToast';
 // @ts-ignore
-import logoImg from '../logo.png';
+import { resolveMediaSrc } from '../utils/mediaUrl';
+import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
 import { formatIDR } from '../utils/currency';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
@@ -67,6 +72,10 @@ export const DashboardLayout = () => {
 
   const { wallet, fetchWallet } = useWalletStore();
   const { settings, fetchSettings } = useWebsiteStore();
+  useCmsLiveSync(true);
+
+  const brandLogo = resolveMediaSrc(settings?.logo);
+  const brandName = settings?.websiteName || 'Website';
   const { unreadCount, notifications, fetchNotifications, markAllAsRead, markAsRead } = useNotificationStore();
   const logout = useAuthStore((s) => s.logout);
   const authUser = useAuthStore((s) => s.user);
@@ -124,9 +133,14 @@ export const DashboardLayout = () => {
       case 'Finance':
         return [
           { path: '/dashboard/finance', label: 'Dashboard', icon: DollarSign },
-          { path: '/dashboard/finance/financial-report', label: 'Financial Report', icon: FileSpreadsheet },
-          { path: '/dashboard/finance/settlement', label: 'Settlement', icon: Building },
+          { path: '/dashboard/finance/treasury', label: 'Treasury', icon: Building },
+          { path: '/dashboard/finance/refund-queue', label: 'Refund Queue', icon: Share2 },
           { path: '/dashboard/finance/refund-approval', label: 'Refund Approval', icon: Receipt },
+          { path: '/dashboard/finance/settlement', label: 'Settlement Queue', icon: Building },
+          { path: '/dashboard/finance/ledger', label: 'Ledger', icon: FileSpreadsheet },
+          { path: '/dashboard/finance/financial-report', label: 'Reports', icon: FileSpreadsheet },
+          { path: '/dashboard/finance/alerts', label: 'Alerts', icon: Bell },
+          { path: '/dashboard/finance/wallets', label: 'Wallets', icon: Wallet },
           { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
@@ -134,6 +148,9 @@ export const DashboardLayout = () => {
       case 'Operations':
         return [
           { path: '/dashboard/operations', label: 'Dashboard', icon: Server },
+          { path: '/dashboard/operations/issue-queue', label: 'Issue Queue', icon: AlertCircle },
+          { path: '/dashboard/operations/alerts', label: 'Alerts', icon: Bell },
+          { path: '/dashboard/operations/live-transactions', label: 'Live Transactions', icon: Activity },
           { path: '/dashboard/operations/product-providers', label: 'Product Provider Control', icon: Zap },
           { path: '/dashboard/operations/products', label: 'Product Management', icon: Layers },
           { path: '/dashboard/operations/providers', label: 'Provider Management', icon: Server },
@@ -150,6 +167,7 @@ export const DashboardLayout = () => {
         return [
           { path: '/dashboard/marketing', label: 'Dashboard', icon: Megaphone },
           { path: '/dashboard/marketing/banners', label: 'Banner', icon: ImageIcon },
+          { path: '/dashboard/marketing/feedback-queue', label: 'Feedback Queue', icon: MessageSquare },
           { path: '/dashboard/marketing/promotions', label: 'Promotion', icon: Tag },
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/marketing/announcements', label: 'Announcement', icon: Bell },
@@ -167,6 +185,8 @@ export const DashboardLayout = () => {
       case 'Customer Support':
         return [
           { path: '/dashboard/customer-support', label: 'Dashboard', icon: Headset },
+          { path: '/dashboard/customer-support/inbox', label: 'Inbox', icon: MessageSquare },
+          { path: '/dashboard/customer-support/workflows', label: 'Workflows', icon: Share2 },
           { path: '/dashboard/customer-support/tickets', label: 'Tickets', icon: FileText },
           { path: '/dashboard/customer-support/customer-profile', label: 'Customer', icon: UserCheck },
           { path: '/dashboard/customer-support/refund-center', label: 'Refund', icon: Receipt },
@@ -178,10 +198,15 @@ export const DashboardLayout = () => {
       case 'Owner':
         return [
           { path: '/dashboard/owner', label: 'Executive Dashboard', icon: Crown },
+          { path: '/dashboard/admin/workflows', label: 'Global Workflows', icon: Share2 },
+          { path: '/dashboard/owner/alerts', label: 'Executive Alerts', icon: Bell },
+          { path: '/dashboard/owner/approvals', label: 'Approvals', icon: ShieldCheck },
+          { path: '/dashboard/owner/audit', label: 'Audit Center', icon: FileText },
           { path: '/dashboard/finance', label: 'Finance', icon: DollarSign },
           { path: '/dashboard/operations', label: 'Operations', icon: Server },
           { path: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
           { path: '/dashboard/customer-support', label: 'Customer Support', icon: Headset },
+          { path: '/dashboard/owner/system-settings', label: 'System Settings', icon: Settings },
           { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
@@ -189,6 +214,7 @@ export const DashboardLayout = () => {
       case 'Super Admin':
         return [
           { path: '/dashboard/owner', label: 'Executive Dashboard', icon: Crown },
+          { path: '/dashboard/admin/workflows', label: 'Global Workflows', icon: Share2 },
           { path: '/dashboard/finance', label: 'Finance CMS', icon: DollarSign },
           { path: '/dashboard/operations', label: 'Operations CMS', icon: Server },
           { path: '/dashboard/marketing', label: 'Marketing CMS', icon: Megaphone },
@@ -215,6 +241,7 @@ export const DashboardLayout = () => {
           { divider: true },
           { path: '/dashboard/transfer', label: 'Transfer', icon: Send },
           { path: '/dashboard/riwayat', label: 'Riwayat', icon: History },
+          { path: '/dashboard/help', label: 'Help Center', icon: Headset },
           { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
     }
@@ -230,12 +257,16 @@ export const DashboardLayout = () => {
           { path: '/dashboard/finance', label: 'Dashboard', icon: DollarSign },
           { path: '/dashboard/finance/financial-report', label: 'Report', icon: FileSpreadsheet },
           { path: '/dashboard/finance/settlement', label: 'Settlement', icon: Building },
+          { path: '/dashboard/finance/refund-queue', label: 'Refund Queue', icon: Share2 },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
           { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
       case 'Operations':
         return [
           { path: '/dashboard/operations', label: 'Dashboard', icon: Server },
+          { path: '/dashboard/operations/issue-queue', label: 'Issue Queue', icon: AlertCircle },
+          { path: '/dashboard/operations/alerts', label: 'Alerts', icon: Bell },
+          { path: '/dashboard/operations/live-transactions', label: 'Live Tx', icon: Activity },
           { path: '/dashboard/operations/product-providers', label: 'Providers', icon: Zap },
           { path: '/dashboard/operations/products', label: 'Products', icon: Layers },
           { path: '/dashboard/operations/monitoring', label: 'Monitoring', icon: Activity },
@@ -246,6 +277,7 @@ export const DashboardLayout = () => {
         return [
           { path: '/dashboard/marketing', label: 'Dashboard', icon: Megaphone },
           { path: '/dashboard/marketing/banners', label: 'Banner', icon: ImageIcon },
+          { path: '/dashboard/marketing/feedback-queue', label: 'Feedback', icon: MessageSquare },
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
           { path: '/dashboard/account', label: 'Akun', icon: User },
@@ -253,6 +285,8 @@ export const DashboardLayout = () => {
       case 'Customer Support':
         return [
           { path: '/dashboard/customer-support', label: 'Dashboard', icon: Headset },
+          { path: '/dashboard/customer-support/inbox', label: 'Inbox', icon: MessageSquare },
+          { path: '/dashboard/customer-support/workflows', label: 'Workflows', icon: Share2 },
           { path: '/dashboard/customer-support/tickets', label: 'Tickets', icon: FileText },
           { path: '/dashboard/customer-support/refund-center', label: 'Refund', icon: Receipt },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
@@ -261,6 +295,9 @@ export const DashboardLayout = () => {
       case 'Owner':
         return [
           { path: '/dashboard/owner', label: 'Executive', icon: Crown },
+          { path: '/dashboard/admin/workflows', label: 'Workflows', icon: Share2 },
+          { path: '/dashboard/owner/alerts', label: 'Alerts', icon: Bell },
+          { path: '/dashboard/owner/approvals', label: 'Approvals', icon: ShieldCheck },
           { path: '/dashboard/finance', label: 'Finance', icon: DollarSign },
           { path: '/dashboard/operations', label: 'Operations', icon: Server },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
@@ -324,18 +361,25 @@ export const DashboardLayout = () => {
         {/* Sidebar Header Logo */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-gray-50">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <img
-              src={logoImg}
-              alt={settings?.websiteName || 'GurkyNet'}
-              className="w-9 h-9 object-contain rounded-xl shrink-0"
-            />
+            {brandLogo ? (
+              <img
+                src={brandLogo}
+                alt={brandName}
+                className="w-9 h-9 object-contain rounded-xl shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black shrink-0">
+                {brandName.charAt(0).toUpperCase()}
+              </div>
+            )}
             {!isSidebarCollapsed && (
               <motion.span 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="font-extrabold text-xl text-gray-900 tracking-tight"
+                className="font-extrabold text-xl text-gray-900 tracking-tight truncate"
               >
-                Gurky<span className="text-primary-600">Net</span>
+                {brandName}
               </motion.span>
             )}
           </div>
@@ -441,13 +485,20 @@ export const DashboardLayout = () => {
           <div className="flex items-center gap-4 flex-1">
             {/* Mobile Brand Logo */}
             <div className="flex md:hidden items-center gap-2">
-              <img
-                src={logoImg}
-                alt={settings?.websiteName || 'GurkyNet'}
-                className="w-8 h-8 object-contain rounded-lg shrink-0"
-              />
-              <span className="font-extrabold text-base text-gray-900 tracking-tight">
-                Gurky<span className="text-primary-600">Net</span>
+              {brandLogo ? (
+                <img
+                  src={brandLogo}
+                  alt={brandName}
+                  className="w-8 h-8 object-contain rounded-lg shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-black text-sm shrink-0">
+                  {brandName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="font-extrabold text-base text-gray-900 tracking-tight truncate max-w-[140px]">
+                {brandName}
               </span>
             </div>
 

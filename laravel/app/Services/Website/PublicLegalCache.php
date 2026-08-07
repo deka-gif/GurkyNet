@@ -10,19 +10,26 @@ class PublicLegalCache
 
     public const DOC_KEY_PREFIX = 'public:legal:doc:';
 
-    public const TTL_SECONDS = 300;
+    public const TTL_SECONDS = 1800; // 30 minutes — cleared on publish
 
     public static function docKey(string $slug): string
     {
         return self::DOC_KEY_PREFIX.$slug;
     }
 
-    public static function forget(): void
+    public static function forgetCachesOnly(): void
     {
         Cache::forget(self::INDEX_KEY);
         foreach (\App\Models\LegalDocument::catalog() as $item) {
             Cache::forget(self::docKey($item['slug']));
         }
-        PublicHomepageCache::forget();
+    }
+
+    public static function forget(): void
+    {
+        CmsSyncService::publish(
+            [CmsSyncService::SCOPE_LEGAL, CmsSyncService::SCOPE_STATIC_PAGE],
+            'legal_center'
+        );
     }
 }

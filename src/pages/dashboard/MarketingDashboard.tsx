@@ -30,6 +30,9 @@ import {
 import { storageService } from '../../services/storage.service';
 import { useMarketingStore } from '../../store/marketing.store';
 import { StatCard, ChartErrorBoundary } from '../../components/common';
+import { WorkflowStatsStrip } from '../../components/workflow/WorkflowStatsStrip';
+import { Link } from 'react-router-dom';
+import { FinanceCrossWidgets } from '../../components/finance/FinanceCrossWidgets';
 
 const PerformanceTooltip = ({ active, payload, label }: any) => {
   if (active && Array.isArray(payload) && payload.length > 0) {
@@ -269,6 +272,12 @@ export const MarketingDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/dashboard/marketing/feedback-queue"
+              className="px-4 py-2.5 bg-pink-400 text-purple-950 rounded-2xl font-black text-xs shadow-md hover:bg-pink-300 transition"
+            >
+              Feedback Queue
+            </Link>
             <button
               onClick={() => {
                 fetchDashboard();
@@ -283,6 +292,14 @@ export const MarketingDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <WorkflowStatsStrip
+        division="marketing"
+        queuePath="/dashboard/marketing/feedback-queue"
+        queueLabel="Feedback Queue"
+      />
+
+      <FinanceCrossWidgets audience="marketing" />
 
       {dashboardError && (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-semibold flex items-center justify-between">

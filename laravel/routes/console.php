@@ -33,3 +33,11 @@ Schedule::command('transactions:reconcile-pending')
 
 // Operational hygiene
 Schedule::command('queue:prune-failed --hours=168')->daily();
+
+// Ops Command Center — scheduler heartbeat for infra monitoring
+Artisan::command('ops:heartbeat', function () {
+    app(\App\Services\Operations\OpsMonitoringService::class)->bumpSchedulerHeartbeat();
+    $this->info('Ops scheduler heartbeat bumped.');
+})->purpose('Bump ops scheduler heartbeat cache key');
+
+Schedule::command('ops:heartbeat')->everyFiveMinutes()->withoutOverlapping();

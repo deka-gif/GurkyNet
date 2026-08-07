@@ -4,6 +4,7 @@ import { Navbar } from '../components/layout/Navbar';
 import { Footer } from '../components/layout/Footer';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 import { useWebsiteStore } from '../store/website.store';
+import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
 
 export const PublicLayout = () => {
   const { settings, fetchHomepage } = useWebsiteStore();
@@ -12,6 +13,9 @@ export const PublicLayout = () => {
   useEffect(() => {
     void fetchHomepage();
   }, [fetchHomepage]);
+
+  // Marketing CMS live sync — refetch without browser refresh
+  useCmsLiveSync(true);
 
   // Dynamically set favicon from backend WebsiteSettings
   useEffect(() => {

@@ -204,6 +204,8 @@ export const MarketingLegalCenter: React.FC = () => {
       const label = window.prompt('Label versi (opsional):', '') || undefined;
       const res = await websiteService.publishLegal(activeSlug, label);
       applyDetail(res?.data ?? res);
+      const { notifyCmsLocalSync } = await import('../../lib/cmsSync');
+      notifyCmsLocalSync({ scopes: ['LegalUpdated', 'StaticPageUpdated'], reason: 'legal_publish' });
       flash('Dokumen berhasil dipublish. Cache publik di-refresh.');
       await loadList();
     } catch (e: any) {

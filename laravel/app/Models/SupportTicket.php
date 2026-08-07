@@ -16,12 +16,14 @@ class SupportTicket extends Model
         'ticket_number',
         'user_id',
         'transaction_id',
+        'conversation_id',
         'category',
         'subject',
         'description',
         'attachment',
         'priority',
         'status',
+        'source',
         'closed_at',
     ];
 
@@ -37,6 +39,11 @@ class SupportTicket extends Model
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class);
+    }
+
+    public function conversation()
+    {
+        return $this->belongsTo(Conversation::class, 'conversation_id');
     }
 
     public function replies(): HasMany

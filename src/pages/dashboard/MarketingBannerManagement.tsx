@@ -219,6 +219,12 @@ export const MarketingBannerManagement: React.FC = () => {
     if (result.success) {
       setIsFormModalOpen(false);
       showNotification(result.message || 'Banner berhasil disimpan.');
+      try {
+        const { notifyCmsLocalSync } = await import('../../lib/cmsSync');
+        notifyCmsLocalSync({ scopes: ['BannerUpdated', 'HomepageUpdated'], reason: 'banner_save' });
+      } catch {
+        // ignore
+      }
       fetchBanners({ page: currentPage });
     } else {
       showNotification(result.message || 'Gagal menyimpan banner.');

@@ -206,4 +206,65 @@ export const operationsService = {
     });
     return res.data;
   },
+
+  // —— Operations Command Center (Sprint 8.4) ——
+  async getCommandCenter() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/command-center');
+    return res.data?.data || res.data;
+  },
+
+  async getInfraMonitoring() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/monitoring/infra');
+    return res.data?.data || res.data;
+  },
+
+  async refreshInfraMonitoring() {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/operations/monitoring/infra/refresh');
+    return res.data?.data || res.data;
+  },
+
+  async getLiveTransactions(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/live-transactions', { params });
+    return res.data?.data || res.data;
+  },
+
+  async getActivityTimeline(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/activity-timeline', { params });
+    return res.data?.data || res.data;
+  },
+
+  async getAlerts(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/alerts', { params });
+    return res.data?.data || res.data;
+  },
+
+  async evaluateAlerts() {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/operations/alerts/evaluate');
+    return res.data?.data || res.data;
+  },
+
+  async ackAlert(id: number) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/alerts/${id}/ack`);
+    return res.data?.data || res.data;
+  },
+
+  async investigateAlert(id: number) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/alerts/${id}/investigate`);
+    return res.data?.data || res.data;
+  },
+
+  async resolveAlert(id: number) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/alerts/${id}/resolve`);
+    return res.data?.data || res.data;
+  },
+
+  async closeAlert(id: number) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/alerts/${id}/close`);
+    return res.data?.data || res.data;
+  },
+
+  async getIssueDetail(workflowId: number) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/operations/issues/${workflowId}`);
+    return res.data?.data || res.data;
+  },
 };

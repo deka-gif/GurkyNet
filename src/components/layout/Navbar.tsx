@@ -4,7 +4,7 @@ import { Menu, X, LogIn, UserCheck, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
 import { WebsiteMenu } from '../../types';
-import logoImg from '../../logo.png'; // Direct import file logo dari src/logo.png
+import { resolveMediaSrc } from '../../utils/mediaUrl';
 
 // Helper to construct nested menu structure
 function buildMenuTree(menuItems: WebsiteMenu[]): WebsiteMenu[] {
@@ -73,15 +73,22 @@ export const Navbar = () => {
     >
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="flex items-center justify-between">
-          {/* Logo and Brand */}
+          {/* Logo and Brand — CMS Website Settings (Single Source of Truth) */}
           <Link to="/" className="flex items-center gap-2" id="nav-brand">
-            <img
-              src={logoImg}
-              alt={settings?.websiteName || 'GurkyNet'}
-              className="w-10 h-10 object-contain rounded-xl"
-            />
+            {resolveMediaSrc(settings?.logo) ? (
+              <img
+                src={resolveMediaSrc(settings?.logo)}
+                alt={settings?.websiteName || 'Website'}
+                className="w-10 h-10 object-contain rounded-xl"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-md shadow-primary-500/30">
+                {(settings?.websiteName || 'G').charAt(0).toUpperCase()}
+              </div>
+            )}
             <span className="font-extrabold text-2xl tracking-tight text-gray-900">
-              {settings?.websiteName || 'GurkyNet'}
+              {settings?.websiteName || 'Website'}
             </span>
           </Link>
 

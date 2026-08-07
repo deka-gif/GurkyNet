@@ -56,11 +56,24 @@ import {
   CustomerSupportTransactionInvestigation,
   CustomerSupportRefundCenter,
   CustomerSupportKnowledgeBase,
+  CustomerSupportInbox,
+  HelpCenterPage,
+  OperationsIssueQueue,
+  FinanceEscalationQueue,
+  MarketingFeedbackQueue,
+  AdminGlobalWorkflowQueue,
+  CsWorkflowReadQueue,
   FinanceDashboard,
   FinanceRefundApproval,
   FinanceSettlementManagement,
   FinanceFinancialReport,
+  FinanceTreasuryPage,
+  FinanceLedgerPage,
+  FinanceAlertsPage,
+  FinanceWalletMonitorPage,
   OperationsDashboard,
+  OperationsAlertsPage,
+  OperationsLiveTransactionsPage,
   OperationsProductManagement,
   OperationsProviderManagement,
   OperationsServiceMonitoring,
@@ -80,6 +93,9 @@ import {
   MarketingStaticPages,
   MarketingMediaLibrary,
   OwnerDashboard,
+  OwnerExecutiveAlertsPage,
+  OwnerExecutiveApprovalsPage,
+  OwnerAuditCenterPage,
   SystemSettingsCenter,
 } from './lazyPages';
 
@@ -164,10 +180,42 @@ export const router = createBrowserRouter([
         )
       },
       {
+        path: 'owner/alerts',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
+            <OwnerExecutiveAlertsPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'owner/approvals',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
+            <OwnerExecutiveApprovalsPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'owner/audit',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
+            <OwnerAuditCenterPage />
+          </ProtectedRoute>
+        )
+      },
+      {
         path: 'owner/system-settings',
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
             <SystemSettingsCenter />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'admin/workflows',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
+            <AdminGlobalWorkflowQueue />
           </ProtectedRoute>
         )
       },
@@ -188,10 +236,54 @@ export const router = createBrowserRouter([
         )
       },
       {
+        path: 'finance/escalation-queue',
+        element: <Navigate to="/dashboard/finance/refund-queue" replace />
+      },
+      {
+        path: 'finance/refund-queue',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceEscalationQueue />
+          </ProtectedRoute>
+        )
+      },
+      {
         path: 'finance/settlement',
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
             <FinanceSettlementManagement />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/treasury',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceTreasuryPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/ledger',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceLedgerPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/alerts',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceAlertsPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/wallets',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceWalletMonitorPage />
           </ProtectedRoute>
         )
       },
@@ -208,6 +300,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
             <OperationsDashboard />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'operations/alerts',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
+            <OperationsAlertsPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'operations/live-transactions',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
+            <OperationsLiveTransactionsPage />
           </ProtectedRoute>
         )
       },
@@ -260,6 +368,14 @@ export const router = createBrowserRouter([
         )
       },
       {
+        path: 'operations/issue-queue',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
+            <OperationsIssueQueue />
+          </ProtectedRoute>
+        )
+      },
+      {
         path: 'marketing',
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner']}>
@@ -272,6 +388,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner']}>
             <MarketingBannerManagement />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'marketing/feedback-queue',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner']}>
+            <MarketingFeedbackQueue />
           </ProtectedRoute>
         )
       },
@@ -567,7 +691,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'chat',
-        element: <CustomerChatPage />
+        element: <Navigate to="/dashboard/help?tab=chat" replace />
+      },
+      {
+        path: 'help',
+        element: <HelpCenterPage />
       },
       {
         path: 'notifikasi',
@@ -642,6 +770,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Customer Support', 'Owner']}>
             <CustomerSupportDashboard />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'customer-support/inbox',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Customer Support', 'Owner']}>
+            <CustomerSupportInbox />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'customer-support/workflows',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Customer Support', 'Owner']}>
+            <CsWorkflowReadQueue />
           </ProtectedRoute>
         )
       },

@@ -19,16 +19,34 @@ class MarketingPromotionAction
 
     public function create(array $data): BannerPromotion
     {
-        return $this->marketingRepository->createPromotion($data);
+        $row = $this->marketingRepository->createPromotion($data);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_PROMOTION],
+            'promotion_create'
+        );
+
+        return $row;
     }
 
     public function update(string|int $id, array $data): BannerPromotion
     {
-        return $this->marketingRepository->updatePromotion($id, $data);
+        $row = $this->marketingRepository->updatePromotion($id, $data);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_PROMOTION],
+            'promotion_update'
+        );
+
+        return $row;
     }
 
     public function delete(string|int $id): bool
     {
-        return $this->marketingRepository->deletePromotion($id);
+        $ok = $this->marketingRepository->deletePromotion($id);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_PROMOTION],
+            'promotion_delete'
+        );
+
+        return $ok;
     }
 }

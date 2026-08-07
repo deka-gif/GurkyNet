@@ -5,6 +5,7 @@ import { CheckCircle } from 'lucide-react';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 import { useWebsiteStore } from '../store/website.store';
 import { resolveMediaSrc } from '../utils/mediaUrl';
+import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
 
 export const AuthLayout = () => {
   const { settings, fetchSettings } = useWebsiteStore();
@@ -12,6 +13,8 @@ export const AuthLayout = () => {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useCmsLiveSync(true);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between selection:bg-primary-200 selection:text-primary-900 font-sans">
@@ -105,9 +108,17 @@ export const AuthLayout = () => {
         </div>
       </main>
 
-      {/* Footer */}
+      {/* Footer — identity from CMS */}
       <footer className="p-6 text-center text-xs text-gray-500">
-        GurkyNet &bull; Syarat & Ketentuan &bull; Kebijakan Privasi
+        {settings?.copyright || settings?.websiteName || ''}
+        {' · '}
+        <Link to="/legal/terms-conditions" className="hover:text-primary-600">
+          Syarat & Ketentuan
+        </Link>
+        {' · '}
+        <Link to="/legal/privacy-policy" className="hover:text-primary-600">
+          Kebijakan Privasi
+        </Link>
       </footer>
     </div>
   );

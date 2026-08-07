@@ -43,9 +43,9 @@ export const Footer = () => {
               </span>
             </Link>
 
-            <p className="text-gray-600 leading-relaxed text-sm">
-              {settings?.tagline || 'Platform PPOB modern untuk semua kebutuhan transaksi digital Anda. Cepat, aman, dan terpercaya.'}
-            </p>
+            {settings?.tagline ? (
+              <p className="text-gray-600 leading-relaxed text-sm">{settings.tagline}</p>
+            ) : null}
 
             {/* Social Media Links */}
             <div className="flex items-center gap-3">

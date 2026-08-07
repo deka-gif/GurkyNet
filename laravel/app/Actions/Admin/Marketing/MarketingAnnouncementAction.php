@@ -19,16 +19,34 @@ class MarketingAnnouncementAction
 
     public function create(array $data): Notification
     {
-        return $this->marketingRepository->createAnnouncement($data);
+        $row = $this->marketingRepository->createAnnouncement($data);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_ANNOUNCEMENT],
+            'announcement_create'
+        );
+
+        return $row;
     }
 
     public function update(string|int $id, array $data): Notification
     {
-        return $this->marketingRepository->updateAnnouncement($id, $data);
+        $row = $this->marketingRepository->updateAnnouncement($id, $data);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_ANNOUNCEMENT],
+            'announcement_update'
+        );
+
+        return $row;
     }
 
     public function delete(string|int $id): bool
     {
-        return $this->marketingRepository->deleteAnnouncement($id);
+        $ok = $this->marketingRepository->deleteAnnouncement($id);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_ANNOUNCEMENT],
+            'announcement_delete'
+        );
+
+        return $ok;
     }
 }

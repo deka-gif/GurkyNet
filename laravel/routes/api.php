@@ -58,6 +58,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/static-pages/{slug}', [PublicWebsiteController::class, 'staticPageBySlug']);
         Route::get('/legal',              [PublicWebsiteController::class, 'legalIndex']);
         Route::get('/legal/{slug}',       [PublicWebsiteController::class, 'legalBySlug']);
+        Route::get('/cms-sync',           [PublicWebsiteController::class, 'cmsSync']);
         Route::get('/homepage',           [PublicWebsiteController::class, 'homepage']);
         Route::get('/homepage-sections',  [PublicWebsiteController::class, 'homepageSections']);
         Route::get('/banners',            [PublicWebsiteController::class, 'banners']);
@@ -178,6 +179,20 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::post('/complaints', [ComplaintController::class, 'store']);
         Route::get('/complaints/{id}', [ComplaintController::class, 'show']);
 
+        // Live Chat + Help Center (Sprint 8.0)
+        Route::prefix('chat')->group(function () {
+            Route::get('/conversation', [\App\Http\Controllers\Api\v1\ChatController::class, 'conversation']);
+            Route::post('/conversation', [\App\Http\Controllers\Api\v1\ChatController::class, 'conversation']);
+            Route::get('/conversations/{id}/messages', [\App\Http\Controllers\Api\v1\ChatController::class, 'messages']);
+            Route::post('/conversations/{id}/messages', [\App\Http\Controllers\Api\v1\ChatController::class, 'send']);
+            Route::post('/conversations/{id}/read', [\App\Http\Controllers\Api\v1\ChatController::class, 'read']);
+            Route::get('/refund-statuses', [\App\Http\Controllers\Api\v1\ChatController::class, 'refundStatuses']);
+        });
+
+        // Realtime SSE / poll (transport abstraction)
+        Route::get('/realtime/stream', [\App\Http\Controllers\Api\v1\RealtimeController::class, 'stream']);
+        Route::get('/realtime/poll', [\App\Http\Controllers\Api\v1\RealtimeController::class, 'poll']);
+
         // Help / Legal / About (CMS-backed)
         Route::get('/help', [AccountContentController::class, 'help']);
         Route::get('/privacy', [AccountContentController::class, 'privacy']);
@@ -241,17 +256,50 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         // Finance Administration Module
         Route::prefix('admin/finance')->middleware([EnsureRole::class . ':finance,owner'])->group(function () {
             Route::get('/dashboard', [FinanceController::class, 'dashboard']);
+            Route::get('/command-center', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'commandCenter']);
+            Route::get('/treasury', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'treasury']);
+            Route::get('/provider-deposits', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'providerDeposits']);
+            Route::post('/provider-deposits/refresh', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'refreshProviderDeposits']);
+            Route::get('/payment-gateways', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'paymentGateways']);
+            Route::get('/wallets/monitor', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'walletMonitor']);
+            Route::get('/ledger', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'ledgerIndex']);
+            Route::get('/ledger/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'ledgerShow'])->whereNumber('id');
             Route::get('/reports', [FinanceController::class, 'reports']);
+            Route::get('/reports/structured', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'structuredReports']);
             Route::get('/refunds', [FinanceController::class, 'refunds']);
             Route::post('/refunds/{id}/approve', [FinanceController::class, 'approveRefund']);
             Route::post('/refunds/{id}/reject', [FinanceController::class, 'rejectRefund']);
-            Route::get('/settlements', [FinanceController::class, 'settlements']);
+            Route::get('/settlements', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'settlementIndex']);
+            Route::post('/settlements', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'settlementStore']);
+            Route::get('/settlements/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'settlementShow'])->whereNumber('id');
+            Route::patch('/settlements/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'settlementUpdate'])->whereNumber('id');
+            Route::get('/alerts', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertsIndex']);
+            Route::post('/alerts/evaluate', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertsEvaluate']);
+            Route::post('/alerts/{id}/ack', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertAck'])->whereNumber('id');
+            Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertResolve'])->whereNumber('id');
             Route::post('/wallet/adjust', [FinanceController::class, 'adjustWallet']);
         });
+
+        // Cross-division finance widgets (read-only)
+        Route::get('/admin/finance/widgets/{audience}', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'widgets'])
+            ->middleware([EnsureRole::class . ':finance,customer_support,operations,marketing,owner'])
+            ->where('audience', 'customer_support|cs|operations|marketing');
 
         // Operations Administration Module
         Route::prefix('admin/operations')->middleware([EnsureRole::class . ':operations,owner'])->group(function () {
             Route::get('/dashboard', [OperationsController::class, 'dashboard']);
+            Route::get('/command-center', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'commandCenter']);
+            Route::get('/monitoring/infra', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'infra']);
+            Route::post('/monitoring/infra/refresh', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'refreshInfra']);
+            Route::get('/live-transactions', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'liveTransactions']);
+            Route::get('/activity-timeline', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'activityTimeline']);
+            Route::get('/alerts', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'alertsIndex']);
+            Route::post('/alerts/evaluate', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'alertsEvaluate']);
+            Route::post('/alerts/{id}/ack', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'alertAck'])->whereNumber('id');
+            Route::post('/alerts/{id}/investigate', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'alertInvestigate'])->whereNumber('id');
+            Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'alertResolve'])->whereNumber('id');
+            Route::post('/alerts/{id}/close', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'alertClose'])->whereNumber('id');
+            Route::get('/issues/{workflowId}', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'issueDetail'])->whereNumber('workflowId');
             Route::get('/products', [OperationsController::class, 'products']);
             Route::put('/products/{id}', [OperationsController::class, 'updateProduct']);
             Route::get('/product-providers', [OperationsController::class, 'productProviders']);
@@ -324,6 +372,15 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::prefix('admin/customer-support')->middleware([EnsureRole::class . ':customer_support,owner'])->group(function () {
             Route::get('/dashboard', [CustomerSupportController::class, 'dashboard']);
             Route::get('/stats', [CustomerSupportController::class, 'stats']);
+            Route::get('/hub-stats', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'hubStats']);
+            Route::get('/inbox', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'index']);
+            Route::get('/inbox/{id}', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'show']);
+            Route::post('/inbox/{id}/messages', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'send']);
+            Route::post('/inbox/{id}/assign', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'assign']);
+            Route::post('/inbox/{id}/close', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'close']);
+            Route::post('/inbox/{id}/read', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'read']);
+            Route::post('/inbox/{id}/convert-ticket', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'convertTicket']);
+            Route::post('/inbox/{id}/escalate', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'escalate']);
             Route::get('/tickets', [CustomerSupportController::class, 'tickets']);
             Route::post('/tickets', [CustomerSupportController::class, 'createTicket']);
             Route::get('/tickets/{id}', [CustomerSupportController::class, 'showTicket']);
@@ -343,9 +400,47 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/knowledge-base/{id}', [CustomerSupportController::class, 'knowledgeBaseArticle']);
         });
 
+        // Division escalation queues + notifications (Sprint 8.0) — now Workflow-backed (8.2)
+        Route::prefix('admin/escalations')->middleware([EnsureRole::class . ':customer_support,operations,finance,marketing,owner'])->group(function () {
+            Route::get('/notifications', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'notifications']);
+            Route::put('/notifications/read-all', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'markAllNotificationsRead']);
+            Route::put('/notifications/{id}/read', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'markNotificationRead']);
+            Route::get('/{division}', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'index'])
+                ->where('division', 'operations|finance|marketing|customer_support');
+            Route::patch('/items/{id}', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'update']);
+        });
+
+        // Workflow Engine (Sprint 8.2)
+        Route::prefix('admin/workflows')->middleware([EnsureRole::class . ':customer_support,operations,finance,marketing,owner'])->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'store']);
+            Route::get('/stats/{division}', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'stats'])
+                ->where('division', 'customer-support|customer_support|operations|finance|marketing|admin|owner');
+            Route::get('/{id}', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'show'])->whereNumber('id');
+            Route::post('/{id}/escalate', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'escalate'])->whereNumber('id');
+            Route::post('/{id}/actions', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'action'])->whereNumber('id');
+            Route::post('/{id}/close', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'close'])->whereNumber('id');
+            Route::post('/{id}/assign', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'assign'])->whereNumber('id');
+            Route::post('/{id}/reassign', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'reassign'])->whereNumber('id');
+            Route::post('/{id}/override', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'override'])->whereNumber('id');
+            Route::post('/{id}/force-resolve', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'forceResolve'])->whereNumber('id');
+        });
+
         // Executive Owner Administration Module
         Route::prefix('admin/executive')->middleware([EnsureRole::class . ':owner'])->group(function () {
             Route::get('/dashboard', [OwnerController::class, 'dashboard']);
+            Route::get('/command-center', [OwnerController::class, 'commandCenter']);
+            Route::get('/business-health', [OwnerController::class, 'businessHealth']);
+            Route::get('/alerts', [OwnerController::class, 'executiveAlerts']);
+            Route::get('/risks', [OwnerController::class, 'risks']);
+            Route::get('/goals', [OwnerController::class, 'goals']);
+            Route::get('/profit', [OwnerController::class, 'profit']);
+            Route::get('/treasury', [OwnerController::class, 'treasury']);
+            Route::get('/insights', [OwnerController::class, 'insights']);
+            Route::get('/workflow-monitor', [OwnerController::class, 'workflowMonitor']);
+            Route::get('/workflow-timeline', [OwnerController::class, 'workflowTimeline']);
+            Route::get('/approvals', [OwnerController::class, 'approvals']);
+            Route::post('/approvals/{workflowId}/decide', [OwnerController::class, 'decideApproval'])->whereNumber('workflowId');
             Route::get('/financial-overview', [OwnerController::class, 'financialOverview']);
             Route::get('/department-overview', [OwnerController::class, 'departmentOverview']);
             Route::get('/system-health', [OwnerController::class, 'systemHealth']);
@@ -388,6 +483,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/settings', [WebsiteSettingController::class, 'store']);
             Route::get('/settings/{id}', [WebsiteSettingController::class, 'show']);
             Route::put('/settings/{id}', [WebsiteSettingController::class, 'update']);
+            Route::patch('/settings/{id}', [WebsiteSettingController::class, 'patch']);
             Route::delete('/settings/{id}', [WebsiteSettingController::class, 'destroy']);
 
             // Homepage Sections

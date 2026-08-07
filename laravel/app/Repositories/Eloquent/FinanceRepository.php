@@ -463,6 +463,22 @@ class FinanceRepository implements FinanceRepositoryInterface
         $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Ditolak: ' . ($reason ?? 'Tidak memenuhi syarat'));
         $transaction->save();
 
+        try {
+            app(\App\Services\Finance\FinanceLedgerService::class)->record([
+                'user_id' => $transaction->user_id,
+                'transaction_id' => $transaction->id,
+                'invoice' => $transaction->invoice_number,
+                'source_module' => 'finance',
+                'event_type' => 'refund_reject',
+                'debit' => 0,
+                'credit' => 0,
+                'reference' => $reason ?? 'Refund rejected',
+                'meta' => ['notes' => $transaction->notes],
+            ]);
+        } catch (\Throwable $e) {
+            // ledger hook must not block reject
+        }
+
         return $transaction->fresh(['user', 'paymentHistory']);
     }
 

@@ -32,7 +32,7 @@ class WebsiteMenuAction
     public function create(array $data): WebsiteMenu
     {
         $menu = $this->repository->create($data);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_MENU, 'menu_create');
 
         return $menu;
     }
@@ -40,7 +40,7 @@ class WebsiteMenuAction
     public function update(int $id, array $data): WebsiteMenu
     {
         $menu = $this->repository->update($id, $data);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_MENU, 'menu_update');
 
         return $menu;
     }
@@ -48,7 +48,7 @@ class WebsiteMenuAction
     public function delete(int $id): bool
     {
         $ok = $this->repository->delete($id);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_MENU, 'menu_delete');
 
         return $ok;
     }

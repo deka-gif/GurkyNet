@@ -56,13 +56,28 @@ class WebsiteSettingController extends Controller
 
     public function update(int $id, UpdateWebsiteSettingRequest $request): JsonResponse
     {
+        return $this->patch($id, $request);
+    }
+
+    /**
+     * PATCH /admin/website/settings/{id} — sparse update (only changed fields).
+     */
+    public function patch(int $id, UpdateWebsiteSettingRequest $request): JsonResponse
+    {
         $setting = $this->action->findById($id);
 
-        if (!$setting) {
+        if (! $setting) {
             return $this->errorResponse('Pengaturan website tidak ditemukan.', 404);
         }
 
         $data = $request->validated();
+        if ($data === []) {
+            return $this->successResponse(
+                'Tidak ada perubahan.',
+                new WebsiteSettingResource($setting)
+            );
+        }
+
         $updatedSetting = $this->action->update($id, $data);
 
         return $this->successResponse(

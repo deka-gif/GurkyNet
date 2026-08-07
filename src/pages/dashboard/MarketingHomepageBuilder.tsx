@@ -217,6 +217,8 @@ export const MarketingHomepageBuilder: React.FC = () => {
       setIsDirty(false);
       setVersions(data.versions || []);
       setLatestVersion(data.published?.latestVersion ?? null);
+      const { notifyCmsLocalSync } = await import('../../lib/cmsSync');
+      notifyCmsLocalSync({ scopes: ['HomepageUpdated'], reason: 'homepage_builder_publish' });
       flash('Homepage berhasil dipublish. Cache diperbarui.');
     } catch (e: any) {
       setError(e?.message || 'Publish gagal.');

@@ -47,7 +47,10 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
     public function create(array $data): WebsiteSetting
     {
         $setting = WebsiteSetting::create($data);
-        \App\Services\Website\PublicHomepageCache::forget();
+        \App\Services\Website\PublicHomepageCache::forget(
+            \App\Services\Website\CmsSyncService::SCOPE_SETTINGS,
+            'website_settings_create'
+        );
 
         return $setting->load(self::WITH);
     }
@@ -61,7 +64,10 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
         } else {
             $setting->update($data);
         }
-        \App\Services\Website\PublicHomepageCache::forget();
+        \App\Services\Website\PublicHomepageCache::forget(
+            \App\Services\Website\CmsSyncService::SCOPE_SETTINGS,
+            'website_settings_update'
+        );
 
         return $setting->load(self::WITH);
     }
@@ -70,7 +76,15 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
     {
         $setting = WebsiteSetting::find($id);
         if ($setting) {
-            return (bool) $setting->delete();
+            $deleted = (bool) $setting->delete();
+            if ($deleted) {
+                \App\Services\Website\PublicHomepageCache::forget(
+                    \App\Services\Website\CmsSyncService::SCOPE_SETTINGS,
+                    'website_settings_delete'
+                );
+            }
+
+            return $deleted;
         }
         return false;
     }

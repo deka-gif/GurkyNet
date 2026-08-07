@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, RefreshCw, Check, AlertCircle, Info, ShieldAlert, Image as ImageIcon, X } from 'lucide-react';
 import { websiteService } from '../../services';
+import { buildWebsiteSettingPatch } from '../../services/website.service';
 import { WebsiteSetting, Media } from '../../types';
 import { CmsPageHeader, CmsSaveButton } from '../../components/common/CmsCommon';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { resolveMediaSrc } from '../../utils/mediaUrl';
+import { notifyCmsLocalSync } from '../../lib/cmsSync';
 
 export const MarketingWebsiteSettings: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
@@ -108,16 +110,22 @@ export const MarketingWebsiteSettings: React.FC = () => {
 
     try {
       if (originalSetting?.id) {
-        // Update
-        const updated = await websiteService.updateSetting(originalSetting.id, formState);
+        const patch = buildWebsiteSettingPatch(originalSetting, formState);
+        if (Object.keys(patch).length === 0) {
+          setSuccess('Tidak ada perubahan untuk disimpan.');
+          setTimeout(() => setSuccess(null), 3000);
+          return;
+        }
+        const updated = await websiteService.patchSetting(originalSetting.id, patch);
         setOriginalSetting(updated);
         setFormState(updated);
-        setSuccess('Pengaturan website berhasil diperbarui!');
+        notifyCmsLocalSync({ scopes: ['WebsiteSettingUpdated'], reason: 'website_settings_patch' });
+        setSuccess('Pengaturan disimpan — website user akan update otomatis.');
       } else {
-        // Create
         const created = await websiteService.createSetting(formState);
         setOriginalSetting(created);
         setFormState(created);
+        notifyCmsLocalSync({ scopes: ['WebsiteSettingUpdated'], reason: 'website_settings_create' });
         setSuccess('Pengaturan website baru berhasil dibuat!');
       }
     } catch (err: any) {

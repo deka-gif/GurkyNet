@@ -14,6 +14,7 @@ import {
   Server,
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
+import { operationsService } from '../../services/operations.service';
 
 type NocView = 'grid' | 'service' | 'provider';
 
@@ -57,6 +58,11 @@ export const OperationsServiceMonitoring: React.FC = () => {
   const [issuesPage, setIssuesPage] = useState(1);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [infra, setInfra] = useState<any>(null);
+
+  useEffect(() => {
+    void operationsService.getInfraMonitoring().then(setInfra).catch(() => setInfra(null));
+  }, []);
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -192,6 +198,41 @@ export const OperationsServiceMonitoring: React.FC = () => {
           <button type="button" onClick={() => setActionMessage(null)}>
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {infra && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <Server className="w-4 h-4" /> App-level infra
+            </p>
+            <button
+              type="button"
+              className="text-xs font-bold text-sky-700"
+              onClick={async () => {
+                const refreshed = await operationsService.refreshInfraMonitoring();
+                setInfra(refreshed?.infra || refreshed);
+              }}
+            >
+              Refresh probes
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-xs">
+            {['redis', 'database', 'cache', 'queue', 'failed_jobs', 'scheduler'].map((key) => (
+              <div key={key} className="rounded-xl border border-slate-100 px-3 py-2">
+                <p className="uppercase text-[10px] text-slate-400 font-bold">{key}</p>
+                <p className="font-black mt-0.5">{String(infra?.[key]?.status || '—').toUpperCase()}</p>
+              </div>
+            ))}
+            {['cpu', 'ram', 'disk'].map((key) => (
+              <div key={key} className="rounded-xl border border-dashed border-slate-200 px-3 py-2 bg-slate-50">
+                <p className="uppercase text-[10px] text-slate-400 font-bold">{key}</p>
+                <p className="font-black mt-0.5">N/A</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Metric Not Available</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

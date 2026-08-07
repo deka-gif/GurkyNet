@@ -391,7 +391,7 @@ export const DashboardHomePage = () => {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/dashboard/chat')}
+              onClick={() => navigate('/dashboard/help?tab=chat')}
               className="text-xs font-bold bg-white text-primary-700 hover:bg-primary-50 border border-primary-200 px-3 py-1.5 rounded-xl transition-all shadow-sm shrink-0 cursor-pointer"
             >
               Chat CS

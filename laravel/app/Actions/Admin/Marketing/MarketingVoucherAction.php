@@ -19,16 +19,34 @@ class MarketingVoucherAction
 
     public function create(array $data): BannerPromotion
     {
-        return $this->marketingRepository->createVoucher($data);
+        $row = $this->marketingRepository->createVoucher($data);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_VOUCHER],
+            'voucher_create'
+        );
+
+        return $row;
     }
 
     public function update(string|int $id, array $data): BannerPromotion
     {
-        return $this->marketingRepository->updateVoucher($id, $data);
+        $row = $this->marketingRepository->updateVoucher($id, $data);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_VOUCHER],
+            'voucher_update'
+        );
+
+        return $row;
     }
 
     public function delete(string|int $id): bool
     {
-        return $this->marketingRepository->deleteVoucher($id);
+        $ok = $this->marketingRepository->deleteVoucher($id);
+        \App\Services\Website\CmsSyncService::publish(
+            [\App\Services\Website\CmsSyncService::SCOPE_VOUCHER],
+            'voucher_delete'
+        );
+
+        return $ok;
     }
 }

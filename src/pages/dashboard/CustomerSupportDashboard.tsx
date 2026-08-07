@@ -14,16 +14,23 @@ import {
   Filter,
   ArrowUpRight,
   UserCheck,
-  RefreshCw
+  RefreshCw,
+  MessageSquare,
+  Share2,
 } from 'lucide-react';
 
 import { useCustomerSupportStore } from '../../store/customerSupport.store';
 import { DashboardHeader, StatCard } from '../../components/common';
+import { chatService } from '../../services/chat/chat.service';
+import { workflowService } from '../../services/workflow/workflow.service';
+import { FinanceCrossWidgets } from '../../components/finance/FinanceCrossWidgets';
 
 export const CustomerSupportDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('Semua');
   const [notification, setNotification] = useState<string | null>(null);
+  const [hubStats, setHubStats] = useState<Record<string, number>>({});
+  const [wfStats, setWfStats] = useState<Record<string, number | null>>({});
 
   const {
     dashboardData,
@@ -38,35 +45,47 @@ export const CustomerSupportDashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboard();
     fetchTickets();
+    chatService.hubStats().then(setHubStats).catch(() => setHubStats({}));
+    workflowService.stats('customer-support').then((s) => setWfStats(s as Record<string, number | null>)).catch(() => setWfStats({}));
   }, [fetchDashboard, fetchTickets]);
 
-  // Statistics from store (real API values only; no fabricated deltas)
+  // Statistics from hub + dashboard (real API values only)
   const stats = [
     {
-      title: 'Open Tickets',
-      value: (dashboardData?.openTickets ?? dashboardData?.open_tickets ?? 0).toString(),
-      icon: Ticket,
+      title: 'Live Chats',
+      value: (hubStats.liveChats ?? 0).toString(),
+      icon: MessageSquare,
     },
     {
-      title: 'Pending Tickets',
-      value: (dashboardData?.pendingTickets ?? dashboardData?.pending_tickets ?? 0).toString(),
+      title: 'Waiting Ops',
+      value: String(wfStats.waitingOperations ?? 0),
+      icon: Share2,
+    },
+    {
+      title: 'Waiting Finance',
+      value: String(wfStats.waitingFinance ?? 0),
+      icon: Receipt,
+    },
+    {
+      title: 'Waiting Marketing',
+      value: String(wfStats.waitingMarketing ?? 0),
+      icon: MessageSquare,
+    },
+    {
+      title: 'Critical',
+      value: String(wfStats.criticalCases ?? 0),
       icon: AlertCircle,
     },
+  ];
+
+  const workflowExtras = [
+    { title: 'Escalated Today', value: String(wfStats.escalatedToday ?? 0) },
+    { title: 'Resolved Today', value: String(wfStats.resolvedToday ?? 0) },
     {
-      title: 'Resolved Today',
-      value: (dashboardData?.resolvedToday ?? dashboardData?.resolved_today ?? 0).toString(),
-      icon: CheckCircle2,
+      title: 'Avg Resolution',
+      value: wfStats.averageResolutionMinutes != null ? `${wfStats.averageResolutionMinutes}m` : '—',
     },
-    {
-      title: 'Average Response Time',
-      value: dashboardData?.avgResponseTime || dashboardData?.avg_response_time || '-',
-      icon: Clock,
-    },
-    {
-      title: 'Total Tickets',
-      value: (Array.isArray(tickets) ? tickets.length : 0).toString(),
-      icon: ArrowUpRight,
-    }
+    { title: 'Open Tickets', value: (hubStats.openTickets ?? dashboardData?.openTickets ?? dashboardData?.open_tickets ?? 0).toString() },
   ];
 
   // Handle Quick Action
@@ -147,6 +166,13 @@ export const CustomerSupportDashboard: React.FC = () => {
               Refresh
             </button>
             <Link
+              to="/dashboard/customer-support/inbox"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-xs transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Inbox
+            </Link>
+            <Link
               to="/dashboard/customer-support/tickets"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
             >
@@ -219,10 +245,28 @@ export const CustomerSupportDashboard: React.FC = () => {
         ))}
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {workflowExtras.map((item) => (
+          <div key={item.title} className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
+            <p className="text-[11px] font-bold uppercase text-gray-400">{item.title}</p>
+            <p className="text-xl font-black text-gray-900 mt-1">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <FinanceCrossWidgets audience="customer_support" />
+
       {/* Quick Actions */}
       <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Link
+            to="/dashboard/customer-support/workflows"
+            className="flex items-center justify-center gap-2 p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors shadow-xs"
+          >
+            <Share2 className="w-4 h-4" />
+            <span>Workflows</span>
+          </Link>
           <Link
             to="/dashboard/customer-support/tickets"
             className="flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors shadow-xs"

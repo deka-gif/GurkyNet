@@ -7,13 +7,20 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
   const { settings, sections } = useWebsiteStore();
   const contactSection = sections.find((s) => s.componentType === 'announcement');
 
-  const whatsappNumber = settings?.whatsapp || '+62 812 3456 7890';
-  const whatsappUrl = `https://wa.me/${whatsappNumber.replace(/[^0-9]/g, '')}`;
-  const supportEmail = settings?.supportEmail || 'support@gurkynet.com';
-  const instagramHandle = settings?.instagram ? settings.instagram.replace('https://instagram.com/', '@') : '@gurkynet';
-  const tiktokHandle = settings?.tiktok ? settings.tiktok.replace('https://tiktok.com/@', '@') : '@gurkynet';
-  const officeAddress = settings?.officeAddress || 'Jl. Gatot Subroto No. 88, Jakarta Selatan';
-  const mapsUrl = settings?.googleMapsUrl || 'https://maps.google.com/?q=Jakarta';
+  // Contact data — Marketing CMS Website Settings only (no hardcoded phone/email)
+  const whatsappNumber = settings?.whatsapp || '';
+  const whatsappUrl = whatsappNumber
+    ? `https://wa.me/${whatsappNumber.replace(/[^0-9]/g, '')}`
+    : '#';
+  const supportEmail = settings?.supportEmail || '';
+  const instagramHandle = settings?.instagram
+    ? settings.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '@')
+    : '';
+  const tiktokHandle = settings?.tiktok
+    ? settings.tiktok.replace(/^https?:\/\/(www\.)?tiktok\.com\/@?/i, '@')
+    : '';
+  const officeAddress = settings?.officeAddress || '';
+  const mapsUrl = settings?.googleMapsUrl || '';
 
   return (
     <section id="contact" className="py-20 md:py-32 bg-white">
@@ -57,15 +64,17 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
                 <MessageCircle className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">WhatsApp</h4>
-              <p className="text-gray-600 mb-4">{whatsappNumber}</p>
-              <a 
-                href={whatsappUrl} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="text-primary-600 font-semibold text-sm hover:underline"
-              >
-                Chat Sekarang →
-              </a>
+              <p className="text-gray-600 mb-4">{whatsappNumber || 'Belum diatur di CMS'}</p>
+              {whatsappNumber ? (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-600 font-semibold text-sm hover:underline"
+                >
+                  Chat Sekarang →
+                </a>
+              ) : null}
             </div>
 
             <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">
@@ -73,13 +82,15 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
                 <Mail className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">Email</h4>
-              <p className="text-gray-600 mb-4">{supportEmail}</p>
-              <a 
-                href={`mailto:${supportEmail}`} 
-                className="text-primary-600 font-semibold text-sm hover:underline"
-              >
-                Kirim Pesan →
-              </a>
+              <p className="text-gray-600 mb-4">{supportEmail || 'Belum diatur di CMS'}</p>
+              {supportEmail ? (
+                <a
+                  href={`mailto:${supportEmail}`}
+                  className="text-primary-600 font-semibold text-sm hover:underline"
+                >
+                  Kirim Pesan →
+                </a>
+              ) : null}
             </div>
             
             <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">
@@ -87,16 +98,18 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
                 <Instagram className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">Sosial Media</h4>
-              <p className="text-gray-600 mb-1">{instagramHandle}</p>
-              <p className="text-gray-600 mb-4">{tiktokHandle}</p>
-              <a 
-                href={settings?.instagram || '#'} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="text-primary-600 font-semibold text-sm hover:underline"
-              >
-                Follow Kami →
-              </a>
+              <p className="text-gray-600 mb-1">{instagramHandle || '—'}</p>
+              <p className="text-gray-600 mb-4">{tiktokHandle || '—'}</p>
+              {settings?.instagram ? (
+                <a
+                  href={settings.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-600 font-semibold text-sm hover:underline"
+                >
+                  Follow Kami →
+                </a>
+              ) : null}
             </div>
 
             <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">

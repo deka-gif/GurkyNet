@@ -2,13 +2,29 @@ import { apiClient } from './api';
 import { ApiResponse, WebsiteSetting, HomepageSection, WebsiteMenu, StaticPage, PublicBanner, HomepagePayload } from '../types';
 
 // Helper to convert setting keys from Camel to Snake
+function mediaToUrl(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value && 'url' in (value as any)) {
+    return String((value as any).url || '');
+  }
+  return undefined;
+}
+
 function settingToBackend(s: Partial<WebsiteSetting>): any {
   const backend: any = {};
   if (s.websiteName !== undefined) backend.website_name = s.websiteName;
   if (s.tagline !== undefined) backend.tagline = s.tagline;
-  if (s.logo !== undefined) backend.logo = s.logo;
-  if (s.logoDark !== undefined) backend.logo_dark = s.logoDark;
-  if (s.favicon !== undefined) backend.favicon = s.favicon;
+
+  // Never send Media objects — only string URLs (or omit when only media_id changes)
+  const logo = mediaToUrl(s.logo);
+  const logoDark = mediaToUrl(s.logoDark);
+  const favicon = mediaToUrl(s.favicon);
+  if (logo !== undefined) backend.logo = logo;
+  if (logoDark !== undefined) backend.logo_dark = logoDark;
+  if (favicon !== undefined) backend.favicon = favicon;
+
   if (s.logoMediaId !== undefined) backend.logo_media_id = s.logoMediaId;
   if (s.logoDarkMediaId !== undefined) backend.logo_dark_media_id = s.logoDarkMediaId;
   if (s.faviconMediaId !== undefined) backend.favicon_media_id = s.faviconMediaId;
@@ -31,6 +47,58 @@ function settingToBackend(s: Partial<WebsiteSetting>): any {
   if (s.seoDescription !== undefined) backend.seo_description = s.seoDescription;
   if (s.seoKeywords !== undefined) backend.seo_keywords = s.seoKeywords;
   return backend;
+}
+
+/** Build sparse PATCH payload — only keys that actually changed. */
+export function buildWebsiteSettingPatch(
+  original: Partial<WebsiteSetting> | null,
+  next: Partial<WebsiteSetting>
+): Partial<WebsiteSetting> {
+  const keys: (keyof WebsiteSetting)[] = [
+    'websiteName',
+    'tagline',
+    'logo',
+    'logoDark',
+    'favicon',
+    'logoMediaId',
+    'logoDarkMediaId',
+    'faviconMediaId',
+    'supportEmail',
+    'supportPhone',
+    'whatsapp',
+    'officeAddress',
+    'googleMapsUrl',
+    'facebook',
+    'instagram',
+    'tiktok',
+    'youtube',
+    'twitter',
+    'copyright',
+    'maintenanceMode',
+    'timezone',
+    'currency',
+    'language',
+    'seoTitle',
+    'seoDescription',
+    'seoKeywords',
+  ];
+
+  const patch: Partial<WebsiteSetting> = {};
+  for (const key of keys) {
+    if (next[key] === undefined) continue;
+    const a =
+      key === 'logo' || key === 'logoDark' || key === 'favicon'
+        ? mediaToUrl(original?.[key])
+        : (original?.[key] as any);
+    const b =
+      key === 'logo' || key === 'logoDark' || key === 'favicon'
+        ? mediaToUrl(next[key])
+        : (next[key] as any);
+    if (a !== b) {
+      (patch as any)[key] = next[key];
+    }
+  }
+  return patch;
 }
 
 // Helper to convert section keys from Camel to Snake
@@ -217,9 +285,22 @@ export const websiteService = {
   },
 
   async updateSetting(id: number, setting: Partial<WebsiteSetting>): Promise<WebsiteSetting> {
+    return this.patchSetting(id, setting);
+  },
+
+  /** Sparse PATCH — only send changed fields (Sprint 7.3 live sync). */
+  async patchSetting(id: number, setting: Partial<WebsiteSetting>): Promise<WebsiteSetting> {
     const backendData = settingToBackend(setting);
-    const res = await apiClient.put<ApiResponse<WebsiteSetting>>(`/admin/website/settings/${id}`, backendData);
+    const res = await apiClient.patch<ApiResponse<WebsiteSetting>>(
+      `/admin/website/settings/${id}`,
+      backendData
+    );
     return res.data.data;
+  },
+
+  async getCmsSyncStatus() {
+    const res = await apiClient.get<ApiResponse<any>>('/public/cms-sync');
+    return res.data;
   },
 
   async deleteSetting(id: number): Promise<void> {

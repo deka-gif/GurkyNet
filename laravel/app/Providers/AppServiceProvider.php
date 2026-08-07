@@ -44,6 +44,8 @@ use App\Repositories\Eloquent\StaticPageRepository;
 
 use App\Repositories\Contracts\SystemSettingRepositoryInterface;
 use App\Repositories\Eloquent\SystemSettingRepository;
+use App\Contracts\Realtime\RealtimeTransport;
+use App\Services\Realtime\SseRealtimeTransport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -72,6 +74,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(WebsiteMenuRepositoryInterface::class, WebsiteMenuRepository::class);
         $this->app->bind(StaticPageRepositoryInterface::class, StaticPageRepository::class);
         $this->app->bind(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
+
+        // Sprint 8.0 — swap to ReverbRealtimeTransport later without changing services
+        $this->app->singleton(RealtimeTransport::class, SseRealtimeTransport::class);
     }
 
     /**
@@ -209,6 +214,15 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\Event::listen(
             \App\Events\WalletDebited::class,
             \App\Listeners\BroadcastEvent::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletCredited::class,
+            \App\Listeners\RecordFinanceLedger::class
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletDebited::class,
+            \App\Listeners\RecordFinanceLedger::class
         );
 
         \Illuminate\Support\Facades\Event::listen(

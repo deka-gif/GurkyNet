@@ -52,7 +52,7 @@ class PublicWebsiteController extends Controller
     public function settings(): JsonResponse
     {
         try {
-            $payload = \Illuminate\Support\Facades\Cache::remember('public:website:settings', 60, function () {
+            $payload = \App\Services\Website\PublicHomepageCache::rememberSettings(function () {
                 try {
                     $setting = $this->settingAction->getLatest();
                 } catch (\Throwable $e) {
@@ -89,7 +89,7 @@ class PublicWebsiteController extends Controller
         } catch (\Throwable $e) {
             report($e);
             try {
-                \Illuminate\Support\Facades\Cache::forget('public:website:settings');
+                \Illuminate\Support\Facades\Cache::forget(\App\Services\Website\PublicHomepageCache::SETTINGS_KEY);
             } catch (\Throwable) {
                 // ignore cache flush failures
             }
@@ -99,6 +99,17 @@ class PublicWebsiteController extends Controller
                 $this->defaultPublicSettingsPayload()
             );
         }
+    }
+
+    /**
+     * GET /api/v1/public/cms-sync — revision signal for live CMS refetch (Sprint 7.3).
+     */
+    public function cmsSync(): JsonResponse
+    {
+        return $this->successResponse(
+            'CMS sync status.',
+            \App\Services\Website\CmsSyncService::status()
+        );
     }
 
     /**
@@ -139,26 +150,28 @@ class PublicWebsiteController extends Controller
 
     public function menus(): JsonResponse
     {
-        $menus = $this->menuAction->listAll()
-            ->filter(fn ($menu) => $menu->visible === true)
-            ->values();
+        $menus = \App\Services\Website\PublicHomepageCache::rememberMenus(function () {
+            $rows = $this->menuAction->listAll()
+                ->filter(fn ($menu) => $menu->visible === true)
+                ->values();
 
-        return $this->successResponse(
-            'Daftar menu website berhasil dimuat.',
-            WebsiteMenuResource::collection($menus)
-        );
+            return WebsiteMenuResource::collection($rows)->resolve();
+        });
+
+        return $this->successResponse('Daftar menu website berhasil dimuat.', $menus);
     }
 
     public function staticPages(): JsonResponse
     {
-        $pages = $this->pageAction->listAll()
-            ->filter(fn ($page) => $page->status === 'published')
-            ->values();
+        $pages = \App\Services\Website\PublicHomepageCache::rememberPages(function () {
+            $rows = $this->pageAction->listAll()
+                ->filter(fn ($page) => $page->status === 'published')
+                ->values();
 
-        return $this->successResponse(
-            'Daftar halaman statis berhasil dimuat.',
-            StaticPageResource::collection($pages)
-        );
+            return StaticPageResource::collection($rows)->resolve();
+        });
+
+        return $this->successResponse('Daftar halaman statis berhasil dimuat.', $pages);
     }
 
     /**

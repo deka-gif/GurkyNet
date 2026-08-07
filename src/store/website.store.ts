@@ -13,6 +13,7 @@ interface WebsiteState {
   faqs: HomepagePayload['faqs'];
   seo: HomepagePayload['seo'] | null;
   homepageReady: boolean;
+  cmsRevision: number | null;
 
   loadingSettings: boolean;
   loadingSections: boolean;
@@ -32,10 +33,13 @@ interface WebsiteState {
   fetchPages: (force?: boolean) => Promise<void>;
   fetchBanners: (force?: boolean) => Promise<void>;
   fetchHomepage: (force?: boolean) => Promise<void>;
+  /** Force-refetch public CMS surfaces after Marketing save / revision bump. */
+  syncFromCms: (scopes?: string[]) => Promise<void>;
 }
 
 /** In-flight promise — ensures GET /public/homepage is never duplicated. */
 let homepageInflight: Promise<void> | null = null;
+let syncInflight: Promise<void> | null = null;
 
 export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   settings: null,
@@ -48,6 +52,7 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   faqs: [],
   seo: null,
   homepageReady: false,
+  cmsRevision: null,
 
   loadingSettings: false,
   loadingSections: false,
@@ -98,10 +103,11 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
         });
       } catch (err: any) {
         const message = err?.message || 'Gagal memuat homepage publik.';
+        // Keep last good snapshot — never blank the site on sync/API failure
         set({
-          errorSettings: message,
-          errorSections: message,
-          errorBanners: message,
+          errorSettings: get().settings ? null : message,
+          errorSections: get().sections.length ? null : message,
+          errorBanners: get().banners.length ? null : message,
           loadingSettings: false,
           loadingSections: false,
           loadingBanners: false,
@@ -130,7 +136,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
       const setting = Array.isArray(data) ? (data.length > 0 ? data[0] : null) : (data || null);
       set({ settings: setting, loadingSettings: false });
     } catch (err: any) {
-      set({ errorSettings: err.message || 'Gagal memuat pengaturan website.', loadingSettings: false });
+      set({
+        errorSettings: get().settings ? null : (err.message || 'Gagal memuat pengaturan website.'),
+        loadingSettings: false,
+      });
     }
   },
 
@@ -145,7 +154,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
       const response = await websiteService.getPublicSections();
       set({ sections: response.data || [], loadingSections: false });
     } catch (err: any) {
-      set({ errorSections: err.message || 'Gagal memuat seksi halaman.', loadingSections: false });
+      set({
+        errorSections: get().sections.length ? null : (err.message || 'Gagal memuat seksi halaman.'),
+        loadingSections: false,
+      });
     }
   },
 
@@ -160,7 +172,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
       const response = await websiteService.getPublicMenus();
       set({ menus: response.data || [], loadingMenus: false });
     } catch (err: any) {
-      set({ errorMenus: err.message || 'Gagal memuat menu navigasi.', loadingMenus: false });
+      set({
+        errorMenus: get().menus.length ? null : (err.message || 'Gagal memuat menu navigasi.'),
+        loadingMenus: false,
+      });
     }
   },
 
@@ -175,7 +190,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
       const response = await websiteService.getPublicPages();
       set({ pages: response.data || [], loadingPages: false });
     } catch (err: any) {
-      set({ errorPages: err.message || 'Gagal memuat halaman statis.', loadingPages: false });
+      set({
+        errorPages: get().pages.length ? null : (err.message || 'Gagal memuat halaman statis.'),
+        loadingPages: false,
+      });
     }
   },
 
@@ -190,7 +208,50 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
       const response = await websiteService.getPublicBanners();
       set({ banners: response.data || [], loadingBanners: false });
     } catch (err: any) {
-      set({ errorBanners: err.message || 'Gagal memuat banner promosi.', loadingBanners: false });
+      set({
+        errorBanners: get().banners.length ? null : (err.message || 'Gagal memuat banner promosi.'),
+        loadingBanners: false,
+      });
+    }
+  },
+
+  syncFromCms: async (scopes = []) => {
+    if (syncInflight) return syncInflight;
+
+    syncInflight = (async () => {
+      const scopeSet = new Set(scopes || []);
+      const refreshAll =
+        scopeSet.size === 0 ||
+        scopeSet.has('HomepageUpdated') ||
+        scopeSet.has('WebsiteSettingUpdated') ||
+        scopeSet.has('BannerUpdated') ||
+        scopeSet.has('MenuUpdated') ||
+        scopeSet.has('StaticPageUpdated') ||
+        scopeSet.has('LegalUpdated');
+
+      // Always refresh homepage aggregate when identity/homepage surfaces change.
+      if (refreshAll) {
+        await get().fetchHomepage(true);
+      }
+
+      if (scopeSet.has('WebsiteSettingUpdated') || scopeSet.size === 0) {
+        await get().fetchSettings(true);
+      }
+      if (scopeSet.has('MenuUpdated') || scopeSet.size === 0) {
+        await get().fetchMenus(true);
+      }
+      if (scopeSet.has('StaticPageUpdated') || scopeSet.has('LegalUpdated') || scopeSet.size === 0) {
+        await get().fetchPages(true);
+      }
+      if (scopeSet.has('BannerUpdated') || scopeSet.size === 0) {
+        await get().fetchBanners(true);
+      }
+    })();
+
+    try {
+      await syncInflight;
+    } finally {
+      syncInflight = null;
     }
   },
 }));

@@ -37,7 +37,7 @@ class StaticPageAction
     public function create(array $data): StaticPage
     {
         $page = $this->repository->create($data);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_STATIC_PAGE, 'static_page_create');
 
         return $page;
     }
@@ -45,7 +45,7 @@ class StaticPageAction
     public function update(int $id, array $data): StaticPage
     {
         $page = $this->repository->update($id, $data);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_STATIC_PAGE, 'static_page_update');
 
         return $page;
     }
@@ -53,7 +53,7 @@ class StaticPageAction
     public function delete(int $id): bool
     {
         $ok = $this->repository->delete($id);
-        PublicHomepageCache::forget();
+        PublicHomepageCache::forget(\App\Services\Website\CmsSyncService::SCOPE_STATIC_PAGE, 'static_page_delete');
 
         return $ok;
     }

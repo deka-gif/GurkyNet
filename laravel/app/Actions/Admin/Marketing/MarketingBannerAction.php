@@ -20,7 +20,10 @@ class MarketingBannerAction
     public function create(array $data): BannerPromotion
     {
         $banner = $this->marketingRepository->createBanner($data);
-        \App\Services\Website\PublicHomepageCache::forget();
+        \App\Services\Website\PublicHomepageCache::forget(
+            \App\Services\Website\CmsSyncService::SCOPE_BANNER,
+            'banner_create'
+        );
 
         return $banner;
     }
@@ -28,7 +31,10 @@ class MarketingBannerAction
     public function update(string|int $id, array $data): BannerPromotion
     {
         $banner = $this->marketingRepository->updateBanner($id, $data);
-        \App\Services\Website\PublicHomepageCache::forget();
+        \App\Services\Website\PublicHomepageCache::forget(
+            \App\Services\Website\CmsSyncService::SCOPE_BANNER,
+            'banner_update'
+        );
 
         return $banner;
     }
@@ -36,7 +42,10 @@ class MarketingBannerAction
     public function delete(string|int $id): bool
     {
         $ok = $this->marketingRepository->deleteBanner($id);
-        \App\Services\Website\PublicHomepageCache::forget();
+        \App\Services\Website\PublicHomepageCache::forget(
+            \App\Services\Website\CmsSyncService::SCOPE_BANNER,
+            'banner_delete'
+        );
 
         return $ok;
     }

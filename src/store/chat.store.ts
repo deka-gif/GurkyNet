@@ -12,9 +12,10 @@ type ChatState = {
   sending: boolean;
   error: string | null;
   hydratedUserId: string | null;
-  hydrate: (userId: string, userName?: string | null) => Promise<void>;
+  hydrate: (userId: string, userName?: string | null, opts?: { transactionId?: number; force?: boolean }) => Promise<void>;
   sendMessage: (body: string, senderName?: string | null) => Promise<void>;
-  reloadFromStorage: (userId: string) => Promise<void>;
+  appendMessage: (msg: ChatMessage) => void;
+  reloadThread: () => Promise<void>;
   clearError: () => void;
 };
 
@@ -26,37 +27,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
   hydratedUserId: null,
 
-  hydrate: async (userId, userName) => {
+  hydrate: async (userId, userName, opts) => {
     if (!userId) return;
-    // Lazy hydration — skip re-read when same user already loaded
-    if (get().hydratedUserId === userId && get().conversation) {
+    if (!opts?.force && get().hydratedUserId === userId && get().conversation) {
       return;
     }
     set({ loading: true, error: null });
     try {
-      const snap = await chatService.ensureConversation({ userId, userName });
+      const snap = await chatService.ensureConversation({
+        userId,
+        userName,
+        transactionId: opts?.transactionId,
+      });
       set({
         conversation: snap.conversation,
         messages: snap.messages,
         loading: false,
         hydratedUserId: userId,
       });
+      void chatService.markRead(snap.conversation.id);
     } catch (err: any) {
       set({
-        error: err?.message || 'Gagal membuka chat.',
+        error: err?.response?.data?.message || err?.message || 'Gagal membuka chat.',
         loading: false,
       });
     }
   },
 
-  reloadFromStorage: async (userId) => {
-    if (!userId) return;
-    const snap = await chatService.ensureConversation({ userId });
-    set({
-      conversation: snap.conversation,
-      messages: snap.messages,
-      hydratedUserId: userId,
-    });
+  reloadThread: async () => {
+    const conv = get().conversation;
+    if (!conv) return;
+    try {
+      const snap = await chatService.getThread(conv.id);
+      set({ conversation: snap.conversation, messages: snap.messages });
+    } catch {
+      // keep
+    }
+  },
+
+  appendMessage: (msg) => {
+    const exists = get().messages.some(
+      (m) => m.id === msg.id || (msg.clientMessageId && m.clientMessageId === msg.clientMessageId)
+    );
+    if (exists) return;
+    set({ messages: [...get().messages, msg] });
   },
 
   sendMessage: async (body, senderName) => {
@@ -99,7 +113,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err: any) {
       set({
         sending: false,
-        error: err?.message || 'Gagal mengirim pesan.',
+        error: err?.response?.data?.message || err?.message || 'Gagal mengirim pesan.',
         messages: get().messages.map((m) =>
           m.status === 'sending' ? { ...m, status: 'failed' as const } : m
         ),
