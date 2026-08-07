@@ -154,9 +154,8 @@ class PublicWebsiteController extends Controller
             ->sortBy('display_order')
             ->values();
         $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
-            ->where('type', 'banner')
-            ->where('is_active', true)
-            ->latest()
+            ->visibleInCarousel()
+            ->orderedForDisplay()
             ->take(10)
             ->get();
         $heroSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'hero');
@@ -183,14 +182,38 @@ class PublicWebsiteController extends Controller
     public function banners(): JsonResponse
     {
         $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
-            ->where('type', 'banner')
-            ->where('is_active', true)
-            ->latest()
+            ->visibleInCarousel()
+            ->orderedForDisplay()
             ->get();
 
         return $this->successResponse(
             'Daftar banner berhasil dimuat.',
             BannerResource::collection($banners)
+        );
+    }
+
+    /**
+     * GET /api/v1/public/banners/{slug}
+     * Promo detail for user dashboard (read-only).
+     */
+    public function bannerBySlug(string $slug): JsonResponse
+    {
+        $banner = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
+            ->banners()
+            ->where('slug', $slug)
+            ->first();
+
+        if (! $banner) {
+            return $this->errorResponse('Promo tidak ditemukan.', 404);
+        }
+
+        if (! $banner->is_active) {
+            return $this->errorResponse('Promo tidak tersedia.', 404);
+        }
+
+        return $this->successResponse(
+            'Detail promo berhasil dimuat.',
+            new BannerResource($banner)
         );
     }
 

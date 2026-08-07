@@ -71,7 +71,7 @@ export const NotifikasiPage = () => {
           )}
           
           <button 
-            onClick={fetchNotifications}
+            onClick={() => void fetchNotifications({ force: true })}
             className="p-2.5 rounded-xl bg-white border border-gray-100 hover:bg-gray-50 text-gray-500 transition-all shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />

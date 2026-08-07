@@ -2,21 +2,45 @@ import { create } from 'zustand';
 import { transactionService } from '../services/transaction/transaction.service';
 import { Transaction } from '../types';
 import { normalizeTransactionStatus } from '../utils/transactionStatus';
+import { CacheTTL, cachedFetch, getCachedStale, invalidateCache } from '../utils/queryCache';
 
 function normalizeTransactionRow(row: any): Transaction {
   const status = normalizeTransactionStatus(row?.status);
+  const providerCode =
+    row?.providerCode ||
+    row?.provider_code ||
+    row?.fulfillment_provider_code ||
+    row?.fulfillmentProviderCode ||
+    null;
+  const providerName =
+    row?.providerName ||
+    row?.provider_name ||
+    row?.provider ||
+    null;
+
   return {
     ...row,
     id: row?.id,
     transactionCode: row?.transactionCode || row?.invoice_number || row?.transaction_code || '',
+    invoice_number: row?.invoice_number || row?.transactionCode || row?.transaction_code,
     serviceName: row?.serviceName || row?.service_name || '',
-    productName: row?.productName || row?.product_name || row?.serviceName || row?.service_name || '',
+    productName:
+      row?.productName ||
+      row?.product_name ||
+      row?.serviceName ||
+      row?.service_name ||
+      '',
     targetNo: row?.targetNo || row?.target_number || '',
     amount: Number(row?.amount ?? 0),
     date: row?.date || row?.createdAt || row?.created_at || '',
     status: status as Transaction['status'],
     note: row?.note || row?.notes || '',
     notes: row?.notes || row?.note || '',
+    providerCode,
+    providerName,
+    adminFee: row?.adminFee != null ? Number(row.adminFee) : undefined,
+    totalPayment: row?.totalPayment != null ? Number(row.totalPayment) : undefined,
+    paymentMethod: row?.paymentMethod || row?.payment_method || null,
   };
 }
 
@@ -52,43 +76,48 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   lastFetchedAt: null,
 
   fetchTransactions: async () => {
-    console.log('HISTORY FETCH');
-    set({ loading: true, error: null, errorCode: null, validationErrors: null });
-    try {
-      const response = await transactionService.getTransactions();
-      console.log('HISTORY RESPONSE', {
-        success: response?.success,
-        count: Array.isArray(response?.data) ? response.data.length : null,
-        sampleStatuses: unwrapTransactionList(response?.data)
-          .slice(0, 5)
-          .map((row) => ({
-            code: row?.transactionCode || row?.invoice_number,
-            status: row?.status,
-            normalized: normalizeTransactionStatus(row?.status),
-          })),
-      });
+    const stale = getCachedStale<Transaction[]>('transactions:list');
+    if (stale?.fresh && get().transactions.length > 0) {
+      return;
+    }
+    if (stale && get().transactions.length === 0) {
+      set({ transactions: stale.data, loading: false, lastFetchedAt: Date.now() });
+      if (stale.fresh) return;
+    }
 
-      if (response.success && response.data !== undefined && response.data !== null) {
-        const rows = unwrapTransactionList(response.data).map(normalizeTransactionRow);
-        console.log('HISTORY CACHE', {
-          stored: rows.length,
-          statuses: rows.slice(0, 5).map((r) => ({ code: r.transactionCode, status: r.status })),
-        });
+    if (get().transactions.length === 0) {
+      set({ loading: true, error: null, errorCode: null, validationErrors: null });
+    } else {
+      set({ error: null, errorCode: null, validationErrors: null });
+    }
+
+    try {
+      const rows = await cachedFetch({
+        key: 'transactions:list',
+        ttlMs: CacheTTL.RECENT_TX,
+        fetcher: async () => {
+          const response = await transactionService.getTransactions();
+          if (!response.success || response.data === undefined || response.data === null) {
+            throw new Error(response.message || 'Gagal memuat riwayat');
+          }
+          return unwrapTransactionList(response.data).map(normalizeTransactionRow);
+        },
+      });
+      set({
+        transactions: rows,
+        loading: false,
+        lastFetchedAt: Date.now(),
+      });
+    } catch (err: any) {
+      if (get().transactions.length === 0) {
         set({
-          transactions: rows,
+          error: err.message || 'Gagal memuat riwayat transaksi.',
+          errorCode: err.status || null,
           loading: false,
-          lastFetchedAt: Date.now(),
         });
       } else {
-        set({ error: response.message, loading: false });
+        set({ loading: false });
       }
-    } catch (err: any) {
-      console.error('HISTORY FETCH failed', err);
-      set({
-        error: err.message || 'Gagal memuat riwayat transaksi.',
-        errorCode: err.status || null,
-        loading: false,
-      });
     }
   },
 
@@ -102,11 +131,12 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     );
     if (idx === -1) {
       set({ transactions: [normalized, ...current] });
-      return;
+    } else {
+      const next = [...current];
+      next[idx] = { ...next[idx], ...normalized };
+      set({ transactions: next });
     }
-    const next = [...current];
-    next[idx] = { ...next[idx], ...normalized };
-    set({ transactions: next });
+    invalidateCache('transactions:list');
   },
 
   createTransaction: async (data) => {

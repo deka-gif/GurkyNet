@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
+import { LazyRoute } from '../components/ui/LazyRoute';
+import { LazyImage } from '../components/ui/LazyImage';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home, 
@@ -50,6 +52,7 @@ import { useAuthStore } from '../store/auth.store';
 import { useWebsiteStore } from '../store/website.store';
 import { UserRole } from '../constants/auth';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
+import { NotificationToast } from '../components/notifications/NotificationToast';
 // @ts-ignore
 import logoImg from '../logo.png';
 import { formatIDR } from '../utils/currency';
@@ -555,7 +558,7 @@ export const DashboardLayout = () => {
 
             {/* Profile Avatar & Name */}
             <Link to="/dashboard/account" className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 p-1.5 pr-3.5 rounded-2xl border border-gray-100 transition-all group">
-              <img 
+              <LazyImage
                 src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'} 
                 alt={currentUser.name} 
                 referrerPolicy="no-referrer"
@@ -572,9 +575,14 @@ export const DashboardLayout = () => {
 
         {/* CONTENT VIEW AREA */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <Outlet />
+          <LazyRoute>
+            <Outlet />
+          </LazyRoute>
         </main>
       </div>
+
+      {/* Modern toast host — queued, auto-hide 15s, pause on hover */}
+      <NotificationToast />
 
       {/* ========================================================= */}
       {/* MOBILE BOTTOM NAVIGATION */}

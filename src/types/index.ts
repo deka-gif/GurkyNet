@@ -61,12 +61,27 @@ export interface WalletOverview {
 export interface Banner {
   id: string;
   title: string;
+  slug?: string;
   description: string;
+  terms?: string | null;
   image: string;
+  imageUrl?: string;
+  mobileImageUrl?: string;
   promoCode?: string;
+  code?: string;
   validUntil?: string;
-  isActive: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
   redirectUrl?: string;
+  priority?: number;
+  sortOrder?: number;
+  isActive: boolean;
+  status?: 'active' | 'upcoming' | 'expired' | 'inactive' | string;
+  scheduleStatus?: string;
 }
 
 export interface Product {
@@ -103,6 +118,12 @@ export interface Transaction {
   status: 'sukses' | 'success' | 'pending' | 'gagal' | 'failed' | 'cancelled';
   note?: string;
   notes?: string;
+  /** Fulfillment provider code from API when present (e.g. digiflazz, vip). */
+  providerCode?: string | null;
+  providerName?: string | null;
+  adminFee?: number;
+  totalPayment?: number;
+  paymentMethod?: string | null;
 }
 
 export interface Notification {

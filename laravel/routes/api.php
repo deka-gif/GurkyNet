@@ -59,6 +59,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/homepage',           [PublicWebsiteController::class, 'homepage']);
         Route::get('/homepage-sections',  [PublicWebsiteController::class, 'homepageSections']);
         Route::get('/banners',            [PublicWebsiteController::class, 'banners']);
+        Route::get('/banners/{slug}',     [PublicWebsiteController::class, 'bannerBySlug']);
         Route::get('/promotions',         [PublicWebsiteController::class, 'promotions']);
         Route::get('/vouchers',           [PublicWebsiteController::class, 'vouchers']);
         Route::get('/announcements',      [PublicWebsiteController::class, 'announcements']);

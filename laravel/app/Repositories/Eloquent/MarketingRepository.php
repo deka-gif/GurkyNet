@@ -50,14 +50,19 @@ class MarketingRepository implements MarketingRepositoryInterface
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];
-            $query->where('title', 'like', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
         }
 
         if (isset($filters['status'])) {
-            $this->applyStatusFilter($query, $filters['status']);
+            $this->applyBannerScheduleFilter($query, $filters['status']);
         }
 
-        return $query->latest()->paginate($perPage);
+        return $query->orderedForDisplay()->paginate($perPage);
     }
 
     /**
@@ -65,14 +70,21 @@ class MarketingRepository implements MarketingRepositoryInterface
      */
     public function createBanner(array $data): BannerPromotion
     {
+        $data = $this->normalizeBannerPayload($data);
         $data['type'] = 'banner';
         $data['is_active'] = filter_var($data['is_active'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
+        if (empty($data['slug']) && ! empty($data['title'])) {
+            $data['slug'] = BannerPromotion::makeUniqueSlug($data['title']);
+        }
+
         $banner = BannerPromotion::create($data);
+        $banner->load(['imageMedia', 'mobileImageMedia']);
 
         $this->marketingService->logActivity('CREATE_BANNER', [
             'banner_id' => $banner->id,
             'title' => $banner->title,
+            'slug' => $banner->slug,
         ]);
 
         return $banner;
@@ -84,9 +96,16 @@ class MarketingRepository implements MarketingRepositoryInterface
     public function updateBanner(string|int $id, array $data): BannerPromotion
     {
         $banner = BannerPromotion::where('type', 'banner')->findOrFail($id);
+        $data = $this->normalizeBannerPayload($data);
 
         if (isset($data['is_active'])) {
             $data['is_active'] = filter_var($data['is_active'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (array_key_exists('slug', $data) && filled($data['slug'])) {
+            $data['slug'] = BannerPromotion::makeUniqueSlug((string) $data['slug'], $banner->id);
+        } elseif (! empty($data['title']) && blank($banner->slug)) {
+            $data['slug'] = BannerPromotion::makeUniqueSlug($data['title'], $banner->id);
         }
 
         $banner->update($data);
@@ -97,7 +116,7 @@ class MarketingRepository implements MarketingRepositoryInterface
             'updated_fields' => array_keys($data),
         ]);
 
-        return $banner->fresh();
+        return $banner->fresh(['imageMedia', 'mobileImageMedia']);
     }
 
     /**
@@ -387,5 +406,74 @@ class MarketingRepository implements MarketingRepositoryInterface
         } elseif ($status === 'inactive' || $status === '0' || $status === false || $status === 0) {
             $query->where('is_active', false);
         }
+    }
+
+    /**
+     * Banner CMS schedule filters (Active / Scheduled / Expired / Hidden).
+     */
+    protected function applyBannerScheduleFilter($query, mixed $status): void
+    {
+        $status = strtolower((string) $status);
+        $now = now();
+
+        if (in_array($status, ['active', '1', 'true'], true)) {
+            $query->where('is_active', true)
+                ->where(function ($q) use ($now) {
+                    $q->whereNull('starts_at')->orWhere('starts_at', '<=', $now);
+                })
+                ->where(function ($q) use ($now) {
+                    $q->whereNull('ends_at')->orWhere('ends_at', '>=', $now);
+                });
+
+            return;
+        }
+
+        if (in_array($status, ['scheduled', 'upcoming', 'akan datang'], true)) {
+            $query->where('is_active', true)->whereNotNull('starts_at')->where('starts_at', '>', $now);
+
+            return;
+        }
+
+        if (in_array($status, ['expired', 'berakhir'], true)) {
+            $query->whereNotNull('ends_at')->where('ends_at', '<', $now);
+
+            return;
+        }
+
+        if (in_array($status, ['hidden', 'inactive', 'draft', '0', 'false'], true)) {
+            $query->where('is_active', false);
+
+            return;
+        }
+
+        $this->applyStatusFilter($query, $status);
+    }
+
+    /**
+     * Keep only fillable banner fields; drop UI-only keys.
+     */
+    protected function normalizeBannerPayload(array $data): array
+    {
+        unset(
+            $data['position'],
+            $data['tagline'],
+            $data['name'],
+            $data['link_url'],
+            $data['clickUrl'],
+            $data['cta_url'],
+            $data['ctaUrl'],
+            $data['start_date'],
+            $data['end_date'],
+            $data['promo_code'],
+            $data['promoCode'],
+            $data['ctaLabel'],
+            $data['sortOrder'],
+            $data['terms_and_conditions'],
+            $data['mobile_image_url'],
+            $data['image'],
+            $data['mobileImage'],
+        );
+
+        return $data;
     }
 }

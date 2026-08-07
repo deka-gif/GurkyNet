@@ -32,6 +32,9 @@ class TransactionResource extends JsonResource
             'paymentMethod' => $this->payment_method,
             'status' => $normalizedStatus,
             'notes' => $this->notes,
+            // Existing fulfillment column — expose for history badges (no provider logic change).
+            'providerCode' => $this->fulfillment_provider_code,
+            'providerName' => $this->fulfillment_provider_code,
             'items' => TransactionItemResource::collection($this->whenLoaded('items')),
             'date' => $this->created_at?->toIso8601String(),
             'createdAt' => $this->created_at?->toIso8601String(),

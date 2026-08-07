@@ -6,4 +6,9 @@ export const bannerService = {
     const response = await apiClient.get<ApiResponse<Banner[]>>('/public/banners');
     return response.data;
   },
+
+  getBannerBySlug: async (slug: string): Promise<ApiResponse<Banner>> => {
+    const response = await apiClient.get<ApiResponse<Banner>>(`/public/banners/${encodeURIComponent(slug)}`);
+    return response.data;
+  },
 };

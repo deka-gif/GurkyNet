@@ -62,12 +62,16 @@ export const MarketingBannerManagement: React.FC = () => {
 
   const [formState, setFormState] = useState<{
     title: string;
-    position: string;
+    slug: string;
+    code: string;
     description: string;
+    terms: string;
     link_url: string;
-    tagline: string;
+    cta_label: string;
     start_date: string;
     end_date: string;
+    priority: number;
+    sort_order: number;
     is_active: boolean;
     image_media_id?: number;
     mobile_image_media_id?: number;
@@ -77,12 +81,16 @@ export const MarketingBannerManagement: React.FC = () => {
     mobile_image_url?: string;
   }>({
     title: '',
-    position: 'Homepage Carousel',
+    slug: '',
+    code: '',
     description: '',
+    terms: '',
     link_url: '',
-    tagline: '',
+    cta_label: 'Gunakan Promo',
     start_date: '',
     end_date: '',
+    priority: 0,
+    sort_order: 0,
     is_active: true,
     image_media_id: undefined,
     mobile_image_media_id: undefined,
@@ -109,12 +117,16 @@ export const MarketingBannerManagement: React.FC = () => {
     setEditingBannerId(null);
     setFormState({
       title: '',
-      position: 'Homepage Carousel',
+      slug: '',
+      code: '',
       description: '',
+      terms: '',
       link_url: '',
-      tagline: '',
+      cta_label: 'Gunakan Promo',
       start_date: '',
       end_date: '',
+      priority: 0,
+      sort_order: 0,
       is_active: true,
       image_media_id: undefined,
       mobile_image_media_id: undefined,
@@ -130,19 +142,26 @@ export const MarketingBannerManagement: React.FC = () => {
     setEditingBannerId(banner.id);
     setFormState({
       title: banner.title || banner.name || '',
-      position: banner.position || 'Homepage Carousel',
+      slug: banner.slug || '',
+      code: banner.code || banner.promoCode || '',
       description: banner.description || '',
-      link_url: banner.link_url || banner.clickUrl || '',
-      tagline: banner.tagline || '',
-      start_date: banner.start_date || banner.startDate || '',
-      end_date: banner.end_date || banner.endDate || '',
-      is_active: banner.is_active ?? banner.status === 'Active',
+      terms: banner.terms || '',
+      link_url: banner.redirectUrl || banner.ctaUrl || banner.link_url || banner.clickUrl || '',
+      cta_label: banner.ctaLabel || banner.cta_label || 'Gunakan Promo',
+      start_date: banner.start_date || banner.startDate || (banner.startsAt ? String(banner.startsAt).slice(0, 10) : ''),
+      end_date: banner.end_date || banner.endDate || (banner.endsAt ? String(banner.endsAt).slice(0, 10) : ''),
+      priority: Number(banner.priority ?? 0),
+      sort_order: Number(banner.sort_order ?? banner.sortOrder ?? 0),
+      is_active: banner.is_active ?? banner.isActive ?? true,
       image_media_id: banner.image_media_id || banner.imageMediaId,
       mobile_image_media_id: banner.mobile_image_media_id || banner.mobileImageMediaId,
       image_media: banner.image_media || banner.imageMedia,
       mobile_image_media: banner.mobile_image_media || banner.mobileImageMedia,
       image_url: banner.image_url || banner.image || '',
-      mobile_image_url: banner.mobile_image_url || banner.mobileImage || '',
+      mobile_image_url:
+        typeof banner.mobileImage === 'string'
+          ? banner.mobileImage
+          : banner.mobile_image_url || banner.mobileImageUrl || '',
     });
     setIsFormModalOpen(true);
   };
@@ -174,19 +193,20 @@ export const MarketingBannerManagement: React.FC = () => {
     e.preventDefault();
     const payload = {
       title: formState.title,
-      name: formState.title,
-      position: formState.position,
+      slug: formState.slug || undefined,
+      code: formState.code || undefined,
       description: formState.description,
-      link_url: formState.link_url,
-      clickUrl: formState.link_url,
-      tagline: formState.tagline,
-      start_date: formState.start_date,
-      end_date: formState.end_date,
+      terms: formState.terms || undefined,
+      redirect_url: formState.link_url || undefined,
+      cta_label: formState.cta_label || undefined,
+      starts_at: formState.start_date || undefined,
+      ends_at: formState.end_date || undefined,
+      priority: formState.priority,
+      sort_order: formState.sort_order,
       is_active: formState.is_active,
       image_media_id: formState.image_media_id,
       mobile_image_media_id: formState.mobile_image_media_id,
-      image_url: formState.image_url,
-      mobile_image_url: formState.mobile_image_url,
+      image_url: formState.image_url || undefined,
     };
 
     let result;
@@ -230,50 +250,46 @@ export const MarketingBannerManagement: React.FC = () => {
   };
 
   const totalBanners = bannersPagination?.total ?? banners.length;
-  const activeBanners = banners.filter((b) => b.is_active || b.status === 'Active').length;
-  const scheduledBanners = banners.filter((b) => b.status === 'Scheduled').length;
-  const expiredBanners = banners.filter((b) => b.status === 'Expired').length;
+  const activeBanners = banners.filter((b) => (b.scheduleStatus || b.status) === 'active').length;
+  const scheduledBanners = banners.filter((b) => (b.scheduleStatus || b.status) === 'upcoming').length;
+  const expiredBanners = banners.filter((b) => (b.scheduleStatus || b.status) === 'expired').length;
 
   const getStatusBadge = (banner: any) => {
-    const status = banner.status || (banner.is_active ? 'Active' : 'Hidden');
+    const status = banner.scheduleStatus || banner.status || (banner.is_active || banner.isActive ? 'active' : 'inactive');
     switch (status) {
       case 'Active':
       case 'active':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            Active
+            Aktif
           </span>
         );
       case 'Scheduled':
       case 'scheduled':
+      case 'upcoming':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
             <Clock className="w-3.5 h-3.5 text-blue-600" />
-            Scheduled
-          </span>
-        );
-      case 'Draft':
-      case 'draft':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
-            <FileText className="w-3.5 h-3.5 text-amber-600" />
-            Draft
+            Akan Datang
           </span>
         );
       case 'Hidden':
       case 'hidden':
+      case 'inactive':
+      case 'Draft':
+      case 'draft':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200">
             <EyeOff className="w-3.5 h-3.5 text-purple-600" />
-            Hidden
+            Nonaktif
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-gray-100 text-gray-600 border border-gray-200">
             <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
-            Expired
+            Berakhir
           </span>
         );
     }
@@ -426,11 +442,10 @@ export const MarketingBannerManagement: React.FC = () => {
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none bg-white font-medium text-gray-800"
             >
               <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Scheduled">Scheduled</option>
-              <option value="Draft">Draft</option>
-              <option value="Hidden">Hidden</option>
-              <option value="Expired">Expired</option>
+              <option value="Active">Aktif</option>
+              <option value="Scheduled">Akan Datang</option>
+              <option value="Hidden">Nonaktif</option>
+              <option value="Expired">Berakhir</option>
             </select>
           </div>
 
@@ -472,7 +487,7 @@ export const MarketingBannerManagement: React.FC = () => {
             <thead>
               <tr className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-100 uppercase tracking-wider text-[10px]">
                 <th className="py-3.5 px-4">Banner Name</th>
-                <th className="py-3.5 px-4">Position</th>
+                <th className="py-3.5 px-4">Slug</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Start Date</th>
                 <th className="py-3.5 px-4">End Date</th>
@@ -503,9 +518,9 @@ export const MarketingBannerManagement: React.FC = () => {
                       <div className="text-[10px] text-gray-400 font-mono mt-0.5">{banner.id}</div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-[10px] inline-flex items-center gap-1">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-[10px] inline-flex items-center gap-1 font-mono">
                         <Layers className="w-3 h-3 text-slate-500" />
-                        {banner.position || 'Homepage Carousel'}
+                        {banner.slug || '-'}
                       </span>
                     </td>
                     <td className="py-4 px-4">{getStatusBadge(banner)}</td>
@@ -796,7 +811,7 @@ export const MarketingBannerManagement: React.FC = () => {
 
             <form onSubmit={handleSaveBanner} className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Judul / Nama Banner</label>
+                <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Judul Promo</label>
                 <input
                   type="text"
                   required
@@ -808,27 +823,23 @@ export const MarketingBannerManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Position</label>
-                  <select
-                    value={formState.position}
-                    onChange={(e) => setFormState((prev) => ({ ...prev, position: e.target.value }))}
-                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
-                  >
-                    <option value="Homepage Carousel">Homepage Carousel</option>
-                    <option value="Category Header">Category Header</option>
-                    <option value="Popup Modal">Popup Modal</option>
-                    <option value="Footer Banner">Footer Banner</option>
-                    <option value="Sidebar Banner">Sidebar Banner</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Tagline</label>
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Slug</label>
                   <input
                     type="text"
-                    value={formState.tagline}
-                    onChange={(e) => setFormState((prev) => ({ ...prev, tagline: e.target.value }))}
+                    value={formState.slug}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, slug: e.target.value }))}
+                    placeholder="otomatis dari judul"
                     className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Kode Promo</label>
+                  <input
+                    type="text"
+                    value={formState.code}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                    placeholder="FLASHSALE"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium font-mono"
                   />
                 </div>
               </div>
@@ -855,15 +866,50 @@ export const MarketingBannerManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Target URL</label>
-                <input
-                  type="text"
-                  value={formState.link_url}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, link_url: e.target.value }))}
-                  placeholder="https://gurkynet.id/promo/..."
-                  className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Priority</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={formState.priority}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, priority: Number(e.target.value) || 0 }))}
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Sort Order</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={formState.sort_order}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, sort_order: Number(e.target.value) || 0 }))}
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">CTA Label</label>
+                  <input
+                    type="text"
+                    value={formState.cta_label}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, cta_label: e.target.value }))}
+                    placeholder="Gunakan Promo"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">CTA URL</label>
+                  <input
+                    type="text"
+                    value={formState.link_url}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, link_url: e.target.value }))}
+                    placeholder="/dashboard/pulsa"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -872,6 +918,16 @@ export const MarketingBannerManagement: React.FC = () => {
                   value={formState.description}
                   onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
                   rows={2}
+                  className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium resize-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Syarat & Ketentuan</label>
+                <textarea
+                  value={formState.terms}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, terms: e.target.value }))}
+                  rows={3}
                   className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all font-medium resize-none"
                 />
               </div>

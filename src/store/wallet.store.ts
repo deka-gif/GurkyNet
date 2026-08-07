@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { walletService } from '../services/wallet/wallet.service';
 import { Wallet, WalletOverviewSummary, WalletLedgerEntry } from '../types';
+import { CacheTTL, cachedFetch, getCachedStale } from '../utils/queryCache';
 
 interface WalletState {
   wallet: Wallet | null;
@@ -73,22 +74,53 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   lastTopUpError: null,
 
   fetchWallet: async () => {
-    set({ loading: true, error: null });
+    const stale = getCachedStale<{
+      wallet: Wallet | null;
+      summary: WalletOverviewSummary | null;
+      recent: WalletLedgerEntry[];
+    }>('wallet:overview');
+
+    if (stale?.fresh && get().wallet) {
+      return;
+    }
+
+    if (stale && !get().wallet) {
+      set({
+        wallet: stale.data.wallet,
+        summary: stale.data.summary,
+        history: stale.data.recent.length > 0 ? stale.data.recent : get().history,
+        loading: false,
+      });
+      if (stale.fresh) return;
+    }
+
+    if (!get().wallet) set({ loading: true, error: null });
+    else set({ error: null });
+
     try {
-      const response = await walletService.getWallet();
-      if (response.success && response.data) {
-        const parsed = normalizeOverviewPayload(response.data);
-        set({
-          wallet: parsed.wallet,
-          summary: parsed.summary,
-          history: parsed.recent.length > 0 ? parsed.recent : get().history,
-          loading: false,
-        });
-      } else {
-        set({ error: response.message || 'Gagal memuat dompet.', loading: false });
-      }
+      const parsed = await cachedFetch({
+        key: 'wallet:overview',
+        ttlMs: CacheTTL.WALLET,
+        fetcher: async () => {
+          const response = await walletService.getWallet();
+          if (!response.success || !response.data) {
+            throw new Error(response.message || 'Gagal memuat dompet.');
+          }
+          return normalizeOverviewPayload(response.data);
+        },
+      });
+      set({
+        wallet: parsed.wallet,
+        summary: parsed.summary,
+        history: parsed.recent.length > 0 ? parsed.recent : get().history,
+        loading: false,
+      });
     } catch (err: any) {
-      set({ error: err.message || 'Terjadi kesalahan jaringan.', loading: false });
+      if (!get().wallet) {
+        set({ error: err.message || 'Terjadi kesalahan jaringan.', loading: false });
+      } else {
+        set({ loading: false });
+      }
     }
   },
 

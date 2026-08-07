@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   History,
@@ -24,8 +25,14 @@ import {
   normalizeTransactionStatus,
   transactionStatusLabel,
 } from '../../utils/transactionStatus';
+import {
+  formatTransactionDateTime,
+  maskTargetNumber,
+  resolveProviderBadge,
+} from '../../utils/transactionDisplay';
 
 export const RiwayatPage = () => {
+  const navigate = useNavigate();
   const { transactions, loading, error, fetchTransactions } = useTransactionStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -303,7 +310,7 @@ export const RiwayatPage = () => {
             return (
               <div
                 key={tx.id}
-                onClick={() => setSelectedTx(tx)}
+                onClick={() => navigate(`/dashboard/riwayat/${encodeURIComponent(String(tx.id || tx.transactionCode))}`)}
                 className="bg-white rounded-3xl p-5 border border-gray-100 hover:border-primary-100 shadow-xl shadow-gray-200/10 cursor-pointer transition-all flex flex-col md:flex-row justify-between md:items-center gap-4 group"
               >
                 <div className="flex items-center gap-4">
@@ -337,13 +344,11 @@ export const RiwayatPage = () => {
                       {tx.productName}
                     </h4>
                     <p className="text-[10px] text-gray-400 mt-0.5">
-                      Tujuan: {tx.targetNo} •{' '}
-                      {new Date(tx.date).toLocaleString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      Tujuan: {maskTargetNumber(tx.targetNo)} •{' '}
+                      {formatTransactionDateTime(tx.date)}
+                      {resolveProviderBadge(tx.providerCode, tx.providerName)
+                        ? ` • ${resolveProviderBadge(tx.providerCode, tx.providerName)}`
+                        : ''}
                     </p>
                   </div>
                 </div>

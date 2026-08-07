@@ -12,17 +12,23 @@ import { NotFoundPage } from '../pages/public/NotFoundPage';
 import { UnauthorizedPage } from '../pages/public/UnauthorizedPage';
 import { ProtectedRoute } from '../components/ui/ProtectedRoute';
 import { GuestRoute } from '../components/ui/GuestRoute';
-import { DashboardHomePage } from '../pages/dashboard/DashboardHomePage';
-import { WalletPage } from '../pages/dashboard/WalletPage';
-import { PulsaPage } from '../pages/dashboard/PulsaPage';
-import { PaketDataPage } from '../pages/dashboard/PaketDataPage';
-import { TokenPlnPage } from '../pages/dashboard/TokenPlnPage';
-import { GamePage } from '../pages/dashboard/GamePage';
-import { VoucherDigitalPage } from '../pages/dashboard/VoucherDigitalPage';
-import { VoucherInternetPage } from '../pages/dashboard/VoucherInternetPage';
-import { TransferPage } from '../pages/dashboard/TransferPage';
-import { TelekomunikasiHubPage, TagihanHubPage } from '../pages/dashboard/ServiceHubPages';
 import {
+  DashboardHomePage,
+  PromoDetailPage,
+  TransactionDetailPage,
+  CustomerChatPage,
+  RiwayatPage,
+  WalletPage,
+  NotifikasiPage,
+  PulsaPage,
+  PaketDataPage,
+  TokenPlnPage,
+  GamePage,
+  VoucherDigitalPage,
+  VoucherInternetPage,
+  TransferPage,
+  TelekomunikasiHubPage,
+  TagihanHubPage,
   TopUpDigitalPage,
   LanggananDigitalPage,
   InternationalTopUpPage,
@@ -31,10 +37,6 @@ import {
   TelcoAktivasiPerdanaPage,
   TelcoEsimPage,
   TagihanSubPage,
-} from '../pages/dashboard/MappedCatalogPages';
-import { RiwayatPage } from '../pages/dashboard/RiwayatPage';
-import { NotifikasiPage } from '../pages/dashboard/NotifikasiPage';
-import {
   AccountHubPage,
   AccountSettingsPage,
   AccountEditPage,
@@ -46,37 +48,37 @@ import {
   AccountComplaintDetailPage,
   AccountHelpPage,
   AccountCmsPage,
-} from '../pages/dashboard/account';
-import { CustomerSupportDashboard } from '../pages/dashboard/CustomerSupportDashboard';
-import { CustomerSupportTickets } from '../pages/dashboard/CustomerSupportTickets';
-import { CustomerSupportTicketDetail } from '../pages/dashboard/CustomerSupportTicketDetail';
-import { CustomerSupportCustomerProfile } from '../pages/dashboard/CustomerSupportCustomerProfile';
-import { CustomerSupportTransactionInvestigation } from '../pages/dashboard/CustomerSupportTransactionInvestigation';
-import { CustomerSupportRefundCenter } from '../pages/dashboard/CustomerSupportRefundCenter';
-import { CustomerSupportKnowledgeBase } from '../pages/dashboard/CustomerSupportKnowledgeBase';
-import { FinanceDashboard } from '../pages/dashboard/FinanceDashboard';
-import { FinanceRefundApproval } from '../pages/dashboard/FinanceRefundApproval';
-import { FinanceSettlementManagement } from '../pages/dashboard/FinanceSettlementManagement';
-import { FinanceFinancialReport } from '../pages/dashboard/FinanceFinancialReport';
-import { OperationsDashboard } from '../pages/dashboard/OperationsDashboard';
-import { OperationsProductManagement } from '../pages/dashboard/OperationsProductManagement';
-import { OperationsProviderManagement } from '../pages/dashboard/OperationsProviderManagement';
-import { OperationsServiceMonitoring } from '../pages/dashboard/OperationsServiceMonitoring';
-import { OperationsPricingManagement } from '../pages/dashboard/OperationsPricingManagement';
-import { OperationsProductProviderControl } from '../pages/dashboard/OperationsProductProviderControl';
-import { OperationsPaymentGatewayControl } from '../pages/dashboard/OperationsPaymentGatewayControl';
-import { MarketingDashboard } from '../pages/dashboard/MarketingDashboard';
-import { MarketingBannerManagement } from '../pages/dashboard/MarketingBannerManagement';
-import { MarketingPromotionManagement } from '../pages/dashboard/MarketingPromotionManagement';
-import { MarketingVoucherManagement } from '../pages/dashboard/MarketingVoucherManagement';
-import { MarketingAnnouncementCenter } from '../pages/dashboard/MarketingAnnouncementCenter';
-import { MarketingWebsiteSettings } from '../pages/dashboard/MarketingWebsiteSettings';
-import { MarketingHomepageSections } from '../pages/dashboard/MarketingHomepageSections';
-import { MarketingWebsiteMenu } from '../pages/dashboard/MarketingWebsiteMenu';
-import { MarketingStaticPages } from '../pages/dashboard/MarketingStaticPages';
-import { MarketingMediaLibrary } from '../pages/dashboard/MarketingMediaLibrary';
-import { OwnerDashboard } from '../pages/dashboard/OwnerDashboard';
-import { SystemSettingsCenter } from '../pages/dashboard/SystemSettingsCenter';
+  CustomerSupportDashboard,
+  CustomerSupportTickets,
+  CustomerSupportTicketDetail,
+  CustomerSupportCustomerProfile,
+  CustomerSupportTransactionInvestigation,
+  CustomerSupportRefundCenter,
+  CustomerSupportKnowledgeBase,
+  FinanceDashboard,
+  FinanceRefundApproval,
+  FinanceSettlementManagement,
+  FinanceFinancialReport,
+  OperationsDashboard,
+  OperationsProductManagement,
+  OperationsProviderManagement,
+  OperationsServiceMonitoring,
+  OperationsPricingManagement,
+  OperationsProductProviderControl,
+  OperationsPaymentGatewayControl,
+  MarketingDashboard,
+  MarketingBannerManagement,
+  MarketingPromotionManagement,
+  MarketingVoucherManagement,
+  MarketingAnnouncementCenter,
+  MarketingWebsiteSettings,
+  MarketingHomepageSections,
+  MarketingWebsiteMenu,
+  MarketingStaticPages,
+  MarketingMediaLibrary,
+  OwnerDashboard,
+  SystemSettingsCenter,
+} from './lazyPages';
 
 export const router = createBrowserRouter([
   {
@@ -137,6 +139,10 @@ export const router = createBrowserRouter([
       { 
         index: true, 
         element: <DashboardHomePage />
+      },
+      {
+        path: 'promo/:slug',
+        element: <PromoDetailPage />
       },
       {
         path: 'owner',
@@ -527,6 +533,14 @@ export const router = createBrowserRouter([
       {
         path: 'riwayat',
         element: <RiwayatPage />
+      },
+      {
+        path: 'riwayat/:id',
+        element: <TransactionDetailPage />
+      },
+      {
+        path: 'chat',
+        element: <CustomerChatPage />
       },
       {
         path: 'notifikasi',
