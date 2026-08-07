@@ -84,11 +84,20 @@ class ProcessDigiflazzTransaction implements ShouldQueue
             $digiflazzStatus = strtolower($data['status'] ?? 'pending');
             $sn = $data['sn'] ?? null;
 
-            $digiflazzTx->update([
-                'digiflazz_status' => $digiflazzStatus,
-                'sn' => $sn,
-                'raw_response' => $response,
-            ]);
+            // Map Digiflazz Sukses/Pending/Gagal → GurkyNet success/pending/failed (legacy job path).
+            if (in_array($digiflazzStatus, ['sukses'], true)) {
+                $digiflazzStatus = 'success';
+            } elseif (in_array($digiflazzStatus, ['gagal'], true)) {
+                $digiflazzStatus = 'failed';
+            }
+
+            $digiflazzTx->update(
+                DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                    $digiflazzStatus,
+                    is_array($response) ? $response : [],
+                    is_string($sn) ? $sn : null
+                )
+            );
 
             if ($digiflazzStatus === 'success') {
                 $transaction->update([

@@ -7,13 +7,18 @@ use App\Models\ProductProvider;
 use App\Models\User;
 use App\Services\AvailabilityService;
 use App\Services\DigiflazzService;
+use App\Services\ProductProviders\DigiflazzResponseCodeClassifier;
 use App\Services\ProductProviders\ProductProviderSelectionService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Real Digiflazz postpaid inquiry (inq-pasca) with short-lived session for pay-pasca.
+ *
+ * Status is the primary success/failure indicator; Digiflazz RC classifies the outcome
+ * when present (DigiflazzResponseCodeClassifier).
  */
 class TagihanInquiryService
 {
@@ -88,11 +93,29 @@ class TagihanInquiryService
             ]);
         }
 
-        $status = strtolower((string) ($data['status'] ?? ''));
-        if (!in_array($status, ['sukses', 'success'], true)) {
-            $message = trim((string) ($data['message'] ?? $data['rc'] ?? 'Inquiry gagal.'));
+        $status = strtolower(trim((string) ($data['status'] ?? '')));
+        $rc = DigiflazzResponseCodeClassifier::normalize($data['rc'] ?? null);
+        $classifier = $rc !== null
+            ? DigiflazzResponseCodeClassifier::classify($rc)
+            : null;
+
+        Log::info('Digiflazz tagihan inquiry classified', array_merge(
+            [
+                'sku' => $providerSku,
+                'customer_no' => $customerNo,
+                'ref_id' => $refId,
+                'status' => $status !== '' ? $status : null,
+            ],
+            $classifier?->toLogContext() ?? [
+                'rc' => null,
+                'category' => null,
+            ]
+        ));
+
+        // Status remains the primary success/failure indicator.
+        if (! in_array($status, ['sukses', 'success'], true)) {
             throw ValidationException::withMessages([
-                'inquiry' => [$message !== '' ? $message : 'Inquiry gagal.'],
+                'inquiry' => [$this->resolveFailureUserMessage($data, $classifier)],
             ]);
         }
 
@@ -136,6 +159,33 @@ class TagihanInquiryService
             'is_ewallet' => !empty($normalized['is_ewallet']),
             'expires_in_seconds' => self::CACHE_TTL_MINUTES * 60,
         ];
+    }
+
+    /**
+     * User-facing failure message: prefer Digiflazz `message`, then RC Message column, then raw rc / default.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function resolveFailureUserMessage(array $data, ?DigiflazzResponseCodeClassifier $classifier): string
+    {
+        $message = trim((string) ($data['message'] ?? ''));
+        if ($message !== '') {
+            return $message;
+        }
+
+        if ($classifier !== null) {
+            $description = trim($classifier->description());
+            if ($description !== '' && ! $classifier->isUnknown()) {
+                return $description;
+            }
+        }
+
+        $rcRaw = trim((string) ($data['rc'] ?? ''));
+        if ($rcRaw !== '') {
+            return 'Inquiry gagal (RC '.$rcRaw.').';
+        }
+
+        return 'Inquiry gagal.';
     }
 
     /**
@@ -326,8 +376,45 @@ class TagihanInquiryService
             'selling_price' => round($sellingPrice, 2),
             'provider_price' => round($providerPrice, 2),
             'tax_details' => $taxDetails,
+            // Digiflazz Bayar Tagihan: payment allowed only on the same calendar day as inquiry.
+            'inquired_at' => now()->toIso8601String(),
             'raw' => $data,
         ];
+    }
+
+    /**
+     * Digiflazz rule: bill payment must occur on the same local calendar day as inquiry.
+     * Additional to session TTL — does not replace CACHE_TTL_MINUTES.
+     *
+     * @param  array<string, mixed>  $session
+     */
+    public function assertSameDayAsInquiry(array $session): void
+    {
+        $raw = $session['inquired_at'] ?? null;
+        if (! is_string($raw) || trim($raw) === '') {
+            throw ValidationException::withMessages([
+                'inquiry_ref_id' => ['Sesi inquiry tidak memiliki waktu pengecekan. Silakan cek tagihan ulang.'],
+            ]);
+        }
+
+        try {
+            $inquiryDate = \Illuminate\Support\Carbon::parse($raw)
+                ->timezone(config('app.timezone'))
+                ->toDateString();
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([
+                'inquiry_ref_id' => ['Waktu inquiry tidak valid. Silakan cek tagihan ulang.'],
+            ]);
+        }
+
+        $today = now()->timezone(config('app.timezone'))->toDateString();
+        if ($inquiryDate !== $today) {
+            throw ValidationException::withMessages([
+                'inquiry_ref_id' => [
+                    'Pembayaran tagihan hanya dapat dilakukan pada tanggal yang sama dengan tanggal pengecekan tagihan. Silakan cek tagihan ulang.',
+                ],
+            ]);
+        }
     }
 
     /**

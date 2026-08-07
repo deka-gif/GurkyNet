@@ -239,8 +239,8 @@ class DigiflazzIntegrationTest extends TestCase
             'digiflazz_status' => 'pending',
         ]);
 
-        // 2. Call Webhook Callback
-        $response = $this->postJson('/api/v1/webhooks/digiflazz', [
+        // 2. Call Webhook Callback (legacy X-Digiflazz-Signature still supported)
+        $payload = [
             'data' => [
                 'ref_id' => $transaction->invoice_number,
                 'buyer_sku_code' => 'TSEL10K',
@@ -249,20 +249,23 @@ class DigiflazzIntegrationTest extends TestCase
                 'sn' => 'SN-WEBHOOK-SUCCESS',
                 'price' => 10100,
                 'message' => 'Transaksi Sukses',
-            ]
-        ], [
-            'X-Digiflazz-Signature' => 'sha1=' . hash_hmac('sha1', json_encode([
-                'data' => [
-                    'ref_id' => $transaction->invoice_number,
-                    'buyer_sku_code' => 'TSEL10K',
-                    'customer_no' => '081234567890',
-                    'status' => 'Success',
-                    'sn' => 'SN-WEBHOOK-SUCCESS',
-                    'price' => 10100,
-                    'message' => 'Transaksi Sukses',
-                ]
-            ]), env('DIGIFLAZZ_WEBHOOK_SECRET', env('DIGIFLAZZ_API_KEY')))
-        ]);
+            ],
+        ];
+        $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $secret = (string) (config('services.digiflazz.webhook_secret') ?: 'testing_webhook_secret');
+        $response = $this->call(
+            'POST',
+            '/api/v1/webhooks/digiflazz',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_ACCEPT' => 'application/json',
+                'HTTP_X_DIGIFLAZZ_SIGNATURE' => 'sha1='.hash_hmac('sha1', (string) $body, $secret),
+            ],
+            $body
+        );
 
         $response->assertStatus(200);
 
@@ -303,7 +306,7 @@ class DigiflazzIntegrationTest extends TestCase
         $this->assertEquals(88500.00, $this->wallet->balance);
 
         // 2. Call Webhook Callback with Failed status
-        $response = $this->postJson('/api/v1/webhooks/digiflazz', [
+        $payload = [
             'data' => [
                 'ref_id' => $transaction->invoice_number,
                 'buyer_sku_code' => 'TSEL10K',
@@ -312,20 +315,23 @@ class DigiflazzIntegrationTest extends TestCase
                 'sn' => '',
                 'price' => 0,
                 'message' => 'Transaksi Gagal',
-            ]
-        ], [
-            'X-Digiflazz-Signature' => 'sha1=' . hash_hmac('sha1', json_encode([
-                'data' => [
-                    'ref_id' => $transaction->invoice_number,
-                    'buyer_sku_code' => 'TSEL10K',
-                    'customer_no' => '081234567890',
-                    'status' => 'Failed',
-                    'sn' => '',
-                    'price' => 0,
-                    'message' => 'Transaksi Gagal',
-                ]
-            ]), env('DIGIFLAZZ_WEBHOOK_SECRET', env('DIGIFLAZZ_API_KEY')))
-        ]);
+            ],
+        ];
+        $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $secret = (string) (config('services.digiflazz.webhook_secret') ?: 'testing_webhook_secret');
+        $response = $this->call(
+            'POST',
+            '/api/v1/webhooks/digiflazz',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_ACCEPT' => 'application/json',
+                'HTTP_X_DIGIFLAZZ_SIGNATURE' => 'sha1='.hash_hmac('sha1', (string) $body, $secret),
+            ],
+            $body
+        );
 
         $response->assertStatus(200);
 

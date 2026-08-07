@@ -55,12 +55,17 @@ return [
     | Pending/processing must resolve to SUCCESS or FAILED. Status is checked
     | at each check_at_seconds mark; after max_seconds a final check runs and
     | then an idempotent wallet refund is issued if still unresolved.
+    |
+    | Digiflazz Cek Status: do not re-call the same transaction/data with an
+    | interval under 60 seconds (race / duplication risk). Offsets are clamped
+    | to enforce that minimum gap.
     */
     'timeout' => [
-        'max_seconds' => (int) env('PPOB_TRANSACTION_TIMEOUT_SECONDS', 60),
+        'max_seconds' => (int) env('PPOB_TRANSACTION_TIMEOUT_SECONDS', 180),
+        'min_check_interval_seconds' => (int) env('PPOB_TRANSACTION_MIN_CHECK_INTERVAL_SECONDS', 60),
         'check_at_seconds' => array_values(array_filter(array_map(
             'intval',
-            explode(',', (string) env('PPOB_TRANSACTION_TIMEOUT_CHECKS', '5,15,30,45,60'))
+            explode(',', (string) env('PPOB_TRANSACTION_TIMEOUT_CHECKS', '60,120,180'))
         ))),
     ],
 ];

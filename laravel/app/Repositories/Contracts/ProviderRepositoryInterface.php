@@ -10,5 +10,9 @@ interface ProviderRepositoryInterface
     public function allActive(): Collection;
     public function findById(int $id): ?Provider;
     public function findByName(string $name): ?Provider;
-    public function syncWithDigiflazz(array $digiflazzProducts): void;
+    /**
+     * @param  array<int, array<string, mixed>>  $digiflazzProducts
+     * @param  array<string, list<string>>  $seenSkusByListType  e.g. ['prepaid' => [...], 'pasca' => [...]]
+     */
+    public function syncWithDigiflazz(array $digiflazzProducts, array $seenSkusByListType = []): void;
 }

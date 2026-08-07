@@ -4,12 +4,17 @@ namespace App\Services\Pln;
 
 use App\Models\User;
 use App\Services\DigiflazzService;
+use App\Services\ProductProviders\DigiflazzResponseCodeClassifier;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Real Digiflazz prepaid PLN meter inquiry (/inquiry-pln).
  * Inquiry only — does not debit wallet or purchase token.
+ *
+ * Status is the primary success/failure indicator; Digiflazz RC classifies the outcome
+ * when present (DigiflazzResponseCodeClassifier). Field `name` is optional per Digiflazz docs.
  */
 class PlnInquiryService
 {
@@ -24,7 +29,7 @@ class PlnInquiryService
      */
     public function inquire(User $user, string $customerNo): array
     {
-        if (!$this->digiflazz->isConfigured()) {
+        if (! $this->digiflazz->isConfigured()) {
             throw ValidationException::withMessages([
                 'provider' => ['Layanan inquiry PLN belum dikonfigurasi.'],
             ]);
@@ -46,33 +51,58 @@ class PlnInquiryService
         }
 
         $data = $response['data'] ?? null;
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             throw ValidationException::withMessages([
                 'inquiry' => ['Respons inquiry PLN tidak valid.'],
             ]);
         }
 
-        $status = strtolower((string) ($data['status'] ?? ''));
-        if (!in_array($status, ['sukses', 'success'], true)) {
-            $message = trim((string) ($data['message'] ?? $data['rc'] ?? 'Inquiry meter gagal.'));
+        $status = strtolower(trim((string) ($data['status'] ?? '')));
+        $rc = DigiflazzResponseCodeClassifier::normalize($data['rc'] ?? null);
+        $classifier = $rc !== null
+            ? DigiflazzResponseCodeClassifier::classify($rc)
+            : null;
+
+        Log::info('Digiflazz PLN inquiry classified', array_merge(
+            [
+                'customer_no' => $customerNo,
+                'status' => $status !== '' ? $status : null,
+            ],
+            $classifier?->toLogContext() ?? [
+                'rc' => null,
+                'category' => null,
+            ]
+        ));
+
+        // Status remains the primary success/failure indicator.
+        $isSuccess = in_array($status, ['sukses', 'success'], true);
+        if (! $isSuccess) {
             throw ValidationException::withMessages([
-                'inquiry' => [$message !== '' ? $message : 'Inquiry meter gagal.'],
+                'inquiry' => [$this->resolveFailureUserMessage($data, $classifier)],
             ]);
         }
 
-        $name = trim((string) ($data['name'] ?? ''));
-        if ($name === '') {
+        $resolvedCustomerNo = trim((string) ($data['customer_no'] ?? ''));
+        if ($resolvedCustomerNo === '') {
+            $resolvedCustomerNo = $customerNo;
+        }
+        if ($resolvedCustomerNo === '') {
             throw ValidationException::withMessages([
-                'inquiry' => ['Nama pelanggan tidak tersedia dari provider.'],
+                'inquiry' => ['Nomor pelanggan tidak tersedia dari provider.'],
             ]);
         }
+
+        // Digiflazz docs: `name` is optional — do not fail when absent.
+        $name = trim((string) ($data['name'] ?? ''));
 
         $normalized = [
-            'customer_no' => (string) ($data['customer_no'] ?? $customerNo),
+            'customer_no' => $resolvedCustomerNo,
             'meter_no' => trim((string) ($data['meter_no'] ?? '')),
             'subscriber_id' => trim((string) ($data['subscriber_id'] ?? '')),
             'customer_name' => $name,
             'segment_power' => trim((string) ($data['segment_power'] ?? '')),
+            'rc' => $rc,
+            'rc_category' => $classifier?->category,
             'raw' => $data,
         ];
 
@@ -86,6 +116,33 @@ class PlnInquiryService
             'segment_power' => $normalized['segment_power'],
             'expires_in_seconds' => self::CACHE_TTL_MINUTES * 60,
         ];
+    }
+
+    /**
+     * User-facing failure message: prefer Digiflazz `message`, then RC description, then raw rc / default.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function resolveFailureUserMessage(array $data, ?DigiflazzResponseCodeClassifier $classifier): string
+    {
+        $message = trim((string) ($data['message'] ?? ''));
+        if ($message !== '') {
+            return $message;
+        }
+
+        if ($classifier !== null) {
+            $description = trim($classifier->description());
+            if ($description !== '' && ! $classifier->isUnknown()) {
+                return $description;
+            }
+        }
+
+        $rcRaw = trim((string) ($data['rc'] ?? ''));
+        if ($rcRaw !== '') {
+            return 'Inquiry meter gagal (RC '.$rcRaw.').';
+        }
+
+        return 'Inquiry meter gagal.';
     }
 
     /**

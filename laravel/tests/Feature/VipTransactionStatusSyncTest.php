@@ -48,8 +48,9 @@ class VipTransactionStatusSyncTest extends TestCase
             'services.vip.merchant_id' => 'api-id-test',
             'services.vip.api_key' => 'api-key-test',
             'services.vip.signature' => '',
-            'ppob.timeout.max_seconds' => 60,
-            'ppob.timeout.check_at_seconds' => [5, 15, 30, 45, 60],
+            'ppob.timeout.max_seconds' => 180,
+            'ppob.timeout.min_check_interval_seconds' => 60,
+            'ppob.timeout.check_at_seconds' => [60, 120, 180],
         ]);
 
         $this->user = User::create([

@@ -12,6 +12,7 @@ use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\DigiflazzService;
 use App\Services\NotificationService;
 use App\Services\WalletRefundService;
 use Illuminate\Support\Facades\Log;
@@ -195,13 +196,14 @@ class ProductProviderFulfillmentService
                 'attempt' => $attempt,
                 'success' => $result->ok && in_array($result->status, ['success', 'pending'], true),
                 'error_message' => $result->ok ? null : ($result->message ?? $result->reason),
-                'meta' => [
+                'meta' => array_filter([
                     'status' => $result->status,
                     'should_failover' => $result->shouldFailover,
                     'failover_executed' => $result->shouldFailover && $nextCode !== null,
                     'internal_sku' => $internalSku,
                     'provider_sku' => $offer->provider_sku,
-                ],
+                    'digiflazz_rc' => $this->digiflazzRcLogContext($provider->code, $result),
+                ], static fn ($v) => $v !== null),
             ]);
 
             $this->health->recordFulfillmentOutcome($provider, $result);
@@ -258,6 +260,11 @@ class ProductProviderFulfillmentService
                 'provider_code' => $provider->code,
                 'reason' => $result->reason ?? 'provider_rejected',
             ]);
+            if ($provider->code === ProductProvider::CODE_DIGIFLAZZ && is_array($result->raw) && $result->raw !== []) {
+                DigiflazzTransaction::where('transaction_id', $transaction->id)->update(
+                    DigiflazzService::digiflazzTransactionAttributesFromResponse('failed', $result->raw, $result->sn)
+                );
+            }
             $this->failAndRefund(
                 $transaction,
                 'Transaksi gagal diproses. Saldo akan dikembalikan bila sudah dipotong.',
@@ -300,11 +307,13 @@ class ProductProviderFulfillmentService
         ]);
 
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
-            DigiflazzTransaction::where('transaction_id', $transaction->id)->update([
-                'digiflazz_status' => 'success',
-                'sn' => $result->sn,
-                'raw_response' => $result->raw,
-            ]);
+            DigiflazzTransaction::where('transaction_id', $transaction->id)->update(
+                DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                    'success',
+                    is_array($result->raw) ? $result->raw : [],
+                    $result->sn
+                )
+            );
         }
 
         PaymentHistory::recordFor(
@@ -341,10 +350,13 @@ class ProductProviderFulfillmentService
         ]);
 
         if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
-            DigiflazzTransaction::where('transaction_id', $transaction->id)->update([
-                'digiflazz_status' => 'pending',
-                'raw_response' => $result->raw,
-            ]);
+            DigiflazzTransaction::where('transaction_id', $transaction->id)->update(
+                DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                    'pending',
+                    is_array($result->raw) ? $result->raw : [],
+                    $result->sn
+                )
+            );
         }
 
         Log::info('UPDATE TRANSACTION', [
@@ -522,5 +534,24 @@ class ProductProviderFulfillmentService
                     );
                 }
             });
+    }
+
+    /**
+     * Digiflazz RC log context for fulfill meta (no credentials).
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function digiflazzRcLogContext(string $providerCode, ProviderFulfillmentResult $result): ?array
+    {
+        if ($providerCode !== ProductProvider::CODE_DIGIFLAZZ) {
+            return null;
+        }
+
+        $data = $result->raw['data'] ?? null;
+        if (! is_array($data) || ! array_key_exists('rc', $data)) {
+            return null;
+        }
+
+        return DigiflazzResponseCodeClassifier::fromResponseData($data)->toLogContext();
     }
 }

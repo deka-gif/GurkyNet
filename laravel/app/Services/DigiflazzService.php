@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Services\ProductProviders\DigiflazzHealthClassifier;
+use App\Services\ProductProviders\DigiflazzResponseCodeClassifier;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -48,13 +49,17 @@ class DigiflazzService
      * Postpaid / e-money inquiry (inq-pasca). Does not charge Digiflazz deposit.
      * Optional $year — Digiflazz PBB (tahun pajak).
      * Optional $amount — Digiflazz E-Money denomination.
+     * Optional testing — same config/env as Topup (`DIGIFLAZZ_TESTING`); omitted when unset.
+     *
+     * @param  array{testing?: bool|string|null}  $options
      */
     public function inquiryPasca(
         string $sku,
         string $customerNo,
         string $refId,
         ?int $year = null,
-        ?int $amount = null
+        ?int $amount = null,
+        array $options = []
     ): array {
         $this->assertConfigured();
 
@@ -73,7 +78,31 @@ class DigiflazzService
             $payload['amount'] = $amount;
         }
 
+        $payload = array_merge($payload, $this->resolveOptionalInquiryFields($options));
+
         return $this->postRequest('/transaction', $payload);
+    }
+
+    /**
+     * Optional Digiflazz `testing` flag for inq-pasca / pay-pasca — omitted when unset.
+     * Reuses the same Digiflazz `testing` config/env as Topup (`DIGIFLAZZ_TESTING`).
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     */
+    public function resolveOptionalInquiryFields(array $options = []): array
+    {
+        $merged = array_merge([
+            'testing' => config('services.digiflazz.testing'),
+        ], $options);
+
+        $optional = [];
+
+        if ($this->isPresentOptionalFlag($merged['testing'] ?? null)) {
+            $optional['testing'] = true;
+        }
+
+        return $optional;
     }
 
     /**
@@ -86,9 +115,16 @@ class DigiflazzService
 
     /**
      * Postpaid bill payment (pay-pasca). Must reuse the same ref_id as inquiry.
+     * Optional testing — same config/env as Topup & Inquiry (`DIGIFLAZZ_TESTING`); omitted when unset.
+     *
+     * @param  array{testing?: bool|string|null}  $options
      */
-    public function payPasca(string $sku, string $customerNo, string $refId): array
-    {
+    public function payPasca(
+        string $sku,
+        string $customerNo,
+        string $refId,
+        array $options = []
+    ): array {
         $this->assertConfigured();
 
         $payload = [
@@ -100,13 +136,26 @@ class DigiflazzService
             'sign' => $this->sign($refId),
         ];
 
+        $payload = array_merge($payload, $this->resolveOptionalInquiryFields($options));
+
         return $this->postRequest('/transaction', $payload);
     }
 
     /**
-     * Buy prepaid product.
+     * Buy prepaid product (Digiflazz Topup).
+     *
+     * Required payload: username, buyer_sku_code, customer_no, ref_id, sign.
+     * Optional Digiflazz fields (testing, max_price, cb_url, allow_dot) are merged from
+     * config/services.php + $options and only included when a value is present.
+     *
+     * @param  array{
+     *   testing?: bool|null,
+     *   max_price?: int|string|null,
+     *   cb_url?: string|null,
+     *   allow_dot?: bool|null
+     * }  $options
      */
-    public function buy(string $sku, string $customerNo, string $refId): array
+    public function buy(string $sku, string $customerNo, string $refId, array $options = []): array
     {
         $this->assertConfigured();
 
@@ -118,28 +167,173 @@ class DigiflazzService
             'sign' => $this->sign($refId),
         ];
 
+        $payload = array_merge($payload, $this->resolveOptionalTopupFields($options));
+
         return $this->postRequest('/transaction', $payload);
     }
 
     /**
-     * Check prepaid transaction status.
+     * Prepaid status check (Digiflazz Cek Status / Topup docs).
+     *
+     * Official prepaid flow: re-send the Topup request with the **same ref_id**.
+     * This does not create a new GurkyNet invoice/transaction — Digiflazz keys on ref_id.
+     * `cmd=status` is not used (not documented in Cek Status.pdf).
+     *
+     * Terminology (do not confuse):
+     * - Retry HTTP: transport-level retries inside executeRequest/postRequest (same payload).
+     * - Retry Status / Check Status Prepaid: this method — re-Topup with same ref_id.
+     * - Retry Topup (fulfill): first purchase attempt via buy() when creating the order.
+     * - Check Status Pasca: checkStatusPasca() with commands=status-pasca (postpaid only).
      */
     public function checkStatus(string $sku, string $customerNo, string $refId): array
     {
-        $payload = [
-            'username' => $this->username,
-            'buyer_sku_code' => $sku,
-            'customer_no' => $customerNo,
-            'ref_id' => $refId,
-            'cmd' => 'status',
-            'sign' => $this->sign($refId),
-        ];
-
-        return $this->postRequest('/transaction', $payload);
+        return $this->buy($sku, $customerNo, $refId);
     }
 
     /**
-     * Check postpaid transaction status (status-pasca).
+     * Optional Topup request fields — omitted when unset so legacy payloads stay identical.
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     */
+    public function resolveOptionalTopupFields(array $options = []): array
+    {
+        $merged = array_merge([
+            'testing' => config('services.digiflazz.testing'),
+            'max_price' => config('services.digiflazz.max_price'),
+            'cb_url' => config('services.digiflazz.cb_url'),
+            'allow_dot' => config('services.digiflazz.allow_dot'),
+        ], $options);
+
+        $optional = [];
+
+        if ($this->isPresentOptionalFlag($merged['testing'] ?? null)) {
+            $optional['testing'] = true;
+        }
+
+        if ($this->isPresentOptionalValue($merged['max_price'] ?? null)) {
+            $optional['max_price'] = (int) $merged['max_price'];
+        }
+
+        if ($this->isPresentOptionalValue($merged['cb_url'] ?? null)) {
+            $optional['cb_url'] = (string) $merged['cb_url'];
+        }
+
+        if ($this->isPresentOptionalFlag($merged['allow_dot'] ?? null)) {
+            $optional['allow_dot'] = true;
+        }
+
+        return $optional;
+    }
+
+    /**
+     * Extract Digiflazz Topup `data` fields for persistence. Missing keys stay null
+     * so callers remain compatible with older/partial responses.
+     *
+     * @param  array<string, mixed>  $response  Full Digiflazz JSON or already-unwrapped `data`
+     * @return array{
+     *   rc: ?string,
+     *   price: ?int,
+     *   buyer_last_saldo: ?float,
+     *   tele: ?string,
+     *   wa: ?string,
+     *   sn: ?string,
+     *   message: ?string,
+     *   status: ?string
+     * }
+     */
+    public static function extractTopupResponseFields(array $response): array
+    {
+        $data = $response;
+        if (isset($response['data']) && is_array($response['data'])) {
+            $data = $response['data'];
+        }
+
+        return [
+            'rc' => array_key_exists('rc', $data) && $data['rc'] !== null && $data['rc'] !== ''
+                ? (string) $data['rc']
+                : null,
+            'price' => array_key_exists('price', $data) && $data['price'] !== null && $data['price'] !== ''
+                ? (int) $data['price']
+                : null,
+            'buyer_last_saldo' => array_key_exists('buyer_last_saldo', $data) && $data['buyer_last_saldo'] !== null && $data['buyer_last_saldo'] !== ''
+                ? (float) $data['buyer_last_saldo']
+                : null,
+            'tele' => array_key_exists('tele', $data) && $data['tele'] !== null && $data['tele'] !== ''
+                ? (string) $data['tele']
+                : null,
+            'wa' => array_key_exists('wa', $data) && $data['wa'] !== null && $data['wa'] !== ''
+                ? (string) $data['wa']
+                : null,
+            'sn' => array_key_exists('sn', $data) && $data['sn'] !== null && $data['sn'] !== ''
+                ? (string) $data['sn']
+                : null,
+            'message' => array_key_exists('message', $data) && $data['message'] !== null
+                ? (string) $data['message']
+                : null,
+            'status' => array_key_exists('status', $data) && $data['status'] !== null
+                ? (string) $data['status']
+                : null,
+        ];
+    }
+
+    /**
+     * Attributes to update on digiflazz_transactions from a Digiflazz Topup/status response.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<string, mixed>
+     */
+    public static function digiflazzTransactionAttributesFromResponse(
+        string $digiflazzStatus,
+        array $raw,
+        ?string $sn = null
+    ): array {
+        $fields = self::extractTopupResponseFields($raw);
+
+        $attributes = [
+            'digiflazz_status' => $digiflazzStatus,
+            'raw_response' => $raw,
+        ];
+
+        $resolvedSn = $sn ?? $fields['sn'];
+        if ($resolvedSn !== null) {
+            $attributes['sn'] = $resolvedSn;
+        }
+
+        foreach (['rc', 'price', 'buyer_last_saldo', 'tele', 'wa', 'message'] as $key) {
+            if ($fields[$key] !== null) {
+                $attributes[$key] = $fields[$key];
+            }
+        }
+
+        return $attributes;
+    }
+
+    protected function isPresentOptionalValue(mixed $value): bool
+    {
+        return $value !== null && $value !== '';
+    }
+
+    protected function isPresentOptionalFlag(mixed $value): bool
+    {
+        if ($value === null || $value === '') {
+            return false;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+    }
+
+    /**
+     * Postpaid status check (Digiflazz Cek Status).
+     *
+     * Uses commands=status-pasca with the same ref_id as the original pay-pasca / inquiry.
+     * Distinct from prepaid re-Topup status checks.
      */
     public function checkStatusPasca(string $sku, string $customerNo, string $refId): array
     {
@@ -244,7 +438,7 @@ class DigiflazzService
      */
     protected function logHealthProbeResult(array $result): void
     {
-        Log::info('Digiflazz healthProbe result', [
+        $context = [
             'provider' => 'digiflazz',
             'endpoint' => '/cek-saldo',
             'http_status' => $result['http_status'] ?? null,
@@ -255,7 +449,14 @@ class DigiflazzService
             'connection' => $result['connection'] ?? null,
             'balance' => $result['balance'] ?? null,
             'status' => $result['status'] ?? null,
-        ]);
+        ];
+
+        $rc = DigiflazzResponseCodeClassifier::normalize($result['provider_code'] ?? null);
+        if ($rc !== null) {
+            $context = array_merge($context, DigiflazzResponseCodeClassifier::classify($rc)->toOfficialMetadata());
+        }
+
+        Log::info('Digiflazz healthProbe result', $context);
     }
 
     /**
@@ -304,12 +505,13 @@ class DigiflazzService
                     $body = [];
                 }
 
-                Log::info("Digiflazz API Response Attempt {$attempt}", [
+                Log::info("Digiflazz API Response Attempt {$attempt}", array_merge([
                     'status' => $response->status(),
                     'body' => $body,
                     'latency' => $latency,
                     'provider_reference' => $payload['ref_id'] ?? null,
-                ]);
+                    'endpoint' => $endpoint,
+                ], $this->rcLogContextFromBody($body)));
 
                 $last = [
                     'http_status' => $response->status(),
@@ -402,5 +604,24 @@ class DigiflazzService
         throw new \Exception(
             'Digiflazz API error ('.$status.'): '.json_encode($result['body'], JSON_UNESCAPED_UNICODE)
         );
+    }
+
+    /**
+     * Attach official Digiflazz RC metadata when response `data.rc` is present.
+     * Safe for price-list success payloads (product lists have no `rc` key).
+     *
+     * @param  array<string, mixed>  $body
+     * @return array<string, mixed>
+     */
+    protected function rcLogContextFromBody(array $body): array
+    {
+        $data = $body['data'] ?? null;
+        if (! is_array($data) || ! array_key_exists('rc', $data)) {
+            return [];
+        }
+
+        return [
+            'digiflazz_rc' => DigiflazzResponseCodeClassifier::fromResponseData($data)->toOfficialMetadata(),
+        ];
     }
 }

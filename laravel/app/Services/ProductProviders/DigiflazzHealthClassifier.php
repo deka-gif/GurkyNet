@@ -15,37 +15,20 @@ final class DigiflazzHealthClassifier
      */
     public static function normalizeRc(mixed $rc): ?string
     {
+        return DigiflazzResponseCodeClassifier::normalize($rc);
+    }
+
+    /**
+     * Map Digiflazz RC to an internal GurkyNet api_status, or null if RC is not a known health error.
+     * Delegates to DigiflazzResponseCodeClassifier (official RC catalog).
+     */
+    public static function statusForRc(?string $rc): ?string
+    {
         if ($rc === null || $rc === '') {
             return null;
         }
 
-        if (is_int($rc) || is_float($rc)) {
-            return (string) (int) $rc;
-        }
-
-        $raw = trim((string) $rc);
-        if ($raw === '') {
-            return null;
-        }
-
-        if (preg_match('/\d+/', $raw, $m)) {
-            return (string) (int) $m[0];
-        }
-
-        return null;
-    }
-
-    /**
-     * Map Digiflazz RC to an internal GurkyNet api_status, or null if RC is not a known error.
-     */
-    public static function statusForRc(?string $rc): ?string
-    {
-        return match ($rc) {
-            '40' => ProviderHealthStatus::CONFIG_ERROR,
-            '41', '42' => ProviderHealthStatus::AUTH_FAILED,
-            '45' => ProviderHealthStatus::NETWORK_CONFIGURATION,
-            default => null,
-        };
+        return DigiflazzResponseCodeClassifier::classify($rc)->healthStatus();
     }
 
     /**

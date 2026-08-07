@@ -211,10 +211,14 @@ class TransactionController extends Controller
 
     /**
      * Handle incoming Digiflazz Webhook callback.
+     *
+     * Official Digiflazz docs (Webhooks.pdf):
+     * - Signature header: X-Hub-Signature = sha1=HMAC-SHA1(rawBody, secret)
+     * - X-Digiflazz-Signature is accepted only as legacy compatibility.
+     * - Events: create | update | resend (+ ping payload without transaction data)
      */
     public function digiflazzCallback(Request $request): JsonResponse
     {
-        $signatureHeader = $request->header('X-Digiflazz-Signature');
         $secret = (string) (
             config('services.digiflazz.webhook_secret')
             ?: env('DIGIFLAZZ_WEBHOOK_SECRET')
@@ -229,6 +233,7 @@ class TransactionController extends Controller
                 $secret = 'testing_webhook_secret';
             } else {
                 \Illuminate\Support\Facades\Log::error('Digiflazz webhook rejected: secret not configured');
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Webhook secret is not configured.',
@@ -236,22 +241,63 @@ class TransactionController extends Controller
             }
         }
 
-        $expectedSignature = 'sha1=' . hash_hmac('sha1', $request->getContent(), $secret);
+        $rawBody = $request->getContent();
+        $expectedSignature = 'sha1='.hash_hmac('sha1', $rawBody, $secret);
 
-        // Bypass signature only in automated tests.
-        if (!app()->environment('testing') && !hash_equals($expectedSignature, (string) $signatureHeader)) {
+        // Official Digiflazz header (Webhooks.pdf).
+        $hubSignature = (string) $request->header('X-Hub-Signature', '');
+        // Legacy compatibility only — older GurkyNet clients/tests used X-Digiflazz-Signature.
+        $legacySignature = (string) $request->header('X-Digiflazz-Signature', '');
+
+        $providedSignature = $hubSignature !== '' ? $hubSignature : $legacySignature;
+        $signatureSource = $hubSignature !== '' ? 'X-Hub-Signature' : ($legacySignature !== '' ? 'X-Digiflazz-Signature' : 'none');
+
+        if ($providedSignature === '' || ! hash_equals($expectedSignature, $providedSignature)) {
             \Illuminate\Support\Facades\Log::warning('Digiflazz Webhook Signature Mismatch', [
-                'has_header' => !empty($signatureHeader),
+                'signature_source' => $signatureSource,
+                'has_hub_signature' => $hubSignature !== '',
+                'has_legacy_signature' => $legacySignature !== '',
             ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid webhook signature.',
             ], 401);
         }
 
+        $event = strtolower(trim((string) $request->header('X-Digiflazz-Event', '')));
+        $userAgent = (string) $request->header('User-Agent', '');
+        $agentClass = $this->classifyDigiflazzWebhookUserAgent($userAgent);
+
+        \Illuminate\Support\Facades\Log::info('Digiflazz webhook received', [
+            'event' => $event !== '' ? $event : null,
+            'user_agent' => $userAgent !== '' ? $userAgent : null,
+            'user_agent_class' => $agentClass,
+            'signature_source' => $signatureSource,
+            'signature_valid' => true,
+        ]);
+
         $payload = $request->json()->all();
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        // Ping Event (Webhooks.pdf): sed + hook_id + hook — not a transaction callback.
+        if ($this->isDigiflazzWebhookPing($payload)) {
+            \Illuminate\Support\Facades\Log::info('Digiflazz webhook ping', [
+                'event' => $event !== '' ? $event : 'ping',
+                'hook_id' => $payload['hook_id'] ?? null,
+                'user_agent_class' => $agentClass,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Webhook ping acknowledged.',
+            ], 200);
+        }
+
         $data = $payload['data'] ?? null;
-        if (!$data) {
+        if (! $data) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid webhook payload structure.',
@@ -260,70 +306,128 @@ class TransactionController extends Controller
 
         // Handle both single-item and multi-item callback formats
         $items = isset($data['ref_id']) ? [$data] : $data;
+        if (! is_array($items)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid webhook payload structure.',
+            ], 400);
+        }
 
         foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
             $refId = $item['ref_id'] ?? null;
-            if (!$refId) {
+            if (! $refId) {
                 continue;
             }
 
             $digiflazzTx = \App\Models\DigiflazzTransaction::where('ref_id', $refId)->first();
-            if (!$digiflazzTx) {
-                \Illuminate\Support\Facades\Log::warning("Digiflazz Callback: Ref ID {$refId} not found locally.");
+            if (! $digiflazzTx) {
+                \Illuminate\Support\Facades\Log::warning('Digiflazz Callback: Ref ID not found locally.', [
+                    'ref_id' => $refId,
+                    'event' => $event !== '' ? $event : null,
+                ]);
                 continue;
             }
 
-            $status = strtolower($item['status'] ?? 'pending');
-            $sn = $item['sn'] ?? null;
+            $normalizedStatus = $this->normalizeDigiflazzWebhookStatus($item['status'] ?? null);
+            $sn = isset($item['sn']) && $item['sn'] !== '' ? (string) $item['sn'] : null;
+            $rcClassifier = \App\Services\ProductProviders\DigiflazzResponseCodeClassifier::fromResponseData($item);
 
-            $digiflazzTx->update([
-                'digiflazz_status' => $status,
-                'sn' => $sn,
-                'raw_response' => $payload,
-            ]);
+            \Illuminate\Support\Facades\Log::info('Digiflazz webhook RC classified', array_merge(
+                [
+                    'ref_id' => $refId,
+                    'event' => $event !== '' ? $event : null,
+                    'status' => $normalizedStatus,
+                ],
+                $rcClassifier->toLogContext()
+            ));
+
+            $mirrorAttributes = \App\Services\DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                $normalizedStatus,
+                ['data' => $item],
+                $sn
+            );
+            $mirrorAttributes['raw_response'] = array_merge(
+                is_array($payload) ? $payload : [],
+                [
+                    '_gurky_webhook' => [
+                        'event' => $event !== '' ? $event : null,
+                        'user_agent' => $userAgent !== '' ? $userAgent : null,
+                        'user_agent_class' => $agentClass,
+                    ],
+                ]
+            );
+            $digiflazzTx->update($mirrorAttributes);
 
             $transaction = $digiflazzTx->transaction;
-            if ($transaction && ($transaction->status === 'pending' || $transaction->status === 'processing')) {
-                if ($status === 'success') {
-                    $transaction->update([
-                        'status' => \App\Enums\TransactionStatus::SUCCESS->value,
-                        'notes' => 'Transaksi sukses. SN: ' . ($sn ?? '-'),
-                    ]);
+            if (! $transaction) {
+                continue;
+            }
 
-                    \App\Models\PaymentHistory::recordFor(
-                        $transaction,
-                        'digiflazz',
-                        'success',
-                        $payload,
-                        $item,
-                        $transaction->invoice_number
-                    );
+            $inFlight = in_array($transaction->status, ['pending', 'processing'], true);
+            if (! $inFlight) {
+                \Illuminate\Support\Facades\Log::info('Digiflazz webhook duplicate — transaction already terminal', [
+                    'ref_id' => $refId,
+                    'event' => $event !== '' ? $event : null,
+                    'transaction_id' => $transaction->id,
+                    'transaction_status' => $transaction->status,
+                    'webhook_status' => $normalizedStatus,
+                ]);
+                continue;
+            }
 
-                    event(new \App\Events\TransactionSuccess($transaction));
-                    event(new \App\Events\PaymentSettled($transaction, is_array($payload) ? $payload : []));
-                } elseif ($status === 'failed') {
-                    $refundService = app(\App\Services\WalletRefundService::class);
-                    $result = $refundService->refundOnce(
-                        $transaction,
-                        'Refund Gagal Transaksi (Callback): ' . $transaction->invoice_number,
-                        'digiflazz_webhook',
-                        'Transaksi gagal dari operator.',
-                        \App\Enums\TransactionStatus::FAILED->value
-                    );
+            if ($normalizedStatus === 'success') {
+                $transaction->update([
+                    'status' => \App\Enums\TransactionStatus::SUCCESS->value,
+                    'notes' => 'Transaksi sukses. SN: '.($sn ?? $digiflazzTx->fresh()?->sn ?? '-'),
+                ]);
 
-                    $refundService->writeAudit(null, 'DIGIFLAZZ_WEBHOOK_FAILED_REFUND', [
-                        'transaction_id' => $transaction->id,
-                        'credited' => $result['credited'],
-                        'already_refunded' => $result['already_refunded'],
-                    ]);
+                \App\Models\PaymentHistory::recordFor(
+                    $transaction,
+                    'digiflazz',
+                    'success',
+                    $payload,
+                    $item,
+                    $transaction->invoice_number
+                );
 
-                    event(new \App\Events\TransactionFailed($result['transaction']));
-                } else {
-                    $transaction->update([
-                        'status' => \App\Enums\TransactionStatus::PROCESSING->value,
-                        'notes' => 'Sedang diproses oleh operator.',
-                    ]);
-                }
+                event(new \App\Events\TransactionSuccess($transaction));
+                event(new \App\Events\PaymentSettled($transaction, is_array($payload) ? $payload : []));
+            } elseif ($normalizedStatus === 'failed') {
+                $refundService = app(\App\Services\WalletRefundService::class);
+                $failNote = $rcClassifier->category === \App\Services\ProductProviders\DigiflazzResponseCodeClassifier::REFUND
+                    || $rcClassifier->isRefundable()
+                    ? 'Transaksi gagal/refund dari operator (RC '.$rcClassifier->code.').'
+                    : 'Transaksi gagal dari operator.';
+
+                $result = $refundService->refundOnce(
+                    $transaction,
+                    'Refund Gagal Transaksi (Callback): '.$transaction->invoice_number,
+                    'digiflazz_webhook',
+                    $failNote,
+                    \App\Enums\TransactionStatus::FAILED->value
+                );
+
+                $refundService->writeAudit(null, 'DIGIFLAZZ_WEBHOOK_FAILED_REFUND', [
+                    'transaction_id' => $transaction->id,
+                    'credited' => $result['credited'],
+                    'already_refunded' => $result['already_refunded'],
+                    // RC metadata distinguishes Digiflazz-created vs never-created for audit accuracy.
+                    'digiflazz_rc' => $rcClassifier->code,
+                    'digiflazz_rc_category' => $rcClassifier->category,
+                    'digiflazz_should_refund' => $rcClassifier->shouldRefund,
+                    'digiflazz_transaction_created' => $rcClassifier->transactionCreated,
+                ]);
+
+                event(new \App\Events\TransactionFailed($result['transaction']));
+            } else {
+                $transaction->update([
+                    'status' => \App\Enums\TransactionStatus::PROCESSING->value,
+                    'notes' => 'Sedang diproses oleh operator.',
+                ]);
             }
         }
 
@@ -331,6 +435,53 @@ class TransactionController extends Controller
             'success' => true,
             'message' => 'Callback processed successfully.',
         ]);
+    }
+
+    /**
+     * Digiflazz ping payload shape (Webhooks.pdf).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function isDigiflazzWebhookPing(array $payload): bool
+    {
+        return array_key_exists('sed', $payload)
+            && array_key_exists('hook_id', $payload)
+            && array_key_exists('hook', $payload);
+    }
+
+    /**
+     * Normalize Digiflazz webhook status strings to GurkyNet success|failed|pending.
+     */
+    protected function normalizeDigiflazzWebhookStatus(mixed $status): string
+    {
+        $normalized = strtolower(trim((string) $status));
+
+        if (in_array($normalized, ['sukses', 'success'], true)) {
+            return 'success';
+        }
+
+        if (in_array($normalized, ['gagal', 'failed', 'failure'], true)) {
+            return 'failed';
+        }
+
+        if (in_array($normalized, ['pending', 'process', 'processing'], true)) {
+            return 'pending';
+        }
+
+        return 'pending';
+    }
+
+    /**
+     * Classify Digiflazz User-Agent for logging only (does not change business flow).
+     */
+    protected function classifyDigiflazzWebhookUserAgent(string $userAgent): string
+    {
+        return match (true) {
+            str_contains($userAgent, 'Digiflazz-Pasca-Hookshot') => 'postpaid',
+            str_contains($userAgent, 'Digiflazz-Hotel-Hookshot') => 'hotel',
+            str_contains($userAgent, 'Digiflazz-Hookshot') => 'prepaid',
+            default => 'unknown',
+        };
     }
 
     /**

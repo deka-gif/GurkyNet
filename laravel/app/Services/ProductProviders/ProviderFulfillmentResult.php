@@ -24,9 +24,9 @@ final class ProviderFulfillmentResult
         return new self(true, 'success', false, $ms, $sn, $message, null, $raw);
     }
 
-    public static function pending(int $ms, array $raw = [], ?string $message = null): self
+    public static function pending(int $ms, array $raw = [], ?string $message = null, ?string $reason = null): self
     {
-        return new self(true, 'pending', false, $ms, null, $message, null, $raw);
+        return new self(true, 'pending', false, $ms, null, $message, $reason, $raw);
     }
 
     public static function failed(int $ms, string $reason, bool $failover, ?string $message = null, array $raw = []): self

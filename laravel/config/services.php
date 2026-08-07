@@ -39,6 +39,11 @@ return [
         'secret' => env('DIGIFLAZZ_SECRET'),
         'webhook_secret' => env('DIGIFLAZZ_WEBHOOK_SECRET', env('DIGIFLAZZ_SECRET')),
         'base_url' => env('DIGIFLAZZ_BASE_URL', 'https://api.digiflazz.com/v1'),
+        // Optional Digiflazz Topup + Cek Tagihan / Bayar Tagihan fields — omitted from payload when unset/empty.
+        'testing' => env('DIGIFLAZZ_TESTING'),
+        'max_price' => env('DIGIFLAZZ_MAX_PRICE'),
+        'cb_url' => env('DIGIFLAZZ_CB_URL'),
+        'allow_dot' => env('DIGIFLAZZ_ALLOW_DOT'),
     ],
 
     'vip' => [

@@ -10,9 +10,17 @@ use Illuminate\Support\Facades\Log;
 /**
  * Digiflazz product-provider adapter.
  * Preserves existing Digiflazz buy semantics used by ProcessDigiflazzTransaction.
+ *
+ * Status monitoring (Digiflazz Cek Status.pdf):
+ * - PREPAID: re-Topup with the same ref_id (via DigiflazzService::checkStatus → buy).
+ * - POSTPAID: commands=status-pasca (DigiflazzService::checkStatusPasca).
+ * WatchPendingTransactionJob drives polling; min interval is enforced at 60 seconds.
  */
 class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
 {
+    /** Digiflazz: do not status-check prepaid txs older than 90 days (creates a NEW tx). */
+    public const PREPAID_STATUS_MAX_AGE_DAYS = 90;
+
     public function __construct(
         protected DigiflazzService $digiflazz,
         protected ProviderFailoverPolicy $failoverPolicy,
@@ -66,22 +74,37 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             $status = strtolower((string) ($data['status'] ?? 'pending'));
             $sn = isset($data['sn']) ? (string) $data['sn'] : null;
             $message = (string) ($data['message'] ?? $data['rc'] ?? '');
+            $rcClassifier = DigiflazzResponseCodeClassifier::fromResponseData($data);
+            $failureLog = DigiflazzFailureReasonPresenter::toLogContext($data);
+
+            Log::info('Digiflazz fulfill RC classified', array_merge(
+                [
+                    'transaction_id' => $transaction->id,
+                    'status' => $status,
+                ],
+                $rcClassifier->toLogContext(),
+                $failureLog
+            ));
 
             if ($status === 'success' || $status === 'sukses') {
                 return ProviderFulfillmentResult::success($ms, $sn, $response, $message ?: 'OK');
             }
 
             if ($status === 'failed' || $status === 'gagal') {
-                $reason = $this->classifyFailureReason($message);
-                if ($this->failoverPolicy->messageLooksCustomer($message)) {
-                    $reason = 'customer_validation';
-                }
-                // pay-pasca ref_id is bound to Digiflazz inquiry — never failover to another provider.
-                $failover = !$isPasca && $this->failoverPolicy->shouldFailover($reason, $message);
+                [$reason, $failover] = $this->classifyFailedOutcome($data, $message, $isPasca);
+
+                Log::info('Digiflazz fulfill failure reason', array_merge(
+                    [
+                        'transaction_id' => $transaction->id,
+                        'fulfillment_reason' => $reason,
+                        'should_failover' => $failover,
+                    ],
+                    $failureLog
+                ));
 
                 return ProviderFulfillmentResult::failed(
                     $ms,
-                    $failover ? $reason : ($reason === 'customer_validation' ? 'customer_validation' : 'provider_rejected'),
+                    $reason,
                     $failover,
                     $message ?: 'Digiflazz reported failed.',
                     $response
@@ -89,7 +112,13 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             }
 
             // pending / processing — do not failover; Digiflazz owns the ref_id
-            return ProviderFulfillmentResult::pending($ms, $response, $message ?: 'Processing');
+            // RC 03 / 99 are official pending classifiers when status is pending.
+            return ProviderFulfillmentResult::pending(
+                $ms,
+                $response,
+                $message ?: ($rcClassifier->isPending() ? $rcClassifier->description() : 'Processing'),
+                $rcClassifier->isPending() ? 'pending' : null
+            );
         } catch (\Throwable $e) {
             $ms = (int) ((microtime(true) - $started) * 1000);
             Log::warning('Digiflazz adapter fulfill error', [
@@ -108,6 +137,12 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
         }
     }
 
+    /**
+     * Status probe — not a new GurkyNet invoice.
+     *
+     * PREPAID: DigiflazzService::checkStatus() re-sends Topup with the same ref_id.
+     * POSTPAID: DigiflazzService::checkStatusPasca() with commands=status-pasca.
+     */
     public function checkStatus(
         Transaction $transaction,
         string $providerSku,
@@ -127,6 +162,25 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             }
 
             $isPasca = $this->isPascaTransaction($transaction);
+
+            if (! $isPasca && $this->isPrepaidStatusCheckExpired($transaction)) {
+                $ms = (int) ((microtime(true) - $started) * 1000);
+
+                return ProviderFulfillmentResult::failed(
+                    $ms,
+                    'status_check_window_expired',
+                    false,
+                    'Pengecekan status Digiflazz tidak diizinkan: transaksi prepaid lebih dari '
+                        .self::PREPAID_STATUS_MAX_AGE_DAYS.' hari (risiko transaksi baru).',
+                    [
+                        'local' => true,
+                        'reason' => 'status_check_window_expired',
+                        'max_age_days' => self::PREPAID_STATUS_MAX_AGE_DAYS,
+                    ]
+                );
+            }
+
+            // PREPAID → re-Topup same ref_id | POSTPAID → status-pasca
             $response = $isPasca
                 ? $this->digiflazz->checkStatusPasca($providerSku, $customerNo, $refId)
                 : $this->digiflazz->checkStatus($providerSku, $customerNo, $refId);
@@ -140,22 +194,62 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             $status = strtolower((string) ($data['status'] ?? 'pending'));
             $sn = isset($data['sn']) ? (string) $data['sn'] : null;
             $message = (string) ($data['message'] ?? $data['rc'] ?? '');
+            $rcClassifier = DigiflazzResponseCodeClassifier::fromResponseData($data);
+
+            Log::info('Digiflazz status-check RC classified', array_merge(
+                [
+                    'transaction_id' => $transaction->id,
+                    'status' => $status,
+                ],
+                $rcClassifier->toLogContext()
+            ));
+
+            // Postpaid >90 days: Digiflazz returns "Data belum ada" — not a system error.
+            if ($isPasca && $this->isPascaDataNotFoundMessage($message)) {
+                return ProviderFulfillmentResult::pending(
+                    $ms,
+                    $response,
+                    'Data belum ada',
+                    'data_not_found'
+                );
+            }
 
             if ($status === 'success' || $status === 'sukses') {
                 return ProviderFulfillmentResult::success($ms, $sn, $response, $message ?: 'OK');
             }
 
             if ($status === 'failed' || $status === 'gagal') {
+                // Status probe never failovers; RC still classifies reason (refund / validation / etc.).
+                if (DigiflazzResponseCodeClassifier::normalize($data['rc'] ?? null) !== null) {
+                    $reason = $this->terminalReason($rcClassifier->fulfillmentReason());
+                } else {
+                    [$reason] = $this->classifyFailedOutcome($data, $message, $isPasca);
+                    // Force no failover on status check.
+                }
+
+                Log::info('Digiflazz status-check failure reason', array_merge(
+                    [
+                        'transaction_id' => $transaction->id,
+                        'fulfillment_reason' => $reason,
+                    ],
+                    DigiflazzFailureReasonPresenter::toLogContext($data)
+                ));
+
                 return ProviderFulfillmentResult::failed(
                     $ms,
-                    'provider_rejected',
+                    $reason,
                     false,
                     $message ?: 'Digiflazz reported failed.',
                     $response
                 );
             }
 
-            return ProviderFulfillmentResult::pending($ms, $response, $message ?: 'Still processing');
+            return ProviderFulfillmentResult::pending(
+                $ms,
+                $response,
+                $message ?: ($rcClassifier->isPending() ? $rcClassifier->description() : 'Still processing'),
+                $rcClassifier->isPending() ? 'pending' : null
+            );
         } catch (\Throwable $e) {
             return ProviderFulfillmentResult::pending(
                 (int) ((microtime(true) - $started) * 1000),
@@ -174,6 +268,23 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
         }
 
         return !empty($meta['is_pasca']) || !empty($meta['inquiry_ref_id']);
+    }
+
+    protected function isPrepaidStatusCheckExpired(Transaction $transaction): bool
+    {
+        $createdAt = $transaction->created_at;
+        if ($createdAt === null) {
+            return false;
+        }
+
+        return $createdAt->lte(now()->subDays(self::PREPAID_STATUS_MAX_AGE_DAYS));
+    }
+
+    protected function isPascaDataNotFoundMessage(string $message): bool
+    {
+        $normalized = strtolower(trim($message));
+
+        return $normalized !== '' && str_contains($normalized, 'data belum ada');
     }
 
     public function healthCheck(): array
@@ -203,23 +314,62 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
         ]);
     }
 
-    protected function classifyFailureReason(string $message): string
+    /**
+     * Classify a Digiflazz failed status.
+     * Priority: official RC classifier → Alasan Gagal exact catalog → fuzzy catalog → unknown.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: string, 1: bool} [reason, shouldFailover]
+     */
+    protected function classifyFailedOutcome(array $data, string $message, bool $isPasca): array
     {
-        $m = strtolower($message);
-        if (str_contains($m, 'saldo') || str_contains($m, 'balance') || str_contains($m, 'insufficient')) {
-            return 'insufficient_balance';
-        }
-        if (str_contains($m, 'maintenance') || str_contains($m, 'gangguan') || str_contains($m, 'cut off')) {
-            return 'provider_maintenance';
-        }
-        if (str_contains($m, 'timeout')) {
-            return 'timeout';
-        }
-        if (str_contains($m, 'offline')) {
-            return 'provider_offline';
+        $rc = DigiflazzResponseCodeClassifier::normalize($data['rc'] ?? null);
+
+        if ($rc !== null) {
+            $classifier = DigiflazzResponseCodeClassifier::classify($rc);
+            $reason = $classifier->fulfillmentReason();
+            // pay-pasca ref_id is bound to Digiflazz inquiry — never failover to another provider.
+            $failover = ! $isPasca && $this->failoverPolicy->shouldFailover($reason, $message, $rc);
+
+            return [$this->terminalReason($reason, $failover), $failover];
         }
 
-        return 'provider_error';
+        // No RC — official Alasan Gagal catalog (exact message), then fuzzy last resort.
+        $failure = DigiflazzFailureReasonCatalog::findByMessage($message)
+            ?? DigiflazzFailureReasonCatalog::findByMessageFuzzy($message);
+
+        if ($failure !== null) {
+            $reason = $failure->fulfillmentReason();
+            $failover = ! $isPasca && $failure->allowsFailover();
+
+            return [$this->terminalReason($reason, $failover), $failover];
+        }
+
+        return [$this->terminalReason('provider_rejected', false), false];
+    }
+
+    /**
+     * When not failing over, preserve specific terminal reasons; collapse generic provider codes.
+     */
+    protected function terminalReason(string $reason, bool $failover = false): string
+    {
+        if ($failover) {
+            return $reason;
+        }
+
+        if (in_array($reason, [
+            'customer_validation',
+            'digiflazz_refund',
+            'authentication_failure',
+            'rate_limited',
+            'pending',
+            'unknown_configuration',
+            'provider_seller_balance',
+        ], true)) {
+            return $reason;
+        }
+
+        return 'provider_rejected';
     }
 
     protected function classifyException(\Throwable $e): string
@@ -238,3 +388,4 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
         return 'provider_exception';
     }
 }
+

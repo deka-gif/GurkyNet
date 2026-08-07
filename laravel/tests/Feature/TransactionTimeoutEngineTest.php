@@ -40,8 +40,9 @@ class TransactionTimeoutEngineTest extends TestCase
         parent::setUp();
 
         config([
-            'ppob.timeout.max_seconds' => 60,
-            'ppob.timeout.check_at_seconds' => [15, 30, 45, 60],
+            'ppob.timeout.max_seconds' => 180,
+            'ppob.timeout.min_check_interval_seconds' => 60,
+            'ppob.timeout.check_at_seconds' => [60, 120, 180],
         ]);
 
         $this->user = User::create([
@@ -285,7 +286,7 @@ class TransactionTimeoutEngineTest extends TestCase
 
         $this->assertSame(1, $count);
         Queue::assertPushed(WatchPendingTransactionJob::class, function (WatchPendingTransactionJob $job) use ($tx) {
-            return $job->transactionId === $tx->id && $job->checkIndex === 3;
+            return $job->transactionId === $tx->id && $job->checkIndex === 2;
         });
     }
 
@@ -294,8 +295,8 @@ class TransactionTimeoutEngineTest extends TestCase
         Queue::fake();
 
         $tx = $this->makeInFlightTransaction([
-            'created_at' => now()->subSeconds(15),
-            'timeout_at' => now()->addSeconds(45),
+            'created_at' => now()->subSeconds(60),
+            'timeout_at' => now()->addSeconds(120),
         ]);
 
         $this->bindVipAdapter(fn () => ProviderFulfillmentResult::pending(10, [], 'wait'));

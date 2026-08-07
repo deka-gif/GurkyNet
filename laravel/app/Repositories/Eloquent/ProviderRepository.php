@@ -6,6 +6,7 @@ use App\Models\Provider;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductProvider;
+use App\Models\ProductProviderSku;
 use App\Models\DigiflazzProduct;
 use App\Models\Setting;
 use App\Repositories\Contracts\ProviderRepositoryInterface;
@@ -32,8 +33,11 @@ class ProviderRepository implements ProviderRepositoryInterface
     /**
      * Upsert Digiflazz catalog rows into digiflazz_products and the master products table.
      * Master `products` remains the single source of truth for Website / Ops / Checkout / Finance.
+     *
+     * @param  array<int, array<string, mixed>>  $digiflazzProducts
+     * @param  array<string, list<string>>  $seenSkusByListType
      */
-    public function syncWithDigiflazz(array $digiflazzProducts): void
+    public function syncWithDigiflazz(array $digiflazzProducts, array $seenSkusByListType = []): void
     {
         $defaultMargin = (float) (Setting::where('key', 'default_margin')->value('value') ?? 1500);
         $categoryMargins = collect(json_decode(Setting::where('key', 'category_margins')->value('value') ?? '[]', true) ?: [])
@@ -54,17 +58,26 @@ class ProviderRepository implements ProviderRepositoryInterface
             $sellerStatus = (bool) ($dp['seller_product_status'] ?? true);
             $isActive = $buyerStatus && $sellerStatus;
 
-            // 1. Sync DigiflazzProduct mirror (supplier cache)
+            // 1. Sync DigiflazzProduct mirror (supplier cache) — keep all official Digiflazz fields
             DigiflazzProduct::updateOrCreate(
                 ['buyer_sku_code' => $sku],
                 [
+                    'list_type' => $dp['list_type'] ?? null,
                     'product_name' => $dp['product_name'],
                     'category' => $dp['category'],
                     'brand' => $dp['brand'],
+                    'type' => $dp['type'] ?? null,
+                    'seller_name' => $dp['seller_name'] ?? null,
                     'seller_price' => $basePrice,
+                    'admin' => $this->nullableInt($dp['admin'] ?? null),
+                    'commission' => $this->nullableInt($dp['commission'] ?? null),
                     'buyer_product_status' => $buyerStatus,
                     'seller_product_status' => $sellerStatus,
                     'unlimited_stock' => (bool) ($dp['unlimited_stock'] ?? true),
+                    'stock' => isset($dp['stock']) ? (string) $dp['stock'] : null,
+                    'multi' => array_key_exists('multi', $dp) ? (bool) $dp['multi'] : null,
+                    'start_cut_off' => $dp['start_cut_off'] ?? null,
+                    'end_cut_off' => $dp['end_cut_off'] ?? null,
                     'desc' => $dp['desc'] ?? null,
                 ]
             );
@@ -148,7 +161,7 @@ class ProviderRepository implements ProviderRepositoryInterface
             // 5. Upsert Digiflazz SKU offer mapping (internal SKU → provider SKU)
             $master = Product::withTrashed()->where('sku_code', $sku)->first();
             if ($master && $digiflazzProvider) {
-                \App\Models\ProductProviderSku::updateOrCreate(
+                ProductProviderSku::updateOrCreate(
                     [
                         'product_id' => $master->id,
                         'product_provider_id' => $digiflazzProvider->id,
@@ -163,12 +176,69 @@ class ProviderRepository implements ProviderRepositoryInterface
             }
         }
 
+        $this->deactivateMissingDigiflazzSkus($seenSkusByListType, $digiflazzProvider);
+
         if ($digiflazzProvider) {
             $digiflazzProvider->forceFill([
                 'last_sync_at' => now(),
-                'product_count' => \App\Models\ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count(),
+                'product_count' => ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count(),
             ])->save();
         }
+    }
+
+    /**
+     * Soft-deactivate Digiflazz SKUs that disappeared from a successful price-list response.
+     * Never deletes rows — transaction history stays intact.
+     *
+     * @param  array<string, list<string>>  $seenSkusByListType
+     */
+    protected function deactivateMissingDigiflazzSkus(array $seenSkusByListType, ?ProductProvider $digiflazzProvider): void
+    {
+        foreach ($seenSkusByListType as $listType => $seenSkus) {
+            $listType = (string) $listType;
+            if ($listType === '' || ! is_array($seenSkus)) {
+                continue;
+            }
+
+            $seenSkus = array_values(array_unique(array_map('strval', $seenSkus)));
+
+            $query = DigiflazzProduct::query()->where('list_type', $listType);
+            if ($seenSkus !== []) {
+                $query->whereNotIn('buyer_sku_code', $seenSkus);
+            }
+
+            $missingSkus = $query->pluck('buyer_sku_code')->all();
+            if ($missingSkus === []) {
+                continue;
+            }
+
+            DigiflazzProduct::whereIn('buyer_sku_code', $missingSkus)->update([
+                'buyer_product_status' => false,
+                'seller_product_status' => false,
+            ]);
+
+            Product::whereIn('sku_code', $missingSkus)
+                ->when(
+                    $digiflazzProvider,
+                    fn ($q) => $q->where('product_provider_id', $digiflazzProvider->id)
+                )
+                ->update(['status' => false]);
+
+            if ($digiflazzProvider) {
+                ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)
+                    ->whereIn('provider_sku', $missingSkus)
+                    ->update(['is_active' => false]);
+            }
+        }
+    }
+
+    protected function nullableInt(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     /**

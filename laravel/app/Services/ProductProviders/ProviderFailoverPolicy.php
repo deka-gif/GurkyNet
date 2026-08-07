@@ -5,6 +5,9 @@ namespace App\Services\ProductProviders;
 /**
  * Decides whether a failed fulfillment should failover to the next Product Provider.
  * Customer-side errors must NOT failover.
+ *
+ * When a Digiflazz RC is provided, classification is delegated to
+ * DigiflazzResponseCodeClassifier (message substring heuristics are skipped).
  */
 class ProviderFailoverPolicy
 {
@@ -31,6 +34,7 @@ class ProviderFailoverPolicy
         'invalid_response',
         'provider_exception',
         'insufficient_balance', // provider deposit / saldo — not end-user wallet
+        'rate_limited',
     ];
 
     /**
@@ -46,11 +50,13 @@ class ProviderFailoverPolicy
         'nomor_salah',
         'user_insufficient_balance',
         'duplicate_transaction',
+        'digiflazz_refund',
         'provider_rejected', // hard reject when classified as customer-facing
     ];
 
     /**
      * Message needles that indicate a customer-side failure.
+     * Used only when Digiflazz RC is absent (VIP / legacy).
      *
      * @var list<string>
      */
@@ -75,6 +81,7 @@ class ProviderFailoverPolicy
 
     /**
      * Message needles that indicate provider/infrastructure failure.
+     * Used only when Digiflazz RC is absent (VIP / legacy).
      *
      * @var list<string>
      */
@@ -98,13 +105,18 @@ class ProviderFailoverPolicy
         'api key',
     ];
 
-    public function shouldFailover(?string $reason, ?string $message = null): bool
+    public function shouldFailover(?string $reason, ?string $message = null, mixed $digiflazzRc = null): bool
     {
+        // Digiflazz official RC takes precedence over message heuristics.
+        if ($digiflazzRc !== null && $digiflazzRc !== '') {
+            return DigiflazzResponseCodeClassifier::classify($digiflazzRc)->allowsFailover();
+        }
+
         $reasonKey = strtolower(trim((string) $reason));
         $msg = strtolower(trim((string) $message));
 
         if ($reasonKey !== '' && in_array($reasonKey, $this->customerReasons, true)) {
-            // provider_rejected alone is ambiguous — inspect message
+            // provider_rejected alone is ambiguous — inspect message (non-Digiflazz / legacy)
             if ($reasonKey === 'provider_rejected') {
                 if ($this->messageLooksCustomer($msg)) {
                     return false;

@@ -239,4 +239,135 @@ class PlnTokenInquiryFlowTest extends TestCase
                 && ($request->data()['customer_no'] ?? null) === '141234567890';
         });
     }
+
+    public function test_inquiry_succeeds_when_name_is_missing(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/inquiry-pln' => Http::response([
+                'data' => [
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'customer_no' => '141234567890',
+                    'meter_no' => '141234567890',
+                    'subscriber_id' => '523300817840',
+                    'segment_power' => 'R1 /000001300',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $this->postJson('/api/v1/pln/inquiry', [
+            'customer_no' => '141234567890',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.customer_no', '141234567890')
+            ->assertJsonPath('data.customer_name', '')
+            ->assertJsonPath('data.segment_power', 'R1 /000001300');
+    }
+
+    public function test_inquiry_failure_prefers_message_over_rc_description(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/inquiry-pln' => Http::response([
+                'data' => [
+                    'status' => 'Gagal',
+                    'message' => 'Nomor tidak ditemukan',
+                    'rc' => '54',
+                    'customer_no' => '141234567890',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $this->postJson('/api/v1/pln/inquiry', [
+            'customer_no' => '141234567890',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Nomor tidak ditemukan');
+    }
+
+    public function test_inquiry_failure_uses_rc_description_when_message_empty(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/inquiry-pln' => Http::response([
+                'data' => [
+                    'status' => 'Gagal',
+                    'message' => '',
+                    'rc' => '54',
+                    'customer_no' => '141234567890',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $this->postJson('/api/v1/pln/inquiry', [
+            'customer_no' => '141234567890',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Nomor Tujuan Salah');
+    }
+
+    public function test_inquiry_status_primary_over_success_rc(): void
+    {
+        // Misleading RC 00 with Gagal status — status wins.
+        Http::fake([
+            'https://api.digiflazz.com/v1/inquiry-pln' => Http::response([
+                'data' => [
+                    'status' => 'Gagal',
+                    'message' => 'Gagal meski RC 00',
+                    'rc' => '00',
+                    'customer_no' => '141234567890',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $this->postJson('/api/v1/pln/inquiry', [
+            'customer_no' => '141234567890',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Gagal meski RC 00');
+    }
+
+    public function test_purchase_after_inquiry_without_name_still_allowed(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/inquiry-pln' => Http::response([
+                'data' => [
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'customer_no' => '141234567890',
+                    'meter_no' => '141234567890',
+                    'subscriber_id' => '523300817840',
+                    'segment_power' => 'R1 / 900',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $this->postJson('/api/v1/pln/inquiry', [
+            'customer_no' => '141234567890',
+        ])->assertOk();
+
+        Queue::fake();
+
+        $transaction = resolve(CreateTransactionAction::class)->execute(
+            $this->user,
+            'PLN20',
+            '141234567890',
+            '123456'
+        );
+
+        $meta = $transaction->items->first()?->custom_metadata ?? [];
+        $this->assertTrue(! empty($meta['pln_prepaid']));
+        $this->assertTrue(($meta['customer_name'] ?? null) === null || $meta['customer_name'] === '');
+    }
 }

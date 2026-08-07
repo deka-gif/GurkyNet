@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Log;
 /**
  * Async pending/processing watcher — never blocks HTTP.
  * Idempotent settlement (success/refund) makes duplicate polls safe.
+ *
+ * Digiflazz Cek Status: TransactionTimeoutService enforces ≥60s between probes for
+ * the same transaction. This job only schedules/handles ladder steps — it does not
+ * bypass that interval.
  */
 class WatchPendingTransactionJob implements ShouldQueue
 {

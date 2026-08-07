@@ -129,6 +129,9 @@ class CreateTransactionAction
                     ]);
                 }
 
+                // Digiflazz Bayar Tagihan: same calendar day as inquiry (in addition to session TTL).
+                $this->tagihanInquiryService->assertSameDayAsInquiry($inquirySession);
+
                 // Charge Digiflazz selling_price (provider-authoritative). Never trust client amounts.
                 $sellPrice = (float) $inquirySession['bill_amount'];
                 $adminFee = (float) $inquirySession['admin_fee'];

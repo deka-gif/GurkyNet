@@ -14,11 +14,19 @@ class DigiflazzTransaction extends Model
         'customer_no',
         'sn',
         'digiflazz_status',
+        'rc',
+        'price',
+        'buyer_last_saldo',
+        'tele',
+        'wa',
+        'message',
         'raw_response',
     ];
 
     protected $casts = [
         'raw_response' => 'array',
+        'price' => 'integer',
+        'buyer_last_saldo' => 'decimal:2',
     ];
 
     /**
