@@ -562,14 +562,35 @@ class ProductRepository implements ProductRepositoryInterface
     {
         $best = PHP_INT_MAX;
         foreach ($product->providerSkus as $sku) {
-            if (!$sku->is_active) {
+            if (! $sku->is_active) {
                 continue;
             }
             $pp = $sku->productProvider;
-            if (!$pp || !$pp->is_active) {
+            if (! $pp || ! $pp->is_active) {
+                continue;
+            }
+            // Maintenance / offline partners must not win the merged catalog card
+            // over a sellable backup provider (VIP).
+            if (method_exists($pp, 'isPartnerMaintenance') && $pp->isPartnerMaintenance()) {
+                continue;
+            }
+            if (method_exists($pp, 'isPartnerOffline') && $pp->isPartnerOffline()) {
+                continue;
+            }
+            if (in_array(strtolower((string) ($pp->api_status ?? '')), ['offline', 'not_configured'], true)) {
                 continue;
             }
             $best = min($best, (int) ($pp->priority ?? 100));
+        }
+
+        // Fallback: if this row has no sellable local offers, use routing (siblings).
+        if ($best === PHP_INT_MAX) {
+            $offer = app(\App\Services\ProductProviders\ProductRoutingService::class)
+                ->orderedOffersForProduct($product)
+                ->first();
+            if ($offer?->productProvider) {
+                return (int) ($offer->productProvider->priority ?? 100);
+            }
         }
 
         return $best === PHP_INT_MAX ? 100 : $best;

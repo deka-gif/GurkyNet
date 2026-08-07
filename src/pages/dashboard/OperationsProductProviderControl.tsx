@@ -156,7 +156,8 @@ export const OperationsProductProviderControl: React.FC = () => {
           <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Operations</p>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Product Provider Control Center</h1>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Command center for PPOB product providers (Digiflazz, VipPulsa, …). Payment gateways are managed separately.
+            Pusat kendali Digiflazz, VIP Payment, dan provider berikutnya. Status API hanya mengatur kandidat transaksi —
+            produk tetap berbasis Product Mapping + Priority + Auto Failover. User tidak melihat nama provider.
           </p>
         </div>
         <button

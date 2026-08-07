@@ -186,6 +186,16 @@ class ProductRoutingService
      *
      * @return list<int>
      */
+    public function logicalSiblingProductIdsPublic(Product $product): array
+    {
+        return $this->logicalSiblingProductIds($product);
+    }
+
+    /**
+     * Product ids that share the same logical catalog identity (including self).
+     *
+     * @return list<int>
+     */
     protected function logicalSiblingProductIds(Product $product): array
     {
         $product->loadMissing(['category', 'provider']);
@@ -216,19 +226,11 @@ class ProductRoutingService
 
     /**
      * Whether a product is sellable in the user catalog right now.
+     * Uses the same priority + sibling failover set as checkout routing.
      */
     public function productHasActiveOffer(Product $product): bool
     {
-        return ProductProviderSku::query()
-            ->where('product_id', $product->id)
-            ->where('is_active', true)
-            ->whereHas('productProvider', fn ($q) => $q->where('is_active', true))
-            ->exists()
-            || (
-                ProductProviderSku::query()->where('product_id', $product->id)->doesntExist()
-                && (bool) ProductProvider::digiflazz()?->is_active
-                && (int) $product->product_provider_id === (int) ProductProvider::digiflazz()?->id
-            );
+        return $this->orderedOffersForProduct($product)->isNotEmpty();
     }
 
     protected function logSkipped(

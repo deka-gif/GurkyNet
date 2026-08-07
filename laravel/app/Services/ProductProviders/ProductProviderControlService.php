@@ -96,6 +96,11 @@ class ProductProviderControlService
             'isPrimary' => (int) $p->priority === 1,
             'online' => $apiOnline,
             'apiWarning' => $poweredOn && !$apiOnline,
+            // Product-centric architecture: API/power status never alone hides catalog
+            // when another mapped provider can fulfill the same logical SKU.
+            'routingMode' => 'product_priority_failover',
+            'controlsCatalogAlone' => false,
+            'note' => 'API status memengaruhi kandidat transaksi. Produk tetap tampil jika provider cadangan Online.',
         ];
     }
 
