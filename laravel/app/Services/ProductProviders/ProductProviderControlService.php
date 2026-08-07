@@ -95,6 +95,7 @@ class ProductProviderControlService
             'lastSuccessAt' => optional($p->last_success_at)?->toIso8601String(),
             'lastFailureAt' => optional($p->last_failure_at)?->toIso8601String(),
             'lastError' => $p->last_error,
+            'healthIndicators' => $this->healthIndicatorsForCard($p),
             'isPrimary' => (int) $p->priority === 1,
             'online' => $transactionEligible,
             'transactionEligible' => $transactionEligible,
@@ -409,6 +410,76 @@ class ProductProviderControlService
             'reason' => $reason,
             'meta' => $meta,
         ]);
+    }
+
+    /**
+     * Indicator grid for Control Center — prefers last health_check log meta.
+     *
+     * @return array{connection:string, authentication:string, balance:string, service:string}
+     */
+    protected function healthIndicatorsForCard(ProductProvider $p): array
+    {
+        $log = ProductProviderLog::query()
+            ->where('product_provider_id', $p->id)
+            ->where('event_type', 'health_check')
+            ->orderByDesc('id')
+            ->first();
+
+        $meta = is_array($log?->meta) ? $log->meta : [];
+        if (isset($meta['indicator_labels']) && is_array($meta['indicator_labels'])) {
+            return [
+                'connection' => (string) ($meta['indicator_labels']['connection'] ?? 'Tidak diketahui'),
+                'authentication' => (string) ($meta['indicator_labels']['authentication'] ?? 'Tidak diketahui'),
+                'balance' => (string) ($meta['indicator_labels']['balance'] ?? 'Tidak diketahui'),
+                'service' => (string) ($meta['indicator_labels']['service'] ?? 'Tidak diketahui'),
+            ];
+        }
+
+        if (isset($meta['indicators']) && is_array($meta['indicators'])) {
+            return ProviderHealthStatus::indicatorLabels($meta['indicators']);
+        }
+
+        // Derive from persisted api_status when no probe meta yet.
+        $api = strtolower((string) ($p->api_status ?? ''));
+
+        return match ($api) {
+            'online' => [
+                'connection' => 'Online',
+                'authentication' => 'Valid',
+                'balance' => 'Tersedia',
+                'service' => 'Aktif',
+            ],
+            'partial', 'degraded', 'syncing' => [
+                'connection' => 'Online',
+                'authentication' => 'Valid',
+                'balance' => 'Tidak dapat dibaca',
+                'service' => 'Aktif',
+            ],
+            'auth_failed' => [
+                'connection' => 'Online',
+                'authentication' => 'Gagal',
+                'balance' => 'Tidak dapat dibaca',
+                'service' => 'Terganggu',
+            ],
+            'maintenance' => [
+                'connection' => 'Online',
+                'authentication' => 'Tidak diketahui',
+                'balance' => 'Tidak diketahui',
+                'service' => 'Terganggu',
+            ],
+            'offline', 'timeout', 'no_response' => [
+                'connection' => 'Gagal',
+                'authentication' => 'Tidak diketahui',
+                'balance' => 'Tidak dapat dibaca',
+                'service' => 'Terganggu',
+            ],
+            default => [
+                'connection' => 'Tidak diketahui',
+                'authentication' => 'Tidak diketahui',
+                'balance' => 'Tidak diketahui',
+                'service' => 'Tidak diketahui',
+            ],
+        };
     }
 
     /**

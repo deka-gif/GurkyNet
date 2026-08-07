@@ -169,6 +169,7 @@ class ProviderPartnerService
             'healthColor' => $controlCard['healthColor'] ?? $p->health_color,
             'statusDescription' => $statusDescription,
             'healthLabel' => $this->resolveHealthLabel($p, $displayStatus),
+            'healthIndicators' => $controlCard['healthIndicators'] ?? null,
             'responseTime' => $p->avg_response_ms !== null ? $p->avg_response_ms.'ms' : null,
             'avgResponseTime' => $p->avg_response_ms !== null ? $p->avg_response_ms.'ms' : null,
             'avgResponseMs' => $p->avg_response_ms,
@@ -202,7 +203,7 @@ class ProviderPartnerService
         }
 
         if (! $p->is_active || $partner === 'offline') {
-            return 'Offline';
+            return 'Disabled';
         }
 
         $api = strtolower((string) ($p->api_status ?? 'unknown'));
@@ -213,6 +214,7 @@ class ProviderPartnerService
             'maintenance' => 'Maintenance',
             'auth_failed' => 'Autentikasi Gagal',
             'not_configured' => 'Belum Dikonfigurasi',
+            'disabled' => 'Disabled',
             'offline', 'timeout', 'no_response' => 'Offline',
             default => ProviderHealthStatus::labelFor($api),
         };
@@ -229,7 +231,7 @@ class ProviderPartnerService
             'Online' => 'Sehat',
             'Gangguan Sebagian' => 'Perlu Perhatian',
             'Maintenance' => 'Maintenance',
-            'Autentikasi Gagal', 'Belum Dikonfigurasi' => 'Tidak Aktif',
+            'Autentikasi Gagal', 'Belum Dikonfigurasi', 'Disabled' => 'Tidak Aktif',
             default => 'Tidak Aktif',
         };
     }
@@ -296,7 +298,8 @@ class ProviderPartnerService
             'maintenance' => 'maintenance',
             'auth_failed', 'autentikasi gagal', 'autentikasi_gagal' => 'autentikasi gagal',
             'not_configured', 'belum dikonfigurasi', 'belum_dikonfigurasi' => 'belum dikonfigurasi',
-            'offline', 'inactive', 'off', 'disabled', 'timeout' => 'offline',
+            'disabled' => 'disabled',
+            'offline', 'inactive', 'off', 'disabled_legacy', 'timeout' => 'offline',
             default => $s,
         };
     }

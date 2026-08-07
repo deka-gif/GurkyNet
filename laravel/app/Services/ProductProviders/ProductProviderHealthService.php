@@ -59,6 +59,18 @@ class ProductProviderHealthService
         $latency = $result['latency_ms'] ?? null;
         $balance = array_key_exists('balance', $result) ? $result['balance'] : null;
 
+        Log::info('HEALTH CHECK — probe classified', [
+            'provider' => $provider->code,
+            'http_status' => $result['http_status'] ?? null,
+            'latency_ms' => $latency,
+            'connection' => $indicators['connection'] ?? null,
+            'authentication' => $indicators['authentication'] ?? null,
+            'balance' => $indicators['balance'] ?? null,
+            'sync' => $indicators['sync'] ?? null,
+            'provider_message' => $indicators['message'] ?? null,
+            'api_status' => $evaluated['api_status'],
+        ]);
+
         return $this->persistEvaluation(
             $provider,
             $evaluated,
@@ -68,6 +80,7 @@ class ProductProviderHealthService
                 'http_status' => $result['http_status'] ?? null,
                 'probe_message' => $result['message'] ?? null,
                 'indicators' => $evaluated['indicators'],
+                'indicator_labels' => $evaluated['indicator_labels'] ?? [],
             ],
             $oldApiStatus,
             $oldHealthColor,

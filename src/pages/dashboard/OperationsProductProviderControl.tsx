@@ -31,6 +31,12 @@ type ProviderCard = {
   healthColor: string;
   healthLabel?: string;
   statusDescription?: string | null;
+  healthIndicators?: {
+    connection?: string;
+    authentication?: string;
+    balance?: string;
+    service?: string;
+  } | null;
   balance: number | null;
   productCount: number;
   productCountLabel?: string;
@@ -260,13 +266,33 @@ export const OperationsProductProviderControl: React.FC = () => {
                   className={`mb-4 rounded-xl border px-3 py-2.5 text-[12px] font-semibold flex items-start gap-2 ${healthTone(card.healthColor)}`}
                 >
                   <Activity className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <div>
+                  <div className="w-full">
                     <div className="font-extrabold">{formatApiStatus(card)}</div>
                     <p className="font-medium mt-0.5 opacity-90">
                       {card.statusDescription ||
                         card.lastError ||
                         'Status provider belum diperiksa.'}
                     </p>
+                    {card.healthIndicators && (
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="rounded-lg bg-white/60 border border-black/5 px-2 py-1.5">
+                          <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Connection</div>
+                          <div className="font-extrabold">{card.healthIndicators.connection || '—'}</div>
+                        </div>
+                        <div className="rounded-lg bg-white/60 border border-black/5 px-2 py-1.5">
+                          <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Authentication</div>
+                          <div className="font-extrabold">{card.healthIndicators.authentication || '—'}</div>
+                        </div>
+                        <div className="rounded-lg bg-white/60 border border-black/5 px-2 py-1.5">
+                          <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Balance</div>
+                          <div className="font-extrabold">{card.healthIndicators.balance || '—'}</div>
+                        </div>
+                        <div className="rounded-lg bg-white/60 border border-black/5 px-2 py-1.5">
+                          <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Service</div>
+                          <div className="font-extrabold">{card.healthIndicators.service || '—'}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

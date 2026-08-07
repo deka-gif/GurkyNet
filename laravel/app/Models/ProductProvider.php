@@ -79,6 +79,15 @@ class ProductProvider extends Model
             $old = $provider->getOriginal('is_active');
             $new = $provider->is_active;
 
+            // Keep partner_status aligned with Control Center power switch.
+            if ($new) {
+                if (strtolower((string) ($provider->partner_status ?? '')) === 'offline') {
+                    $provider->partner_status = 'online';
+                }
+            } else {
+                $provider->partner_status = 'offline';
+            }
+
             $trace = collect(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 25))
                 ->map(function (array $frame) {
                     $file = $frame['file'] ?? '?';
@@ -94,6 +103,7 @@ class ProductProvider extends Model
                 'code' => $provider->code,
                 'OLD VALUE' => $old,
                 'NEW VALUE' => $new,
+                'partner_status' => $provider->partner_status,
                 'Call stack' => $trace,
             ]);
         });

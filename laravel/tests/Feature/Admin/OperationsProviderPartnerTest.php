@@ -133,7 +133,7 @@ class OperationsProviderPartnerTest extends TestCase
         $this->assertContains('vip', collect($maint->json('data'))->pluck('code')->map(fn ($c) => strtolower((string) $c))->all());
         $this->assertNotContains('digiflazz', collect($maint->json('data'))->pluck('code')->map(fn ($c) => strtolower((string) $c))->all());
 
-        $offline = $this->getJson('/api/v1/admin/operations/providers?status=Offline&per_page=50');
+        $offline = $this->getJson('/api/v1/admin/operations/providers?status=Disabled&per_page=50');
         $offline->assertOk();
         $this->assertContains('digiflazz', collect($offline->json('data'))->pluck('code')->map(fn ($c) => strtolower((string) $c))->all());
     }

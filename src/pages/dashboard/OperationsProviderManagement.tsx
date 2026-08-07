@@ -26,6 +26,7 @@ function resolvePartnerStatus(item: any): string {
   if (s === 'maintenance') return 'Maintenance';
   if (s === 'auth_failed' || s === 'autentikasi gagal') return 'Autentikasi Gagal';
   if (s === 'not_configured' || s === 'belum dikonfigurasi') return 'Belum Dikonfigurasi';
+  if (s === 'disabled') return 'Disabled';
   return 'Offline';
 }
 
@@ -128,13 +129,21 @@ export const OperationsProviderManagement: React.FC = () => {
         </span>
       );
     }
+    if (s === 'Disabled') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">
+          <WifiOff className="w-3.5 h-3.5 text-slate-500" />
+          Disabled
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-red-50 text-red-700 border border-red-200">
         <WifiOff className="w-3.5 h-3.5 text-red-600" />
         Offline
       </span>
     );
-  };
+  };;
 
   return (
     <div className="space-y-6 pb-12">
@@ -221,6 +230,7 @@ export const OperationsProviderManagement: React.FC = () => {
               <option value="Gangguan Sebagian">Gangguan Sebagian</option>
               <option value="Maintenance">Maintenance</option>
               <option value="Autentikasi Gagal">Autentikasi Gagal</option>
+              <option value="Disabled">Disabled</option>
               <option value="Offline">Offline</option>
             </select>
           </div>
@@ -436,6 +446,34 @@ export const OperationsProviderManagement: React.FC = () => {
                       '-'}
                   </div>
                 </div>
+                {selectedProvider.healthIndicators && (
+                  <div className="col-span-2 grid grid-cols-2 gap-2 p-3 bg-white rounded-xl border border-gray-200">
+                    <div>
+                      <div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold">Connection</div>
+                      <div className="font-extrabold text-gray-900">
+                        {selectedProvider.healthIndicators.connection || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold">Authentication</div>
+                      <div className="font-extrabold text-gray-900">
+                        {selectedProvider.healthIndicators.authentication || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold">Balance</div>
+                      <div className="font-extrabold text-gray-900">
+                        {selectedProvider.healthIndicators.balance || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-wide text-gray-400 font-bold">Service</div>
+                      <div className="font-extrabold text-gray-900">
+                        {selectedProvider.healthIndicators.service || '—'}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <span className="text-[10px] text-gray-400 font-bold uppercase">Response Time</span>
                   <div className="font-mono font-extrabold text-indigo-700 mt-0.5">

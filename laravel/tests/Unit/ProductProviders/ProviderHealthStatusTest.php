@@ -23,7 +23,7 @@ class ProviderHealthStatusTest extends TestCase
         $this->assertSame(ProviderHealthStatus::PARTIAL, $result['api_status']);
         $this->assertSame('yellow', $result['health_color']);
         $this->assertTrue($result['transaction_eligible']);
-        $this->assertStringContainsString('saldo', strtolower($result['description']));
+        $this->assertStringContainsString('balance', strtolower($result['description']));
     }
 
     public function test_connection_timeout_is_offline(): void
@@ -50,11 +50,45 @@ class ProviderHealthStatusTest extends TestCase
             'sync' => 'ok',
             'balance' => 'failed',
             'partner_status' => 'online',
+            'message' => 'Wrong Signature',
         ]);
 
         $this->assertSame(ProviderHealthStatus::AUTH_FAILED, $result['api_status']);
         $this->assertFalse($result['transaction_eligible']);
-        $this->assertStringContainsString('API Key', $result['description']);
+        $this->assertSame('Wrong Signature', $result['description']);
+    }
+
+    public function test_auth_failed_without_provider_message_is_generic_not_hardcoded_secret(): void
+    {
+        $result = ProviderHealthStatus::evaluate([
+            'configured' => true,
+            'connection' => 'ok',
+            'authentication' => 'failed',
+            'sync' => 'ok',
+            'balance' => 'failed',
+            'partner_status' => 'online',
+        ]);
+
+        $this->assertSame(ProviderHealthStatus::AUTH_FAILED, $result['api_status']);
+        $this->assertStringNotContainsString('API Key atau Secret', $result['description']);
+    }
+
+    public function test_balance_fail_prefers_provider_message(): void
+    {
+        $result = ProviderHealthStatus::evaluate([
+            'configured' => true,
+            'connection' => 'ok',
+            'authentication' => 'ok',
+            'sync' => 'ok',
+            'balance' => 'failed',
+            'inquiry' => 'ok',
+            'success_rate' => 'ok',
+            'partner_status' => 'online',
+            'message' => 'Balance unavailable',
+        ]);
+
+        $this->assertSame(ProviderHealthStatus::PARTIAL, $result['api_status']);
+        $this->assertSame('Balance unavailable', $result['description']);
     }
 
     public function test_partner_maintenance_overrides_api(): void
