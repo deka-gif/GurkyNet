@@ -157,10 +157,12 @@ class SyncVipCatalogAction
                 continue;
             }
 
-            $providerSku = trim((string) ($row['code'] ?? $row['service'] ?? $row['sku'] ?? ''));
-            $providerName = trim((string) ($row['name'] ?? $row['product_name'] ?? ''));
+            $normalized = \App\Services\ProductProviders\VipPrepaidServicePayload::normalize($row);
+
+            $providerSku = $normalized['code'];
+            $providerName = $normalized['name'];
             $game = trim((string) ($row['game'] ?? ''));
-            $brand = trim((string) ($row['brand'] ?? $row['operator'] ?? ''));
+            $brand = $normalized['brand'];
             if ($brand === '' && $game !== '') {
                 $brand = $game;
             }
@@ -168,7 +170,7 @@ class SyncVipCatalogAction
                 $brand = 'VIP';
             }
 
-            $categoryName = trim((string) ($row['type'] ?? $row['category'] ?? ($row['_catalog'] ?? '')));
+            $categoryName = trim((string) ($normalized['type'] !== '' ? $normalized['type'] : ($normalized['category'] !== '' ? $normalized['category'] : ($row['_catalog'] ?? ''))));
             if ($categoryName === '') {
                 $categoryName = $game !== '' ? 'game' : 'prepaid';
             }
@@ -177,8 +179,9 @@ class SyncVipCatalogAction
             // GET /products?category=pulsa returns VIP offers when Digi is off.
             $categoryName = $this->normalizeVipCategoryName($categoryName, $game !== '');
 
-            $statusRaw = strtolower(trim((string) ($row['status'] ?? 'available')));
-            $providerPrice = $this->extractPrice($row); // NEVER (float)$row['price'] when array
+            $statusRaw = $normalized['status'] !== '' ? $normalized['status'] : 'available';
+            $providerPrice = $normalized['resolved_price']; // NEVER (float)$row['price'] when array
+            $providerMeta = $normalized['meta'];
 
             // Stage 3 — every row
             Log::info('VIP SYNC TRACE — Stage 3 Row', [
@@ -189,6 +192,11 @@ class SyncVipCatalogAction
                 'category' => $categoryName,
                 'price' => $providerPrice,
                 'price_raw' => $row['price'] ?? null,
+                'price_tiers' => $normalized['price'],
+                'multi_trx' => $normalized['multi_trx'],
+                'maintenace' => $normalized['maintenace'],
+                'prepost' => $normalized['prepost'] !== '' ? $normalized['prepost'] : null,
+                'type' => $normalized['type'] !== '' ? $normalized['type'] : null,
                 'status' => $statusRaw,
             ]);
 
@@ -333,6 +341,7 @@ class SyncVipCatalogAction
                     'base_price' => $providerPrice,
                     'provider_price' => $providerPrice,
                     'provider_status' => $statusRaw !== '' ? $statusRaw : ($isActive ? 'available' : 'empty'),
+                    'provider_meta' => $providerMeta,
                     'is_preferred' => false,
                     'is_active' => $isActive,
                 ];
@@ -601,33 +610,13 @@ class SyncVipCatalogAction
 
     /**
      * Resolve VIP price. MUST NOT cast array price with (float)$row['price'].
-     * Order: basic → premium → special → numeric price → harga.
+     * Delegates to VipPrepaidServicePayload (basic → premium → special → numeric).
      *
      * @param  array<string,mixed>  $row
      */
     protected function extractPrice(array $row): float
     {
-        $price = $row['price'] ?? null;
-
-        if (is_array($price)) {
-            foreach (['basic', 'premium', 'special'] as $tier) {
-                if (isset($price[$tier]) && is_numeric($price[$tier])) {
-                    return (float) $price[$tier];
-                }
-            }
-
-            return 0.0;
-        }
-
-        if (is_numeric($price)) {
-            return (float) $price;
-        }
-
-        if (isset($row['harga']) && is_numeric($row['harga'])) {
-            return (float) $row['harga'];
-        }
-
-        return 0.0;
+        return \App\Services\ProductProviders\VipPrepaidServicePayload::normalize($row)['resolved_price'];
     }
 
     /**

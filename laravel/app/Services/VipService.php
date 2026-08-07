@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Services\ProductProviders\VipOrderPayload;
+use App\Services\ProductProviders\VipProfilePayload;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -68,6 +69,15 @@ class VipService
         return $this->credentialStatus()['ok'] === true;
     }
 
+    /**
+     * Expected X-Client-Signature for inbound VIP webhooks (Prepaid.pdf):
+     * md5(API ID + API KEY), or VIP_SIGNATURE when preconfigured.
+     */
+    public function expectedWebhookSignature(): string
+    {
+        return $this->signature;
+    }
+
     public function assertConfigured(): void
     {
         $status = $this->credentialStatus();
@@ -77,9 +87,21 @@ class VipService
     }
 
     /**
-     * Profile / saldo — used for Health Check.
+     * Profile / saldo — used for Health Check (VIPayment API Profile.pdf).
      *
-     * @return array{success:bool,api_status:string,health_color:string,http_status:?int,latency_ms:int,balance:?float,message:string,raw:array}
+     * Request: POST /profile with key + sign = md5(API ID + API KEY).
+     *
+     * @return array{
+     *   success:bool,
+     *   api_status:string,
+     *   health_color:string,
+     *   http_status:?int,
+     *   latency_ms:int,
+     *   balance:?float,
+     *   profile:array{full_name:?string,username:?string,balance:?float,point:?int,level:?string,registered:?string},
+     *   message:string,
+     *   raw:array
+     * }
      */
     public function profile(): array
     {
@@ -107,15 +129,21 @@ class VipService
                 'http_status' => null,
                 'latency_ms' => 0,
                 'balance' => null,
+                'profile' => VipProfilePayload::empty(),
                 'message' => $cred['message'] ?? 'Credentials missing',
                 'raw' => ['missing' => $cred['missing']],
             ];
         }
 
-        return $this->request('profile', [
+        $result = $this->request('profile', [
             'key' => $this->apiKey,
             'sign' => $this->signature,
         ], 'health_check');
+
+        $profile = VipProfilePayload::fromResponse(is_array($result['raw'] ?? null) ? $result['raw'] : []);
+        $result['profile'] = $profile;
+
+        return $result;
     }
 
     /**
@@ -480,6 +508,7 @@ class VipService
             'http_status' => $http,
             'latency_ms' => $ms,
             'balance' => null,
+            'profile' => VipProfilePayload::fromResponse($raw),
             'message' => $message,
             'raw' => $raw,
         ];

@@ -485,6 +485,187 @@ class TransactionController extends Controller
     }
 
     /**
+     * Handle incoming VIPayment / VIP Reseller prepaid webhook (VIPayment API Prepaid.pdf).
+     *
+     * Validates X-Client-Signature = md5(API ID + API KEY). Polling remains the primary
+     * pending path; this callback is an optional additional settlement channel.
+     */
+    public function vipCallback(Request $request): JsonResponse
+    {
+        $vip = app(\App\Services\VipService::class);
+        $expectedSignature = $vip->expectedWebhookSignature();
+        $providedSignature = trim((string) $request->header('X-Client-Signature', ''));
+
+        if ($expectedSignature === '' || $providedSignature === '' || ! hash_equals($expectedSignature, $providedSignature)) {
+            \Illuminate\Support\Facades\Log::warning('VIP Webhook Signature Mismatch', [
+                'has_signature_header' => $providedSignature !== '',
+                'credentials_configured' => $expectedSignature !== '',
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid webhook signature.',
+            ], 401);
+        }
+
+        $payload = $request->json()->all();
+        if (! is_array($payload)) {
+            $payload = $request->all();
+        }
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $items = $this->extractVipWebhookItems($payload);
+        if ($items === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid webhook payload structure.',
+            ], 400);
+        }
+
+        \Illuminate\Support\Facades\Log::info('VIP webhook received', [
+            'item_count' => count($items),
+            'signature_valid' => true,
+        ]);
+
+        foreach ($items as $item) {
+            $trxid = trim((string) ($item['trxid'] ?? ''));
+            if ($trxid === '') {
+                continue;
+            }
+
+            $rawStatus = strtolower(trim((string) ($item['status'] ?? '')));
+            $normalized = \App\Services\ProductProviders\VipOrderPayload::normalizeStatus($rawStatus);
+            $note = trim((string) ($item['note'] ?? ''));
+            $sn = $note !== '' ? $note : null;
+
+            \Illuminate\Support\Facades\Log::info('VIP webhook item classified', [
+                'trxid' => $trxid,
+                'data' => $item['data'] ?? null,
+                'service' => $item['service'] ?? null,
+                'status' => $rawStatus !== '' ? $rawStatus : null,
+                'normalized_status' => $normalized,
+                'note' => $note !== '' ? $note : null,
+                'price' => $item['price'] ?? null,
+            ]);
+
+            $transaction = \App\Models\Transaction::query()
+                ->where('provider_ref', $trxid)
+                ->where(function ($q) {
+                    $q->where('fulfillment_provider_code', \App\Models\ProductProvider::CODE_VIP)
+                        ->orWhereNull('fulfillment_provider_code');
+                })
+                ->first();
+
+            if (! $transaction) {
+                \Illuminate\Support\Facades\Log::warning('VIP webhook: trxid not found locally.', [
+                    'trxid' => $trxid,
+                ]);
+                continue;
+            }
+
+            $inFlight = in_array($transaction->status, ['pending', 'processing'], true);
+            if (! $inFlight) {
+                \Illuminate\Support\Facades\Log::info('VIP webhook duplicate — transaction already terminal', [
+                    'trxid' => $trxid,
+                    'transaction_id' => $transaction->id,
+                    'transaction_status' => $transaction->status,
+                    'webhook_status' => $rawStatus,
+                ]);
+                continue;
+            }
+
+            $transaction->forceFill([
+                'fulfillment_provider_code' => $transaction->fulfillment_provider_code ?: \App\Models\ProductProvider::CODE_VIP,
+                'provider_response' => $payload,
+                'provider_last_status' => $normalized,
+                'provider_checked_at' => now(),
+            ])->save();
+
+            if ($normalized === 'success') {
+                $transaction->update([
+                    'status' => \App\Enums\TransactionStatus::SUCCESS->value,
+                    'notes' => 'Transaksi sukses. SN: '.($sn ?? '-'),
+                ]);
+
+                \App\Models\PaymentHistory::recordFor(
+                    $transaction,
+                    'vip',
+                    'success',
+                    $payload,
+                    $item,
+                    $transaction->invoice_number
+                );
+
+                event(new \App\Events\TransactionSuccess($transaction->fresh(['user']) ?? $transaction));
+                event(new \App\Events\PaymentSettled($transaction->fresh(['user']) ?? $transaction, $payload));
+            } elseif ($normalized === 'failed') {
+                $refundService = app(\App\Services\WalletRefundService::class);
+                $failNote = $note !== ''
+                    ? 'Transaksi gagal dari operator: '.$note
+                    : 'Transaksi gagal dari operator.';
+
+                $result = $refundService->refundOnce(
+                    $transaction,
+                    'Refund Gagal Transaksi (VIP Callback): '.$transaction->invoice_number,
+                    'vip_webhook',
+                    $failNote,
+                    \App\Enums\TransactionStatus::FAILED->value
+                );
+
+                $refundService->writeAudit(null, 'VIP_WEBHOOK_FAILED_REFUND', [
+                    'transaction_id' => $transaction->id,
+                    'trxid' => $trxid,
+                    'credited' => $result['credited'],
+                    'already_refunded' => $result['already_refunded'],
+                    'vip_status' => $rawStatus,
+                ]);
+
+                event(new \App\Events\TransactionFailed($result['transaction']));
+            } else {
+                // waiting / processing — keep in-flight; polling may still resolve later.
+                $transaction->update([
+                    'status' => \App\Enums\TransactionStatus::PENDING->value,
+                    'notes' => 'Sedang diproses oleh operator.',
+                ]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Callback processed successfully.',
+        ]);
+    }
+
+    /**
+     * VIP Prepaid.pdf shows both a flat field table and an envelope example with data[].
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<array<string, mixed>>
+     */
+    protected function extractVipWebhookItems(array $payload): array
+    {
+        $data = $payload['data'] ?? null;
+
+        if (is_array($data) && $data !== []) {
+            if (array_is_list($data)) {
+                return array_values(array_filter($data, 'is_array'));
+            }
+
+            if (array_key_exists('trxid', $data)) {
+                return [$data];
+            }
+        }
+
+        if (array_key_exists('trxid', $payload)) {
+            return [$payload];
+        }
+
+        return [];
+    }
+
+    /**
      * Handle incoming Midtrans Webhook callback.
      */
     public function midtransCallback(Request $request): JsonResponse

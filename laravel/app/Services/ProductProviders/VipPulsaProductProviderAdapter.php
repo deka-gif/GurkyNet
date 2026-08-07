@@ -276,6 +276,9 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
         $balanceValue = $result['balance'] ?? null;
         $message = trim((string) ($result['message'] ?? ''));
         $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
+        $profile = is_array($result['profile'] ?? null)
+            ? $result['profile']
+            : VipProfilePayload::fromResponse($raw);
 
         Log::info('VIP ADAPTER — profile() result for health', [
             'success' => $success,
@@ -285,6 +288,8 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'latency_ms' => $result['latency_ms'] ?? null,
             'message' => $message !== '' ? $message : null,
             'balance' => $balanceValue,
+            'profile_username' => $profile['username'] ?? null,
+            'profile_level' => $profile['level'] ?? null,
         ]);
 
         // Preserve existing VIP classification behaviour — only normalize to the universal contract.
@@ -336,6 +341,11 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'raw' => $raw ?: $result,
         ]);
 
+        // Official Profile.pdf fields — metadata only; balance remains health source.
+        if ($success) {
+            $probe['provider_profile'] = $profile;
+        }
+
         Log::info('VIP healthCheck result', [
             'provider' => ProductProvider::CODE_VIP,
             'http_status' => $probe['http_status'],
@@ -346,6 +356,7 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'balance' => $probe['balance'],
             'latency_ms' => $probe['latency_ms'],
             'status' => $probe['status'],
+            'has_provider_profile' => isset($probe['provider_profile']),
         ]);
 
         return $probe;

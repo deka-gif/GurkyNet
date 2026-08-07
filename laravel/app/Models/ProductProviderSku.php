@@ -17,6 +17,7 @@ class ProductProviderSku extends Model
         'base_price',
         'provider_price',
         'provider_status',
+        'provider_meta',
         'is_preferred',
         'is_active',
     ];
@@ -24,6 +25,7 @@ class ProductProviderSku extends Model
     protected $casts = [
         'base_price' => 'decimal:2',
         'provider_price' => 'decimal:2',
+        'provider_meta' => 'array',
         'is_preferred' => 'boolean',
         'is_active' => 'boolean',
     ];

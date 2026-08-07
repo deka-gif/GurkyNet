@@ -75,6 +75,10 @@ class ProductProviderHealthService
             'status_internal' => $evaluated['api_status'],
         ]);
 
+        $providerProfile = is_array($result['provider_profile'] ?? null)
+            ? $result['provider_profile']
+            : null;
+
         return $this->persistEvaluation(
             $provider,
             $evaluated,
@@ -88,11 +92,13 @@ class ProductProviderHealthService
                 'latency_ms' => $latency,
                 'indicators' => $evaluated['indicators'],
                 'indicator_labels' => $evaluated['indicator_labels'] ?? [],
+                'provider_profile' => $providerProfile,
             ],
             $oldApiStatus,
             $oldHealthColor,
             $oldLastError,
-            $balanceValue
+            $balanceValue,
+            $providerProfile
         );
     }
 
@@ -252,7 +258,8 @@ class ProductProviderHealthService
         mixed $oldApiStatus,
         mixed $oldHealthColor,
         mixed $oldLastError,
-        mixed $balance = null
+        mixed $balance = null,
+        ?array $providerProfile = null
     ): ProductProvider {
         $status = $evaluated['api_status'];
         $color = $evaluated['health_color'];
@@ -272,6 +279,11 @@ class ProductProviderHealthService
 
         if ($balance !== null || array_key_exists('balance', $meta)) {
             $fill['balance'] = $meta['balance'] ?? $balance;
+        }
+
+        // VIP Profile.pdf metadata only — do not clear on failed probes.
+        if (is_array($providerProfile)) {
+            $fill['provider_profile'] = $providerProfile;
         }
 
         $provider->forceFill($fill)->save();

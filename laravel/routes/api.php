@@ -109,6 +109,9 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     // Digiflazz Webhook Callback
     Route::post('/webhooks/digiflazz', [TransactionController::class, 'digiflazzCallback'])->middleware('throttle:120,1');
 
+    // VIPayment / VIP Reseller Prepaid Webhook Callback (optional; polling remains active)
+    Route::post('/webhooks/vip', [TransactionController::class, 'vipCallback'])->middleware('throttle:120,1');
+
     // Midtrans Webhook Callback
     Route::post('/webhooks/midtrans', [TransactionController::class, 'midtransCallback'])->middleware('throttle:120,1');
 

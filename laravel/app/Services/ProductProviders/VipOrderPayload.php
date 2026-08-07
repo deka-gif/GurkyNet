@@ -5,12 +5,21 @@ namespace App\Services\ProductProviders;
 /**
  * Normalize VIP Reseller / VIPAYMENT order & status payloads.
  *
- * Official shapes:
- * - Create order: data is often an object { trxid, status: waiting|processing|success|error, note, ... }
- * - Status check: data is often a LIST of those objects
+ * Official shapes (VIPayment API Prepaid.pdf):
+ * - Create order: data object { trxid, data, code, service, status, note, balance?, price, ... }
+ * - Status / webhook: data LIST of { trxid, data, service, status, note, price, ... }
+ *
+ * Official status values: waiting | processing | success | error
+ * Extra aliases (sukses/gagal/…) are kept for backward compatibility only.
  */
 final class VipOrderPayload
 {
+    /** @return list<string> */
+    public static function officialStatuses(): array
+    {
+        return ['waiting', 'processing', 'success', 'error'];
+    }
+
     /**
      * @param  array<string, mixed>  $raw  Full API body or a data node
      * @return array{trxid:?string,status:string,sn:?string,note:?string,provider_time:?string,row:array<string,mixed>}
@@ -54,20 +63,36 @@ final class VipOrderPayload
 
     /**
      * Map VIP status vocabulary → engine status (success|failed|pending).
+     *
+     * PDF-official: waiting, processing → pending; success → success; error → failed.
      */
     public static function normalizeStatus(string $status): string
     {
         $status = strtolower(trim($status));
 
-        if (in_array($status, ['success', 'sukses', 'ok', 'berhasil'], true)) {
+        // Official prepaid statuses first.
+        if ($status === 'success') {
             return 'success';
         }
 
-        if (in_array($status, ['error', 'failed', 'gagal', 'fail', 'cancel', 'canceled', 'cancelled', 'rejected'], true)) {
+        if ($status === 'error') {
             return 'failed';
         }
 
-        // waiting / processing / pending / proses / empty
+        if (in_array($status, ['waiting', 'processing'], true)) {
+            return 'pending';
+        }
+
+        // Backward-compatible aliases (not listed in Prepaid PDF).
+        if (in_array($status, ['sukses', 'ok', 'berhasil'], true)) {
+            return 'success';
+        }
+
+        if (in_array($status, ['failed', 'gagal', 'fail', 'cancel', 'canceled', 'cancelled', 'rejected'], true)) {
+            return 'failed';
+        }
+
+        // Unknown / pending / proses / empty → keep in-flight
         return 'pending';
     }
 

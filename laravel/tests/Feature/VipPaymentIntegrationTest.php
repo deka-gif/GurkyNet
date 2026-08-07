@@ -116,12 +116,84 @@ class VipPaymentIntegrationTest extends TestCase
         $this->assertSame('online', $vip->api_status);
         $this->assertSame('green', $vip->health_color);
         $this->assertEquals(150000, (float) $vip->balance);
+        // Legacy partial profile still persists nullable official fields.
+        $this->assertSame('demo', $vip->provider_profile['username'] ?? null);
+        $this->assertNull($vip->provider_profile['full_name'] ?? null);
+        $this->assertNull($vip->provider_profile['point'] ?? null);
+        $this->assertNull($vip->provider_profile['level'] ?? null);
+        $this->assertNull($vip->provider_profile['registered'] ?? null);
 
         $this->assertDatabaseHas('product_provider_logs', [
             'product_provider_id' => $vip->id,
             'event_type' => 'health_check',
             'success' => 1,
         ]);
+    }
+
+    public function test_health_check_persists_official_profile_fields_and_uses_balance(): void
+    {
+        $this->actingAsOps();
+        $vip = ProductProvider::vip();
+        $this->assertNotNull($vip);
+
+        $category = \App\Models\ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa-h2', 'icon' => 'phone', 'is_active' => true]);
+        $brand = \App\Models\Provider::create(['name' => 'XL Health2', 'logo' => 'x2.png', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $vip->id,
+            'sku_code' => 'VIP-HEALTH-2',
+            'name' => 'VIP Health SKU 2',
+            'base_price' => 10000,
+            'sell_price' => 11000,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'viphealth2',
+            'is_active' => true,
+            'is_preferred' => true,
+            'priority' => 1,
+        ]);
+        $vip->update(['last_sync_at' => now(), 'product_count' => 1, 'partner_status' => 'online']);
+
+        Http::fake([
+            'vip-reseller.co.id/api/profile' => Http::response([
+                'result' => true,
+                'message' => 'Successfully got your account details.',
+                'data' => [
+                    'full_name' => 'Decha Prio Ariesto Sembiring',
+                    'username' => 'Dechaprio',
+                    'balance' => 7685,
+                    'point' => 0,
+                    'level' => 'Basic',
+                    'registered' => '2026-08-01 14:32:30',
+                ],
+            ], 200),
+        ]);
+
+        $this->postJson("/api/v1/admin/operations/product-provider-control/{$vip->id}/health-check")
+            ->assertOk();
+
+        $vip->refresh();
+        $this->assertSame('online', $vip->api_status);
+        $this->assertEquals(7685, (float) $vip->balance);
+        $this->assertSame('Decha Prio Ariesto Sembiring', $vip->provider_profile['full_name'] ?? null);
+        $this->assertSame('Dechaprio', $vip->provider_profile['username'] ?? null);
+        $this->assertSame(0, $vip->provider_profile['point'] ?? null);
+        $this->assertSame('Basic', $vip->provider_profile['level'] ?? null);
+        $this->assertSame('2026-08-01 14:32:30', $vip->provider_profile['registered'] ?? null);
+        $this->assertEquals(7685, $vip->provider_profile['balance'] ?? null);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://vip-reseller.co.id/api/profile'
+                && $request->method() === 'POST'
+                && ($request['key'] ?? null) === 'api-key-test'
+                && ($request['sign'] ?? null) === md5('api-id-test'.'api-key-test');
+        });
     }
 
     public function test_health_check_sets_auth_failed(): void
