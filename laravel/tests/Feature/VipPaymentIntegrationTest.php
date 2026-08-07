@@ -77,6 +77,30 @@ class VipPaymentIntegrationTest extends TestCase
         $vip = ProductProvider::vip();
         $this->assertNotNull($vip);
 
+        $category = \App\Models\ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa-h', 'icon' => 'phone', 'is_active' => true]);
+        $brand = \App\Models\Provider::create(['name' => 'XL Health', 'logo' => 'x.png', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $vip->id,
+            'sku_code' => 'VIP-HEALTH-1',
+            'name' => 'VIP Health SKU',
+            'base_price' => 10000,
+            'sell_price' => 11000,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'viphealth1',
+            'is_active' => true,
+            'is_preferred' => true,
+            'priority' => 1,
+        ]);
+        $vip->update(['last_sync_at' => now(), 'product_count' => 1, 'partner_status' => 'online']);
+
         Http::fake([
             'vip-reseller.co.id/api/profile' => Http::response([
                 'result' => true,
@@ -135,7 +159,7 @@ class VipPaymentIntegrationTest extends TestCase
             ->assertOk();
 
         $vip->refresh();
-        $this->assertSame('timeout', $vip->api_status);
+        $this->assertSame('offline', $vip->api_status);
     }
 
     public function test_sync_imports_vip_products_without_touching_digiflazz(): void

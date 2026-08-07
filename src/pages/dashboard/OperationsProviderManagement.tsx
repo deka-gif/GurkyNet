@@ -10,20 +10,22 @@ import {
   Eye,
   AlertTriangle,
   X,
-  Edit,
-  Save,
-  Power,
-  PowerOff,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
+import { Link } from 'react-router-dom';
 
 function resolvePartnerStatus(item: any): string {
   const raw = item?.status || item?.partnerStatus || item?.partner_status || 'Online';
   const s = String(raw).toLowerCase();
   if (s === 'online' || s === 'active' || s === 'on') return 'Online';
+  if (s === 'partial' || s === 'degraded' || s === 'syncing' || s === 'gangguan sebagian') {
+    return 'Gangguan Sebagian';
+  }
   if (s === 'maintenance') return 'Maintenance';
+  if (s === 'auth_failed' || s === 'autentikasi gagal') return 'Autentikasi Gagal';
+  if (s === 'not_configured' || s === 'belum dikonfigurasi') return 'Belum Dikonfigurasi';
   return 'Offline';
 }
 
@@ -35,21 +37,15 @@ export const OperationsProviderManagement: React.FC = () => {
     providersError,
     fetchProviders,
     refreshProviderStatuses,
-    updateProvider,
-    syncCatalog,
-    syncLoading,
   } = useOperationsStore();
 
   const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
-  const [editingProvider, setEditingProvider] = useState<any | null>(null);
-
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [serviceFilter, setServiceFilter] = useState<string>('All');
   const [searchInput, setSearchInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -83,54 +79,13 @@ export const OperationsProviderManagement: React.FC = () => {
     loadData(currentPage);
   }, [loadData, currentPage]);
 
-  const handleToggleStatus = async (item: any, newStatus: string) => {
-    const providerId = item.id ?? item.code;
-    const result = await updateProvider(providerId, { status: newStatus.toLowerCase() });
-    if (result.success) {
-      setActionMessage({
-        type: 'success',
-        text: result.message || `Status provider ${item.name || providerId} → ${newStatus}.`,
-      });
-      loadData(currentPage);
-      if (selectedProvider && (selectedProvider.id === providerId || selectedProvider.code === providerId)) {
-        setSelectedProvider({ ...selectedProvider, status: newStatus });
-      }
-    } else {
-      setActionMessage({ type: 'error', text: result.message || 'Gagal mengubah status provider.' });
-    }
-  };
-
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProvider) return;
-
-    const providerId = editingProvider.id ?? editingProvider.code;
-    const payload = {
-      name: editingProvider.name,
-      status: String(editingProvider.status || 'online').toLowerCase(),
-      notes: editingProvider.notes,
-    };
-
-    const result = await updateProvider(providerId, payload);
-    if (result.success) {
-      setActionMessage({ type: 'success', text: result.message || 'Data provider berhasil disimpan.' });
-      setEditingProvider(null);
-      loadData(currentPage);
-      if (selectedProvider && (selectedProvider.id === providerId || selectedProvider.code === providerId)) {
-        setSelectedProvider({ ...selectedProvider, ...payload, status: resolvePartnerStatus(payload) });
-      }
-    } else {
-      setActionMessage({ type: 'error', text: result.message || 'Gagal menyimpan perubahan provider.' });
-    }
-  };
-
   const handleRefreshStatus = async () => {
     setRefreshing(true);
     const result = await refreshProviderStatuses();
     setRefreshing(false);
     setActionMessage({
       type: result.success ? 'success' : 'error',
-      text: result.message || (result.success ? 'Status partner di-refresh dari backend.' : 'Refresh gagal.'),
+      text: result.message || (result.success ? 'Status provider diperbarui dari health check backend.' : 'Refresh gagal.'),
     });
     if (result.success) loadData(currentPage);
   };
@@ -149,11 +104,27 @@ export const OperationsProviderManagement: React.FC = () => {
         </span>
       );
     }
+    if (s === 'Gangguan Sebagian') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+          Gangguan Sebagian
+        </span>
+      );
+    }
     if (s === 'Maintenance') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
-          <Wrench className="w-3.5 h-3.5 text-amber-600" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-orange-50 text-orange-800 border border-orange-200">
+          <Wrench className="w-3.5 h-3.5 text-orange-600" />
           Maintenance
+        </span>
+      );
+    }
+    if (s === 'Autentikasi Gagal' || s === 'Belum Dikonfigurasi') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200">
+          <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+          {s}
         </span>
       );
     }
@@ -192,40 +163,27 @@ export const OperationsProviderManagement: React.FC = () => {
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 backdrop-blur-xs text-[11px] font-bold text-blue-200 border border-blue-400/30">
               <Server className="w-3.5 h-3.5" />
-              GurkyNet Provider Network Center
+              Monitoring Product Provider
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Provider Management</h1>
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed max-w-2xl">
-              Control Center Digiflazz, VIP Payment, dan Midtrans. Status partner langsung mempengaruhi Product
-              Management dan Dashboard User.
+              Dashboard monitoring kondisi Digiflazz, VIP Payment, dan provider PPOB lain. Konfigurasi ON/OFF,
+              Priority, Sync, dan Health Check hanya di{' '}
+              <Link to="/dashboard/operations/product-providers" className="underline font-bold text-white">
+                Product Provider Control Center
+              </Link>
+              .
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={async () => {
-                const result = await syncCatalog();
-                setActionMessage({
-                  type: result.success ? 'success' : 'error',
-                  text: result.message || (result.success ? 'Sinkronisasi Digiflazz berhasil.' : 'Sinkronisasi gagal.'),
-                });
-                if (result.success) loadData(currentPage);
-              }}
-              disabled={syncLoading || providersLoading}
-              className="px-4 py-2.5 bg-emerald-500 text-white rounded-2xl font-extrabold text-xs shadow-md hover:bg-emerald-400 transition flex items-center gap-2 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
-              <span>{syncLoading ? 'Syncing...' : 'Sync Digiflazz'}</span>
-            </button>
-            <button
-              onClick={() => void handleRefreshStatus()}
-              disabled={providersLoading || refreshing}
-              className="px-4 py-2.5 bg-white text-slate-900 rounded-2xl font-extrabold text-xs shadow-md hover:bg-slate-100 transition flex items-center gap-2 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 text-blue-600 ${refreshing || providersLoading ? 'animate-spin' : ''}`} />
-              <span>{refreshing ? 'Probing...' : 'Refresh Status'}</span>
-            </button>
-          </div>
+          <button
+            onClick={() => void handleRefreshStatus()}
+            disabled={providersLoading || refreshing}
+            className="px-4 py-2.5 bg-white text-slate-900 rounded-2xl font-extrabold text-xs shadow-md hover:bg-slate-100 transition flex items-center gap-2 disabled:opacity-50 shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 text-blue-600 ${refreshing || providersLoading ? 'animate-spin' : ''}`} />
+            <span>{refreshing ? 'Memeriksa...' : 'Refresh Status'}</span>
+          </button>
         </div>
       </div>
 
@@ -243,13 +201,13 @@ export const OperationsProviderManagement: React.FC = () => {
             <h2 className="text-sm font-extrabold text-gray-900">Filter Status & Layanan Provider</h2>
           </div>
           <span className="text-xs text-gray-400 font-mono">
-            Showing {totalCount.toLocaleString('id-ID')} Partners
+            {totalCount.toLocaleString('id-ID')} Provider
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div>
-            <label className="block text-[11px] font-bold text-gray-500 mb-1">Status Partner</label>
+            <label className="block text-[11px] font-bold text-gray-500 mb-1">Status</label>
             <select
               value={statusFilter}
               onChange={(e) => {
@@ -260,7 +218,9 @@ export const OperationsProviderManagement: React.FC = () => {
             >
               <option value="All">Semua Status</option>
               <option value="Online">Online</option>
+              <option value="Gangguan Sebagian">Gangguan Sebagian</option>
               <option value="Maintenance">Maintenance</option>
+              <option value="Autentikasi Gagal">Autentikasi Gagal</option>
               <option value="Offline">Offline</option>
             </select>
           </div>
@@ -284,10 +244,7 @@ export const OperationsProviderManagement: React.FC = () => {
               <option value="pln">Token PLN / PLN</option>
               <option value="pdam">PDAM</option>
               <option value="bpjs-kesehatan">BPJS</option>
-              <option value="topup-digital">Top Up Digital</option>
               <option value="tagihan">Tagihan</option>
-              <option value="international">International Top Up</option>
-              <option value="transfer">Transfer</option>
             </select>
           </div>
 
@@ -299,7 +256,7 @@ export const OperationsProviderManagement: React.FC = () => {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Digiflazz, VIP, Midtrans, Game..."
+                placeholder="Digiflazz, VIP, Pulsa, Game..."
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
@@ -310,11 +267,11 @@ export const OperationsProviderManagement: React.FC = () => {
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-extrabold text-gray-900">Provider Management Table</h2>
-            <p className="text-xs text-gray-500">Partner integrasi real dari database & health probe backend</p>
+            <h2 className="text-base font-extrabold text-gray-900">Monitoring Provider PPOB</h2>
+            <p className="text-xs text-gray-500">Data real dari database & health check backend — hanya baca</p>
           </div>
           <span className="text-xs text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 font-mono">
-            {providers.length} / {totalCount} Partners
+            {providers.length} / {totalCount}
           </span>
         </div>
 
@@ -331,16 +288,18 @@ export const OperationsProviderManagement: React.FC = () => {
                   <th className="py-3 px-4">Provider</th>
                   <th className="py-3 px-4">Code</th>
                   <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Health</th>
                   <th className="py-3 px-4">Supported Services</th>
+                  <th className="py-3 px-4">SKU</th>
                   <th className="py-3 px-4">Response Time</th>
                   <th className="py-3 px-4">Last Sync</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
+                  <th className="py-3 px-4 text-center">Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
                 {providers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-400">
+                    <td colSpan={9} className="py-8 text-center text-gray-400">
                       Tidak ada data provider yang memenuhi filter pencarian.
                     </td>
                   </tr>
@@ -349,8 +308,9 @@ export const OperationsProviderManagement: React.FC = () => {
                     const code = item.code || item.id;
                     const name = item.name || '-';
                     const status = resolvePartnerStatus(item);
-                    const responseTime = item.avgResponseTime || item.responseTime || item.response_time || '-';
-                    const lastSync = item.lastSync || item.last_sync || item.lastSyncAt || '-';
+                    const responseTime = item.avgResponseTime || item.responseTime || '-';
+                    const lastSync =
+                      item.lastSyncDisplay || item.lastSync || item.last_sync || item.lastSyncAt || '-';
                     const services = Array.isArray(item.supportedServices)
                       ? item.supportedServices.slice(0, 4).join(', ')
                       : '-';
@@ -361,63 +321,32 @@ export const OperationsProviderManagement: React.FC = () => {
                         className="hover:bg-blue-50/40 cursor-pointer transition-colors"
                         onClick={() => setSelectedProvider(item)}
                       >
-                        <td className="py-3.5 px-4 font-bold text-gray-900">
-                          <div>{name}</div>
-                          <div className="text-[10px] text-gray-400 font-medium">
-                            {item.type === 'payment_gateway' ? 'Payment Gateway' : 'Product Provider'}
-                            {item.productCount != null ? ` · ${item.productCount} produk` : ''}
-                          </div>
-                        </td>
+                        <td className="py-3.5 px-4 font-bold text-gray-900">{name}</td>
                         <td className="py-3.5 px-4 font-mono font-bold text-indigo-700">{code}</td>
                         <td className="py-3.5 px-4">{getStatusBadge(status)}</td>
-                        <td className="py-3.5 px-4 text-gray-600 max-w-[220px] truncate" title={services}>
+                        <td className="py-3.5 px-4 font-bold text-slate-700">
+                          {item.healthLabel || item.apiStatusLabel || '-'}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-600 max-w-[200px] truncate" title={services}>
                           {services || '-'}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono font-bold">
+                          {item.productCountLabel || `${item.productCount ?? 0} SKU`}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold text-blue-700">{responseTime}</td>
                         <td className="py-3.5 px-4 font-mono text-[11px] text-gray-500">{lastSync}</td>
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedProvider(item)}
-                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
-                              title="View Details"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEditingProvider({
-                                  ...item,
-                                  status: status.toLowerCase(),
-                                })
-                              }
-                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-indigo-600 hover:text-white text-gray-600 transition"
-                              title="Edit Provider"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            {status === 'Online' ? (
-                              <button
-                                type="button"
-                                onClick={() => handleToggleStatus(item, 'offline')}
-                                className="p-1.5 rounded-lg bg-gray-100 hover:bg-red-600 hover:text-white text-red-600 transition"
-                                title="Disable / Offline"
-                              >
-                                <PowerOff className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleToggleStatus(item, 'online')}
-                                className="p-1.5 rounded-lg bg-gray-100 hover:bg-emerald-600 hover:text-white text-emerald-600 transition"
-                                title="Enable / Online"
-                              >
-                                <Power className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedProvider(item);
+                            }}
+                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
+                            title="Lihat Detail"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -431,7 +360,7 @@ export const OperationsProviderManagement: React.FC = () => {
         {pageLast > 1 && (
           <div className="p-4 border-t border-gray-100 flex items-center justify-between text-xs bg-gray-50/50">
             <span className="text-gray-500 font-medium">
-              Halaman {pageCurrent} dari {pageLast} · {totalCount} Partners
+              Halaman {pageCurrent} dari {pageLast} · {totalCount} Provider
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -479,7 +408,7 @@ export const OperationsProviderManagement: React.FC = () => {
             <div className="p-6 space-y-5 text-xs text-gray-800 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Provider Name</span>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Provider</span>
                   <div className="font-extrabold text-gray-900 mt-0.5">{selectedProvider.name}</div>
                 </div>
                 <div>
@@ -493,9 +422,18 @@ export const OperationsProviderManagement: React.FC = () => {
                   <div className="mt-0.5">{getStatusBadge(resolvePartnerStatus(selectedProvider))}</div>
                 </div>
                 <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">API Health</span>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Health</span>
                   <div className="font-extrabold text-indigo-700 mt-0.5">
-                    {selectedProvider.apiStatusLabel || selectedProvider.apiStatus || '-'}
+                    {selectedProvider.healthLabel || selectedProvider.apiStatusLabel || '-'}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Keterangan</span>
+                  <div className="font-medium text-gray-800 mt-0.5 leading-relaxed">
+                    {selectedProvider.statusDescription ||
+                      selectedProvider.description ||
+                      selectedProvider.notes ||
+                      '-'}
                   </div>
                 </div>
                 <div>
@@ -505,13 +443,18 @@ export const OperationsProviderManagement: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Product Count</span>
-                  <div className="font-extrabold text-gray-900 mt-0.5">{selectedProvider.productCount ?? 0}</div>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">SKU</span>
+                  <div className="font-extrabold text-gray-900 mt-0.5">
+                    {selectedProvider.productCountLabel || `${selectedProvider.productCount ?? 0} SKU`}
+                  </div>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Last Sync</span>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Terakhir Sinkron</span>
                   <div className="font-mono text-gray-700 mt-0.5">
-                    {selectedProvider.lastSync || selectedProvider.last_sync || '-'}
+                    {selectedProvider.lastSyncDisplay ||
+                      selectedProvider.lastSync ||
+                      selectedProvider.last_sync ||
+                      '-'}
                   </div>
                 </div>
                 <div className="col-span-2">
@@ -522,114 +465,23 @@ export const OperationsProviderManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <h3 className="font-extrabold text-gray-900 text-xs mb-1">Catatan Operasional:</h3>
-                <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 text-gray-700 leading-relaxed font-medium">
-                  {selectedProvider.notes || selectedProvider.description || 'Tidak ada catatan tambahan.'}
-                </div>
-              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Halaman ini hanya monitoring. Untuk ON/OFF, Priority, Sync Product, atau Health Check, buka{' '}
+                <Link to="/dashboard/operations/product-providers" className="text-indigo-600 font-bold underline">
+                  Product Provider Control Center
+                </Link>
+                .
+              </p>
             </div>
 
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2 shrink-0">
-              <button
-                onClick={() => {
-                  setEditingProvider({
-                    ...selectedProvider,
-                    status: resolvePartnerStatus(selectedProvider).toLowerCase(),
-                  });
-                  setSelectedProvider(null);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center gap-1.5"
-              >
-                <Edit className="w-4 h-4" />
-                Edit Provider
-              </button>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end shrink-0">
               <button
                 onClick={() => setSelectedProvider(null)}
                 className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition"
               >
-                Tutup Drawer
+                Tutup
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {editingProvider && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 border border-gray-100">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Edit className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-extrabold text-gray-900 text-base">
-                  Edit Provider ({editingProvider.code || editingProvider.id})
-                </h3>
-              </div>
-              <button
-                onClick={() => setEditingProvider(null)}
-                className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Nama Provider</label>
-                <input
-                  type="text"
-                  value={editingProvider.name || ''}
-                  onChange={(e) => setEditingProvider({ ...editingProvider, name: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-900 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  required
-                  disabled={editingProvider.type === 'payment_gateway'}
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Status Partner</label>
-                <select
-                  value={String(editingProvider.status || 'online').toLowerCase()}
-                  onChange={(e) => setEditingProvider({ ...editingProvider, status: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-900 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="online">Online</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="offline">Offline</option>
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Maintenance: produk tetap terlihat di User Dashboard tetapi tidak bisa dibeli. Offline: produk
-                  disembunyikan.
-                </p>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Catatan</label>
-                <textarea
-                  value={editingProvider.notes || editingProvider.description || ''}
-                  onChange={(e) => setEditingProvider({ ...editingProvider, notes: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 h-20"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingProvider(null)}
-                  className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={providersLoading}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  {providersLoading ? 'Menyimpan...' : 'Simpan Provider'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

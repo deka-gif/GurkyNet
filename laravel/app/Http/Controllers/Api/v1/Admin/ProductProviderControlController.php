@@ -53,7 +53,7 @@ class ProductProviderControlController extends Controller
         $fresh = $service->enable($provider);
         $card = $service->toCard($fresh);
 
-        $response = $this->successResponse('Product provider power ON. Products visible in catalog.', $card);
+        $response = $this->successResponse('Product provider diaktifkan. Siap menerima routing transaksi sesuai prioritas.', $card);
 
         Log::info('EXEC TRACE — RETURN JSON Enable', [
             'Provider ID' => $fresh->id,
@@ -86,7 +86,7 @@ class ProductProviderControlController extends Controller
         $card = $service->toCard($fresh);
 
         $response = $this->successResponse(
-            'Product provider power OFF. Products hidden from catalog.',
+            'Product provider dimatikan. Transaksi baru tidak dikirim ke provider ini; produk tetap di database dan dialihkan ke provider cadangan bila tersedia.',
             $card
         );
 
@@ -102,6 +102,17 @@ class ProductProviderControlController extends Controller
         ]);
 
         return $response;
+    }
+
+    public function maintenance(int $id, ProductProviderControlService $service): JsonResponse
+    {
+        $provider = ProductProvider::findOrFail($id);
+        $fresh = $service->setMaintenance($provider);
+
+        return $this->successResponse(
+            'Product provider masuk mode maintenance. Transaksi akan dialihkan ke provider cadangan jika tersedia.',
+            $service->toCard($fresh)
+        );
     }
 
     public function setPrimary(int $id, ProductProviderControlService $service): JsonResponse

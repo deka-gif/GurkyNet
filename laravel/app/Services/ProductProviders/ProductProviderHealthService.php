@@ -5,8 +5,6 @@ namespace App\Services\ProductProviders;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
-use App\Models\Transaction;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProductProviderHealthService
@@ -14,7 +12,8 @@ class ProductProviderHealthService
     public function __construct(protected ProductProviderRegistry $registry) {}
 
     /**
-     * Run health check for one provider and persist metrics.
+     * Run multi-indicator health check and persist metrics.
+     * Balance failure alone never forces Offline.
      */
     public function check(ProductProvider $provider): ProductProvider
     {
@@ -23,148 +22,225 @@ class ProductProviderHealthService
         $oldApiStatus = $provider->api_status;
         $oldHealthColor = $provider->health_color;
         $oldLastError = $provider->last_error;
-        $oldLastCheck = optional($provider->last_health_check_at)?->toIso8601String();
 
         Log::info('HEALTH CHECK — before update', [
             'Provider ID' => $provider->id,
             'Provider Code' => $provider->code,
             'Old api_status' => $oldApiStatus,
             'Old health_color' => $oldHealthColor,
-            'Old last_error' => $oldLastError,
-            'Old last_health_check_at' => $oldLastCheck,
             'is_active' => $provider->is_active,
+            'partner_status' => $provider->partner_status,
         ]);
 
-        if (!$this->registry->has($provider->code)) {
-            Log::info('HEALTH CHECK — adapter missing', [
-                'Provider Code' => $provider->code,
+        $this->refreshStats($provider);
+        $provider->refresh();
+
+        if (! $this->registry->has($provider->code)) {
+            $evaluated = ProviderHealthStatus::evaluate([
+                'configured' => false,
+                'connection' => 'failed',
+                'authentication' => 'failed',
+                'balance' => 'failed',
+                'sync' => 'unknown',
+                'partner_status' => $provider->partner_status,
             ]);
 
-            $provider->forceFill([
-                'api_status' => 'offline',
-                'health_color' => 'red',
-                'last_health_check_at' => now(),
-                'last_error' => 'No adapter registered',
-            ])->save();
-
-            $this->log($provider, false, null, 'No adapter registered', [
-                'api_status' => 'offline',
-            ]);
-
-            $fresh = $provider->fresh();
-            $this->logAfterUpdate($fresh, $oldApiStatus, $oldHealthColor, $oldLastError);
-
-            return $fresh;
+            return $this->persistEvaluation($provider, $evaluated, null, [
+                'reason' => 'no_adapter',
+            ], $oldApiStatus, $oldHealthColor, $oldLastError);
         }
 
         $adapter = $this->registry->get($provider->code);
-
-        Log::info('HEALTH CHECK — adapter selected', [
-            'Provider Code' => $provider->code,
-            'adapter_class' => $adapter::class,
-        ]);
-
-        // Always probe API — power (is_active) must never override health status.
-        // Power OFF + API Online is valid: products hidden, API still healthy.
         $result = $adapter->healthCheck();
-        $probeStatus = (string) ($result['api_status'] ?? '');
 
-        Log::info('HEALTH CHECK — adapter/VipService result', [
-            'Provider ID' => $provider->id,
-            'Provider Code' => $provider->code,
-            'success' => (bool) ($result['success'] ?? $result['authenticated'] ?? false)
-                || in_array($probeStatus, ['online', 'degraded'], true),
-            'api_status' => $probeStatus,
-            'health_color' => $result['health_color'] ?? null,
-            'http_status' => $result['http_status'] ?? null,
-            'latency_ms' => $result['latency_ms'] ?? null,
-            'latency' => $result['latency_ms'] ?? null,
-            'message' => $result['message'] ?? null,
-            'authenticated' => $result['authenticated'] ?? null,
-            'reachable' => $result['reachable'] ?? null,
-            'balance' => $result['balance'] ?? null,
-        ]);
-
-        if ($probeStatus === 'not_configured') {
-            $message = (string) ($result['message'] ?? 'NOT CONFIGURED');
-            $provider->forceFill([
-                'api_status' => 'not_configured',
-                'health_color' => 'red',
-                'last_health_check_at' => now(),
-                'last_error' => $message,
-                'avg_response_ms' => $result['latency_ms'] ?? $provider->avg_response_ms,
-            ])->save();
-
-            $this->log($provider, false, $result['latency_ms'] ?? null, $message, [
-                'api_status' => 'not_configured',
-                'missing' => $result['raw']['missing'] ?? null,
-            ]);
-
-            $fresh = $provider->fresh();
-            $this->logAfterUpdate($fresh, $oldApiStatus, $oldHealthColor, $oldLastError);
-
-            return $fresh;
-        }
+        $indicators = $this->buildIndicators($provider, $result);
+        $evaluated = ProviderHealthStatus::evaluate($indicators);
 
         $latency = $result['latency_ms'] ?? null;
-        $balance = $result['balance'] ?? null;
-        $message = $result['message'] ?? null;
+        $balance = array_key_exists('balance', $result) ? $result['balance'] : null;
 
-        // Prefer adapter-provided status (online / auth_failed / timeout / not_configured / …)
-        $status = (string) ($result['api_status'] ?? '');
-        $color = (string) ($result['health_color'] ?? '');
+        return $this->persistEvaluation(
+            $provider,
+            $evaluated,
+            $latency,
+            [
+                'balance' => $balance,
+                'http_status' => $result['http_status'] ?? null,
+                'probe_message' => $result['message'] ?? null,
+                'indicators' => $evaluated['indicators'],
+            ],
+            $oldApiStatus,
+            $oldHealthColor,
+            $oldLastError,
+            $balance
+        );
+    }
 
-        if ($status === '') {
-            $reachable = (bool) ($result['reachable'] ?? false);
-            $auth = (bool) ($result['authenticated'] ?? false);
-            $status = 'offline';
-            $color = 'red';
-            if ($reachable && $auth) {
-                $status = 'online';
-                $color = ($latency !== null && $latency > 3000) ? 'yellow' : 'green';
-                if ($balance !== null && $balance <= 0) {
-                    $color = 'yellow';
-                    $status = 'degraded';
-                }
-            } elseif ($reachable) {
-                $status = 'degraded';
-                $color = 'yellow';
+    /**
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    protected function buildIndicators(ProductProvider $provider, array $result): array
+    {
+        $fromAdapter = is_array($result['indicators'] ?? null) ? $result['indicators'] : [];
+
+        $connection = strtolower((string) ($fromAdapter['connection'] ?? ''));
+        $authentication = strtolower((string) ($fromAdapter['authentication'] ?? ''));
+        $balance = strtolower((string) ($fromAdapter['balance'] ?? ''));
+
+        if ($connection === '' || $authentication === '') {
+            // Legacy adapter payloads without indicators.
+            if (($result['configured'] ?? true) === false || ($result['api_status'] ?? null) === 'not_configured') {
+                $connection = 'failed';
+                $authentication = 'failed';
+                $balance = 'failed';
+            } elseif (($result['api_status'] ?? null) === 'auth_failed') {
+                $connection = 'ok';
+                $authentication = 'failed';
+                $balance = 'failed';
+            } elseif (in_array(($result['api_status'] ?? null), ['timeout', 'offline'], true)) {
+                $connection = ($result['api_status'] === 'timeout') ? 'timeout' : 'failed';
+                $authentication = 'unknown';
+                $balance = 'failed';
+            } else {
+                $reachable = (bool) ($result['reachable'] ?? false);
+                $auth = (bool) ($result['authenticated'] ?? false);
+                $connection = $reachable ? ((($result['latency_ms'] ?? 0) > 3000) ? 'slow' : 'ok') : 'failed';
+                $authentication = $auth ? 'ok' : ($reachable ? 'failed' : 'unknown');
+                $balance = array_key_exists('balance', $result) && $result['balance'] !== null ? 'ok' : 'failed';
             }
         }
 
-        if ($color === '') {
-            $color = match ($status) {
-                'online' => 'green',
-                'degraded', 'timeout' => 'yellow',
-                'auth_failed', 'not_configured', 'offline' => 'red',
-                default => 'yellow',
-            };
+        $configured = (bool) ($result['configured'] ?? ($connection !== 'failed' || $authentication === 'ok'));
+        if (($result['api_status'] ?? null) === 'not_configured') {
+            $configured = false;
         }
 
-        if ($status === 'online' && $balance !== null && $balance <= 0) {
-            $status = 'degraded';
-            $color = 'yellow';
+        return [
+            'configured' => $configured,
+            'connection' => $connection ?: 'unknown',
+            'authentication' => $authentication ?: 'unknown',
+            'balance' => $balance ?: 'unknown',
+            'balance_value' => $result['balance'] ?? null,
+            'sync' => $this->syncIndicator($provider),
+            'inquiry' => $this->inquiryIndicator($provider),
+            'success_rate' => $this->successRateIndicator($provider),
+            'success_rate_value' => $provider->success_rate !== null ? (float) $provider->success_rate : null,
+            'product_count' => (int) ($provider->product_count ?? 0),
+            'latency_ms' => $result['latency_ms'] ?? null,
+            'partner_status' => $provider->partner_status,
+            'message' => $result['message'] ?? null,
+            'warnings' => [],
+        ];
+    }
+
+    protected function syncIndicator(ProductProvider $provider): string
+    {
+        $count = (int) ($provider->product_count ?? 0);
+        if ($count <= 0) {
+            $count = ProductProviderSku::query()
+                ->where('product_provider_id', $provider->id)
+                ->where('is_active', true)
+                ->count();
         }
 
-        $ok = in_array($status, ['online', 'degraded'], true);
+        if ($count <= 0) {
+            return 'failed';
+        }
 
-        $provider->forceFill([
+        if (! $provider->last_sync_at) {
+            return 'stale';
+        }
+
+        if ($provider->last_sync_at->lt(now()->subDays(2))) {
+            return 'stale';
+        }
+
+        return 'ok';
+    }
+
+    protected function inquiryIndicator(ProductProvider $provider): string
+    {
+        $recentFails = ProductProviderLog::query()
+            ->where('product_provider_id', $provider->id)
+            ->where('created_at', '>=', now()->subHours(6))
+            ->where(function ($q) {
+                $q->where('event_type', 'inquiry_failed')
+                    ->orWhere(function ($inner) {
+                        $inner->where('event_type', 'fulfill_attempt')
+                            ->where('success', false)
+                            ->where(function ($r) {
+                                $r->where('reason', 'like', '%inquiry%')
+                                    ->orWhere('error_message', 'like', '%inquiry%');
+                            });
+                    });
+            })
+            ->count();
+
+        if ($recentFails >= 3) {
+            return 'warning';
+        }
+
+        return 'ok';
+    }
+
+    protected function successRateIndicator(ProductProvider $provider): string
+    {
+        if ($provider->success_rate === null) {
+            return 'unknown';
+        }
+
+        $rate = (float) $provider->success_rate;
+        $total = (int) ($provider->transactions_today ?? 0);
+        if ($total >= 5 && $rate < 90) {
+            return 'warning';
+        }
+
+        return 'ok';
+    }
+
+    /**
+     * @param  array{api_status:string,health_color:string,label:string,description:string,transaction_eligible:bool,indicators:array}  $evaluated
+     * @param  array<string, mixed>  $meta
+     */
+    protected function persistEvaluation(
+        ProductProvider $provider,
+        array $evaluated,
+        ?int $latency,
+        array $meta,
+        mixed $oldApiStatus,
+        mixed $oldHealthColor,
+        mixed $oldLastError,
+        mixed $balance = null
+    ): ProductProvider {
+        $status = $evaluated['api_status'];
+        $color = $evaluated['health_color'];
+        $ok = (bool) $evaluated['transaction_eligible'];
+
+        $fill = [
             'api_status' => $status,
             'health_color' => $color,
-            'balance' => $balance,
             'avg_response_ms' => $latency ?? $provider->avg_response_ms,
             'last_health_check_at' => now(),
-            'last_error' => $ok ? null : $message,
+            'last_error' => $ok && $status === ProviderHealthStatus::ONLINE
+                ? null
+                : $evaluated['description'],
             'last_success_at' => $ok ? now() : $provider->last_success_at,
             'last_failure_at' => $ok ? $provider->last_failure_at : now(),
-        ])->save();
+        ];
 
-        $this->log($provider, $ok, $latency, $message, [
-            'balance' => $balance,
+        if ($balance !== null || array_key_exists('balance', $meta)) {
+            $fill['balance'] = $meta['balance'] ?? $balance;
+        }
+
+        $provider->forceFill($fill)->save();
+
+        $this->log($provider, $ok, $latency, $evaluated['description'], array_merge($meta, [
             'health_color' => $color,
             'api_status' => $status,
-            'http_status' => $result['http_status'] ?? null,
-        ]);
+            'label' => $evaluated['label'],
+            'transaction_eligible' => $ok,
+        ]));
 
         $fresh = $provider->fresh();
         $this->logAfterUpdate($fresh, $oldApiStatus, $oldHealthColor, $oldLastError);
@@ -178,7 +254,7 @@ class ProductProviderHealthService
         mixed $oldHealthColor,
         mixed $oldLastError
     ): void {
-        if (!$provider) {
+        if (! $provider) {
             return;
         }
 
@@ -251,15 +327,16 @@ class ProductProviderHealthService
         if ($result->ok && $result->status === 'success') {
             $updates['last_success_at'] = now();
             $updates['last_error'] = null;
-            if (($provider->api_status ?? '') === 'offline') {
-                $updates['api_status'] = 'online';
-                $updates['health_color'] = 'green';
+            if (in_array(strtolower((string) ($provider->api_status ?? '')), ['offline', 'timeout'], true)) {
+                // Do not auto-promote to online from a single success — next health check decides.
+                $updates['api_status'] = ProviderHealthStatus::PARTIAL;
+                $updates['health_color'] = 'yellow';
             }
-        } elseif (!$result->ok) {
+        } elseif (! $result->ok) {
             $updates['last_failure_at'] = now();
             $updates['last_error'] = $result->message ?? $result->reason;
-            if (in_array($result->reason, ['timeout', 'http_5xx', 'provider_offline', 'provider_maintenance'], true)) {
-                $updates['api_status'] = 'degraded';
+            if (in_array($result->reason, ['timeout', 'http_5xx', 'provider_offline'], true)) {
+                $updates['api_status'] = ProviderHealthStatus::PARTIAL;
                 $updates['health_color'] = 'yellow';
             }
         }
@@ -286,8 +363,8 @@ class ProductProviderHealthService
             'selected_provider_code' => $provider->code,
             'success' => $success,
             'response_time_ms' => $latency,
-            'error_message' => $success ? null : $message,
-            'reason' => $success ? 'health_ok' : 'health_failed',
+            'error_message' => $success && ($meta['api_status'] ?? '') === ProviderHealthStatus::ONLINE ? null : $message,
+            'reason' => ($meta['api_status'] ?? null) === ProviderHealthStatus::ONLINE ? 'health_ok' : 'health_attention',
             'meta' => $meta,
         ]);
     }

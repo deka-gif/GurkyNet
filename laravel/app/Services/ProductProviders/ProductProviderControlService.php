@@ -46,27 +46,26 @@ class ProductProviderControlService
     public function toCard(ProductProvider $p): array
     {
         $api = strtolower((string) ($p->api_status ?? 'unknown'));
-        // Friendly API label for metrics only — never used as the top power badge.
-        $apiStatusLabel = match ($api) {
-            'online' => 'Online',
-            'degraded', 'syncing' => 'Syncing',
-            'auth_failed' => 'Auth Error',
-            'timeout' => 'Timeout',
-            'not_configured' => 'Not Configured',
-            'no_response', 'unknown' => 'No Response',
-            'offline' => 'Offline',
-            default => ucwords(str_replace('_', ' ', $api)),
-        };
+        $apiStatusLabel = ProviderHealthStatus::labelFor($api);
+        $statusDescription = ProviderHealthStatus::descriptionFor($p);
         $healthColor = strtolower((string) ($p->health_color ?? 'yellow'));
-        if (!in_array($healthColor, ['green', 'yellow', 'red'], true)) {
+        if (! in_array($healthColor, ['green', 'yellow', 'orange', 'red'], true)) {
             $healthColor = match ($api) {
                 'online' => 'green',
-                'degraded', 'syncing', 'timeout' => 'yellow',
+                'partial', 'degraded', 'syncing' => 'yellow',
+                'maintenance' => 'orange',
                 default => 'red',
             };
         }
-        $apiOnline = in_array($api, ['online', 'degraded', 'syncing'], true);
+        $transactionEligible = ProviderHealthStatus::isTransactionEligible(
+            $p->api_status,
+            $p->partner_status
+        );
         $poweredOn = (bool) $p->is_active;
+        $productCount = (int) ($p->product_count ?? ProductProviderSku::where('product_provider_id', $p->id)->count());
+        $lastSyncDisplay = $p->last_sync_at
+            ? $p->last_sync_at->timezone(config('app.timezone'))->format('d/m/Y H:i')
+            : null;
 
         return [
             'id' => $p->id,
@@ -82,9 +81,12 @@ class ProductProviderControlService
             'apiStatusLabel' => $apiStatusLabel,
             'healthColor' => $healthColor,
             'healthLabel' => $apiStatusLabel,
+            'statusDescription' => $statusDescription,
             'balance' => $p->balance !== null ? (float) $p->balance : null,
-            'productCount' => (int) ($p->product_count ?? ProductProviderSku::where('product_provider_id', $p->id)->count()),
+            'productCount' => $productCount,
+            'productCountLabel' => $productCount.' SKU',
             'lastSyncAt' => optional($p->last_sync_at)?->toIso8601String(),
+            'lastSyncDisplay' => $lastSyncDisplay,
             'avgResponseMs' => $p->avg_response_ms,
             'successRate' => $p->success_rate !== null ? (float) $p->success_rate : null,
             'failedTransactionsToday' => (int) $p->failed_transactions_today,
@@ -94,13 +96,12 @@ class ProductProviderControlService
             'lastFailureAt' => optional($p->last_failure_at)?->toIso8601String(),
             'lastError' => $p->last_error,
             'isPrimary' => (int) $p->priority === 1,
-            'online' => $apiOnline,
-            'apiWarning' => $poweredOn && !$apiOnline,
-            // Product-centric architecture: API/power status never alone hides catalog
-            // when another mapped provider can fulfill the same logical SKU.
+            'online' => $transactionEligible,
+            'transactionEligible' => $transactionEligible,
+            'apiWarning' => $poweredOn && ! $transactionEligible,
             'routingMode' => 'product_priority_failover',
             'controlsCatalogAlone' => false,
-            'note' => 'API status memengaruhi kandidat transaksi. Produk tetap tampil jika provider cadangan Online.',
+            'note' => 'Status health memengaruhi kandidat transaksi. Produk tetap tampil jika provider cadangan siap memproses.',
         ];
     }
 
@@ -194,6 +195,19 @@ class ProductProviderControlService
         return $fresh;
     }
 
+    /**
+     * Ops maintenance mode — products may stay visible; transactions skip this provider.
+     */
+    public function setMaintenance(ProductProvider $provider): ProductProvider
+    {
+        $provider->is_active = true;
+        $provider->partner_status = 'maintenance';
+        $provider->save();
+        $this->flushProductCatalogCache();
+
+        return $provider->fresh() ?? $provider;
+    }
+
     public function disable(ProductProvider $provider): ProductProvider
     {
         Log::info('EXEC TRACE — ENTER Service Disable', [
@@ -204,6 +218,7 @@ class ProductProviderControlService
         ]);
 
         // Power OFF only — do not mutate api_status / health_color.
+        // Routing skips this provider; catalog visibility is product-centric (failover).
         $provider->is_active = false;
         $provider->partner_status = 'offline';
 

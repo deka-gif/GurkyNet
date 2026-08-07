@@ -137,6 +137,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/operations/product-providers', label: 'Product Provider Control', icon: Zap },
           { path: '/dashboard/operations/products', label: 'Product Management', icon: Layers },
           { path: '/dashboard/operations/providers', label: 'Provider Management', icon: Server },
+          { path: '/dashboard/operations/payment-gateways', label: 'Payment Gateway Control', icon: CreditCard },
           { path: '/dashboard/operations/monitoring', label: 'Service Monitoring', icon: Activity },
           { path: '/dashboard/operations/pricing', label: 'Pricing & Margin', icon: Tag },
           { path: '/dashboard/account', label: 'Akun', icon: User },

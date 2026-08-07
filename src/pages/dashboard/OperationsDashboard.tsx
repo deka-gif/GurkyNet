@@ -14,7 +14,9 @@ import {
   Database,
   Sliders,
   WifiOff,
-  AlertOctagon
+  AlertOctagon,
+  Zap,
+  CreditCard,
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
 import { StatCard } from '../../components/common';
@@ -248,7 +250,7 @@ export const OperationsDashboard: React.FC = () => {
           <span className="text-xs text-gray-400 font-mono">Operations Management Controls</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <Link
             to="/dashboard/operations/products"
             className="p-4 rounded-2xl bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-100 text-left transition-all group flex flex-col justify-between space-y-2"
@@ -263,6 +265,19 @@ export const OperationsDashboard: React.FC = () => {
           </Link>
 
           <Link
+            to="/dashboard/operations/product-providers"
+            className="p-4 rounded-2xl bg-violet-50 hover:bg-violet-100/80 border border-violet-100 text-left transition-all group flex flex-col justify-between space-y-2"
+          >
+            <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-md shadow-violet-500/20 group-hover:scale-105 transition-transform">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-extrabold text-violet-950 text-xs">Product Provider Control</div>
+              <p className="text-[10px] text-violet-700 mt-0.5">ON/OFF, Priority, Sync & Health</p>
+            </div>
+          </Link>
+
+          <Link
             to="/dashboard/operations/providers"
             className="p-4 rounded-2xl bg-blue-50 hover:bg-blue-100/80 border border-blue-100 text-left transition-all group flex flex-col justify-between space-y-2"
           >
@@ -271,7 +286,20 @@ export const OperationsDashboard: React.FC = () => {
             </div>
             <div>
               <div className="font-extrabold text-blue-950 text-xs">Provider Management</div>
-              <p className="text-[10px] text-blue-700 mt-0.5">Konfigurasi biller & gateway</p>
+              <p className="text-[10px] text-blue-700 mt-0.5">Monitoring status provider PPOB</p>
+            </div>
+          </Link>
+
+          <Link
+            to="/dashboard/operations/payment-gateways"
+            className="p-4 rounded-2xl bg-sky-50 hover:bg-sky-100/80 border border-sky-100 text-left transition-all group flex flex-col justify-between space-y-2"
+          >
+            <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform">
+              <CreditCard className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-extrabold text-sky-950 text-xs">Payment Gateway Control</div>
+              <p className="text-[10px] text-sky-700 mt-0.5">Midtrans & top up saldo</p>
             </div>
           </Link>
 

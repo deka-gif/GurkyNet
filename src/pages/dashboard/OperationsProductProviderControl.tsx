@@ -30,9 +30,12 @@ type ProviderCard = {
   apiStatusLabel?: string;
   healthColor: string;
   healthLabel?: string;
+  statusDescription?: string | null;
   balance: number | null;
   productCount: number;
+  productCountLabel?: string;
   lastSyncAt: string | null;
+  lastSyncDisplay?: string | null;
   avgResponseMs: number | null;
   successRate: number | null;
   failedTransactionsToday: number;
@@ -43,6 +46,7 @@ type ProviderCard = {
   lastError?: string | null;
   isPrimary: boolean;
   online: boolean;
+  transactionEligible?: boolean;
   apiWarning?: boolean;
 };
 
@@ -78,16 +82,31 @@ const formatApiStatus = (card: ProviderCard) => {
   const raw = (card.apiStatus || '').toLowerCase();
   const map: Record<string, string> = {
     online: 'Online',
+    partial: 'Gangguan Sebagian',
+    degraded: 'Gangguan Sebagian',
+    syncing: 'Gangguan Sebagian',
+    maintenance: 'Maintenance',
     offline: 'Offline',
-    degraded: 'Syncing',
-    syncing: 'Syncing',
-    timeout: 'Timeout',
-    auth_failed: 'Auth Error',
-    not_configured: 'Not Configured',
-    no_response: 'No Response',
-    unknown: 'No Response',
+    timeout: 'Offline',
+    auth_failed: 'Autentikasi Gagal',
+    not_configured: 'Belum Dikonfigurasi',
+    no_response: 'Offline',
+    unknown: 'Tidak Diketahui',
   };
   return map[raw] || (card.apiStatus ? String(card.apiStatus) : '—');
+};
+
+const healthTone = (color: string) => {
+  const c = (color || '').toLowerCase();
+  if (c === 'green') return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+  if (c === 'yellow') return 'bg-amber-50 text-amber-900 border-amber-200';
+  if (c === 'orange') return 'bg-orange-50 text-orange-900 border-orange-200';
+  return 'bg-rose-50 text-rose-800 border-rose-200';
+};
+
+const formatSyncTs = (card: ProviderCard) => {
+  if (card.lastSyncDisplay) return card.lastSyncDisplay;
+  return formatTs(card.lastSyncAt);
 };
 
 export const OperationsProductProviderControl: React.FC = () => {
@@ -237,27 +256,66 @@ export const OperationsProductProviderControl: React.FC = () => {
                   </div>
                 </div>
 
+                <div
+                  className={`mb-4 rounded-xl border px-3 py-2.5 text-[12px] font-semibold flex items-start gap-2 ${healthTone(card.healthColor)}`}
+                >
+                  <Activity className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <div>
+                    <div className="font-extrabold">{formatApiStatus(card)}</div>
+                    <p className="font-medium mt-0.5 opacity-90">
+                      {card.statusDescription ||
+                        card.lastError ||
+                        'Status provider belum diperiksa.'}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
                   <Metric icon={<Shield className="w-3.5 h-3.5" />} label="Priority" value={String(card.priority)} />
-                  <Metric icon={<Activity className="w-3.5 h-3.5" />} label="API Status" value={formatApiStatus(card)} />
-                  <Metric icon={<Wallet className="w-3.5 h-3.5" />} label="Balance" value={formatIdr(card.balance)} />
-                  <Metric icon={<LayersIcon />} label="Products" value={String(card.productCount ?? 0)} />
-                  <Metric icon={<Timer className="w-3.5 h-3.5" />} label="Avg Response" value={card.avgResponseMs != null ? `${card.avgResponseMs} ms` : '—'} />
-                  <Metric icon={<TrendingUp className="w-3.5 h-3.5" />} label="Success Rate" value={card.successRate != null ? `${card.successRate}%` : '—'} />
-                  <Metric icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Today Tx" value={String(card.transactionsToday ?? 0)} />
-                  <Metric icon={<AlertTriangle className="w-3.5 h-3.5" />} label="Failed Today" value={String(card.failedTransactionsToday ?? 0)} />
-                  <Metric icon={<RefreshCw className="w-3.5 h-3.5" />} label="Last Sync" value={formatTs(card.lastSyncAt)} />
+                  <Metric icon={<Wallet className="w-3.5 h-3.5" />} label="Saldo" value={formatIdr(card.balance)} />
+                  <Metric
+                    icon={<LayersIcon />}
+                    label="Produk"
+                    value={card.productCountLabel || `${card.productCount ?? 0} SKU`}
+                  />
+                  <Metric
+                    icon={<Timer className="w-3.5 h-3.5" />}
+                    label="Avg Response"
+                    value={card.avgResponseMs != null ? `${card.avgResponseMs} ms` : '—'}
+                  />
+                  <Metric
+                    icon={<TrendingUp className="w-3.5 h-3.5" />}
+                    label="Success Rate"
+                    value={card.successRate != null ? `${card.successRate}%` : '—'}
+                  />
+                  <Metric
+                    icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                    label="Tx Hari Ini"
+                    value={String(card.transactionsToday ?? 0)}
+                  />
+                  <Metric
+                    icon={<AlertTriangle className="w-3.5 h-3.5" />}
+                    label="Gagal Hari Ini"
+                    value={String(card.failedTransactionsToday ?? 0)}
+                  />
+                  <Metric
+                    icon={<RefreshCw className="w-3.5 h-3.5" />}
+                    label="Terakhir Sinkron"
+                    value={formatSyncTs(card)}
+                  />
                 </div>
 
                 <p className="text-[11px] text-slate-400 mb-4">
-                  Last health check: {formatTs(card.lastHealthCheckAt)}
-                  {card.lastError ? ` · ${card.lastError}` : ''}
+                  Health check terakhir: {formatTs(card.lastHealthCheckAt)}
                 </p>
 
-                {(card.apiWarning || (card.enabled && !card.online)) && (
+                {(card.apiWarning || (card.enabled && card.transactionEligible === false)) && (
                   <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900 flex items-start gap-2">
                     <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>API Offline — products remain visible, but transactions may fail.</span>
+                    <span>
+                      {card.statusDescription ||
+                        'API Provider sedang tidak dapat dihubungi. Produk tetap tersedia dari hasil sinkronisasi terakhir. Transaksi baru akan dialihkan ke provider cadangan apabila tersedia.'}
+                    </span>
                   </div>
                 )}
 

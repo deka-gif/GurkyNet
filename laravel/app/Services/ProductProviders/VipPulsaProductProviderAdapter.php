@@ -273,6 +273,7 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
 
         $apiStatus = (string) ($result['api_status'] ?? 'offline');
         $success = (bool) ($result['success'] ?? false);
+        $balance = $result['balance'] ?? null;
 
         Log::info('VIP ADAPTER — profile() result for health', [
             'success' => $success,
@@ -281,19 +282,43 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'http_status' => $result['http_status'] ?? null,
             'latency_ms' => $result['latency_ms'] ?? null,
             'message' => $result['message'] ?? null,
+            'balance' => $balance,
         ]);
 
+        $connection = 'failed';
+        $authentication = 'unknown';
+        $balanceStatus = 'failed';
+
+        if ($apiStatus === 'not_configured') {
+            $connection = 'failed';
+            $authentication = 'failed';
+        } elseif ($apiStatus === 'auth_failed') {
+            $connection = 'ok';
+            $authentication = 'failed';
+        } elseif (in_array($apiStatus, ['timeout', 'offline'], true) && ! $success) {
+            $connection = $apiStatus === 'timeout' ? 'timeout' : 'failed';
+        } elseif ($success || in_array($apiStatus, ['online', 'degraded', 'partial'], true)) {
+            $connection = (($result['latency_ms'] ?? 0) > 3000) ? 'slow' : 'ok';
+            $authentication = 'ok';
+            $balanceStatus = $balance !== null ? 'ok' : 'failed';
+        }
+
         return [
-            'reachable' => $success || in_array($apiStatus, ['online', 'degraded'], true),
-            'authenticated' => $success && $apiStatus === 'online',
-            'balance' => $result['balance'] ?? null,
+            'reachable' => in_array($connection, ['ok', 'slow'], true),
+            'authenticated' => $authentication === 'ok',
+            'balance' => $balance,
             'latency_ms' => $result['latency_ms'] ?? null,
             'message' => $result['message'] ?? null,
-            'api_status' => $apiStatus,
-            'health_color' => (string) ($result['health_color'] ?? 'red'),
             'http_status' => $result['http_status'] ?? null,
+            'configured' => $apiStatus !== 'not_configured',
+            // Do not force api_status from VIP profile alone — HealthService evaluates indicators.
+            'indicators' => [
+                'connection' => $connection,
+                'authentication' => $authentication,
+                'balance' => $balanceStatus,
+            ],
             'success' => $success,
-            'raw' => $result['raw'] ?? [],
+            'raw' => $result['raw'] ?? $result,
         ];
     }
 }

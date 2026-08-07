@@ -199,26 +199,175 @@ class DigiflazzService
      */
     public function checkBalance(): ?float
     {
-        if (!$this->isConfigured()) {
-            return null;
+        $probe = $this->healthProbe();
+
+        return $probe['balance_value'] ?? null;
+    }
+
+    /**
+     * Multi-indicator Digiflazz probe (connection / auth / balance).
+     * Balance failure alone must not imply connection/auth failure.
+     *
+     * @return array{
+     *   configured:bool,
+     *   connection:string,
+     *   authentication:string,
+     *   balance:string,
+     *   balance_value:?float,
+     *   latency_ms:?int,
+     *   http_status:?int,
+     *   message:?string
+     * }
+     */
+    public function healthProbe(): array
+    {
+        if (! $this->isConfigured()) {
+            return [
+                'configured' => false,
+                'connection' => 'failed',
+                'authentication' => 'failed',
+                'balance' => 'failed',
+                'balance_value' => null,
+                'latency_ms' => null,
+                'http_status' => null,
+                'message' => 'Credentials not configured',
+            ];
         }
 
         $payload = [
             'cmd' => 'deposit',
             'username' => $this->username,
-            'sign' => md5($this->username . $this->apiKey . 'depo'),
+            'sign' => md5($this->username.$this->apiKey.'depo'),
         ];
 
+        $url = $this->baseUrl.'/cek-saldo';
+        $started = microtime(true);
+        $timeout = app()->environment('testing') ? 5 : 30;
+        $connectTimeout = app()->environment('testing') ? 2 : 10;
+
         try {
-            $response = $this->postRequest('/cek-saldo', $payload, 1);
-            $deposit = $response['data']['deposit'] ?? null;
+            $response = Http::timeout($timeout)
+                ->connectTimeout($connectTimeout)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($url, $payload);
 
-            return $deposit !== null ? (float) $deposit : null;
+            $ms = (int) ((microtime(true) - $started) * 1000);
+            $status = $response->status();
+            $body = $response->json();
+            if (! is_array($body)) {
+                $body = [];
+            }
+            $message = (string) ($body['data']['message'] ?? $body['message'] ?? '');
+            $rc = strtolower((string) ($body['data']['rc'] ?? $body['rc'] ?? ''));
+            $deposit = $body['data']['deposit'] ?? null;
+
+            if (in_array($status, [401, 403], true)) {
+                return [
+                    'configured' => true,
+                    'connection' => 'ok',
+                    'authentication' => 'failed',
+                    'balance' => 'failed',
+                    'balance_value' => null,
+                    'latency_ms' => $ms,
+                    'http_status' => $status,
+                    'message' => $message !== '' ? $message : 'Authentication failed',
+                ];
+            }
+
+            $authFail = $this->looksLikeDigiAuthFailure($message, $rc);
+            if ($authFail) {
+                return [
+                    'configured' => true,
+                    'connection' => 'ok',
+                    'authentication' => 'failed',
+                    'balance' => 'failed',
+                    'balance_value' => null,
+                    'latency_ms' => $ms,
+                    'http_status' => $status,
+                    'message' => $message !== '' ? $message : 'Authentication failed',
+                ];
+            }
+
+            if ($response->serverError()) {
+                return [
+                    'configured' => true,
+                    'connection' => 'failed',
+                    'authentication' => 'unknown',
+                    'balance' => 'failed',
+                    'balance_value' => null,
+                    'latency_ms' => $ms,
+                    'http_status' => $status,
+                    'message' => 'HTTP '.$status,
+                ];
+            }
+
+            // Connected & authenticated enough to get a structured response.
+            if ($deposit !== null) {
+                return [
+                    'configured' => true,
+                    'connection' => $ms > 3000 ? 'slow' : 'ok',
+                    'authentication' => 'ok',
+                    'balance' => 'ok',
+                    'balance_value' => (float) $deposit,
+                    'latency_ms' => $ms,
+                    'http_status' => $status,
+                    'message' => 'OK',
+                ];
+            }
+
+            // Reachable + not auth error, but saldo missing → Partial (not Offline).
+            return [
+                'configured' => true,
+                'connection' => $ms > 3000 ? 'slow' : 'ok',
+                'authentication' => 'ok',
+                'balance' => 'failed',
+                'balance_value' => null,
+                'latency_ms' => $ms,
+                'http_status' => $status,
+                'message' => $message !== '' ? $message : 'Gagal mengambil informasi saldo provider',
+            ];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            return [
+                'configured' => true,
+                'connection' => 'timeout',
+                'authentication' => 'unknown',
+                'balance' => 'failed',
+                'balance_value' => null,
+                'latency_ms' => (int) ((microtime(true) - $started) * 1000),
+                'http_status' => null,
+                'message' => $e->getMessage(),
+            ];
         } catch (\Throwable $e) {
-            Log::warning('Digiflazz balance check failed', ['message' => $e->getMessage()]);
+            $msg = strtolower($e->getMessage());
+            $isTimeout = str_contains($msg, 'timeout') || str_contains($msg, 'timed out') || str_contains($msg, 'could not resolve');
 
-            return null;
+            return [
+                'configured' => true,
+                'connection' => $isTimeout ? 'timeout' : 'failed',
+                'authentication' => 'unknown',
+                'balance' => 'failed',
+                'balance_value' => null,
+                'latency_ms' => (int) ((microtime(true) - $started) * 1000),
+                'http_status' => null,
+                'message' => $e->getMessage(),
+            ];
         }
+    }
+
+    protected function looksLikeDigiAuthFailure(string $message, string $rc): bool
+    {
+        $m = strtolower($message);
+        if (in_array($rc, ['01', '02', '03'], true)) {
+            // Digiflazz often uses these for invalid IP / wrong credentials — keep soft.
+        }
+
+        return str_contains($m, 'invalid')
+            || str_contains($m, 'unauthor')
+            || str_contains($m, 'signature')
+            || str_contains($m, 'sign')
+            || str_contains($m, 'api key')
+            || str_contains($m, 'username')
+            || str_contains($m, 'credential');
     }
 
     /**

@@ -178,38 +178,23 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
 
     public function healthCheck(): array
     {
-        $started = microtime(true);
+        $probe = $this->digiflazz->healthProbe();
 
-        if (!$this->isConfigured()) {
-            return [
-                'reachable' => false,
-                'authenticated' => false,
-                'balance' => null,
-                'latency_ms' => null,
-                'message' => 'Credentials not configured',
-            ];
-        }
-
-        try {
-            $balance = $this->digiflazz->checkBalance();
-            $ms = (int) ((microtime(true) - $started) * 1000);
-
-            return [
-                'reachable' => $balance !== null,
-                'authenticated' => $balance !== null,
-                'balance' => $balance,
-                'latency_ms' => $ms,
-                'message' => $balance !== null ? 'OK' : 'Balance check returned null',
-            ];
-        } catch (\Throwable $e) {
-            return [
-                'reachable' => false,
-                'authenticated' => false,
-                'balance' => null,
-                'latency_ms' => (int) ((microtime(true) - $started) * 1000),
-                'message' => $e->getMessage(),
-            ];
-        }
+        return [
+            'reachable' => in_array($probe['connection'] ?? '', ['ok', 'slow'], true),
+            'authenticated' => ($probe['authentication'] ?? '') === 'ok',
+            'balance' => $probe['balance_value'] ?? null,
+            'latency_ms' => $probe['latency_ms'] ?? null,
+            'message' => $probe['message'] ?? null,
+            'http_status' => $probe['http_status'] ?? null,
+            'configured' => (bool) ($probe['configured'] ?? false),
+            'indicators' => [
+                'connection' => $probe['connection'] ?? 'unknown',
+                'authentication' => $probe['authentication'] ?? 'unknown',
+                'balance' => $probe['balance'] ?? 'unknown',
+            ],
+            'raw' => $probe,
+        ];
     }
 
     protected function classifyFailureReason(string $message): string

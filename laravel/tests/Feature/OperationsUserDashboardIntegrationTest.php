@@ -165,9 +165,8 @@ class OperationsUserDashboardIntegrationTest extends TestCase
     public function test_provider_maintenance_blocks_only_that_provider_products(): void
     {
         Sanctum::actingAs($this->ops);
-        $this->putJson('/api/v1/admin/operations/providers/'.$this->digi->id, [
-            'status' => 'maintenance',
-        ])->assertOk();
+        $this->postJson('/api/v1/admin/operations/product-provider-control/'.$this->digi->id.'/maintenance')
+            ->assertOk();
 
         ProductCatalogCache::bump();
         $catalog = $this->getJson('/api/v1/products?per_page=100');

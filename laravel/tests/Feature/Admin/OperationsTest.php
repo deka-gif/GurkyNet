@@ -196,17 +196,14 @@ class OperationsTest extends TestCase
         $this->assertContains('digiflazz', $codes);
     }
 
-    public function test_operations_user_can_update_provider(): void
+    public function test_operations_user_can_set_provider_maintenance_via_control_center(): void
     {
         Sanctum::actingAs($this->operationsUser);
 
         $digi = \App\Models\ProductProvider::digiflazz();
         $this->assertNotNull($digi);
 
-        $response = $this->putJson("/api/v1/admin/operations/providers/{$digi->id}", [
-            'status' => 'maintenance',
-            'notes' => 'Penyedia sedang mengalami gangguan jaringan',
-        ]);
+        $response = $this->postJson("/api/v1/admin/operations/product-provider-control/{$digi->id}/maintenance");
 
         $response->assertStatus(200)
             ->assertJson([

@@ -2,20 +2,19 @@
 
 namespace App\Services\ProductProviders;
 
-use App\Models\ActivityLog;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductProvider;
-use App\Models\Setting;
 use App\Services\Catalog\ProductMappingService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as Paginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Provider Management Control Center — Digiflazz / VIP / Midtrans partners.
- * Reuses ProductProvider health + Control Center; payment gateways stay out of product_providers.
+ * Provider Management — monitoring dashboard for Product Providers only.
+ * Configuration (ON/OFF, priority, sync) lives in ProductProviderControlService.
+ * Payment gateways live in PaymentGatewayControlService.
  */
 class ProviderPartnerService
 {
@@ -61,7 +60,7 @@ class ProviderPartnerService
             })->values();
         }
 
-        if (!empty($filters['search'])) {
+        if (! empty($filters['search'])) {
             $q = strtolower(trim((string) $filters['search']));
             $rows = $rows->filter(function (array $row) use ($q) {
                 $hay = strtolower(implode(' ', [
@@ -101,19 +100,16 @@ class ProviderPartnerService
      */
     public function collectPartners(): Collection
     {
-        $productProviders = ProductProvider::query()
+        return ProductProvider::query()
             ->orderBy('priority')
             ->orderBy('sort_order')
             ->get()
-            ->map(fn (ProductProvider $p) => $this->toProductProviderCard($p));
-
-        $gateways = $this->paymentGatewayCards();
-
-        return $productProviders->concat($gateways)->values();
+            ->map(fn (ProductProvider $p) => $this->toProductProviderCard($p))
+            ->values();
     }
 
     /**
-     * Refresh live health for all product providers + Midtrans config probe.
+     * Refresh live health for product providers only (monitoring).
      */
     public function refreshAllHealth(): array
     {
@@ -131,129 +127,111 @@ class ProviderPartnerService
             }
         }
 
-        $this->probeMidtransStatus();
-
         return $updated;
     }
 
     /**
-     * Update partner status / notes. Accepts product_provider id or payment code (midtrans).
+     * Configuration writes are not allowed from Provider Management.
      *
      * @return array<string, mixed>
      */
     public function update(string|int $id, array $data): array
     {
         if ($this->isPaymentGatewayId($id)) {
-            return $this->updatePaymentGateway((string) $id, $data);
+            throw ValidationException::withMessages([
+                'id' => ['Konfigurasi Payment Gateway dilakukan di Payment Gateway Control Center.'],
+            ]);
         }
 
-        $provider = ProductProvider::findOrFail((int) $id);
-
-        if (isset($data['name']) && is_string($data['name']) && trim($data['name']) !== '') {
-            $provider->name = trim($data['name']);
-        }
-
-        if (array_key_exists('status', $data) || array_key_exists('partner_status', $data) || array_key_exists('is_active', $data)) {
-            $raw = $data['partner_status'] ?? $data['status'] ?? ($data['is_active'] ?? null);
-            $partnerStatus = $this->normalizePartnerStatusWrite($raw);
-
-            if ($partnerStatus === 'maintenance') {
-                $this->control->enable($provider->fresh() ?? $provider);
-                $provider = $provider->fresh() ?? $provider;
-                $provider->partner_status = 'maintenance';
-                $provider->is_active = true;
-                $provider->save();
-            } elseif ($partnerStatus === 'offline') {
-                $this->control->disable($provider->fresh() ?? $provider);
-                $provider = $provider->fresh() ?? $provider;
-                $provider->partner_status = 'offline';
-                $provider->is_active = false;
-                $provider->save();
-            } else {
-                $this->control->enable($provider->fresh() ?? $provider);
-                $provider = $provider->fresh() ?? $provider;
-                $provider->partner_status = 'online';
-                $provider->is_active = true;
-                $provider->save();
-            }
-
-            ProductCatalogCache::bump();
-        }
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'activity' => 'UPDATE_PROVIDER_PARTNER_OPERATIONS',
-            'payload' => [
-                'product_provider_id' => $provider->id,
-                'code' => $provider->code,
-                'partner_status' => $provider->partner_status,
-                'notes' => $data['notes'] ?? null,
-                'updated_fields' => $data,
-            ],
+        throw ValidationException::withMessages([
+            'id' => ['Konfigurasi Product Provider dilakukan di Product Provider Control Center (ON/OFF, Priority, Sync, Health Check).'],
         ]);
-
-        return $this->toProductProviderCard($provider->fresh() ?? $provider);
     }
 
     public function toProductProviderCard(ProductProvider $p): array
     {
         $controlCard = $this->control->toCard($p);
         $services = $this->supportedServicesFor($p->id);
-        $partnerStatus = $this->resolveDisplayStatus($p);
+        $displayStatus = $this->resolveDisplayStatus($p);
+        $productCount = (int) ($controlCard['productCount'] ?? $p->product_count ?? 0);
+        $statusDescription = (string) ($controlCard['statusDescription'] ?? ProviderHealthStatus::descriptionFor($p));
 
         return [
             'id' => $p->id,
             'code' => $p->code,
             'name' => $p->name,
             'type' => 'product_provider',
-            'status' => $partnerStatus,
+            'status' => $displayStatus,
             'partnerStatus' => strtolower((string) ($p->partner_status ?? 'online')),
             'enabled' => (bool) $p->is_active,
             'apiStatus' => $controlCard['apiStatus'] ?? $p->api_status,
-            'apiStatusLabel' => $controlCard['apiStatusLabel'] ?? null,
+            'apiStatusLabel' => $controlCard['apiStatusLabel'] ?? ProviderHealthStatus::labelFor($p->api_status),
             'healthColor' => $controlCard['healthColor'] ?? $p->health_color,
+            'statusDescription' => $statusDescription,
+            'healthLabel' => $this->resolveHealthLabel($p, $displayStatus),
             'responseTime' => $p->avg_response_ms !== null ? $p->avg_response_ms.'ms' : null,
             'avgResponseTime' => $p->avg_response_ms !== null ? $p->avg_response_ms.'ms' : null,
             'avgResponseMs' => $p->avg_response_ms,
-            'lastSync' => optional($p->last_sync_at)?->toIso8601String(),
+            'lastSync' => $controlCard['lastSyncDisplay'] ?? optional($p->last_sync_at)?->format('d/m/Y H:i'),
             'last_sync' => optional($p->last_sync_at)?->toIso8601String(),
             'lastSyncAt' => optional($p->last_sync_at)?->toIso8601String(),
-            'productCount' => (int) ($p->product_count ?? 0),
+            'lastSyncDisplay' => $controlCard['lastSyncDisplay'] ?? null,
+            'productCount' => $productCount,
+            'productCountLabel' => $productCount.' SKU',
             'balance' => $p->balance !== null ? (float) $p->balance : null,
             'priority' => (int) $p->priority,
             'supportedServices' => $services['labels'],
             'supportedServiceCodes' => $services['codes'],
-            'description' => sprintf(
-                '%s · %d produk · API %s',
-                $partnerStatus,
-                (int) ($p->product_count ?? 0),
-                (string) ($controlCard['apiStatusLabel'] ?? $p->api_status ?? 'unknown')
-            ),
-            'notes' => $p->last_error,
+            'description' => $statusDescription,
+            'notes' => $p->last_error ?: $statusDescription,
             'lastHealthCheckAt' => optional($p->last_health_check_at)?->toIso8601String(),
+            'transactionEligible' => (bool) ($controlCard['transactionEligible'] ?? false),
+            'readOnly' => true,
+            'configHint' => 'Konfigurasi hanya di Product Provider Control Center.',
         ];
     }
 
     /**
-     * Display status for Provider Management filters (Online|Maintenance|Offline).
+     * Operator-facing health status (Online|Gangguan Sebagian|Maintenance|Offline|Autentikasi Gagal).
      */
     public function resolveDisplayStatus(ProductProvider $p): string
     {
-        if (!$p->is_active) {
-            return 'Offline';
-        }
-
         $partner = strtolower((string) ($p->partner_status ?? 'online'));
         if ($partner === 'maintenance') {
             return 'Maintenance';
         }
 
-        $api = strtolower((string) ($p->api_status ?? 'unknown'));
-        if (in_array($api, ['offline', 'not_configured', 'auth_failed', 'no_response', 'timeout'], true)) {
+        if (! $p->is_active || $partner === 'offline') {
             return 'Offline';
         }
 
-        return 'Online';
+        $api = strtolower((string) ($p->api_status ?? 'unknown'));
+
+        return match ($api) {
+            'online' => 'Online',
+            'partial', 'degraded', 'syncing' => 'Gangguan Sebagian',
+            'maintenance' => 'Maintenance',
+            'auth_failed' => 'Autentikasi Gagal',
+            'not_configured' => 'Belum Dikonfigurasi',
+            'offline', 'timeout', 'no_response' => 'Offline',
+            default => ProviderHealthStatus::labelFor($api),
+        };
+    }
+
+    /**
+     * Short monitoring health label (Bahasa Indonesia).
+     */
+    public function resolveHealthLabel(ProductProvider $p, ?string $displayStatus = null): string
+    {
+        $status = $displayStatus ?? $this->resolveDisplayStatus($p);
+
+        return match ($status) {
+            'Online' => 'Sehat',
+            'Gangguan Sebagian' => 'Perlu Perhatian',
+            'Maintenance' => 'Maintenance',
+            'Autentikasi Gagal', 'Belum Dikonfigurasi' => 'Tidak Aktif',
+            default => 'Tidak Aktif',
+        };
     }
 
     /**
@@ -296,127 +274,12 @@ class ProviderPartnerService
         return ['labels' => $labels, 'codes' => $codes];
     }
 
-    /**
-     * @return Collection<int, array<string, mixed>>
-     */
-    protected function paymentGatewayCards(): Collection
-    {
-        $cards = collect();
-        foreach ((array) config('ppob.payment_gateways', []) as $code => $meta) {
-            // Only surface Midtrans in Provider Management (actively integrated).
-            if (strtolower((string) $code) !== 'midtrans') {
-                continue;
-            }
-            $cards->push($this->midtransCard());
-        }
-
-        return $cards;
-    }
-
-    protected function midtransCard(): array
-    {
-        $configured = $this->midtransConfigured();
-        $stored = strtolower((string) (Setting::where('key', 'partner_midtrans_status')->value('value') ?? ''));
-        if (!in_array($stored, ['online', 'maintenance', 'offline'], true)) {
-            $stored = $configured ? 'online' : 'offline';
-        }
-
-        $status = match ($stored) {
-            'maintenance' => 'Maintenance',
-            'offline' => 'Offline',
-            default => $configured ? 'Online' : 'Offline',
-        };
-        if ($stored === 'online' && !$configured) {
-            $status = 'Offline';
-        }
-
-        return [
-            'id' => 'midtrans',
-            'code' => 'midtrans',
-            'name' => (string) (config('ppob.payment_gateways.midtrans.name') ?: 'Midtrans'),
-            'type' => 'payment_gateway',
-            'status' => $status,
-            'partnerStatus' => $stored,
-            'enabled' => $stored !== 'offline' && $configured,
-            'apiStatus' => $configured ? 'online' : 'not_configured',
-            'apiStatusLabel' => $configured ? 'Configured' : 'Not Configured',
-            'healthColor' => $status === 'Online' ? 'green' : ($status === 'Maintenance' ? 'yellow' : 'red'),
-            'responseTime' => null,
-            'avgResponseTime' => null,
-            'avgResponseMs' => null,
-            'lastSync' => null,
-            'last_sync' => null,
-            'lastSyncAt' => null,
-            'productCount' => 0,
-            'balance' => null,
-            'priority' => 900,
-            'supportedServices' => ['Top Up Saldo', 'Payment Gateway'],
-            'supportedServiceCodes' => ['wallet-topup', 'payment-gateway'],
-            'description' => 'Payment gateway Midtrans untuk top up saldo GurkyPay.',
-            'notes' => $configured ? null : 'MIDTRANS_SERVER_KEY / CLIENT_KEY belum dikonfigurasi.',
-            'lastHealthCheckAt' => now()->toIso8601String(),
-        ];
-    }
-
-    protected function midtransConfigured(): bool
-    {
-        $server = (string) (config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
-        $client = (string) (config('services.midtrans.client_key') ?: env('MIDTRANS_CLIENT_KEY', ''));
-
-        return trim($server) !== '' && trim($client) !== '';
-    }
-
-    protected function probeMidtransStatus(): void
-    {
-        // Persist probe outcome only when operator has not forced maintenance/offline.
-        $stored = strtolower((string) (Setting::where('key', 'partner_midtrans_status')->value('value') ?? ''));
-        if (in_array($stored, ['maintenance', 'offline'], true)) {
-            return;
-        }
-
-        Setting::updateOrCreate(
-            ['key' => 'partner_midtrans_status'],
-            ['value' => $this->midtransConfigured() ? 'online' : 'offline']
-        );
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function updatePaymentGateway(string $id, array $data): array
-    {
-        $code = strtolower(str_replace(['pg-', 'payment-'], '', $id));
-        if ($code !== 'midtrans') {
-            abort(404, 'Payment gateway tidak ditemukan.');
-        }
-
-        if (array_key_exists('status', $data) || array_key_exists('partner_status', $data)) {
-            $partnerStatus = $this->normalizePartnerStatusWrite($data['partner_status'] ?? $data['status']);
-            Setting::updateOrCreate(
-                ['key' => 'partner_midtrans_status'],
-                ['value' => $partnerStatus]
-            );
-        }
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'activity' => 'UPDATE_PAYMENT_GATEWAY_PARTNER',
-            'payload' => [
-                'code' => 'midtrans',
-                'notes' => $data['notes'] ?? null,
-                'updated_fields' => $data,
-            ],
-        ]);
-
-        return $this->midtransCard();
-    }
-
     protected function isPaymentGatewayId(string|int $id): bool
     {
         $normalized = strtolower((string) $id);
 
         return in_array($normalized, ['midtrans', 'pg-midtrans', 'payment-midtrans'], true)
-            || !ctype_digit((string) $id) && isset(config('ppob.payment_gateways')[$normalized]);
+            || (! ctype_digit((string) $id) && isset(config('ppob.payment_gateways')[$normalized]));
     }
 
     protected function normalizePartnerStatusFilter(mixed $status): ?string
@@ -429,29 +292,12 @@ class ProviderPartnerService
 
         return match ($s) {
             'online', 'active', 'on' => 'online',
+            'partial', 'degraded', 'syncing', 'gangguan sebagian', 'gangguan_sebagian' => 'gangguan sebagian',
             'maintenance' => 'maintenance',
-            'offline', 'inactive', 'off', 'disabled' => 'offline',
-            'degraded' => 'online', // degraded API still counts as Online partner when powered on
+            'auth_failed', 'autentikasi gagal', 'autentikasi_gagal' => 'autentikasi gagal',
+            'not_configured', 'belum dikonfigurasi', 'belum_dikonfigurasi' => 'belum dikonfigurasi',
+            'offline', 'inactive', 'off', 'disabled', 'timeout' => 'offline',
             default => $s,
-        };
-    }
-
-    /**
-     * @return 'online'|'maintenance'|'offline'
-     */
-    protected function normalizePartnerStatusWrite(mixed $status): string
-    {
-        if (is_bool($status)) {
-            return $status ? 'online' : 'offline';
-        }
-
-        $s = strtolower(trim((string) $status));
-
-        return match ($s) {
-            '1', 'true', 'online', 'active', 'on', 'tersedia' => 'online',
-            'maintenance' => 'maintenance',
-            '0', 'false', 'offline', 'inactive', 'off', 'disabled', 'gangguan' => 'offline',
-            default => filter_var($status, FILTER_VALIDATE_BOOLEAN) ? 'online' : 'offline',
         };
     }
 }

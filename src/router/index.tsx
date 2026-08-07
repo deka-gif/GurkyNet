@@ -64,6 +64,7 @@ import { OperationsProviderManagement } from '../pages/dashboard/OperationsProvi
 import { OperationsServiceMonitoring } from '../pages/dashboard/OperationsServiceMonitoring';
 import { OperationsPricingManagement } from '../pages/dashboard/OperationsPricingManagement';
 import { OperationsProductProviderControl } from '../pages/dashboard/OperationsProductProviderControl';
+import { OperationsPaymentGatewayControl } from '../pages/dashboard/OperationsPaymentGatewayControl';
 import { MarketingDashboard } from '../pages/dashboard/MarketingDashboard';
 import { MarketingBannerManagement } from '../pages/dashboard/MarketingBannerManagement';
 import { MarketingPromotionManagement } from '../pages/dashboard/MarketingPromotionManagement';
@@ -214,6 +215,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
             <OperationsProviderManagement />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'operations/payment-gateways',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
+            <OperationsPaymentGatewayControl />
           </ProtectedRoute>
         )
       },

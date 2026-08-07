@@ -380,11 +380,37 @@ class MultiProductProviderControlTest extends TestCase
         $vip = ProductProvider::vip();
         $this->assertNotNull($vip);
 
+        $category = \App\Models\ProductCategory::create(['name' => 'Pulsa', 'slug' => 'pulsa-ctrl', 'icon' => 'phone', 'is_active' => true]);
+        $brand = \App\Models\Provider::create(['name' => 'Axis Ctrl', 'logo' => 'a.png', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $vip->id,
+            'sku_code' => 'VIP-CTRL-1',
+            'name' => 'VIP Ctrl SKU',
+            'base_price' => 10000,
+            'sell_price' => 11000,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'vipctrl1',
+            'is_active' => true,
+            'is_preferred' => true,
+            'priority' => 1,
+        ]);
+
         $vip->update([
             'is_active' => true,
+            'partner_status' => 'online',
             'api_status' => 'offline',
             'health_color' => 'yellow',
             'last_error' => 'stale',
+            'last_sync_at' => now(),
+            'product_count' => 1,
         ]);
 
         $this->mock(\App\Services\VipService::class, function ($mock) {

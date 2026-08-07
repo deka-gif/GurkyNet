@@ -108,7 +108,7 @@ class OperationsProviderPartnerTest extends TestCase
         ProductCatalogCache::bump();
     }
 
-    public function test_lists_real_partners_including_digiflazz_vip_midtrans(): void
+    public function test_lists_real_partners_including_digiflazz_vip_without_midtrans(): void
     {
         Sanctum::actingAs($this->ops);
 
@@ -118,7 +118,7 @@ class OperationsProviderPartnerTest extends TestCase
         $codes = collect($res->json('data'))->pluck('code')->map(fn ($c) => strtolower((string) $c))->all();
         $this->assertContains('digiflazz', $codes);
         $this->assertContains('vip', $codes);
-        $this->assertContains('midtrans', $codes);
+        $this->assertNotContains('midtrans', $codes);
     }
 
     public function test_status_filter_online_maintenance_offline(): void
@@ -177,9 +177,8 @@ class OperationsProviderPartnerTest extends TestCase
     {
         Sanctum::actingAs($this->ops);
 
-        $this->putJson('/api/v1/admin/operations/providers/'.$this->digi->id, [
-            'status' => 'maintenance',
-        ])->assertOk();
+        $this->postJson('/api/v1/admin/operations/product-provider-control/'.$this->digi->id.'/maintenance')
+            ->assertOk();
 
         ProductCatalogCache::bump();
 
@@ -202,9 +201,8 @@ class OperationsProviderPartnerTest extends TestCase
     {
         Sanctum::actingAs($this->ops);
 
-        $this->putJson('/api/v1/admin/operations/providers/'.$this->digi->id, [
-            'status' => 'offline',
-        ])->assertOk();
+        $this->postJson('/api/v1/admin/operations/product-provider-control/'.$this->digi->id.'/disable')
+            ->assertOk();
 
         ProductCatalogCache::bump();
 
@@ -213,6 +211,17 @@ class OperationsProviderPartnerTest extends TestCase
         $codes = collect($catalog->json('data'))->pluck('code')->all();
         $this->assertNotContains('TSEL10-P', $codes);
         $this->assertContains('VIP-ML86', $codes);
+    }
+
+    public function test_provider_management_update_is_rejected(): void
+    {
+        Sanctum::actingAs($this->ops);
+
+        $res = $this->putJson('/api/v1/admin/operations/providers/'.$this->digi->id, [
+            'status' => 'offline',
+        ]);
+        $this->assertContains($res->status(), [400, 422]);
+        $this->assertFalse((bool) $res->json('success'));
     }
 
     public function test_refresh_status_endpoint_runs_backend_probe(): void

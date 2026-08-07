@@ -114,13 +114,18 @@ class ProductRoutingService
                 continue;
             }
 
-            if (($pp->api_status ?? null) === 'offline') {
-                $this->logSkipped($transactionId, $product, $pp, 'provider_offline', $offer);
-                continue;
-            }
-
-            if (($pp->api_status ?? null) === 'not_configured') {
-                $this->logSkipped($transactionId, $product, $pp, 'provider_not_configured', $offer);
+            // Offline / auth / not configured / timeout → skip.
+            // Partial / degraded / syncing remain eligible (balance fail alone is Partial).
+            if (! ProviderHealthStatus::isTransactionEligible($pp->api_status, $pp->partner_status)) {
+                $api = strtolower((string) ($pp->api_status ?? ''));
+                $reason = match ($api) {
+                    'auth_failed' => 'provider_auth_failed',
+                    'not_configured' => 'provider_not_configured',
+                    'maintenance' => 'provider_maintenance',
+                    'timeout', 'no_response' => 'provider_offline',
+                    default => 'provider_offline',
+                };
+                $this->logSkipped($transactionId, $product, $pp, $reason, $offer);
                 continue;
             }
 

@@ -126,4 +126,54 @@ export const operationsService = {
     });
     return res.data;
   },
+
+  async setProductProviderMaintenance(id: number | string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/maintenance`);
+    return res.data;
+  },
+
+  // —— Payment Gateway Control Center (not product providers) ——
+  async getPaymentGatewayControl() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/payment-gateway-control');
+    return res.data;
+  },
+
+  async refreshPaymentGateways() {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/operations/payment-gateway-control/refresh');
+    return res.data;
+  },
+
+  async enablePaymentGateway(code: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/payment-gateway-control/${code}/enable`);
+    return res.data;
+  },
+
+  async disablePaymentGateway(code: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/payment-gateway-control/${code}/disable`);
+    return res.data;
+  },
+
+  async setPaymentGatewayMaintenance(code: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/payment-gateway-control/${code}/maintenance`);
+    return res.data;
+  },
+
+  async setPaymentGatewayPriority(code: string, priority: number) {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/operations/payment-gateway-control/${code}/priority`, {
+      priority,
+    });
+    return res.data;
+  },
+
+  async healthCheckPaymentGateway(code: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/payment-gateway-control/${code}/health-check`);
+    return res.data;
+  },
+
+  async getPaymentGatewayLogs(code: string, limit = 50) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/operations/payment-gateway-control/${code}/logs`, {
+      params: { limit },
+    });
+    return res.data;
+  },
 };
