@@ -20,8 +20,10 @@ import {
 } from 'lucide-react';
 import { ownerService } from '../../services/owner.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
+import { useSoftRefresh } from '../../hooks/useSoftRefresh';
 import { storageService } from '../../services/storage.service';
 import { WorkflowStatsStrip } from '../../components/workflow/WorkflowStatsStrip';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 const idr = (n: number | null | undefined) =>
   n == null ? '—' : `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -52,8 +54,10 @@ export const OwnerDashboard: React.FC = () => {
     true,
     ['division.operations', 'division.finance', 'division.customer_support', 'division.marketing'],
     () => void load(),
-    () => storageService.getToken()
+    () => storageService.getToken(),
+    RefreshPolicy.owner
   );
+  useSoftRefresh(true, RefreshPolicy.owner, () => void load());
 
   const health = cc?.businessHealth || {};
   const headline = cc?.headline || {};

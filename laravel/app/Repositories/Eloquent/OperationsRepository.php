@@ -147,35 +147,38 @@ class OperationsRepository implements OperationsRepositoryInterface
     }
 
     /**
-     * Live Digiflazz connectivity + deposit balance for Operations / Owner.
+     * Digiflazz status from GurkyNet DB snapshot (Sprint 8.5 — no live provider call on dashboard).
      */
     protected function getLiveDigiflazzProviderStatus(): array
     {
-        $service = app(\App\Services\DigiflazzService::class);
+        $integration = app(\App\Services\Integration\IntegrationService::class);
+        $row = $integration->balanceFromDatabase(\App\Models\ProductProvider::CODE_DIGIFLAZZ);
+        $balance = $row['balance'] ?? null;
+        $st = strtolower((string) ($row['partner_status'] ?? ''));
 
-        if (!$service->isConfigured()) {
+        if ($row === null) {
             return [
                 'name' => 'Digiflazz',
                 'configured' => false,
-                'status' => 'Not Configured',
+                'status' => 'Not Synced',
                 'balance' => null,
+                'balance_formatted' => null,
+                'source' => 'database',
             ];
         }
 
-        $balance = \Illuminate\Support\Facades\Cache::remember(
-            'digiflazz_balance',
-            60,
-            fn () => $service->checkBalance()
-        );
+        $offline = in_array($st, ['offline', 'down', 'error'], true);
 
         return [
             'name' => 'Digiflazz',
             'configured' => true,
-            'status' => $balance !== null ? 'Online' : 'Unreachable',
+            'status' => $offline ? 'Offline' : ($balance !== null ? 'Online' : 'Pending Sync'),
             'balance' => $balance,
             'balance_formatted' => $balance !== null
-                ? 'Rp ' . number_format($balance, 0, ',', '.')
+                ? 'Rp '.number_format($balance, 0, ',', '.')
                 : null,
+            'source' => 'database',
+            'updated_at' => $row['updated_at'] ?? null,
         ];
     }
 
@@ -535,7 +538,9 @@ class OperationsRepository implements OperationsRepositoryInterface
      */
     public function refreshProviderStatuses(): array
     {
-        return app(\App\Services\ProductProviders\ProviderPartnerService::class)->refreshAllHealth();
+        $result = app(\App\Services\Integration\IntegrationService::class)->probeHealth(true);
+
+        return is_array($result['results'] ?? null) ? $result['results'] : [];
     }
 
     /**

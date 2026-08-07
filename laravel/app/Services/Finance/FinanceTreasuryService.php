@@ -107,29 +107,8 @@ class FinanceTreasuryService
      */
     public function refreshProviderDeposits(): array
     {
-        $rows = [];
-        foreach (ProductProvider::query()->get() as $provider) {
-            try {
-                $result = $this->providers->healthCheck($provider);
-                $provider->refresh();
-                $rows[] = [
-                    'id' => $provider->id,
-                    'code' => $provider->code,
-                    'name' => $provider->name,
-                    'balance' => $provider->balance !== null ? (float) $provider->balance : null,
-                    'health' => $result,
-                ];
-            } catch (\Throwable $e) {
-                $rows[] = [
-                    'id' => $provider->id,
-                    'code' => $provider->code,
-                    'name' => $provider->name,
-                    'balance' => $provider->balance !== null ? (float) $provider->balance : null,
-                    'error' => $e->getMessage(),
-                ];
-            }
-        }
+        $result = app(\App\Services\Integration\IntegrationService::class)->syncBalances(true);
 
-        return $rows;
+        return $result['rows'] ?? [];
     }
 }

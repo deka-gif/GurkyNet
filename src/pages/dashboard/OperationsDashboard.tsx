@@ -13,9 +13,11 @@ import {
 } from 'lucide-react';
 import { operationsService } from '../../services/operations.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
+import { useSoftRefresh } from '../../hooks/useSoftRefresh';
 import { storageService } from '../../services/storage.service';
 import { WorkflowStatsStrip } from '../../components/workflow/WorkflowStatsStrip';
 import { FinanceCrossWidgets } from '../../components/finance/FinanceCrossWidgets';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 function ProbePill({ label, probe }: { label: string; probe?: { status?: string; available?: boolean; message?: string; value?: unknown } }) {
   const status = probe?.status || 'na';
@@ -60,7 +62,8 @@ export const OperationsDashboard: React.FC = () => {
     void load();
   }, [load]);
 
-  useRealtimeChannel(true, ['division.operations'], () => void load(), () => storageService.getToken());
+  useRealtimeChannel(true, ['division.operations'], () => void load(), () => storageService.getToken(), RefreshPolicy.operations);
+  useSoftRefresh(true, RefreshPolicy.operations, () => void load());
 
   const kpis = cc?.kpis || {};
   const infra = cc?.infra || {};

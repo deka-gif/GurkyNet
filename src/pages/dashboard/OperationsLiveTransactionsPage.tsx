@@ -4,6 +4,7 @@ import { operationsService } from '../../services/operations.service';
 import { CmsPageHeader } from '../../components/common/CmsCommon';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 export const OperationsLiveTransactionsPage: React.FC = () => {
   const [rows, setRows] = useState<any[]>([]);
@@ -34,7 +35,7 @@ export const OperationsLiveTransactionsPage: React.FC = () => {
     void load();
   }, [status, provider]);
 
-  useRealtimeChannel(true, ['division.operations'], () => void load(), () => storageService.getToken());
+  useRealtimeChannel(true, ['division.operations'], () => void load(), () => storageService.getToken(), RefreshPolicy.operations);
 
   return (
     <div className="space-y-4 pb-10">

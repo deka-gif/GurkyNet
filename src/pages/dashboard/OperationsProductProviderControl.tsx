@@ -277,7 +277,7 @@ export const OperationsProductProviderControl: React.FC = () => {
       } catch {
         /* ignore poll errors */
       }
-    }, 4000);
+    }, 10_000);
     return () => window.clearInterval(id);
   }, [autoSync?.running, load]);
 

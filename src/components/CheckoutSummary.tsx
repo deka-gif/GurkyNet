@@ -117,8 +117,8 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
 
   /** Poll backend until VIP status sync settles SUCCESS/FAILED (aligned with 60s timeout ladder). */
   const pollTransactionUntilSettled = async (idOrInvoice: string) => {
-    const maxAttempts = 24; // ~60s at 2.5s interval
-    const intervalMs = 2500;
+    const maxAttempts = 12; // ~60s at 5s interval (server WatchPendingTransactionJob is SSOT)
+    const intervalMs = 5000;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise<void>((resolve) => {

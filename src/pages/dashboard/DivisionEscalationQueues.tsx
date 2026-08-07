@@ -14,6 +14,7 @@ import { operationsService } from '../../services/operations.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
 import { CmsPageHeader } from '../../components/common/CmsCommon';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 type Division = 'operations' | 'finance' | 'marketing' | 'admin' | 'customer_support';
 
@@ -171,7 +172,8 @@ export const WorkflowQueuePage: React.FC<Props> = ({ division, title, subtitle, 
       void load();
       if (selectedId) void loadDetail(selectedId);
     },
-    () => storageService.getToken()
+    () => storageService.getToken(),
+    RefreshPolicy.workflow
   );
 
   const runAction = async (action: string) => {

@@ -3,7 +3,7 @@ import { websiteService } from '../services/website.service';
 import { useWebsiteStore } from '../store/website.store';
 import { CMS_SYNC_CHANNEL, type CmsSyncPayload } from '../lib/cmsSync';
 
-const POLL_MS = 4000;
+const POLL_MS = 30_000;
 
 /**
  * Listens for Marketing CMS changes and force-refetches public website data

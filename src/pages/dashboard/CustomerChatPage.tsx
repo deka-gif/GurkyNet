@@ -13,6 +13,7 @@ import { useChatStore } from '../../store/chat.store';
 import type { ChatMessage } from '../../services/chat/chat.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -116,7 +117,7 @@ export function CustomerChatPage() {
       }
     },
     () => storageService.getToken(),
-    2000
+    RefreshPolicy.chat
   );
 
   useEffect(() => {

@@ -13,6 +13,7 @@ import {
 import { chatService, type ChatConversation, type ChatMessage } from '../../services/chat/chat.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 import { CmsPageHeader } from '../../components/common/CmsCommon';
 
 export const CustomerSupportInbox: React.FC = () => {
@@ -83,7 +84,8 @@ export const CustomerSupportInbox: React.FC = () => {
         }
       }
     },
-    () => storageService.getToken()
+    () => storageService.getToken(),
+    RefreshPolicy.inbox
   );
 
   useRealtimeChannel(
@@ -110,7 +112,8 @@ export const CustomerSupportInbox: React.FC = () => {
         });
       }
     },
-    () => storageService.getToken()
+    () => storageService.getToken(),
+    RefreshPolicy.inbox
   );
 
   const send = async () => {

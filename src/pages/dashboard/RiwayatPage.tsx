@@ -56,9 +56,9 @@ export const RiwayatPage = () => {
     if (!hasPending) return;
 
     const timer = window.setInterval(() => {
-      console.log('HISTORY FETCH — pending poll');
+      if (document.visibilityState === 'hidden') return;
       void fetchTransactions();
-    }, 3000);
+    }, 10_000);
 
     return () => window.clearInterval(timer);
   }, [transactions, fetchTransactions]);

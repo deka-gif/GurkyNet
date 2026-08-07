@@ -13,8 +13,10 @@ import {
 } from 'lucide-react';
 import { financeService, formatIdr } from '../../services/finance.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
+import { useSoftRefresh } from '../../hooks/useSoftRefresh';
 import { storageService } from '../../services/storage.service';
 import { WorkflowStatsStrip } from '../../components/workflow/WorkflowStatsStrip';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 export const FinanceDashboard: React.FC = () => {
   const [cc, setCc] = useState<any>(null);
@@ -38,7 +40,8 @@ export const FinanceDashboard: React.FC = () => {
     void load();
   }, [load]);
 
-  useRealtimeChannel(true, ['division.finance'], () => void load(), () => storageService.getToken());
+  useRealtimeChannel(true, ['division.finance'], () => void load(), () => storageService.getToken(), RefreshPolicy.finance);
+  useSoftRefresh(true, RefreshPolicy.finance, () => void load());
 
   const widgets = [
     { label: "Today's Revenue", value: formatIdr(cc?.todaysRevenue), to: '/dashboard/finance/financial-report' },

@@ -41,3 +41,29 @@ Artisan::command('ops:heartbeat', function () {
 })->purpose('Bump ops scheduler heartbeat cache key');
 
 Schedule::command('ops:heartbeat')->everyFiveMinutes()->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------------
+| Sprint 8.5 — Integration Service scheduler (no 1s cadence)
+|--------------------------------------------------------------------------
+| Provider APIs only via IntegrationService. Dashboards read DB.
+*/
+Schedule::command('integration:sync-balances')
+    ->everyTenMinutes()
+    ->withoutOverlapping(15)
+    ->runInBackground();
+
+Schedule::command('integration:health-probe')
+    ->everyMinute()
+    ->withoutOverlapping(2)
+    ->runInBackground();
+
+Schedule::command('integration:payment-status')
+    ->everyMinute()
+    ->withoutOverlapping(2)
+    ->runInBackground();
+
+Schedule::command('integration:retry-failed')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(10)
+    ->runInBackground();

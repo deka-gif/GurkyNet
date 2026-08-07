@@ -472,22 +472,18 @@ class PublicWebsiteController extends Controller
     public function providerStatus(DigiflazzService $digiflazzService): JsonResponse
     {
         $configured = $digiflazzService->isConfigured();
-        $balance = null;
-        if ($configured) {
-            $balance = \Illuminate\Support\Facades\Cache::remember(
-                'digiflazz_balance_public',
-                60,
-                fn () => $digiflazzService->checkBalance()
-            );
-        }
+        $integration = app(\App\Services\Integration\IntegrationService::class);
+        $row = $integration->balanceFromDatabase(\App\Models\ProductProvider::CODE_DIGIFLAZZ);
+        $balance = $row['balance'] ?? null;
 
         $activeProviders = Provider::where('is_active', true)->count();
         $totalProviders = Provider::count();
+        $ppActive = \App\Models\ProductProvider::query()->where('is_active', true)->count();
 
         $status = 'offline';
-        if ($configured && $balance !== null && $activeProviders > 0) {
+        if ($configured && $balance !== null && ($activeProviders > 0 || $ppActive > 0)) {
             $status = 'online';
-        } elseif ($configured && $activeProviders > 0) {
+        } elseif ($configured && ($activeProviders > 0 || $ppActive > 0)) {
             $status = 'degraded';
         }
 
@@ -495,6 +491,7 @@ class PublicWebsiteController extends Controller
             'status' => $status,
             'digiflazz_configured' => $configured,
             'digiflazz_reachable' => $balance !== null,
+            'source' => 'database',
             'active_providers' => $activeProviders,
             'total_providers' => $totalProviders,
             'updated_at' => now()->toIso8601String(),

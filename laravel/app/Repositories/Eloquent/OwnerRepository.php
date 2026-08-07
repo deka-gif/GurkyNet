@@ -94,29 +94,22 @@ class OwnerRepository implements OwnerRepositoryInterface
                 . ($totalUsers - $usersYesterday) . ' pengguna baru'
             : ($totalUsers . ' pengguna terdaftar');
 
-        // Provider health derived from Digiflazz live connectivity + brand activation
-        $digiflazzService = app(\App\Services\DigiflazzService::class);
-        $digiflazzBalance = null;
-        if ($digiflazzService->isConfigured()) {
-            $digiflazzBalance = \Illuminate\Support\Facades\Cache::remember(
-                'digiflazz_balance',
-                60,
-                fn () => $digiflazzService->checkBalance()
-            );
-        }
+        // Provider health from GurkyNet DB only (Sprint 8.5 — no live Digiflazz on Owner dashboard)
+        $integration = app(\App\Services\Integration\IntegrationService::class);
+        $digiflazzBalance = $integration->digiflazzBalanceCached();
+        $digiRow = $integration->balanceFromDatabase(\App\Models\ProductProvider::CODE_DIGIFLAZZ);
 
         $totalProviders = Provider::count();
         $inactiveProviders = Provider::where('is_active', false)->count();
-        if (!$digiflazzService->isConfigured()) {
-            $providerHealth = 'Digiflazz Not Configured';
-        } elseif ($digiflazzBalance === null) {
-            $providerHealth = 'Digiflazz Unreachable';
-        } elseif ($totalProviders === 0) {
+        $ppProviders = \App\Models\ProductProvider::query()->count();
+        if ($ppProviders === 0 && $totalProviders === 0) {
             $providerHealth = 'No Providers Synced';
+        } elseif ($digiRow && in_array(strtolower((string) ($digiRow['partner_status'] ?? '')), ['offline', 'down', 'error'], true)) {
+            $providerHealth = 'Digiflazz Offline';
+        } elseif ($inactiveProviders === 0) {
+            $providerHealth = 'Normal';
         } else {
-            $providerHealth = $inactiveProviders === 0
-                ? 'Normal'
-                : "Degraded ({$inactiveProviders} inactive)";
+            $providerHealth = "Degraded ({$inactiveProviders} inactive)";
         }
 
         // Queue status from the real jobs table when available
@@ -365,25 +358,20 @@ class OwnerRepository implements OwnerRepositoryInterface
                 . ($failedJobs ? ", {$failedJobs} failed" : '') . ')';
         }
 
-        // Live Digiflazz deposit balance
-        $digiflazzService = app(\App\Services\DigiflazzService::class);
-        $digiflazzBalance = null;
-        if (!$digiflazzService->isConfigured()) {
+        // Digiflazz deposit from GurkyNet DB (scheduler / Ops sync fills this — no live hit)
+        $integration = app(\App\Services\Integration\IntegrationService::class);
+        $digiflazzBalance = $integration->digiflazzBalanceCached();
+        $digiRow = $integration->balanceFromDatabase(\App\Models\ProductProvider::CODE_DIGIFLAZZ);
+        if ($digiRow === null) {
             $digiflazzStatus = 'Offline';
-            $digiflazzNotes = 'Not Configured';
+            $digiflazzNotes = 'Not Synced';
+        } elseif ($digiflazzBalance !== null) {
+            $digiflazzStatus = 'Online';
+            $digiflazzNotes = 'Balance: Rp '.number_format($digiflazzBalance, 0, ',', '.').' (DB)';
         } else {
-            $digiflazzBalance = \Illuminate\Support\Facades\Cache::remember(
-                'digiflazz_balance',
-                60,
-                fn () => $digiflazzService->checkBalance()
-            );
-            if ($digiflazzBalance !== null) {
-                $digiflazzStatus = 'Online';
-                $digiflazzNotes = 'Balance: Rp ' . number_format($digiflazzBalance, 0, ',', '.');
-            } else {
-                $digiflazzStatus = 'Warning';
-                $digiflazzNotes = 'Unreachable';
-            }
+            $st = strtolower((string) ($digiRow['partner_status'] ?? ''));
+            $digiflazzStatus = in_array($st, ['offline', 'down', 'error'], true) ? 'Offline' : 'Warning';
+            $digiflazzNotes = 'Balance pending sync · status '.$st;
         }
 
         $lastSyncAt = \App\Models\Setting::where('key', 'digiflazz_last_sync_at')->value('value');

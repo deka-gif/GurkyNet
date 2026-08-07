@@ -120,6 +120,8 @@ class ExecutiveCommandCenterService
             'failed_rate' => $legacy['failed_rate'],
             'wallet_balance' => $legacy['wallet_balance'] ?? 0,
             'provider_health' => $legacy['provider_health'] ?? null,
+            'provider_balance' => $legacy['provider_balance'] ?? null,
+            'digiflazz_balance' => $legacy['digiflazz_balance'] ?? null,
             'queue_status' => $legacy['queue_status'] ?? null,
             'system_health' => $legacy['system_health'] ?? null,
             'today_revenue_change' => $legacy['today_revenue_change'] ?? null,

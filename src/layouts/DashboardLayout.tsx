@@ -60,6 +60,9 @@ import { NotificationToast } from '../components/notifications/NotificationToast
 // @ts-ignore
 import { resolveMediaSrc } from '../utils/mediaUrl';
 import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
+import { useRealtimeChannel } from '../hooks/useRealtimeChannel';
+import { useSoftRefresh } from '../hooks/useSoftRefresh';
+import { RefreshPolicy } from '../lib/refreshPolicy';
 import { formatIDR } from '../utils/currency';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
@@ -95,13 +98,20 @@ export const DashboardLayout = () => {
     fetchSettings();
   }, [fetchWallet, fetchNotifications, fetchSettings]);
 
-  // Soft-poll notifications so badge + history stay aligned with backend settlement.
-  useEffect(() => {
-    const timer = window.setInterval(() => {
+  const notificationChannel = authUser?.id ? [`user.notifications.${authUser.id}`] : [];
+  useRealtimeChannel(
+    !!authUser?.id,
+    notificationChannel,
+    () => {
       void fetchNotifications();
-    }, 15000);
-    return () => window.clearInterval(timer);
-  }, [fetchNotifications]);
+    },
+    () => storageService.getToken(),
+    RefreshPolicy.notification
+  );
+
+  useSoftRefresh(!!authUser?.id, RefreshPolicy.notification * 6, () => {
+    void fetchNotifications();
+  });
 
   // Redirect if session is cleared manually
   useEffect(() => {

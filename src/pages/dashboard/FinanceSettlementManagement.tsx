@@ -4,6 +4,7 @@ import { financeService, formatIdr } from '../../services/finance.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
 import { CmsPageHeader } from '../../components/common/CmsCommon';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
 
 export const FinanceSettlementManagement: React.FC = () => {
   const [items, setItems] = useState<any[]>([]);
@@ -51,7 +52,7 @@ export const FinanceSettlementManagement: React.FC = () => {
   useRealtimeChannel(true, ['division.finance'], () => {
     void load();
     if (selectedId) void loadDetail(selectedId);
-  }, () => storageService.getToken());
+  }, () => storageService.getToken(), RefreshPolicy.finance);
 
   const create = async () => {
     const amount = Number(window.prompt('Nominal settlement:', '0') || 0);
