@@ -180,21 +180,27 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
     {
         $probe = $this->digiflazz->healthProbe();
 
-        return [
-            'reachable' => in_array($probe['connection'] ?? '', ['ok', 'slow'], true),
-            'authenticated' => ($probe['authentication'] ?? '') === 'ok',
-            'balance' => $probe['balance_value'] ?? null,
-            'latency_ms' => $probe['latency_ms'] ?? null,
-            'message' => $probe['message'] ?? null,
-            'http_status' => $probe['http_status'] ?? null,
+        // DigiflazzService already returns the universal ProviderHealthProbeResult contract.
+        if (isset($probe['status'], $probe['indicators'])) {
+            return $probe;
+        }
+
+        return ProviderHealthProbeResult::make([
             'configured' => (bool) ($probe['configured'] ?? false),
-            'indicators' => [
-                'connection' => $probe['connection'] ?? 'unknown',
-                'authentication' => $probe['authentication'] ?? 'unknown',
-                'balance' => $probe['balance'] ?? 'unknown',
-            ],
+            'connection' => $probe['connection'] ?? 'unknown',
+            'authentication' => $probe['authentication'] ?? 'unknown',
+            'balance' => is_string($probe['balance'] ?? null) && in_array($probe['balance'], ['ok', 'failed', 'unknown'], true)
+                ? $probe['balance']
+                : (($probe['balance_value'] ?? null) !== null ? 'ok' : 'unknown'),
+            'service' => $probe['service'] ?? 'ok',
+            'status' => $probe['status'] ?? '',
+            'provider_code' => $probe['provider_code'] ?? $probe['rc'] ?? null,
+            'provider_message' => $probe['provider_message'] ?? $probe['message'] ?? null,
+            'http_status' => $probe['http_status'] ?? null,
+            'latency_ms' => $probe['latency_ms'] ?? null,
+            'balance_value' => $probe['balance_value'] ?? (is_numeric($probe['balance'] ?? null) ? $probe['balance'] : null),
             'raw' => $probe,
-        ];
+        ]);
     }
 
     protected function classifyFailureReason(string $message): string

@@ -210,7 +210,7 @@ class ProviderMultiIndicatorHealthTest extends TestCase
         $res->assertOk();
         $card = collect($res->json('data'))->firstWhere('code', $this->digi->code);
         $this->assertNotNull($card);
-        $this->assertSame('Gangguan Sebagian', $card['apiStatusLabel']);
+        $this->assertSame('PARTIAL', $card['apiStatusLabel']);
         $this->assertStringContainsString('saldo', strtolower((string) ($card['statusDescription'] ?? '')));
         $this->assertStringContainsString('SKU', (string) ($card['productCountLabel'] ?? ''));
     }

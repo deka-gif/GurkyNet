@@ -57,18 +57,22 @@ class ProductProviderHealthService
         $evaluated = ProviderHealthStatus::evaluate($indicators);
 
         $latency = $result['latency_ms'] ?? null;
-        $balance = array_key_exists('balance', $result) ? $result['balance'] : null;
+        $balanceValue = $result['balance_value']
+            ?? $result['balance_amount']
+            ?? (is_numeric($result['balance'] ?? null) ? $result['balance'] : null);
 
         Log::info('HEALTH CHECK — probe classified', [
             'provider' => $provider->code,
             'http_status' => $result['http_status'] ?? null,
             'latency_ms' => $latency,
+            'provider_code' => $result['provider_code'] ?? $indicators['provider_code'] ?? null,
+            'provider_message' => $indicators['message'] ?? null,
             'connection' => $indicators['connection'] ?? null,
             'authentication' => $indicators['authentication'] ?? null,
             'balance' => $indicators['balance'] ?? null,
+            'service' => $indicators['service'] ?? null,
             'sync' => $indicators['sync'] ?? null,
-            'provider_message' => $indicators['message'] ?? null,
-            'api_status' => $evaluated['api_status'],
+            'status_internal' => $evaluated['api_status'],
         ]);
 
         return $this->persistEvaluation(
@@ -76,16 +80,19 @@ class ProductProviderHealthService
             $evaluated,
             $latency,
             [
-                'balance' => $balance,
+                'balance' => $balanceValue,
                 'http_status' => $result['http_status'] ?? null,
-                'probe_message' => $result['message'] ?? null,
+                'probe_message' => $result['provider_message'] ?? $result['message'] ?? null,
+                'provider_code' => $result['provider_code'] ?? null,
+                'provider_message' => $result['provider_message'] ?? $result['message'] ?? null,
+                'latency_ms' => $latency,
                 'indicators' => $evaluated['indicators'],
                 'indicator_labels' => $evaluated['indicator_labels'] ?? [],
             ],
             $oldApiStatus,
             $oldHealthColor,
             $oldLastError,
-            $balance
+            $balanceValue
         );
     }
 
@@ -97,9 +104,16 @@ class ProductProviderHealthService
     {
         $fromAdapter = is_array($result['indicators'] ?? null) ? $result['indicators'] : [];
 
-        $connection = strtolower((string) ($fromAdapter['connection'] ?? ''));
-        $authentication = strtolower((string) ($fromAdapter['authentication'] ?? ''));
+        $connection = strtolower((string) ($fromAdapter['connection'] ?? $result['connection'] ?? ''));
+        $authentication = strtolower((string) ($fromAdapter['authentication'] ?? $result['authentication'] ?? ''));
         $balance = strtolower((string) ($fromAdapter['balance'] ?? ''));
+        $service = strtolower((string) ($fromAdapter['service'] ?? $result['service'] ?? ''));
+        $status = strtolower((string) ($fromAdapter['status'] ?? $result['status'] ?? ''));
+
+        // Flat contract: balance may be indicator string.
+        if ($balance === '' && isset($result['balance']) && in_array((string) $result['balance'], ['ok', 'failed', 'unknown'], true)) {
+            $balance = (string) $result['balance'];
+        }
 
         if ($connection === '' || $authentication === '') {
             // Legacy adapter payloads without indicators.
@@ -107,20 +121,25 @@ class ProductProviderHealthService
                 $connection = 'failed';
                 $authentication = 'failed';
                 $balance = 'failed';
+                $status = $status !== '' ? $status : ProviderHealthStatus::NOT_CONFIGURED;
             } elseif (($result['api_status'] ?? null) === 'auth_failed') {
                 $connection = 'ok';
                 $authentication = 'failed';
-                $balance = 'failed';
+                $balance = 'unknown';
+                $status = $status !== '' ? $status : ProviderHealthStatus::AUTH_FAILED;
             } elseif (in_array(($result['api_status'] ?? null), ['timeout', 'offline'], true)) {
                 $connection = ($result['api_status'] === 'timeout') ? 'timeout' : 'failed';
                 $authentication = 'unknown';
-                $balance = 'failed';
+                $balance = 'unknown';
+                $status = $status !== '' ? $status : ProviderHealthStatus::OFFLINE;
             } else {
                 $reachable = (bool) ($result['reachable'] ?? false);
                 $auth = (bool) ($result['authenticated'] ?? false);
                 $connection = $reachable ? ((($result['latency_ms'] ?? 0) > 3000) ? 'slow' : 'ok') : 'failed';
                 $authentication = $auth ? 'ok' : ($reachable ? 'failed' : 'unknown');
-                $balance = array_key_exists('balance', $result) && $result['balance'] !== null ? 'ok' : 'failed';
+                $hasAmount = ($result['balance_value'] ?? $result['balance_amount'] ?? null) !== null
+                    || (isset($result['balance']) && is_numeric($result['balance']));
+                $balance = $hasAmount ? 'ok' : 'failed';
             }
         }
 
@@ -129,20 +148,29 @@ class ProductProviderHealthService
             $configured = false;
         }
 
+        $balanceValue = $result['balance_value']
+            ?? $result['balance_amount']
+            ?? (is_numeric($result['balance'] ?? null) ? $result['balance'] : null);
+
         return [
             'configured' => $configured,
             'connection' => $connection ?: 'unknown',
             'authentication' => $authentication ?: 'unknown',
             'balance' => $balance ?: 'unknown',
-            'balance_value' => $result['balance'] ?? null,
+            'service' => $service !== '' ? $service : 'ok',
+            'status' => $status,
+            'provider_code' => $result['provider_code'] ?? $fromAdapter['provider_code'] ?? null,
+            'balance_value' => $balanceValue,
             'sync' => $this->syncIndicator($provider),
             'inquiry' => $this->inquiryIndicator($provider),
             'success_rate' => $this->successRateIndicator($provider),
             'success_rate_value' => $provider->success_rate !== null ? (float) $provider->success_rate : null,
             'product_count' => (int) ($provider->product_count ?? 0),
             'latency_ms' => $result['latency_ms'] ?? null,
+            'http_status' => $result['http_status'] ?? null,
             'partner_status' => $provider->partner_status,
-            'message' => $result['message'] ?? null,
+            'message' => $result['provider_message'] ?? $result['message'] ?? null,
+            'provider_message' => $result['provider_message'] ?? $result['message'] ?? null,
             'warnings' => [],
         ];
     }

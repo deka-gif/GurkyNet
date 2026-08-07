@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\ProductProviders\DigiflazzHealthClassifier;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -205,36 +206,24 @@ class DigiflazzService
     }
 
     /**
-     * Multi-indicator Digiflazz probe (connection / auth / balance).
-     * Uses the same transport as Sync / Inquiry / Transaction (executeRequest).
-     * Balance failure alone must never imply authentication failure.
+     * Multi-indicator Digiflazz probe via shared executeRequest transport.
+     * Classification uses official Digiflazz RC — never message substring matching.
      *
-     * @return array{
-     *   configured:bool,
-     *   connection:string,
-     *   authentication:string,
-     *   balance:string,
-     *   balance_value:?float,
-     *   latency_ms:?int,
-     *   http_status:?int,
-     *   message:?string,
-     *   rc:?string
-     * }
+     * @return array<string, mixed>
      */
     public function healthProbe(): array
     {
         if (! $this->isConfigured()) {
-            return [
-                'configured' => false,
-                'connection' => 'failed',
-                'authentication' => 'failed',
-                'balance' => 'failed',
-                'balance_value' => null,
-                'latency_ms' => null,
+            $result = DigiflazzHealthClassifier::classify([
                 'http_status' => null,
-                'message' => 'Credentials not configured',
-                'rc' => null,
-            ];
+                'body' => [],
+                'latency_ms' => 0,
+                'connection_error' => false,
+                'error_message' => null,
+            ], false);
+            $this->logHealthProbeResult($result);
+
+            return $result;
         }
 
         $payload = [
@@ -244,161 +233,10 @@ class DigiflazzService
         ];
 
         $transport = $this->executeRequest('/cek-saldo', $payload, app()->environment('testing') ? 1 : 3);
-
-        $ms = (int) ($transport['latency_ms'] ?? 0);
-        $status = $transport['http_status'];
-        $body = is_array($transport['body'] ?? null) ? $transport['body'] : [];
-        $message = (string) ($body['data']['message'] ?? $body['message'] ?? $transport['error_message'] ?? '');
-        $rc = strtolower((string) ($body['data']['rc'] ?? $body['rc'] ?? ''));
-        $deposit = $body['data']['deposit'] ?? null;
-
-        if ($transport['connection_error']) {
-            $isTimeout = str_contains(strtolower((string) $transport['error_message']), 'timeout')
-                || str_contains(strtolower((string) $transport['error_message']), 'timed out')
-                || str_contains(strtolower((string) $transport['error_message']), 'could not resolve');
-
-            $result = [
-                'configured' => true,
-                'connection' => $isTimeout ? 'timeout' : 'failed',
-                'authentication' => 'unknown',
-                'balance' => 'failed',
-                'balance_value' => null,
-                'latency_ms' => $ms,
-                'http_status' => $status,
-                'message' => $message !== '' ? $message : (string) ($transport['error_message'] ?? 'Connection failed'),
-                'rc' => $rc !== '' ? $rc : null,
-            ];
-            $this->logHealthProbeResult($result);
-
-            return $result;
-        }
-
-        if ($status !== null && in_array((int) $status, [401, 403], true)) {
-            $result = [
-                'configured' => true,
-                'connection' => 'ok',
-                'authentication' => 'failed',
-                'balance' => 'failed',
-                'balance_value' => null,
-                'latency_ms' => $ms,
-                'http_status' => $status,
-                'message' => $message !== '' ? $message : 'HTTP '.$status,
-                'rc' => $rc !== '' ? $rc : null,
-            ];
-            $this->logHealthProbeResult($result);
-
-            return $result;
-        }
-
-        if ($this->looksLikeDigiAuthFailure($message, $rc)) {
-            $result = [
-                'configured' => true,
-                'connection' => 'ok',
-                'authentication' => 'failed',
-                'balance' => 'failed',
-                'balance_value' => null,
-                'latency_ms' => $ms,
-                'http_status' => $status,
-                'message' => $message,
-                'rc' => $rc !== '' ? $rc : null,
-            ];
-            $this->logHealthProbeResult($result);
-
-            return $result;
-        }
-
-        if ($status !== null && (int) $status >= 500) {
-            $result = [
-                'configured' => true,
-                'connection' => 'failed',
-                'authentication' => 'unknown',
-                'balance' => 'failed',
-                'balance_value' => null,
-                'latency_ms' => $ms,
-                'http_status' => $status,
-                'message' => $message !== '' ? $message : 'HTTP '.$status,
-                'rc' => $rc !== '' ? $rc : null,
-            ];
-            $this->logHealthProbeResult($result);
-
-            return $result;
-        }
-
-        // Reachable + not a confirmed auth failure.
-        $connection = ($ms > 3000) ? 'slow' : 'ok';
-
-        if ($deposit !== null) {
-            $result = [
-                'configured' => true,
-                'connection' => $connection,
-                'authentication' => 'ok',
-                'balance' => 'ok',
-                'balance_value' => (float) $deposit,
-                'latency_ms' => $ms,
-                'http_status' => $status,
-                'message' => $message !== '' ? $message : 'OK',
-                'rc' => $rc !== '' ? $rc : null,
-            ];
-            $this->logHealthProbeResult($result);
-
-            return $result;
-        }
-
-        // Auth OK (or unknown but not failed) — balance unreadable → Partial upstream.
-        $result = [
-            'configured' => true,
-            'connection' => $connection,
-            'authentication' => 'ok',
-            'balance' => 'failed',
-            'balance_value' => null,
-            'latency_ms' => $ms,
-            'http_status' => $status,
-            'message' => $message !== '' ? $message : 'Balance unavailable',
-            'rc' => $rc !== '' ? $rc : null,
-        ];
+        $result = DigiflazzHealthClassifier::classify($transport, true);
         $this->logHealthProbeResult($result);
 
         return $result;
-    }
-
-    /**
-     * Strict credential-failure detection only. Avoids false positives from
-     * generic substrings like "sign", "invalid", or "username".
-     */
-    protected function looksLikeDigiAuthFailure(string $message, string $rc): bool
-    {
-        $m = strtolower(trim($message));
-        if ($m === '') {
-            return false;
-        }
-
-        $phrases = [
-            'wrong signature',
-            'invalid signature',
-            'signature salah',
-            'signature tidak valid',
-            'unauthorized',
-            'unauthorised',
-            'invalid api key',
-            'api key salah',
-            'api key tidak valid',
-            'invalid username',
-            'username salah',
-            'username tidak valid',
-            'credential invalid',
-            'credentials invalid',
-            'credential salah',
-            'authentication failed',
-            'autentikasi gagal',
-        ];
-
-        foreach ($phrases as $phrase) {
-            if (str_contains($m, $phrase)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -411,11 +249,12 @@ class DigiflazzService
             'endpoint' => '/cek-saldo',
             'http_status' => $result['http_status'] ?? null,
             'latency_ms' => $result['latency_ms'] ?? null,
-            'rc' => $result['rc'] ?? null,
-            'message' => $result['message'] ?? null,
-            'balance_available' => ($result['balance'] ?? null) === 'ok',
+            'provider_code' => $result['provider_code'] ?? null,
+            'provider_message' => $result['provider_message'] ?? $result['message'] ?? null,
             'authentication' => $result['authentication'] ?? null,
             'connection' => $result['connection'] ?? null,
+            'balance' => $result['balance'] ?? null,
+            'status' => $result['status'] ?? null,
         ]);
     }
 

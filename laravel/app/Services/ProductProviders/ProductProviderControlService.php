@@ -96,6 +96,12 @@ class ProductProviderControlService
             'lastFailureAt' => optional($p->last_failure_at)?->toIso8601String(),
             'lastError' => $p->last_error,
             'healthIndicators' => $this->healthIndicatorsForCard($p),
+            'providerCode' => $this->lastHealthMeta($p)['provider_code'] ?? null,
+            'providerMessage' => $this->lastHealthMeta($p)['provider_message']
+                ?? $this->lastHealthMeta($p)['probe_message']
+                ?? $p->last_error,
+            'probeLatencyMs' => $this->lastHealthMeta($p)['latency_ms']
+                ?? $p->avg_response_ms,
             'isPrimary' => (int) $p->priority === 1,
             'online' => $transactionEligible,
             'transactionEligible' => $transactionEligible,
@@ -413,11 +419,9 @@ class ProductProviderControlService
     }
 
     /**
-     * Indicator grid for Control Center — prefers last health_check log meta.
-     *
-     * @return array{connection:string, authentication:string, balance:string, service:string}
+     * @return array<string, mixed>
      */
-    protected function healthIndicatorsForCard(ProductProvider $p): array
+    protected function lastHealthMeta(ProductProvider $p): array
     {
         $log = ProductProviderLog::query()
             ->where('product_provider_id', $p->id)
@@ -425,13 +429,23 @@ class ProductProviderControlService
             ->orderByDesc('id')
             ->first();
 
-        $meta = is_array($log?->meta) ? $log->meta : [];
+        return is_array($log?->meta) ? $log->meta : [];
+    }
+
+    /**
+     * Indicator grid for Control Center — prefers last health_check log meta.
+     *
+     * @return array{connection:string, authentication:string, balance:string, service:string}
+     */
+    protected function healthIndicatorsForCard(ProductProvider $p): array
+    {
+        $meta = $this->lastHealthMeta($p);
         if (isset($meta['indicator_labels']) && is_array($meta['indicator_labels'])) {
             return [
-                'connection' => (string) ($meta['indicator_labels']['connection'] ?? 'Tidak diketahui'),
-                'authentication' => (string) ($meta['indicator_labels']['authentication'] ?? 'Tidak diketahui'),
-                'balance' => (string) ($meta['indicator_labels']['balance'] ?? 'Tidak diketahui'),
-                'service' => (string) ($meta['indicator_labels']['service'] ?? 'Tidak diketahui'),
+                'connection' => (string) ($meta['indicator_labels']['connection'] ?? 'Unknown'),
+                'authentication' => (string) ($meta['indicator_labels']['authentication'] ?? 'Unknown'),
+                'balance' => (string) ($meta['indicator_labels']['balance'] ?? 'Unknown'),
+                'service' => (string) ($meta['indicator_labels']['service'] ?? 'Unknown'),
             ];
         }
 
@@ -446,38 +460,50 @@ class ProductProviderControlService
             'online' => [
                 'connection' => 'Online',
                 'authentication' => 'Valid',
-                'balance' => 'Tersedia',
-                'service' => 'Aktif',
+                'balance' => 'OK',
+                'service' => 'Active',
             ],
             'partial', 'degraded', 'syncing' => [
                 'connection' => 'Online',
                 'authentication' => 'Valid',
-                'balance' => 'Tidak dapat dibaca',
-                'service' => 'Aktif',
+                'balance' => 'Failed',
+                'service' => 'Active',
             ],
             'auth_failed' => [
                 'connection' => 'Online',
-                'authentication' => 'Gagal',
-                'balance' => 'Tidak dapat dibaca',
-                'service' => 'Terganggu',
+                'authentication' => 'Failed',
+                'balance' => 'Unknown',
+                'service' => 'Active',
+            ],
+            'config_error' => [
+                'connection' => 'Online',
+                'authentication' => 'Unknown',
+                'balance' => 'Unknown',
+                'service' => 'Active',
+            ],
+            'network_configuration' => [
+                'connection' => 'Online',
+                'authentication' => 'Unknown',
+                'balance' => 'Unknown',
+                'service' => 'Active',
             ],
             'maintenance' => [
                 'connection' => 'Online',
-                'authentication' => 'Tidak diketahui',
-                'balance' => 'Tidak diketahui',
+                'authentication' => 'Unknown',
+                'balance' => 'Unknown',
                 'service' => 'Terganggu',
             ],
             'offline', 'timeout', 'no_response' => [
                 'connection' => 'Gagal',
-                'authentication' => 'Tidak diketahui',
-                'balance' => 'Tidak dapat dibaca',
+                'authentication' => 'Unknown',
+                'balance' => 'Unknown',
                 'service' => 'Terganggu',
             ],
             default => [
-                'connection' => 'Tidak diketahui',
-                'authentication' => 'Tidak diketahui',
-                'balance' => 'Tidak diketahui',
-                'service' => 'Tidak diketahui',
+                'connection' => 'Unknown',
+                'authentication' => 'Unknown',
+                'balance' => 'Unknown',
+                'service' => 'Unknown',
             ],
         };
     }

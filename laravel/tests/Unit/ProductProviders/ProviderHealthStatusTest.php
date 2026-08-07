@@ -73,6 +73,38 @@ class ProviderHealthStatusTest extends TestCase
         $this->assertStringNotContainsString('API Key atau Secret', $result['description']);
     }
 
+    public function test_config_error_and_network_configuration_labels(): void
+    {
+        $config = ProviderHealthStatus::evaluate([
+            'configured' => true,
+            'connection' => 'ok',
+            'authentication' => 'unknown',
+            'balance' => 'unknown',
+            'service' => 'ok',
+            'status' => ProviderHealthStatus::CONFIG_ERROR,
+            'partner_status' => 'online',
+            'message' => 'Payload Error',
+        ]);
+        $this->assertSame(ProviderHealthStatus::CONFIG_ERROR, $config['api_status']);
+        $this->assertSame('CONFIG_ERROR', $config['label']);
+        $this->assertSame('Payload Error', $config['description']);
+        $this->assertFalse($config['transaction_eligible']);
+
+        $net = ProviderHealthStatus::evaluate([
+            'configured' => true,
+            'connection' => 'ok',
+            'authentication' => 'unknown',
+            'balance' => 'unknown',
+            'service' => 'ok',
+            'status' => ProviderHealthStatus::NETWORK_CONFIGURATION,
+            'partner_status' => 'online',
+            'message' => 'IP tidak dikenali',
+        ]);
+        $this->assertSame(ProviderHealthStatus::NETWORK_CONFIGURATION, $net['api_status']);
+        $this->assertSame('NETWORK_CONFIGURATION', $net['label']);
+        $this->assertFalse($net['transaction_eligible']);
+    }
+
     public function test_balance_fail_prefers_provider_message(): void
     {
         $result = ProviderHealthStatus::evaluate([
@@ -132,6 +164,8 @@ class ProviderHealthStatusTest extends TestCase
         $this->assertTrue(ProviderHealthStatus::isTransactionEligible(null, 'online'));
         $this->assertFalse(ProviderHealthStatus::isTransactionEligible('offline', 'online'));
         $this->assertFalse(ProviderHealthStatus::isTransactionEligible('auth_failed', 'online'));
+        $this->assertFalse(ProviderHealthStatus::isTransactionEligible('config_error', 'online'));
+        $this->assertFalse(ProviderHealthStatus::isTransactionEligible('network_configuration', 'online'));
         $this->assertFalse(ProviderHealthStatus::isTransactionEligible('online', 'maintenance'));
     }
 }

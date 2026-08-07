@@ -5,9 +5,9 @@ namespace App\Services\ProductProviders;
 use App\Models\ProductProvider;
 
 /**
- * Derives operator-facing provider health from multiple real indicators.
- * Balance failure alone must never force Offline or Auth Failed.
- * Descriptions prefer the real provider message — never invent credential errors.
+ * Universal provider health evaluation for Control Center.
+ * Adapters map provider-native responses → indicators + optional authoritative `status`.
+ * Dashboard never classifies Digiflazz/VIP/etc. — it only renders evaluate() output.
  */
 class ProviderHealthStatus
 {
@@ -16,27 +16,13 @@ class ProviderHealthStatus
     public const MAINTENANCE = 'maintenance';
     public const OFFLINE = 'offline';
     public const AUTH_FAILED = 'auth_failed';
+    public const CONFIG_ERROR = 'config_error';
+    public const NETWORK_CONFIGURATION = 'network_configuration';
     public const NOT_CONFIGURED = 'not_configured';
     public const DISABLED = 'disabled';
 
     /**
-     * @param  array{
-     *   connection?:string,
-     *   authentication?:string,
-     *   sync?:string,
-     *   balance?:string,
-     *   inquiry?:string,
-     *   success_rate?:string,
-     *   partner_status?:string,
-     *   is_active?:bool,
-     *   configured?:bool,
-     *   latency_ms?:?int,
-     *   balance_value?:?float,
-     *   product_count?:int,
-     *   success_rate_value?:?float,
-     *   warnings?:list<string>,
-     *   message?:?string,
-     * }  $indicators
+     * @param  array<string, mixed>  $indicators
      * @return array{
      *   api_status:string,
      *   health_color:string,
@@ -49,14 +35,14 @@ class ProviderHealthStatus
      */
     public static function evaluate(array $indicators): array
     {
-        $providerMessage = trim((string) ($indicators['message'] ?? ''));
+        $providerMessage = trim((string) ($indicators['message'] ?? $indicators['provider_message'] ?? ''));
         $partner = strtolower((string) ($indicators['partner_status'] ?? 'online'));
 
         if ($partner === 'maintenance') {
             return self::result(
                 self::MAINTENANCE,
                 'orange',
-                'Maintenance',
+                self::labelFor(self::MAINTENANCE),
                 $providerMessage !== ''
                     ? $providerMessage
                     : 'Provider sedang dalam pemeliharaan. Sistem akan menggunakan provider cadangan jika tersedia.',
@@ -69,7 +55,7 @@ class ProviderHealthStatus
             return self::result(
                 self::NOT_CONFIGURED,
                 'red',
-                'Belum Dikonfigurasi',
+                self::labelFor(self::NOT_CONFIGURED),
                 $providerMessage !== ''
                     ? $providerMessage
                     : 'Integrasi provider belum dikonfigurasi.',
@@ -78,18 +64,25 @@ class ProviderHealthStatus
             );
         }
 
+        // Adapter-authoritative status (RC / native code mapping already done in adapter).
+        $forced = strtolower(trim((string) ($indicators['status'] ?? '')));
+        if ($forced !== '' && self::isKnownStatus($forced)) {
+            return self::resultFromForcedStatus($forced, $providerMessage, $indicators);
+        }
+
         $connection = strtolower((string) ($indicators['connection'] ?? 'unknown'));
         $auth = strtolower((string) ($indicators['authentication'] ?? 'unknown'));
         $sync = strtolower((string) ($indicators['sync'] ?? 'unknown'));
         $balance = strtolower((string) ($indicators['balance'] ?? 'unknown'));
         $inquiry = strtolower((string) ($indicators['inquiry'] ?? 'unknown'));
         $successRate = strtolower((string) ($indicators['success_rate'] ?? 'unknown'));
+        $service = strtolower((string) ($indicators['service'] ?? 'unknown'));
 
         if ($auth === 'failed') {
             return self::result(
                 self::AUTH_FAILED,
                 'red',
-                'Autentikasi Gagal',
+                self::labelFor(self::AUTH_FAILED),
                 $providerMessage !== ''
                     ? $providerMessage
                     : 'Autentikasi provider gagal menurut response provider.',
@@ -102,7 +95,7 @@ class ProviderHealthStatus
             return self::result(
                 self::OFFLINE,
                 'red',
-                'Offline',
+                self::labelFor(self::OFFLINE),
                 $providerMessage !== ''
                     ? $providerMessage
                     : 'Provider tidak dapat dihubungi. Produk tetap tersedia dari sinkronisasi terakhir.',
@@ -116,6 +109,11 @@ class ProviderHealthStatus
             $warnings[] = $providerMessage !== ''
                 ? $providerMessage
                 : 'Balance provider sedang tidak tersedia.';
+        }
+        if ($service === 'failed') {
+            $warnings[] = $providerMessage !== ''
+                ? $providerMessage
+                : 'Sebagian layanan provider sedang terganggu.';
         }
         if ($sync === 'failed' || $sync === 'stale') {
             $warnings[] = 'Sinkronisasi produk tertunda atau belum berhasil.';
@@ -133,8 +131,7 @@ class ProviderHealthStatus
         $warnings = array_values(array_unique(array_filter($warnings)));
 
         if ($warnings !== []) {
-            // Prefer the real provider message when balance/service is degraded.
-            $desc = $providerMessage !== '' && $balance === 'failed'
+            $desc = $providerMessage !== '' && ($balance === 'failed' || $service === 'failed')
                 ? $providerMessage
                 : (count($warnings) === 1
                     ? $warnings[0]
@@ -143,7 +140,7 @@ class ProviderHealthStatus
             return self::result(
                 self::PARTIAL,
                 'yellow',
-                'Gangguan Sebagian',
+                self::labelFor(self::PARTIAL),
                 $desc,
                 true,
                 array_merge($indicators, ['warnings' => $warnings])
@@ -153,7 +150,7 @@ class ProviderHealthStatus
         return self::result(
             self::ONLINE,
             'green',
-            'Online',
+            self::labelFor(self::ONLINE),
             $providerMessage !== '' && strtoupper($providerMessage) !== 'OK'
                 ? $providerMessage
                 : 'Provider berjalan normal dan siap memproses transaksi.',
@@ -163,8 +160,75 @@ class ProviderHealthStatus
     }
 
     /**
-     * Human labels for Control Center / Provider Management indicator grid.
-     *
+     * @param  array<string, mixed>  $indicators
+     * @return array{api_status:string,health_color:string,label:string,description:string,transaction_eligible:bool,indicators:array,indicator_labels:array<string,string>}
+     */
+    protected static function resultFromForcedStatus(string $status, string $providerMessage, array $indicators): array
+    {
+        // Soft-upgrade ONLINE → PARTIAL when sync/inquiry/etc. degrade while adapter says online.
+        if ($status === self::ONLINE) {
+            $sync = strtolower((string) ($indicators['sync'] ?? 'ok'));
+            $inquiry = strtolower((string) ($indicators['inquiry'] ?? 'ok'));
+            $successRate = strtolower((string) ($indicators['success_rate'] ?? 'ok'));
+            if (in_array($sync, ['failed', 'stale'], true)
+                || in_array($inquiry, ['failed', 'warning'], true)
+                || $successRate === 'warning') {
+                $status = self::PARTIAL;
+            }
+        }
+
+        $color = match ($status) {
+            self::ONLINE => 'green',
+            self::PARTIAL, 'degraded', 'syncing' => 'yellow',
+            self::MAINTENANCE => 'orange',
+            default => 'red',
+        };
+
+        $eligible = self::isTransactionEligible($status, $indicators['partner_status'] ?? 'online');
+
+        $fallback = match ($status) {
+            self::ONLINE => 'Provider berjalan normal dan siap memproses transaksi.',
+            self::PARTIAL => 'Provider masih dapat digunakan. Sebagian layanan sedang mengalami gangguan.',
+            self::AUTH_FAILED => 'Autentikasi provider gagal menurut response provider.',
+            self::CONFIG_ERROR => 'Konfigurasi request/payload provider tidak valid menurut response provider.',
+            self::NETWORK_CONFIGURATION => 'Konfigurasi jaringan provider (whitelist IP / firewall) bermasalah menurut response provider.',
+            self::OFFLINE => 'Provider tidak dapat dihubungi. Produk tetap tersedia dari sinkronisasi terakhir.',
+            self::NOT_CONFIGURED => 'Integrasi provider belum dikonfigurasi.',
+            self::MAINTENANCE => 'Provider sedang dalam pemeliharaan.',
+            self::DISABLED => 'Provider dinonaktifkan manual oleh administrator.',
+            default => 'Status provider belum diperiksa.',
+        };
+
+        return self::result(
+            $status,
+            $color,
+            self::labelFor($status),
+            $providerMessage !== '' ? $providerMessage : $fallback,
+            $eligible,
+            $indicators
+        );
+    }
+
+    public static function isKnownStatus(string $status): bool
+    {
+        return in_array($status, [
+            self::ONLINE,
+            self::PARTIAL,
+            self::MAINTENANCE,
+            self::OFFLINE,
+            self::AUTH_FAILED,
+            self::CONFIG_ERROR,
+            self::NETWORK_CONFIGURATION,
+            self::NOT_CONFIGURED,
+            self::DISABLED,
+            'degraded',
+            'syncing',
+            'timeout',
+            'no_response',
+        ], true);
+    }
+
+    /**
      * @param  array<string, mixed>  $indicators
      * @return array{connection:string, authentication:string, balance:string, service:string}
      */
@@ -173,11 +237,15 @@ class ProviderHealthStatus
         $connection = strtolower((string) ($indicators['connection'] ?? 'unknown'));
         $auth = strtolower((string) ($indicators['authentication'] ?? 'unknown'));
         $balance = strtolower((string) ($indicators['balance'] ?? 'unknown'));
+        $service = strtolower((string) ($indicators['service'] ?? ''));
         $sync = strtolower((string) ($indicators['sync'] ?? 'unknown'));
         $inquiry = strtolower((string) ($indicators['inquiry'] ?? 'unknown'));
 
-        $serviceOk = ! in_array($sync, ['failed', 'stale'], true)
-            && ! in_array($inquiry, ['failed', 'warning'], true);
+        if ($service === '') {
+            $serviceOk = ! in_array($sync, ['failed', 'stale'], true)
+                && ! in_array($inquiry, ['failed', 'warning'], true);
+            $service = $serviceOk ? 'ok' : 'failed';
+        }
 
         return [
             'connection' => match ($connection) {
@@ -189,26 +257,22 @@ class ProviderHealthStatus
             },
             'authentication' => match ($auth) {
                 'ok' => 'Valid',
-                'failed' => 'Gagal',
-                default => 'Tidak diketahui',
+                'failed' => 'Failed',
+                default => 'Unknown',
             },
             'balance' => match ($balance) {
-                'ok' => 'Tersedia',
-                'failed' => 'Tidak dapat dibaca',
-                default => 'Tidak diketahui',
+                'ok' => 'OK',
+                'failed' => 'Failed',
+                default => 'Unknown',
             },
-            'service' => $serviceOk ? 'Aktif' : 'Terganggu',
+            'service' => match ($service) {
+                'ok', 'active' => 'Active',
+                'failed' => 'Terganggu',
+                default => 'Unknown',
+            },
         ];
     }
 
-    /**
-     * Whether checkout routing may still attempt this provider.
-     * unknown = belum di-probe — tetap boleh dicoba (bukan Offline).
-     *
-     * Partner power (is_active / DISABLED) is enforced by ProductRoutingService separately.
-     * partner_status=offline alone must not block when the provider is powered on —
-     * that stale flag is synced from is_active; API Offline is api_status instead.
-     */
     public static function isTransactionEligible(?string $apiStatus, ?string $partnerStatus = null): bool
     {
         $partner = strtolower((string) ($partnerStatus ?? 'online'));
@@ -228,15 +292,17 @@ class ProviderHealthStatus
     public static function labelFor(?string $apiStatus): string
     {
         return match (strtolower((string) $apiStatus)) {
-            self::ONLINE => 'Online',
-            self::PARTIAL, 'degraded', 'syncing' => 'Gangguan Sebagian',
-            self::MAINTENANCE => 'Maintenance',
-            self::AUTH_FAILED => 'Autentikasi Gagal',
-            self::NOT_CONFIGURED => 'Belum Dikonfigurasi',
-            self::DISABLED => 'Disabled',
-            'timeout', 'no_response' => 'Offline',
-            self::OFFLINE => 'Offline',
-            default => $apiStatus ? ucwords(str_replace('_', ' ', (string) $apiStatus)) : 'Tidak Diketahui',
+            self::ONLINE => 'ONLINE',
+            self::PARTIAL, 'degraded', 'syncing' => 'PARTIAL',
+            self::MAINTENANCE => 'MAINTENANCE',
+            self::AUTH_FAILED => 'AUTH_FAILED',
+            self::CONFIG_ERROR => 'CONFIG_ERROR',
+            self::NETWORK_CONFIGURATION => 'NETWORK_CONFIGURATION',
+            self::NOT_CONFIGURED => 'NOT_CONFIGURED',
+            self::DISABLED => 'DISABLED',
+            'timeout', 'no_response' => 'OFFLINE',
+            self::OFFLINE => 'OFFLINE',
+            default => $apiStatus ? strtoupper(str_replace(' ', '_', (string) $apiStatus)) : 'UNKNOWN',
         };
     }
 
@@ -261,7 +327,6 @@ class ProviderHealthStatus
         $api = strtolower((string) ($provider->api_status ?? ''));
         $err = trim((string) ($provider->last_error ?? ''));
 
-        // Prefer stored provider/probe message for all non-online states.
         if ($err !== '' && $api !== self::ONLINE) {
             return $err;
         }
@@ -271,6 +336,8 @@ class ProviderHealthStatus
             self::PARTIAL, 'degraded', 'syncing' => 'Provider masih dapat digunakan. Sebagian layanan sedang mengalami gangguan.',
             self::MAINTENANCE => 'Provider sedang dalam pemeliharaan. Sistem akan menggunakan provider cadangan jika tersedia.',
             self::AUTH_FAILED => 'Autentikasi provider gagal menurut response provider.',
+            self::CONFIG_ERROR => 'Konfigurasi request/payload provider tidak valid menurut response provider.',
+            self::NETWORK_CONFIGURATION => 'Konfigurasi jaringan provider (whitelist IP / firewall) bermasalah menurut response provider.',
             self::NOT_CONFIGURED => 'Integrasi provider belum dikonfigurasi.',
             self::DISABLED => 'Provider dinonaktifkan manual oleh administrator.',
             self::OFFLINE, 'timeout', 'no_response' => 'Provider tidak dapat dihubungi. Produk tetap tersedia dari sinkronisasi terakhir.',

@@ -273,7 +273,9 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
 
         $apiStatus = (string) ($result['api_status'] ?? 'offline');
         $success = (bool) ($result['success'] ?? false);
-        $balance = $result['balance'] ?? null;
+        $balanceValue = $result['balance'] ?? null;
+        $message = trim((string) ($result['message'] ?? ''));
+        $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
 
         Log::info('VIP ADAPTER — profile() result for health', [
             'success' => $success,
@@ -281,44 +283,94 @@ class VipPulsaProductProviderAdapter implements ProductProviderAdapterInterface
             'health_color' => $result['health_color'] ?? null,
             'http_status' => $result['http_status'] ?? null,
             'latency_ms' => $result['latency_ms'] ?? null,
-            'message' => $result['message'] ?? null,
-            'balance' => $balance,
+            'message' => $message !== '' ? $message : null,
+            'balance' => $balanceValue,
         ]);
 
+        // Preserve existing VIP classification behaviour — only normalize to the universal contract.
         $connection = 'failed';
         $authentication = 'unknown';
-        $balanceStatus = 'failed';
+        $balanceStatus = 'unknown';
+        $service = 'ok';
+        $status = ProviderHealthStatus::OFFLINE;
 
         if ($apiStatus === 'not_configured') {
             $connection = 'failed';
             $authentication = 'failed';
+            $service = 'failed';
+            $status = ProviderHealthStatus::NOT_CONFIGURED;
         } elseif ($apiStatus === 'auth_failed') {
             $connection = 'ok';
             $authentication = 'failed';
+            $balanceStatus = 'unknown';
+            $status = ProviderHealthStatus::AUTH_FAILED;
         } elseif (in_array($apiStatus, ['timeout', 'offline'], true) && ! $success) {
             $connection = $apiStatus === 'timeout' ? 'timeout' : 'failed';
+            $status = ProviderHealthStatus::OFFLINE;
         } elseif ($success || in_array($apiStatus, ['online', 'degraded', 'partial'], true)) {
             $connection = (($result['latency_ms'] ?? 0) > 3000) ? 'slow' : 'ok';
             $authentication = 'ok';
-            $balanceStatus = $balance !== null ? 'ok' : 'failed';
+            if ($balanceValue !== null) {
+                $balanceStatus = 'ok';
+                $status = $apiStatus === 'degraded' || $apiStatus === 'partial'
+                    ? ProviderHealthStatus::PARTIAL
+                    : ProviderHealthStatus::ONLINE;
+            } else {
+                $balanceStatus = 'failed';
+                $status = ProviderHealthStatus::PARTIAL;
+            }
         }
 
-        return [
-            'reachable' => in_array($connection, ['ok', 'slow'], true),
-            'authenticated' => $authentication === 'ok',
-            'balance' => $balance,
-            'latency_ms' => $result['latency_ms'] ?? null,
-            'message' => $result['message'] ?? null,
-            'http_status' => $result['http_status'] ?? null,
+        $probe = ProviderHealthProbeResult::make([
             'configured' => $apiStatus !== 'not_configured',
-            // Do not force api_status from VIP profile alone — HealthService evaluates indicators.
-            'indicators' => [
-                'connection' => $connection,
-                'authentication' => $authentication,
-                'balance' => $balanceStatus,
-            ],
-            'success' => $success,
-            'raw' => $result['raw'] ?? $result,
-        ];
+            'connection' => $connection,
+            'authentication' => $authentication,
+            'balance' => $balanceStatus,
+            'service' => $service,
+            'status' => $status,
+            'provider_code' => $this->vipProviderCode($raw, $message, $status),
+            'provider_message' => $message !== '' ? $message : null,
+            'http_status' => $result['http_status'] ?? null,
+            'latency_ms' => $result['latency_ms'] ?? null,
+            'balance_value' => $balanceValue !== null ? (float) $balanceValue : null,
+            'raw' => $raw ?: $result,
+        ]);
+
+        Log::info('VIP healthCheck result', [
+            'provider' => ProductProvider::CODE_VIP,
+            'http_status' => $probe['http_status'],
+            'provider_code' => $probe['provider_code'],
+            'provider_message' => $probe['provider_message'],
+            'authentication' => $probe['authentication'],
+            'connection' => $probe['connection'],
+            'balance' => $probe['balance'],
+            'latency_ms' => $probe['latency_ms'],
+            'status' => $probe['status'],
+        ]);
+
+        return $probe;
+    }
+
+    /**
+     * Display-only provider code for Control Center (does not drive auth classification).
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    protected function vipProviderCode(array $raw, string $message, string $status): ?string
+    {
+        foreach (['code', 'error_code', 'rc', 'status_code'] as $key) {
+            if (isset($raw[$key]) && trim((string) $raw[$key]) !== '') {
+                return strtoupper(trim((string) $raw[$key]));
+            }
+        }
+
+        if ($status !== ProviderHealthStatus::AUTH_FAILED || $message === '') {
+            return null;
+        }
+
+        $normalized = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '_', $message) ?? '');
+        $normalized = trim($normalized, '_');
+
+        return $normalized !== '' ? $normalized : null;
     }
 }

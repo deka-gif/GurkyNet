@@ -37,6 +37,9 @@ type ProviderCard = {
     balance?: string;
     service?: string;
   } | null;
+  providerCode?: string | null;
+  providerMessage?: string | null;
+  probeLatencyMs?: number | null;
   balance: number | null;
   productCount: number;
   productCountLabel?: string;
@@ -87,19 +90,22 @@ const formatApiStatus = (card: ProviderCard) => {
   if (card.apiStatusLabel) return card.apiStatusLabel;
   const raw = (card.apiStatus || '').toLowerCase();
   const map: Record<string, string> = {
-    online: 'Online',
-    partial: 'Gangguan Sebagian',
-    degraded: 'Gangguan Sebagian',
-    syncing: 'Gangguan Sebagian',
-    maintenance: 'Maintenance',
-    offline: 'Offline',
-    timeout: 'Offline',
-    auth_failed: 'Autentikasi Gagal',
-    not_configured: 'Belum Dikonfigurasi',
-    no_response: 'Offline',
-    unknown: 'Tidak Diketahui',
+    online: 'ONLINE',
+    partial: 'PARTIAL',
+    degraded: 'PARTIAL',
+    syncing: 'PARTIAL',
+    maintenance: 'MAINTENANCE',
+    offline: 'OFFLINE',
+    timeout: 'OFFLINE',
+    auth_failed: 'AUTH_FAILED',
+    config_error: 'CONFIG_ERROR',
+    network_configuration: 'NETWORK_CONFIGURATION',
+    not_configured: 'NOT_CONFIGURED',
+    disabled: 'DISABLED',
+    no_response: 'OFFLINE',
+    unknown: 'UNKNOWN',
   };
-  return map[raw] || (card.apiStatus ? String(card.apiStatus) : '—');
+  return map[raw] || (card.apiStatus ? String(card.apiStatus).toUpperCase() : '—');
 };
 
 const healthTone = (color: string) => {
@@ -293,6 +299,30 @@ export const OperationsProductProviderControl: React.FC = () => {
                         </div>
                       </div>
                     )}
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Provider Code</div>
+                        <div className="font-mono font-extrabold">
+                          {card.providerCode ? (String(card.providerCode).match(/^\d+$/) ? `RC ${card.providerCode}` : card.providerCode) : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Latency</div>
+                        <div className="font-mono font-extrabold">
+                          {card.probeLatencyMs != null ? `${card.probeLatencyMs} ms` : '—'}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Message</div>
+                        <div className="font-medium leading-relaxed">
+                          {card.providerMessage || card.statusDescription || card.lastError || '—'}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-[9px] uppercase tracking-wide opacity-60 font-bold">Last Check</div>
+                        <div className="font-mono font-extrabold">{formatTs(card.lastHealthCheckAt)}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

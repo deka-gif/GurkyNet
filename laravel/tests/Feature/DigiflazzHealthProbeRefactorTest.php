@@ -8,6 +8,7 @@ use App\Models\ProductProvider;
 use App\Models\ProductProviderSku;
 use App\Models\Provider;
 use App\Services\ProductProviders\ProductProviderHealthService;
+use App\Services\ProductProviders\ProviderHealthStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +24,6 @@ class DigiflazzHealthProbeRefactorTest extends TestCase
     {
         parent::setUp();
 
-        // Reset accumulated HTTP stubs from TestCase so this suite owns Digiflazz responses.
         Http::swap(new \Illuminate\Http\Client\Factory);
 
         config([
@@ -67,43 +67,64 @@ class DigiflazzHealthProbeRefactorTest extends TestCase
         ]);
     }
 
-    public function test_generic_invalid_message_without_deposit_is_partial_not_auth_failed(): void
+    public function test_rc_40_is_config_error(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/cek-saldo' => Http::response([
+                'data' => ['rc' => '40', 'message' => 'Payload Error'],
+            ], 400),
+        ]);
+
+        $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
+        $this->assertSame(ProviderHealthStatus::CONFIG_ERROR, $fresh->api_status);
+        $this->assertSame('Payload Error', $fresh->last_error);
+    }
+
+    public function test_rc_41_is_auth_failed(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/cek-saldo' => Http::response([
+                'data' => ['rc' => '41', 'message' => 'Signature tidak valid'],
+            ], 400),
+        ]);
+
+        $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
+        $this->assertSame(ProviderHealthStatus::AUTH_FAILED, $fresh->api_status);
+        $this->assertSame('Signature tidak valid', $fresh->last_error);
+    }
+
+    public function test_rc_42_is_auth_failed_even_with_deposit_field(): void
     {
         Http::fake([
             'https://api.digiflazz.com/v1/cek-saldo' => Http::response([
                 'data' => [
                     'rc' => '42',
-                    'message' => 'Parameter request tidak valid untuk deposit',
+                    'message' => 'Gagal memproses API Buyer',
+                    'deposit' => 1500000,
                 ],
-            ], 200),
+            ], 400),
         ]);
 
         $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
-
-        $this->assertSame('partial', $fresh->api_status);
-        $this->assertNotSame('auth_failed', $fresh->api_status);
-        $this->assertStringContainsString('tidak valid', (string) $fresh->last_error);
-        $this->assertStringNotContainsString('API Key atau Secret', (string) $fresh->last_error);
+        $this->assertSame(ProviderHealthStatus::AUTH_FAILED, $fresh->api_status);
+        $this->assertSame('Gagal memproses API Buyer', $fresh->last_error);
+        $this->assertNull($fresh->balance);
     }
 
-    public function test_wrong_signature_is_auth_failed_with_provider_message(): void
+    public function test_rc_45_is_network_configuration(): void
     {
         Http::fake([
             'https://api.digiflazz.com/v1/cek-saldo' => Http::response([
-                'data' => [
-                    'rc' => '01',
-                    'message' => 'Wrong Signature',
-                ],
-            ], 200),
+                'data' => ['rc' => '45', 'message' => 'IP tidak dikenali'],
+            ], 400),
         ]);
 
         $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
-
-        $this->assertSame('auth_failed', $fresh->api_status);
-        $this->assertSame('Wrong Signature', $fresh->last_error);
+        $this->assertSame(ProviderHealthStatus::NETWORK_CONFIGURATION, $fresh->api_status);
+        $this->assertSame('IP tidak dikenali', $fresh->last_error);
     }
 
-    public function test_balance_ok_is_online_and_logs_request_attempt(): void
+    public function test_success_deposit_is_online_and_logs_request_attempt(): void
     {
         Log::spy();
 
@@ -118,13 +139,28 @@ class DigiflazzHealthProbeRefactorTest extends TestCase
 
         $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
 
-        $this->assertSame('online', $fresh->api_status);
+        $this->assertSame(ProviderHealthStatus::ONLINE, $fresh->api_status);
         $this->assertSame(125000.0, (float) $fresh->balance);
         $this->assertNull($fresh->last_error);
 
         Log::shouldHaveReceived('info')->withArgs(function ($message) {
             return is_string($message) && str_contains($message, 'Digiflazz API Request Attempt');
         })->atLeast()->once();
+    }
+
+    public function test_auth_ok_without_deposit_is_partial(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/cek-saldo' => Http::response([
+                'data' => [
+                    'message' => 'Balance unavailable',
+                ],
+            ], 200),
+        ]);
+
+        $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
+        $this->assertSame(ProviderHealthStatus::PARTIAL, $fresh->api_status);
+        $this->assertSame('Balance unavailable', $fresh->last_error);
     }
 
     public function test_http_401_is_auth_failed(): void
@@ -136,8 +172,19 @@ class DigiflazzHealthProbeRefactorTest extends TestCase
         ]);
 
         $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
-
-        $this->assertSame('auth_failed', $fresh->api_status);
+        $this->assertSame(ProviderHealthStatus::AUTH_FAILED, $fresh->api_status);
         $this->assertSame('Unauthorized', $fresh->last_error);
+    }
+
+    public function test_http_503_is_offline(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/cek-saldo' => Http::response([
+                'data' => ['message' => 'Service Unavailable'],
+            ], 503),
+        ]);
+
+        $fresh = app(ProductProviderHealthService::class)->check($this->digi->fresh());
+        $this->assertSame(ProviderHealthStatus::OFFLINE, $fresh->api_status);
     }
 }
