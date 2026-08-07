@@ -95,6 +95,43 @@ type SyncSummary = {
   providerName?: string;
 };
 
+type AutoSyncStatus = {
+  enabled?: boolean;
+  status?: string;
+  running?: boolean;
+  schedule?: { frequency?: string; time?: string; timezone?: string; display?: string };
+  providers?: Array<{
+    code: string;
+    name: string;
+    included?: boolean;
+    lastResult?: {
+      status?: string;
+      provider_sku_total?: number;
+      database_sku_total?: number;
+      duration_sec?: number | null;
+      error?: string | null;
+      provider_code?: string | null;
+    } | null;
+  }>;
+  step?: string | null;
+  steps?: Array<{ label?: string; status?: string; error?: string }>;
+  lastSynchronization?: {
+    at?: string | null;
+    dateDisplay?: string | null;
+    timeDisplay?: string | null;
+    status?: string | null;
+    durationSec?: number | null;
+  };
+  nextSynchronization?: {
+    at?: string | null;
+    dateDisplay?: string | null;
+    timeDisplay?: string | null;
+  };
+  lastError?: string | null;
+  lastStatus?: string | null;
+  message?: string | null;
+};
+
 const SYNC_STEPS = [
   'Connecting Provider...',
   'Authenticating...',
@@ -166,8 +203,16 @@ const unwrapProviders = (payload: any): ProviderCard[] => {
   return [];
 };
 
+const unwrapAutoSync = (payload: any): AutoSyncStatus | null => {
+  const data = payload?.data ?? payload;
+  if (data?.autoSync && typeof data.autoSync === 'object') return data.autoSync as AutoSyncStatus;
+  if (data?.schedule && typeof data.schedule === 'object') return data as AutoSyncStatus;
+  return null;
+};
+
 export const OperationsProductProviderControl: React.FC = () => {
   const [cards, setCards] = useState<ProviderCard[]>([]);
+  const [autoSync, setAutoSync] = useState<AutoSyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [globalRefreshing, setGlobalRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,6 +248,8 @@ export const OperationsProductProviderControl: React.FC = () => {
       const res = await operationsService.getProductProviderControl();
       if (!mountedRef.current) return;
       setCards(unwrapProviders(res));
+      const nextAuto = unwrapAutoSync(res);
+      if (nextAuto) setAutoSync(nextAuto);
     } catch (e: any) {
       if (!mountedRef.current) return;
       setError(e?.message || e?.response?.data?.message || 'Gagal memuat Control Center');
@@ -214,6 +261,25 @@ export const OperationsProductProviderControl: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Poll auto-sync status while scheduler is running (server-driven steps, not a JS sync timer).
+  useEffect(() => {
+    if (!autoSync?.running) return;
+    const id = window.setInterval(async () => {
+      try {
+        const res = await operationsService.getAutomaticCatalogSyncStatus();
+        if (!mountedRef.current) return;
+        const next = unwrapAutoSync(res);
+        if (next) setAutoSync(next);
+        if (next && !next.running) {
+          await load();
+        }
+      } catch {
+        /* ignore poll errors */
+      }
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [autoSync?.running, load]);
 
   useEffect(() => {
     if (!toast) return;
@@ -254,6 +320,8 @@ export const OperationsProductProviderControl: React.FC = () => {
       const providers = unwrapProviders(res);
       if (providers.length > 0) setCards(providers);
       else await load();
+      const nextAuto = unwrapAutoSync(res);
+      if (nextAuto) setAutoSync(nextAuto);
       setLastRefreshedAt(new Date());
       setToast('Refreshing Product Provider selesai.');
     } catch (e: any) {
@@ -429,6 +497,127 @@ export const OperationsProductProviderControl: React.FC = () => {
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           {error}
+        </div>
+      )}
+
+      {autoSync && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Automatic Synchronization</p>
+              <h2 className="text-lg font-extrabold text-slate-900 mt-0.5">Nightly Product Provider Sync</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Digiflazz prepaid → cooldown → Digiflazz pasca → VIPayment. Manual Sync Now tetap tersedia per kartu.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${
+                  autoSync.enabled
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${autoSync.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                {autoSync.enabled ? 'Enabled' : 'Disabled'}
+              </span>
+              {autoSync.running && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border bg-indigo-50 text-indigo-800 border-indigo-200">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Running…
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Schedule</p>
+              <p className="mt-1 font-extrabold text-slate-900">{autoSync.schedule?.frequency || 'Daily'}</p>
+              <p className="text-slate-600 font-semibold">{autoSync.schedule?.display || autoSync.schedule?.time || '—'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Last Synchronization</p>
+              <p className="mt-1 font-extrabold text-slate-900">
+                {autoSync.lastSynchronization?.dateDisplay || '—'}
+              </p>
+              <p className="text-slate-600 font-semibold">
+                {autoSync.lastSynchronization?.timeDisplay || '—'}
+                {autoSync.lastSynchronization?.status
+                  ? ` · ${String(autoSync.lastSynchronization.status).toUpperCase()}`
+                  : ''}
+                {autoSync.lastSynchronization?.durationSec != null
+                  ? ` · ${autoSync.lastSynchronization.durationSec}s`
+                  : ''}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Next Synchronization</p>
+              <p className="mt-1 font-extrabold text-slate-900">
+                {autoSync.nextSynchronization?.dateDisplay || '—'}
+              </p>
+              <p className="text-slate-600 font-semibold">{autoSync.nextSynchronization?.timeDisplay || '—'}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {(autoSync.providers || []).map((p) => (
+              <span
+                key={p.code}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                {p.name}
+                {p.lastResult?.status ? (
+                  <span
+                    className={
+                      p.lastResult.status === 'success'
+                        ? 'text-emerald-700'
+                        : p.lastResult.status === 'partial'
+                          ? 'text-amber-700'
+                          : 'text-rose-700'
+                    }
+                  >
+                    · {p.lastResult.status}
+                    {p.lastResult.provider_sku_total != null && p.lastResult.database_sku_total != null
+                      ? ` (${p.lastResult.provider_sku_total}/${p.lastResult.database_sku_total})`
+                      : ''}
+                  </span>
+                ) : null}
+              </span>
+            ))}
+          </div>
+
+          {autoSync.running && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+              <div className="flex items-center gap-2 font-extrabold">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Automatic Synchronization Running…
+              </div>
+              <p className="mt-2 text-[12px] font-semibold">{autoSync.step || 'Preparing…'}</p>
+              {(autoSync.steps || []).length > 0 && (
+                <ol className="mt-2 space-y-1 text-[12px]">
+                  {autoSync.steps!.slice(-6).map((s, idx) => (
+                    <li key={`${s.label}-${idx}`} className="font-semibold">
+                      {s.status === 'success' ? '✓ ' : s.status === 'failed' ? '✕ ' : '· '}
+                      {s.label}
+                      {s.error ? ` — ${s.error}` : ''}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
+          {!autoSync.running && autoSync.lastStatus === 'failed' && autoSync.lastError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-extrabold">Automatic Synchronization Failed</p>
+                <p className="mt-0.5 text-[12px] font-semibold">{autoSync.lastError}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

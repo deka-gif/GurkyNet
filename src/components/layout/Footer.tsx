@@ -1,16 +1,15 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Twitter, Youtube, Mail, Phone, MapPin, Shield, HelpCircle } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
 import { resolveMediaSrc } from '../../utils/mediaUrl';
+import { isLegalSlug, legalPath } from '../legal/legalContent';
+
+function pageHref(slug: string): string {
+  return isLegalSlug(slug) ? legalPath(slug) : `/page/${slug}`;
+}
 
 export const Footer = () => {
-  const { settings, fetchSettings, pages, fetchPages } = useWebsiteStore();
-
-  useEffect(() => {
-    fetchSettings();
-    fetchPages();
-  }, []);
+  const { settings, pages } = useWebsiteStore();
 
   // Filter some common static pages to display at the very bottom, others in the "Perusahaan / Informasi" column
   const bottomPages = pages.filter(p =>
@@ -115,7 +114,7 @@ export const Footer = () => {
               {mainPages.length > 0 ? (
                 mainPages.map((page) => (
                   <li key={page.id}>
-                    <Link to={`/page/${page.slug}`} className="text-gray-600 hover:text-primary-600 transition-colors">
+                    <Link to={pageHref(page.slug)} className="text-gray-600 hover:text-primary-600 transition-colors">
                       {page.title}
                     </Link>
                   </li>
@@ -185,15 +184,15 @@ export const Footer = () => {
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-gray-500">
             {bottomPages.length > 0 ? (
               bottomPages.map((page) => (
-                <Link key={page.id} to={`/page/${page.slug}`} className="hover:text-primary-600 transition-colors">
+                <Link key={page.id} to={pageHref(page.slug)} className="hover:text-primary-600 transition-colors">
                   {page.title}
                 </Link>
               ))
             ) : (
               <>
-                <Link to="/page/privacy-policy" className="hover:text-primary-600 transition-colors">Kebijakan Privasi</Link>
-                <Link to="/page/terms-conditions" className="hover:text-primary-600 transition-colors">Ketentuan Layanan</Link>
-                <Link to="/page/refund-policy" className="hover:text-primary-600 transition-colors">Kebijakan Pengembalian</Link>
+                <Link to="/legal/privacy-policy" className="hover:text-primary-600 transition-colors">Kebijakan Privasi</Link>
+                <Link to="/legal/terms-conditions" className="hover:text-primary-600 transition-colors">Ketentuan Layanan</Link>
+                <Link to="/legal/refund-policy" className="hover:text-primary-600 transition-colors">Kebijakan Pengembalian</Link>
               </>
             )}
           </div>

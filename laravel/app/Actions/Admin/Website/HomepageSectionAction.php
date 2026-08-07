@@ -4,6 +4,7 @@ namespace App\Actions\Admin\Website;
 
 use App\Repositories\Contracts\HomepageSectionRepositoryInterface;
 use App\Models\HomepageSection;
+use App\Services\Website\PublicHomepageCache;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -30,16 +31,25 @@ class HomepageSectionAction
 
     public function create(array $data): HomepageSection
     {
-        return $this->repository->create($data);
+        $section = $this->repository->create($data);
+        PublicHomepageCache::forget();
+
+        return $section;
     }
 
     public function update(int $id, array $data): HomepageSection
     {
-        return $this->repository->update($id, $data);
+        $section = $this->repository->update($id, $data);
+        PublicHomepageCache::forget();
+
+        return $section;
     }
 
     public function delete(int $id): bool
     {
-        return $this->repository->delete($id);
+        $ok = $this->repository->delete($id);
+        PublicHomepageCache::forget();
+
+        return $ok;
     }
 }

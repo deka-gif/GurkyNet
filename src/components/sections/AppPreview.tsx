@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
 import { resolveMediaSrc } from '../../utils/mediaUrl';
 
-export const AppPreview = () => {
+export const AppPreview = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const navigate = useNavigate();
   const { settings, sections, banners } = useWebsiteStore();
   const bannerSection = sections.find((s) => s.componentType === 'banner');

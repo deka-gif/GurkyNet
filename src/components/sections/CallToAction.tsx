@@ -1,11 +1,23 @@
 import { motion } from 'motion/react';
 import { Download } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { useWebsiteStore } from '../../store/website.store';
+import type { HomepageSection } from '../../types';
 
-export const CallToAction = () => {
+type Props = { section?: HomepageSection };
+
+export const CallToAction = ({ section }: Props = {}) => {
   const { settings } = useWebsiteStore();
   const websiteName = settings?.websiteName || 'GurkyNet';
+  const title = section?.title || `Mulai Gunakan ${websiteName} Sekarang`;
+  const description =
+    section?.description ||
+    'Nikmati pengalaman transaksi PPOB yang cepat, aman, dan modern dalam satu aplikasi.';
+  const buttonLabel = section?.buttonLabel || 'Download APK';
+  const buttonUrl = section?.buttonUrl || '#download-app';
+  const isExternal = buttonUrl.startsWith('http');
+  const isHash = buttonUrl.startsWith('#');
 
   return (
     <section className="py-20 bg-white">
@@ -17,7 +29,6 @@ export const CallToAction = () => {
           transition={{ duration: 0.6 }}
           className="bg-gradient-to-br from-primary-600 to-accent-600 rounded-[2.5rem] p-10 md:p-16 text-center text-white shadow-2xl shadow-primary-900/20 relative overflow-hidden"
         >
-          {/* Background Patterns */}
           <div className="absolute inset-0 z-0 opacity-10">
             <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -31,29 +42,45 @@ export const CallToAction = () => {
           <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[150%] bg-white/10 rounded-full blur-3xl rotate-45 pointer-events-none"></div>
 
           <div className="relative z-10 max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold mb-6 leading-tight">
-              Mulai Gunakan {websiteName} Sekarang
-            </h2>
-            <p className="text-lg md:text-xl text-primary-100 mb-10 max-w-2xl mx-auto">
-              Nikmati pengalaman transaksi PPOB yang cepat, aman, dan modern dalam satu aplikasi.
-            </p>
+            {section?.subtitle && (
+              <p className="text-primary-100 text-sm font-bold uppercase tracking-widest mb-3">{section.subtitle}</p>
+            )}
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold mb-6 leading-tight">{title}</h2>
+            <p className="text-lg md:text-xl text-primary-100 mb-10 max-w-2xl mx-auto">{description}</p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a
-                href="#download-app"
-                onClick={(e) => { e.preventDefault(); document.getElementById('download-app')?.scrollIntoView({ behavior: 'smooth' }); }}
-                className="w-full sm:w-auto"
-              >
-                <Button variant="secondary" className="w-full px-8 py-4 font-bold text-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-                  <Download className="w-6 h-6" />
-                  Download APK
-                </Button>
-              </a>
+              {isExternal ? (
+                <a href={buttonUrl} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                  <Button variant="secondary" className="w-full px-8 py-4 font-bold text-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                    <Download className="w-6 h-6" />
+                    {buttonLabel}
+                  </Button>
+                </a>
+              ) : isHash ? (
+                <a
+                  href={buttonUrl}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document.getElementById(buttonUrl.replace('#', ''))?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="w-full sm:w-auto"
+                >
+                  <Button variant="secondary" className="w-full px-8 py-4 font-bold text-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                    <Download className="w-6 h-6" />
+                    {buttonLabel}
+                  </Button>
+                </a>
+              ) : (
+                <Link to={buttonUrl} className="w-full sm:w-auto">
+                  <Button variant="secondary" className="w-full px-8 py-4 font-bold text-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                    <Download className="w-6 h-6" />
+                    {buttonLabel}
+                  </Button>
+                </Link>
+              )}
             </div>
 
-            <div className="mt-8 text-primary-200 text-sm font-medium">
-              Gratis • Aman • Terpercaya
-            </div>
+            <div className="mt-8 text-primary-200 text-sm font-medium">Gratis • Aman • Terpercaya</div>
           </div>
         </motion.div>
       </div>

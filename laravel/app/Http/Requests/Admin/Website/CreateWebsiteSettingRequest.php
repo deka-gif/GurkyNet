@@ -38,6 +38,9 @@ class CreateWebsiteSettingRequest extends FormRequest
             'timezone' => 'nullable|string|max:100',
             'currency' => 'nullable|string|max:10',
             'language' => 'nullable|string|max:10',
+            'seo_title' => 'nullable|string|max:255',
+            'seo_description' => 'nullable|string',
+            'seo_keywords' => 'nullable|string|max:500',
         ];
     }
 }

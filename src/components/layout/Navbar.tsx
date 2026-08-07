@@ -48,18 +48,13 @@ export const Navbar = () => {
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
   const [openMobileSubmenus, setOpenMobileSubmenus] = useState<Record<number, boolean>>({});
 
-  const { settings, fetchSettings, menus, fetchMenus } = useWebsiteStore();
+  const { settings, menus } = useWebsiteStore();
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
     };
     window.addEventListener('scroll', handleScroll);
-
-    // Fetch settings and menus (with cache-first check in the store)
-    fetchSettings();
-    fetchMenus();
-
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 

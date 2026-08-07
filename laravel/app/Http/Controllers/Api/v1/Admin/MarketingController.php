@@ -350,6 +350,8 @@ class MarketingController extends Controller
             'product.providerSkus.productProvider',
         ]);
 
+        \App\Services\Website\PublicHomepageCache::forget();
+
         return $this->successResponse('Featured product berhasil ditambahkan.', [
             'id' => $featured->id,
             'display_order' => (int) $featured->display_order,
@@ -377,6 +379,8 @@ class MarketingController extends Controller
             'product.providerSkus.productProvider',
         ]);
 
+        \App\Services\Website\PublicHomepageCache::forget();
+
         return $this->successResponse('Featured product berhasil diperbarui.', [
             'id' => $featured->id,
             'display_order' => (int) $featured->display_order,
@@ -390,6 +394,7 @@ class MarketingController extends Controller
     {
         $featured = HomepageFeaturedProduct::query()->findOrFail($id);
         $featured->delete();
+        \App\Services\Website\PublicHomepageCache::forget();
 
         return $this->successResponse('Featured product berhasil dihapus.');
     }

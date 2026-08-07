@@ -24,7 +24,7 @@ const steps = [
   },
 ];
 
-export const HowItWorks = () => {
+export const HowItWorks = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   return (
     <section className="py-20 md:py-32 bg-primary-900 text-white relative overflow-hidden">
       {/* Background Decors */}

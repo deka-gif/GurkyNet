@@ -22,3 +22,76 @@
     @apply font-sans antialiased bg-gray-50 text-gray-900;
   }
 }
+
+/* Sprint 7.3 — Legal Center prose */
+.legal-prose {
+  @apply text-gray-800 text-[15px] md:text-base leading-[1.8];
+}
+.legal-prose h1 {
+  @apply text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mt-8 mb-4;
+}
+.legal-prose h2 {
+  @apply text-xl md:text-2xl font-bold text-gray-900 tracking-tight mt-10 mb-3 scroll-mt-28;
+}
+.legal-prose h3 {
+  @apply text-lg font-bold text-gray-900 mt-8 mb-2 scroll-mt-28;
+}
+.legal-prose p {
+  @apply mb-4;
+}
+.legal-prose a {
+  @apply text-primary-700 font-semibold underline underline-offset-2 hover:text-primary-800;
+}
+.legal-prose ul {
+  @apply list-disc pl-6 mb-4 space-y-2;
+}
+.legal-prose ol {
+  @apply list-decimal pl-6 mb-4 space-y-2;
+}
+.legal-prose blockquote {
+  @apply border-l-4 border-primary-400 bg-primary-50/50 pl-4 py-3 my-5 rounded-r-xl text-gray-700 italic;
+}
+.legal-prose pre,
+.legal-prose code {
+  @apply font-mono text-[13px] bg-slate-900 text-slate-100 rounded-xl;
+}
+.legal-prose pre {
+  @apply p-4 overflow-x-auto mb-5;
+}
+.legal-prose :not(pre) > code {
+  @apply px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-800;
+}
+.legal-prose table {
+  @apply w-full border-collapse my-6 text-sm;
+}
+.legal-prose th,
+.legal-prose td {
+  @apply border border-gray-200 px-3 py-2 text-left;
+}
+.legal-prose th {
+  @apply bg-slate-50 font-bold text-gray-800;
+}
+.legal-prose img {
+  @apply max-w-full rounded-xl my-6 shadow-sm;
+}
+.legal-prose .legal-video {
+  @apply relative my-6 aspect-video rounded-xl overflow-hidden bg-slate-100;
+}
+.legal-prose .legal-video iframe {
+  @apply absolute inset-0 w-full h-full border-0;
+}
+.legal-editor-surface h2 {
+  @apply text-xl font-bold mt-4 mb-2;
+}
+.legal-editor-surface h3 {
+  @apply text-lg font-bold mt-3 mb-1.5;
+}
+.legal-editor-surface ul {
+  @apply list-disc pl-6;
+}
+.legal-editor-surface ol {
+  @apply list-decimal pl-6;
+}
+.legal-editor-surface blockquote {
+  @apply border-l-4 border-primary-300 pl-3 italic text-gray-600;
+}

@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, Navigate } from 'react-router-dom';
 import { websiteService } from '../../services/website.service';
 import { StaticPage } from '../../types';
 import { ServerErrorState, EmptyState } from '../../components/ui/FeedbackStates';
 import { ArrowLeft, BookOpen, Clock } from 'lucide-react';
+import { isLegalSlug, legalPath } from '../../components/legal/legalContent';
 
 export const StaticPageView = () => {
   const { slug } = useParams<{ slug: string }>();
   const [page, setPage] = useState<StaticPage | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  if (isLegalSlug(slug)) {
+    return <Navigate to={legalPath(slug!)} replace />;
+  }
 
   const fetchPageDetails = async () => {
     if (!slug) return;

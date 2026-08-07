@@ -13,7 +13,7 @@ const appInfo = {
   downloadUrl: '#'
 };
 
-export const DownloadApp = () => {
+export const DownloadApp = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const { settings, sections } = useWebsiteStore();
   const bannerSection = sections.find((s) => s.componentType === 'banner');
   const appName = settings?.websiteName || 'GurkyNet';

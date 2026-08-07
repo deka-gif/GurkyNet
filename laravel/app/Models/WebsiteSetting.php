@@ -33,6 +33,9 @@ class WebsiteSetting extends Model
         'timezone',
         'currency',
         'language',
+        'seo_title',
+        'seo_description',
+        'seo_keywords',
     ];
 
     protected $casts = [

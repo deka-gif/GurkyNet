@@ -178,6 +178,41 @@ class PublicWebsiteController extends Controller
         );
     }
 
+    /**
+     * GET /api/v1/public/legal — Legal Center document index (Sprint 7.3).
+     */
+    public function legalIndex(): JsonResponse
+    {
+        $payload = \Illuminate\Support\Facades\Cache::remember(
+            \App\Services\Website\PublicLegalCache::INDEX_KEY,
+            \App\Services\Website\PublicLegalCache::TTL_SECONDS,
+            fn () => app(\App\Services\Website\LegalCenterService::class)->publicIndex()
+        );
+
+        return $this->successResponse('Legal Center berhasil dimuat.', [
+            'documents' => $payload,
+            'cachedForSeconds' => \App\Services\Website\PublicLegalCache::TTL_SECONDS,
+        ]);
+    }
+
+    /**
+     * GET /api/v1/public/legal/{slug} — published legal document only.
+     */
+    public function legalBySlug(string $slug): JsonResponse
+    {
+        $payload = \Illuminate\Support\Facades\Cache::remember(
+            \App\Services\Website\PublicLegalCache::docKey($slug),
+            \App\Services\Website\PublicLegalCache::TTL_SECONDS,
+            fn () => app(\App\Services\Website\LegalCenterService::class)->publicDocument($slug)
+        );
+
+        if (! $payload) {
+            return $this->errorResponse('Dokumen legal tidak ditemukan.', 404);
+        }
+
+        return $this->successResponse('Dokumen legal berhasil dimuat.', $payload);
+    }
+
     public function homepageSections(): JsonResponse
     {
         $sections = $this->sectionAction->listAll()
@@ -193,39 +228,66 @@ class PublicWebsiteController extends Controller
 
     /**
      * Aggregated homepage payload for mobile/web bootstrap.
-     * GET /api/v1/public/homepage
+     * GET /api/v1/public/homepage — cached 5 minutes (Sprint 7.1).
      */
     public function homepage(): JsonResponse
     {
-        $settings = $this->settingAction->getLatest();
-        $sections = $this->sectionAction->listAll()
-            ->filter(fn ($section) => $section->visible === true && $section->status === 'active')
-            ->sortBy('display_order')
-            ->values();
-        $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
-            ->visibleInCarousel()
-            ->orderedForDisplay()
-            ->take(10)
-            ->get();
-        $heroSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'hero');
-        $homepageCategories = $this->homepageCatalogBuckets();
-        $featuredProducts = $this->featuredProducts();
-        $faqs = Faq::orderBy('order')->get()->map(fn (Faq $faq) => [
-            'id' => $faq->id,
-            'question' => $faq->question,
-            'answer' => $faq->answer,
-            'order' => (int) $faq->order,
-        ])->values();
+        $payload = \App\Services\Website\PublicHomepageCache::remember(function () {
+            $settings = $this->settingAction->getLatest();
+            $sections = $this->sectionAction->listAll()
+                ->filter(fn ($section) => $section->visible === true && $section->status === 'active')
+                ->sortBy('display_order')
+                ->values();
+            $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
+                ->visibleInCarousel()
+                ->orderedForDisplay()
+                ->take(10)
+                ->get();
+            $heroSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'hero');
+            $homepageCategories = $this->homepageCatalogBuckets();
+            $featuredProducts = $this->featuredProducts();
+            $faqs = Faq::orderBy('order')->get()->map(fn (Faq $faq) => [
+                'id' => $faq->id,
+                'question' => $faq->question,
+                'answer' => $faq->answer,
+                'order' => (int) $faq->order,
+            ])->values();
 
-        return $this->successResponse('Homepage berhasil dimuat.', [
-            'settings' => $settings ? new WebsiteSettingResource($settings) : null,
-            'sections' => HomepageSectionResource::collection($sections),
-            'banners' => BannerResource::collection($banners),
-            'hero' => $heroSection ? new HomepageSectionResource($heroSection) : null,
-            'homepageCategories' => $homepageCategories,
-            'featuredProducts' => ProductResource::collection($featuredProducts),
-            'faqs' => $faqs,
-        ]);
+            $menus = $this->menuAction->listAll()
+                ->filter(fn ($menu) => (bool) $menu->visible)
+                ->sortBy('display_order')
+                ->values();
+
+            $pages = $this->pageAction->listAll()
+                ->filter(fn ($page) => ($page->status ?? '') === 'published')
+                ->values();
+
+            $seoSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'seo');
+
+            return [
+                'settings' => $settings ? (new WebsiteSettingResource($settings))->resolve() : null,
+                'sections' => HomepageSectionResource::collection($sections)->resolve(),
+                'banners' => BannerResource::collection($banners)->resolve(),
+                'hero' => $heroSection ? (new HomepageSectionResource($heroSection))->resolve() : null,
+                'homepageCategories' => $homepageCategories,
+                'featuredProducts' => ProductResource::collection($featuredProducts)->resolve(),
+                'faqs' => $faqs->all(),
+                'menus' => WebsiteMenuResource::collection($menus)->resolve(),
+                'pages' => StaticPageResource::collection($pages)->resolve(),
+                'seo' => [
+                    'title' => $seoSection?->title
+                        ?? $settings?->seo_title
+                        ?? $settings?->website_name,
+                    'description' => $seoSection?->description
+                        ?? $settings?->seo_description
+                        ?? $settings?->tagline,
+                    'keywords' => $settings?->seo_keywords,
+                ],
+                'cachedForSeconds' => \App\Services\Website\PublicHomepageCache::TTL_SECONDS,
+            ];
+        });
+
+        return $this->successResponse('Homepage berhasil dimuat.', $payload);
     }
 
     public function banners(): JsonResponse

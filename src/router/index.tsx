@@ -5,6 +5,7 @@ import { DashboardLayout } from '../layouts/DashboardLayout';
 import { HomePage } from '../pages/public/HomePage';
 import { DocsPage } from '../pages/public/DocsPage';
 import { StaticPageView } from '../pages/public/StaticPageView';
+import { LegalCenterPage } from '../pages/public/LegalCenterPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
@@ -73,6 +74,8 @@ import {
   MarketingAnnouncementCenter,
   MarketingWebsiteSettings,
   MarketingHomepageSections,
+  MarketingHomepageBuilder,
+  MarketingLegalCenter,
   MarketingWebsiteMenu,
   MarketingStaticPages,
   MarketingMediaLibrary,
@@ -96,6 +99,14 @@ export const router = createBrowserRouter([
       {
         path: 'docs',
         element: <DocsPage />
+      },
+      {
+        path: 'legal',
+        element: <LegalCenterPage />
+      },
+      {
+        path: 'legal/:slug',
+        element: <LegalCenterPage />
       },
       {
         path: 'page/:slug',
@@ -293,6 +304,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner']}>
             <MarketingWebsiteSettings />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'marketing/website/homepage-builder',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner', 'Operations']}>
+            <MarketingHomepageBuilder />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'marketing/website/legal-center',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner', 'Operations']}>
+            <MarketingLegalCenter />
           </ProtectedRoute>
         )
       },

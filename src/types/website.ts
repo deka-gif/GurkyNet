@@ -39,6 +39,9 @@ export interface WebsiteSetting {
   timezone?: string;
   currency?: string;
   language?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
   createdAt?: string;
   lastUpdated?: string;
 }
@@ -47,22 +50,49 @@ export type HomepageSectionComponentType =
   | 'hero'
   | 'banner'
   | 'promo'
+  | 'features'
   | 'categories'
   | 'product_grid'
+  | 'statistics'
+  | 'why_us'
+  | 'partners'
+  | 'testimonials'
+  | 'how_it_works'
   | 'announcement'
   | 'news'
   | 'faq'
-  | 'footer';
+  | 'cta'
+  | 'footer'
+  | 'seo';
+
+export type HomepageSectionAnimation = 'fade' | 'slide_up' | 'scale' | 'none';
+
+export interface HomepageSectionContentItem {
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  value?: string;
+  icon?: string;
+  image?: string;
+  url?: string;
+}
 
 export interface HomepageSection {
   id: number;
   title: string;
+  subtitle?: string;
   slug: string;
   componentType: HomepageSectionComponentType;
   displayOrder: number;
   visible: boolean;
   status?: string;
   description?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  buttonLabel?: string;
+  buttonUrl?: string;
+  animation?: HomepageSectionAnimation;
+  contentItems?: HomepageSectionContentItem[];
   heroBackgroundMediaId?: number;
   heroIllustrationMediaId?: number;
   heroMobileImageMediaId?: number;
@@ -156,5 +186,13 @@ export interface HomepagePayload {
     answer: string;
     order: number;
   }>;
+  menus?: WebsiteMenu[];
+  pages?: StaticPage[];
+  seo?: {
+    title?: string | null;
+    description?: string | null;
+    keywords?: string | null;
+  };
+  cachedForSeconds?: number;
 }
 

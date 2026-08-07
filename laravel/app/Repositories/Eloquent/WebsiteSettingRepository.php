@@ -47,6 +47,8 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
     public function create(array $data): WebsiteSetting
     {
         $setting = WebsiteSetting::create($data);
+        \App\Services\Website\PublicHomepageCache::forget();
+
         return $setting->load(self::WITH);
     }
 
@@ -59,6 +61,8 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
         } else {
             $setting->update($data);
         }
+        \App\Services\Website\PublicHomepageCache::forget();
+
         return $setting->load(self::WITH);
     }
 

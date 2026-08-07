@@ -208,7 +208,9 @@ class ProviderMultiIndicatorHealthTest extends TestCase
 
         $res = $this->getJson('/api/v1/admin/operations/product-provider-control');
         $res->assertOk();
-        $card = collect($res->json('data'))->firstWhere('code', $this->digi->code);
+        $data = $res->json('data');
+        $providers = $data['providers'] ?? $data;
+        $card = collect($providers)->firstWhere('code', $this->digi->code);
         $this->assertNotNull($card);
         $this->assertSame('PARTIAL', $card['apiStatusLabel']);
         $this->assertStringContainsString('saldo', strtolower((string) ($card['statusDescription'] ?? '')));

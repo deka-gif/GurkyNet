@@ -11,48 +11,137 @@ import { DownloadApp } from '../../components/sections/DownloadApp';
 import { Faq } from '../../components/sections/Faq';
 import { Contact } from '../../components/sections/Contact';
 import { CallToAction } from '../../components/sections/CallToAction';
+import { CmsContentSection } from '../../components/sections/CmsContentSection';
+import { CmsSectionShell } from '../../components/sections/CmsSectionShell';
+import { HomepageSkeleton } from '../../components/sections/HomepageSkeleton';
 import { ServerErrorState } from '../../components/ui/FeedbackStates';
+import type { HomepageSection } from '../../types';
+
+const renderSection = (sec: HomepageSection) => {
+  switch (sec.componentType) {
+    case 'hero':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <Hero section={sec} />
+        </CmsSectionShell>
+      );
+    case 'news':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <About section={sec} />
+        </CmsSectionShell>
+      );
+    case 'promo':
+    case 'features':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <Features section={sec} />
+        </CmsSectionShell>
+      );
+    case 'categories':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <Services section={sec} />
+        </CmsSectionShell>
+      );
+    case 'product_grid':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <FeaturedProducts section={sec} />
+        </CmsSectionShell>
+      );
+    case 'banner':
+      return (
+        <React.Fragment key={sec.id}>
+          <CmsSectionShell section={sec}>
+            <AppPreview section={sec} />
+          </CmsSectionShell>
+          <CmsSectionShell section={sec}>
+            <DownloadApp section={sec} />
+          </CmsSectionShell>
+        </React.Fragment>
+      );
+    case 'how_it_works':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <HowItWorks section={sec} />
+        </CmsSectionShell>
+      );
+    case 'statistics':
+    case 'why_us':
+    case 'partners':
+    case 'testimonials':
+      return <CmsContentSection key={sec.id} section={sec} />;
+    case 'faq':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <Faq section={sec} />
+        </CmsSectionShell>
+      );
+    case 'announcement':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <Contact section={sec} />
+        </CmsSectionShell>
+      );
+    case 'cta':
+    case 'footer':
+      return (
+        <CmsSectionShell key={sec.id} section={sec}>
+          <CallToAction section={sec} />
+        </CmsSectionShell>
+      );
+    case 'seo':
+      return null;
+    default:
+      return null;
+  }
+};
 
 export const HomePage = () => {
-  const { 
-    sections, 
-    fetchSections, 
-    loadingSections, 
+  const {
+    sections,
+    loadingSections,
     errorSections,
     fetchHomepage,
+    homepageReady,
+    seo,
+    settings,
   } = useWebsiteStore();
 
   useEffect(() => {
-    fetchHomepage();
-  }, []);
+    void fetchHomepage();
+  }, [fetchHomepage]);
 
-  if (loadingSections) {
-    return (
-      <div className="pt-32 pb-20 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="container mx-auto px-4 max-w-lg text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <h3 className="text-lg font-bold text-gray-800">Memuat Tampilan Beranda...</h3>
-          <p className="text-sm text-gray-500 max-w-md mx-auto">Sedang menyelaraskan tata letak dan konten terkini dari CMS.</p>
-          
-          {/* Section Mock Skeletons */}
-          <div className="space-y-3 pt-6 max-w-md mx-auto">
-            <div className="h-4 bg-gray-200 rounded animate-pulse w-2/3 mx-auto" />
-            <div className="h-4 bg-gray-200 rounded animate-pulse w-full" />
-            <div className="h-4 bg-gray-200 rounded animate-pulse w-5/6 mx-auto" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!homepageReady) return;
+    const title = seo?.title || settings?.seoTitle || settings?.websiteName || 'GurkyNet';
+    const description = seo?.description || settings?.seoDescription || settings?.tagline || '';
+    document.title = title;
+    const ensureMeta = (name: string, content: string) => {
+      if (!content) return;
+      let el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+      if (!el) {
+        el = document.createElement('meta');
+        el.name = name;
+        document.head.appendChild(el);
+      }
+      el.content = content;
+    };
+    ensureMeta('description', description);
+    if (seo?.keywords || settings?.seoKeywords) {
+      ensureMeta('keywords', seo?.keywords || settings?.seoKeywords || '');
+    }
+  }, [homepageReady, seo, settings]);
 
-  if (errorSections) {
+  if (errorSections && !homepageReady) {
     return (
       <div className="pt-32 pb-20 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="container mx-auto px-4 max-w-md">
-          <ServerErrorState 
-            title="Gagal Memuat Konten" 
-            description={errorSections} 
-            onRetry={() => fetchSections(true)} 
+          <ServerErrorState
+            title="Gagal Memuat Konten"
+            description={errorSections}
+            onRetry={() => fetchHomepage(true)}
             retryText="Coba Lagi"
           />
         </div>
@@ -60,7 +149,10 @@ export const HomePage = () => {
     );
   }
 
-  // Fallback to default sections order if empty or not provisioned
+  if (loadingSections && !homepageReady) {
+    return <HomepageSkeleton />;
+  }
+
   if (sections.length === 0) {
     return (
       <>
@@ -79,47 +171,9 @@ export const HomePage = () => {
     );
   }
 
-  // Filter visible and active sections and sort by displayOrder
   const activeSections = [...sections]
     .filter((s) => s.visible && (s.status === undefined || s.status === 'active'))
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  return (
-    <>
-      {activeSections.map((sec) => {
-        switch (sec.componentType) {
-          case 'hero':
-            return <Hero key={sec.id} />;
-          case 'news':
-            return <About key={sec.id} />;
-          case 'promo':
-            return (
-              <React.Fragment key={sec.id}>
-                <Features />
-                <CallToAction />
-              </React.Fragment>
-            );
-          case 'categories':
-            return <Services key={sec.id} />;
-          case 'product_grid':
-            return <FeaturedProducts key={sec.id} />;
-          case 'banner':
-            return (
-              <React.Fragment key={sec.id}>
-                <AppPreview key={`${sec.id}-preview`} />
-                <DownloadApp key={`${sec.id}-download`} />
-              </React.Fragment>
-            );
-          case 'faq':
-            return <Faq key={sec.id} />;
-          case 'announcement':
-            return <Contact key={sec.id} />;
-          case 'footer':
-            return <CallToAction key={sec.id} />;
-          default:
-            return null;
-        }
-      })}
-    </>
-  );
+  return <>{activeSections.map((sec) => renderSection(sec))}</>;
 };

@@ -204,12 +204,21 @@ class ProviderRepository implements ProviderRepositoryInterface
 
         $disabled = $this->deactivateMissingDigiflazzSkus($seenSkusByListType, $digiflazzProvider);
 
-        $dbSkuTotal = ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count();
-        $providerSkuTotal = count($digiflazzProducts);
+        // Ops parity: product_count / database audit use ACTIVE Digiflazz SKUs only.
+        $dbSkuRows = ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count();
+        $dbSkuActive = ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)
+            ->where('is_active', true)
+            ->count();
+        $providerActive = 0;
+        foreach ($digiflazzProducts as $dp) {
+            if (($dp['buyer_product_status'] ?? false) && ($dp['seller_product_status'] ?? false)) {
+                $providerActive++;
+            }
+        }
 
         $digiflazzProvider->forceFill([
             'last_sync_at' => now(),
-            'product_count' => $dbSkuTotal,
+            'product_count' => $dbSkuActive,
         ])->save();
 
         return [
@@ -217,21 +226,40 @@ class ProviderRepository implements ProviderRepositoryInterface
             'updated' => $updated,
             'skipped' => $skipped,
             'disabled' => $disabled,
-            'provider_sku_total' => $providerSkuTotal,
-            'database_sku_total' => $dbSkuTotal,
-            'difference' => $providerSkuTotal - $dbSkuTotal,
+            'provider_sku_total' => $providerActive,
+            'provider_sku_raw_total' => count($digiflazzProducts),
+            'database_sku_total' => $dbSkuActive,
+            'database_sku_rows_total' => $dbSkuRows,
+            'difference' => $providerActive - $dbSkuActive,
         ];
     }
 
     /**
-     * Soft-deactivate Digiflazz SKUs that disappeared from a successful price-list response.
+     * Soft-deactivate Digiflazz SKUs missing from a successful price-list response.
      * Never deletes rows — transaction history stays intact.
+     *
+     * Also cleans legacy rows with NULL/empty list_type and stale ProductProviderSku
+     * that are not present in the authoritative seen set for fetched cmds.
      *
      * @param  array<string, list<string>>  $seenSkusByListType
      */
     protected function deactivateMissingDigiflazzSkus(array $seenSkusByListType, ?ProductProvider $digiflazzProvider): int
     {
         $disabled = 0;
+        if ($seenSkusByListType === []) {
+            return 0;
+        }
+
+        $allSeen = [];
+        foreach ($seenSkusByListType as $seenSkus) {
+            if (! is_array($seenSkus)) {
+                continue;
+            }
+            foreach ($seenSkus as $sku) {
+                $allSeen[(string) $sku] = true;
+            }
+        }
+        $allSeenList = array_keys($allSeen);
 
         foreach ($seenSkusByListType as $listType => $seenSkus) {
             $listType = (string) $listType;
@@ -247,32 +275,90 @@ class ProviderRepository implements ProviderRepositoryInterface
             }
 
             $missingSkus = $query->pluck('buyer_sku_code')->all();
-            if ($missingSkus === []) {
-                continue;
-            }
+            $disabled += $this->softDisableDigiflazzSkus($missingSkus, $digiflazzProvider);
+        }
 
-            $disabled += count($missingSkus);
+        if ($allSeenList === []) {
+            return $disabled;
+        }
 
-            DigiflazzProduct::whereIn('buyer_sku_code', $missingSkus)->update([
-                'buyer_product_status' => false,
-                'seller_product_status' => false,
-            ]);
+        // Legacy DigiflazzProduct without list_type
+        $orphanSkus = DigiflazzProduct::query()
+            ->where(function ($q) {
+                $q->whereNull('list_type')->orWhere('list_type', '');
+            })
+            ->whereNotIn('buyer_sku_code', $allSeenList)
+            ->pluck('buyer_sku_code')
+            ->all();
+        $disabled += $this->softDisableDigiflazzSkus($orphanSkus, $digiflazzProvider);
 
-            Product::whereIn('sku_code', $missingSkus)
-                ->when(
-                    $digiflazzProvider,
-                    fn ($q) => $q->where('product_provider_id', $digiflazzProvider->id)
-                )
-                ->update(['status' => false]);
+        if (! $digiflazzProvider) {
+            return $disabled;
+        }
 
-            if ($digiflazzProvider) {
-                ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)
-                    ->whereIn('provider_sku', $missingSkus)
-                    ->update(['is_active' => false]);
-            }
+        $fetchedTypes = array_keys($seenSkusByListType);
+        $staleSkus = ProductProviderSku::query()
+            ->where('product_provider_id', $digiflazzProvider->id)
+            ->where('is_active', true)
+            ->whereNotIn('provider_sku', $allSeenList)
+            ->pluck('provider_sku')
+            ->all();
+
+        if ($staleSkus === []) {
+            return $disabled;
+        }
+
+        $eligible = DigiflazzProduct::query()
+            ->whereIn('buyer_sku_code', $staleSkus)
+            ->where(function ($q) use ($fetchedTypes) {
+                $q->whereIn('list_type', $fetchedTypes)
+                    ->orWhereNull('list_type')
+                    ->orWhere('list_type', '');
+            })
+            ->pluck('buyer_sku_code')
+            ->all();
+
+        $mirrored = DigiflazzProduct::whereIn('buyer_sku_code', $staleSkus)->pluck('buyer_sku_code')->all();
+        $missingMirror = array_values(array_diff($staleSkus, $mirrored));
+        $toDisable = array_values(array_unique(array_merge($eligible, $missingMirror)));
+
+        if ($toDisable !== []) {
+            $disabled += $this->softDisableDigiflazzSkus($toDisable, $digiflazzProvider);
         }
 
         return $disabled;
+    }
+
+    /**
+     * @param  list<string|int>  $skus
+     */
+    protected function softDisableDigiflazzSkus(array $skus, ?ProductProvider $digiflazzProvider): int
+    {
+        $skus = array_values(array_unique(array_map('strval', $skus)));
+        if ($skus === []) {
+            return 0;
+        }
+
+        DigiflazzProduct::whereIn('buyer_sku_code', $skus)->update([
+            'buyer_product_status' => false,
+            'seller_product_status' => false,
+        ]);
+
+        Product::whereIn('sku_code', $skus)
+            ->when(
+                $digiflazzProvider,
+                fn ($q) => $q->where('product_provider_id', $digiflazzProvider->id)
+            )
+            ->update(['status' => false]);
+
+        if (! $digiflazzProvider) {
+            return count($skus);
+        }
+
+        return (int) ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)
+            ->whereIn('provider_sku', $skus)
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
     }
 
     protected function nullableInt(mixed $value): ?int

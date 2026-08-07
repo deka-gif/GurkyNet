@@ -4,6 +4,7 @@ namespace App\Actions\Admin\Website;
 
 use App\Repositories\Contracts\WebsiteMenuRepositoryInterface;
 use App\Models\WebsiteMenu;
+use App\Services\Website\PublicHomepageCache;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -30,16 +31,25 @@ class WebsiteMenuAction
 
     public function create(array $data): WebsiteMenu
     {
-        return $this->repository->create($data);
+        $menu = $this->repository->create($data);
+        PublicHomepageCache::forget();
+
+        return $menu;
     }
 
     public function update(int $id, array $data): WebsiteMenu
     {
-        return $this->repository->update($id, $data);
+        $menu = $this->repository->update($id, $data);
+        PublicHomepageCache::forget();
+
+        return $menu;
     }
 
     public function delete(int $id): bool
     {
-        return $this->repository->delete($id);
+        $ok = $this->repository->delete($id);
+        PublicHomepageCache::forget();
+
+        return $ok;
     }
 }

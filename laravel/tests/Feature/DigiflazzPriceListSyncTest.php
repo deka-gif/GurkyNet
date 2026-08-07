@@ -404,4 +404,211 @@ class DigiflazzPriceListSyncTest extends TestCase
 
         $this->assertTrue(\App\Services\ProductProviders\DigiflazzResponseCodeClassifier::classify('83')->isRateLimited());
     }
+
+    public function test_pipeline_counts_active_only_and_disables_stale_skus(): void
+    {
+        $digi = ProductProvider::digiflazz();
+        ProductProviderSku::create([
+            'product_id' => Product::factory()->create([
+                'sku_code' => 'STALE1',
+                'product_provider_id' => $digi->id,
+                'status' => true,
+            ])->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'STALE1',
+            'base_price' => 1000,
+            'is_preferred' => true,
+            'is_active' => true,
+        ]);
+        DigiflazzProduct::create([
+            'buyer_sku_code' => 'STALE1',
+            'list_type' => 'prepaid',
+            'product_name' => 'Stale',
+            'category' => 'Pulsa',
+            'brand' => 'XL',
+            'seller_price' => 1000,
+            'buyer_product_status' => true,
+            'seller_product_status' => true,
+            'unlimited_stock' => true,
+        ]);
+
+        Http::fake([
+            'https://api.digiflazz.com/v1/price-list' => Http::response([
+                'data' => [
+                    [
+                        'product_name' => 'Active One',
+                        'category' => 'Pulsa',
+                        'brand' => 'XL',
+                        'type' => 'Umum',
+                        'seller_name' => 'Seller',
+                        'price' => 5000,
+                        'buyer_sku_code' => 'A1',
+                        'buyer_product_status' => true,
+                        'seller_product_status' => true,
+                        'unlimited_stock' => true,
+                        'stock' => 0,
+                        'multi' => false,
+                        'start_cut_off' => '00:00',
+                        'end_cut_off' => '00:00',
+                        'desc' => 'a1',
+                    ],
+                    [
+                        'product_name' => 'Inactive Seller',
+                        'category' => 'Pulsa',
+                        'brand' => 'XL',
+                        'type' => 'Umum',
+                        'seller_name' => 'Seller',
+                        'price' => 6000,
+                        'buyer_sku_code' => 'OFF1',
+                        'buyer_product_status' => true,
+                        'seller_product_status' => false,
+                        'unlimited_stock' => true,
+                        'stock' => 0,
+                        'multi' => false,
+                        'start_cut_off' => '00:00',
+                        'end_cut_off' => '00:00',
+                        'desc' => 'off',
+                    ],
+                    [
+                        'product_name' => 'Skip No Sku',
+                        'category' => 'Pulsa',
+                        'brand' => 'XL',
+                        'buyer_product_status' => true,
+                        'seller_product_status' => true,
+                        'price' => 1,
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $result = app(SyncDigiflazzCatalogAction::class)->execute(['cmd' => ['prepaid']]);
+
+        $this->assertSame(3, $result['pipeline']['total_response']);
+        $this->assertSame(2, $result['pipeline']['after_filtering']); // A1 + OFF1
+        $this->assertSame(1, $result['pipeline']['skipped_no_sku']);
+        $this->assertSame(1, $result['provider_sku_total']); // active only
+        $this->assertSame(1, $result['database_sku_total']);
+        $this->assertSame(0, $result['difference']);
+        $this->assertGreaterThanOrEqual(1, $result['disabled']);
+
+        $this->assertFalse((bool) ProductProviderSku::where('provider_sku', 'STALE1')->value('is_active'));
+        $this->assertTrue((bool) ProductProviderSku::where('provider_sku', 'A1')->value('is_active'));
+        $this->assertFalse((bool) ProductProviderSku::where('provider_sku', 'OFF1')->value('is_active'));
+    }
+
+    public function test_orphan_null_list_type_is_disabled_when_missing_from_fetch(): void
+    {
+        DigiflazzProduct::create([
+            'buyer_sku_code' => 'ORPHAN1',
+            'list_type' => null,
+            'product_name' => 'Orphan',
+            'category' => 'Pulsa',
+            'brand' => 'XL',
+            'seller_price' => 1000,
+            'buyer_product_status' => true,
+            'seller_product_status' => true,
+            'unlimited_stock' => true,
+        ]);
+        $digi = ProductProvider::digiflazz();
+        $product = Product::factory()->create([
+            'sku_code' => 'ORPHAN1',
+            'product_provider_id' => $digi->id,
+            'status' => true,
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'ORPHAN1',
+            'base_price' => 1000,
+            'is_preferred' => true,
+            'is_active' => true,
+        ]);
+
+        Http::fake([
+            'https://api.digiflazz.com/v1/price-list' => Http::response([
+                'data' => [[
+                    'product_name' => 'Only',
+                    'category' => 'Pulsa',
+                    'brand' => 'XL',
+                    'type' => 'Umum',
+                    'seller_name' => 'Seller',
+                    'price' => 5000,
+                    'buyer_sku_code' => 'ONLY1',
+                    'buyer_product_status' => true,
+                    'seller_product_status' => true,
+                    'unlimited_stock' => true,
+                    'stock' => 0,
+                    'multi' => false,
+                    'start_cut_off' => '00:00',
+                    'end_cut_off' => '00:00',
+                    'desc' => 'only',
+                ]],
+            ], 200),
+        ]);
+
+        app(SyncDigiflazzCatalogAction::class)->execute(['cmd' => ['prepaid']]);
+
+        $this->assertFalse((bool) DigiflazzProduct::where('buyer_sku_code', 'ORPHAN1')->value('buyer_product_status'));
+        $this->assertFalse((bool) ProductProviderSku::where('provider_sku', 'ORPHAN1')->value('is_active'));
+    }
+
+    public function test_rc83_on_second_cmd_keeps_partial_prepaid_and_does_not_wipe(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/price-list' => function ($request) {
+                $cmd = $request->data()['cmd'] ?? null;
+                if ($cmd === 'prepaid') {
+                    return Http::response([
+                        'data' => [[
+                            'product_name' => 'Xl 5',
+                            'category' => 'Pulsa',
+                            'brand' => 'XL',
+                            'type' => 'Umum',
+                            'seller_name' => 'Seller',
+                            'price' => 5000,
+                            'buyer_sku_code' => 'X5',
+                            'buyer_product_status' => true,
+                            'seller_product_status' => true,
+                            'unlimited_stock' => true,
+                            'stock' => 1,
+                            'multi' => false,
+                            'start_cut_off' => '00:00',
+                            'end_cut_off' => '00:00',
+                            'desc' => 'x5',
+                        ]],
+                    ], 200);
+                }
+
+                return Http::response([
+                    'data' => [
+                        'rc' => '83',
+                        'status' => 'Gagal',
+                        'message' => 'Anda telah mencapai limitasi pengecekan pricelist',
+                    ],
+                ], 200);
+            },
+        ]);
+
+        DigiflazzProduct::create([
+            'buyer_sku_code' => 'pasca-keep',
+            'list_type' => 'pasca',
+            'product_name' => 'Keep Pasca',
+            'category' => 'Pascabayar',
+            'brand' => 'PLN',
+            'seller_price' => 0,
+            'buyer_product_status' => true,
+            'seller_product_status' => true,
+            'unlimited_stock' => true,
+        ]);
+
+        $result = app(SyncDigiflazzCatalogAction::class)->execute([
+            'cmd' => ['prepaid', 'pasca'],
+            'inline_all_cmds' => true,
+        ]);
+
+        $this->assertSame('partial', $result['status']);
+        $this->assertSame(1, $result['provider_sku_total']);
+        $this->assertTrue((bool) DigiflazzProduct::where('buyer_sku_code', 'pasca-keep')->value('buyer_product_status'));
+        $this->assertTrue((bool) Product::where('sku_code', 'X5')->value('status'));
+    }
 }

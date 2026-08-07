@@ -92,6 +92,14 @@ export const operationsService = {
     return res.data;
   },
 
+  async getAutomaticCatalogSyncStatus() {
+    const res = await apiClient.get<ApiResponse<any>>(
+      '/admin/operations/product-provider-control/auto-sync',
+      { timeout: 60000 }
+    );
+    return res.data;
+  },
+
   /** Global refresh: health + balance + SKU + latency for all providers (no page reload). */
   async refreshProductProviderControl() {
     const res = await apiClient.post<ApiResponse<any>>(

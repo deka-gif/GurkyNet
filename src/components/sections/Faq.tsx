@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
@@ -39,13 +39,9 @@ const initialFaqs = [
   }
 ];
 
-export const Faq = () => {
+export const Faq = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
-  const { faqs, fetchHomepage } = useWebsiteStore();
-
-  useEffect(() => {
-    void fetchHomepage();
-  }, []);
+  const { faqs } = useWebsiteStore();
   const resolvedFaqs = faqs.length > 0 ? faqs : initialFaqs;
 
   return (

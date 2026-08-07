@@ -199,7 +199,7 @@ export const RegisterPage: React.FC = () => {
           </div>
           <label className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50/60 px-4 py-3 cursor-pointer">
             <input type="checkbox" {...register('agreeTerms')} disabled={busy} className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-            <span className="text-xs text-gray-600 leading-relaxed">Saya menyetujui <Link to="/page/terms-conditions" className="font-bold text-primary-600 hover:underline">Syarat & Ketentuan</Link> dan <Link to="/page/privacy-policy" className="font-bold text-primary-600 hover:underline">Kebijakan Privasi</Link>.</span>
+            <span className="text-xs text-gray-600 leading-relaxed">Saya menyetujui <Link to="/legal/terms-conditions" className="font-bold text-primary-600 hover:underline">Syarat & Ketentuan</Link> dan <Link to="/legal/privacy-policy" className="font-bold text-primary-600 hover:underline">Kebijakan Privasi</Link>.</span>
           </label>
           {errors.agreeTerms && <p className="text-xs font-semibold text-red-600">{errors.agreeTerms.message}</p>}
           <button type="submit" disabled={busy} className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-full font-bold flex items-center justify-center gap-2">{busy ? 'Memproses...' : <>Lanjut Verifikasi <ArrowRight className="w-4 h-4" /></>}</button>

@@ -3,7 +3,7 @@ import { MessageCircle, Mail, Instagram, MapPin, Clock } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useWebsiteStore } from '../../store/website.store';
 
-export const Contact = () => {
+export const Contact = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const { settings, sections } = useWebsiteStore();
   const contactSection = sections.find((s) => s.componentType === 'announcement');
 

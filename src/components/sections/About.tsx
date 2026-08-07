@@ -2,9 +2,9 @@ import { motion } from 'motion/react';
 import { Shield, Smartphone, Activity } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
 
-export const About = () => {
+export const About = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const { settings, sections } = useWebsiteStore();
-  const aboutSection = sections.find((s) => s.componentType === 'news');
+  const aboutSection = _props.section || sections.find((s) => s.componentType === 'news');
 
   return (
     <section id="about" className="py-20 md:py-32 bg-white">

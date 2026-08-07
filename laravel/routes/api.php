@@ -56,6 +56,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/menus',              [PublicWebsiteController::class, 'menus']);
         Route::get('/static-pages',       [PublicWebsiteController::class, 'staticPages']);
         Route::get('/static-pages/{slug}', [PublicWebsiteController::class, 'staticPageBySlug']);
+        Route::get('/legal',              [PublicWebsiteController::class, 'legalIndex']);
+        Route::get('/legal/{slug}',       [PublicWebsiteController::class, 'legalBySlug']);
         Route::get('/homepage',           [PublicWebsiteController::class, 'homepage']);
         Route::get('/homepage-sections',  [PublicWebsiteController::class, 'homepageSections']);
         Route::get('/banners',            [PublicWebsiteController::class, 'banners']);
@@ -256,6 +258,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             // Product Provider Control Center (PPOB suppliers only — not payment gateways)
             Route::get('/product-provider-control', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'index']);
             Route::post('/product-provider-control/refresh', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'refreshAll']);
+            Route::get('/product-provider-control/auto-sync', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'autoSyncStatus']);
             Route::get('/product-provider-control/{id}', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'show']);
             Route::post('/product-provider-control/{id}/enable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'enable']);
             Route::post('/product-provider-control/{id}/disable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'disable']);
@@ -358,6 +361,27 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Website Content Foundation CRUD APIs
+        Route::prefix('admin/website')->middleware([EnsureRole::class . ':marketing,owner,operations'])->group(function () {
+            Route::get('/homepage-builder', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'show']);
+            Route::get('/homepage-builder/permissions', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'permissions']);
+            Route::get('/homepage-builder/preview', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'preview']);
+            Route::put('/homepage-builder/draft', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'saveDraft']);
+            Route::post('/homepage-builder/reorder', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'reorder']);
+            Route::post('/homepage-builder/discard', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'discard']);
+            Route::post('/homepage-builder/publish', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'publish']);
+            Route::post('/homepage-builder/rollback/{versionId}', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'rollback']);
+
+            // Legal Center (Sprint 7.3)
+            Route::get('/legal-center', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'index']);
+            Route::get('/legal-center/permissions', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'permissions']);
+            Route::get('/legal-center/{slug}', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'show']);
+            Route::get('/legal-center/{slug}/preview', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'preview']);
+            Route::put('/legal-center/{slug}/draft', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'saveDraft']);
+            Route::post('/legal-center/{slug}/discard', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'discard']);
+            Route::post('/legal-center/{slug}/publish', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'publish']);
+            Route::post('/legal-center/{slug}/rollback/{versionId}', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'rollback']);
+        });
+
         Route::prefix('admin/website')->middleware([EnsureRole::class . ':marketing,owner'])->group(function () {
             // Website Settings
             Route::get('/settings', [WebsiteSettingController::class, 'index']);

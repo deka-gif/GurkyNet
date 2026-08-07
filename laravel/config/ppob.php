@@ -68,4 +68,25 @@ return [
             explode(',', (string) env('PPOB_TRANSACTION_TIMEOUT_CHECKS', '60,120,180'))
         ))),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Automatic Product Provider Catalog Synchronization
+    |--------------------------------------------------------------------------
+    | Laravel Scheduler runs `ppob:catalog-auto-sync` daily. Digiflazz full
+    | pricelist is rate-limited (~1× / 5 min / RC83) so prepaid and pasca are
+    | sequenced with a cooldown before VIPayment.
+    |
+    | Override schedule without code changes via env (preferred) or Settings
+    | keys: ppob_catalog_auto_sync_enabled, ppob_catalog_auto_sync_at.
+    */
+    'catalog_auto_sync' => [
+        'enabled' => (bool) env('PPOB_CATALOG_AUTO_SYNC_ENABLED', true),
+        'timezone' => env('PPOB_CATALOG_AUTO_SYNC_TIMEZONE', 'Asia/Jakarta'),
+        'daily_at' => env('PPOB_CATALOG_AUTO_SYNC_AT', '23:59'),
+        'digiflazz_cooldown_minutes' => (int) env('PPOB_DIGIFLAZZ_SYNC_COOLDOWN_MINUTES', 5),
+        'retry_delay_seconds' => (int) env('PPOB_CATALOG_SYNC_RETRY_DELAY_SECONDS', 120),
+        'max_retries' => (int) env('PPOB_CATALOG_SYNC_MAX_RETRIES', 2),
+        'providers' => ['digiflazz', 'vip'],
+    ],
 ];

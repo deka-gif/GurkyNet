@@ -1,17 +1,25 @@
 import { motion } from 'motion/react';
 import { Button } from '../ui/Button';
 import { Download, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useWebsiteStore } from '../../store/website.store';
 import { resolveMediaSrc } from '../../utils/mediaUrl';
+import type { HomepageSection } from '../../types';
 
-export const Hero = () => {
+type Props = { section?: HomepageSection };
+
+export const Hero = ({ section: sectionProp }: Props = {}) => {
   const { settings, sections } = useWebsiteStore();
-  const heroSection = sections.find((s) => s.componentType === 'hero');
+  const heroSection = sectionProp || sections.find((s) => s.componentType === 'hero');
   const desktopBg = heroSection?.heroBackgroundMedia ? resolveMediaSrc(heroSection.heroBackgroundMedia) : '';
   const mobileBg = heroSection?.heroMobileImageMedia ? resolveMediaSrc(heroSection.heroMobileImageMedia) : desktopBg;
   const illustration = heroSection?.heroIllustrationMedia ? resolveMediaSrc(heroSection.heroIllustrationMedia) : '';
-  const ctaLabel = heroSection?.slug?.includes('download') ? 'Download Aplikasi' : 'Mulai Sekarang';
-  const ctaTarget = heroSection?.slug?.includes('contact') ? '#contact' : '#download-app';
+  const ctaLabel = heroSection?.buttonLabel
+    || (heroSection?.slug?.includes('download') ? 'Download Aplikasi' : 'Mulai Sekarang');
+  const ctaTarget = heroSection?.buttonUrl
+    || (heroSection?.slug?.includes('contact') ? '#contact' : '#download-app');
+  const isExternal = ctaTarget.startsWith('http');
+  const isHash = ctaTarget.startsWith('#');
 
   return (
     <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-gray-50 min-h-screen flex items-center">
@@ -44,7 +52,7 @@ export const Hero = () => {
               transition={{ delay: 0.2, duration: 0.5 }}
               className="inline-block bg-primary-100 text-primary-700 px-4 py-1.5 rounded-full text-sm font-semibold mb-6"
             >
-              {heroSection?.description || 'Beta Version 1.0 Tersedia'}
+              {heroSection?.subtitle || heroSection?.description || 'Beta Version 1.0 Tersedia'}
             </motion.div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
@@ -60,16 +68,32 @@ export const Hero = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
-              <a
-                href={ctaTarget}
-                onClick={(e) => { e.preventDefault(); document.getElementById(ctaTarget.replace('#', ''))?.scrollIntoView({ behavior: 'smooth' }); }}
-                className="w-full sm:w-auto"
-              >
-                <Button variant="primary" className="w-full">
-                  <Download className="w-5 h-5" />
-                  {ctaLabel}
-                </Button>
-              </a>
+              {isExternal ? (
+                <a href={ctaTarget} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                  <Button variant="primary" className="w-full">
+                    <Download className="w-5 h-5" />
+                    {ctaLabel}
+                  </Button>
+                </a>
+              ) : isHash ? (
+                <a
+                  href={ctaTarget}
+                  onClick={(e) => { e.preventDefault(); document.getElementById(ctaTarget.replace('#', ''))?.scrollIntoView({ behavior: 'smooth' }); }}
+                  className="w-full sm:w-auto"
+                >
+                  <Button variant="primary" className="w-full">
+                    <Download className="w-5 h-5" />
+                    {ctaLabel}
+                  </Button>
+                </a>
+              ) : (
+                <Link to={ctaTarget} className="w-full sm:w-auto">
+                  <Button variant="primary" className="w-full">
+                    <Download className="w-5 h-5" />
+                    {ctaLabel}
+                  </Button>
+                </Link>
+              )}
               <a
                 href="#features"
                 onClick={(e) => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); }}

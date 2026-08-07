@@ -4,6 +4,7 @@ namespace App\Actions\Admin\Website;
 
 use App\Repositories\Contracts\StaticPageRepositoryInterface;
 use App\Models\StaticPage;
+use App\Services\Website\PublicHomepageCache;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -35,16 +36,25 @@ class StaticPageAction
 
     public function create(array $data): StaticPage
     {
-        return $this->repository->create($data);
+        $page = $this->repository->create($data);
+        PublicHomepageCache::forget();
+
+        return $page;
     }
 
     public function update(int $id, array $data): StaticPage
     {
-        return $this->repository->update($id, $data);
+        $page = $this->repository->update($id, $data);
+        PublicHomepageCache::forget();
+
+        return $page;
     }
 
     public function delete(int $id): bool
     {
-        return $this->repository->delete($id);
+        $ok = $this->repository->delete($id);
+        PublicHomepageCache::forget();
+
+        return $ok;
     }
 }

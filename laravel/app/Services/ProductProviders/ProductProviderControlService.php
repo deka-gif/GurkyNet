@@ -26,12 +26,14 @@ class ProductProviderControlService
 
     /**
      * Control-center card payloads for all product providers.
+     *
+     * @return array{providers: list<array<string, mixed>>, autoSync: array<string, mixed>}
      */
     public function listControlCenter(): array
     {
         $providers = ProductProvider::query()->orderBy('priority')->orderBy('sort_order')->get();
 
-        return $providers->map(function (ProductProvider $p) {
+        $cards = $providers->map(function (ProductProvider $p) {
             try {
                 $this->health->refreshStats($p);
                 $p->refresh();
@@ -41,6 +43,11 @@ class ProductProviderControlService
 
             return $this->toCard($p);
         })->all();
+
+        return [
+            'providers' => $cards,
+            'autoSync' => app(AutomaticCatalogSyncService::class)->statusPayload(),
+        ];
     }
 
     public function toCard(ProductProvider $p): array
@@ -62,7 +69,10 @@ class ProductProviderControlService
             $p->partner_status
         );
         $poweredOn = (bool) $p->is_active;
-        $productCount = (int) ($p->product_count ?? ProductProviderSku::where('product_provider_id', $p->id)->count());
+        $productCount = (int) (
+            $p->product_count
+            ?? ProductProviderSku::where('product_provider_id', $p->id)->where('is_active', true)->count()
+        );
         $lastSyncDisplay = $p->last_sync_at
             ? $p->last_sync_at->timezone(config('app.timezone'))->format('d/m/Y H:i')
             : null;
@@ -473,7 +483,18 @@ class ProductProviderControlService
         return [
             'providers' => $cards,
             'errors' => $errors,
+            'autoSync' => app(AutomaticCatalogSyncService::class)->statusPayload(),
         ];
+    }
+
+    /**
+     * Automatic Synchronization panel payload (Sprint 6.3).
+     *
+     * @return array<string, mixed>
+     */
+    public function autoSyncStatus(): array
+    {
+        return app(AutomaticCatalogSyncService::class)->statusPayload();
     }
 
     public function logs(ProductProvider $provider, int $limit = 50): array
@@ -531,14 +552,18 @@ class ProductProviderControlService
      */
     protected function productAuditForCard(ProductProvider $p): array
     {
-        $db = ProductProviderSku::where('product_provider_id', $p->id)->count();
+        $dbActive = ProductProviderSku::where('product_provider_id', $p->id)
+            ->where('is_active', true)
+            ->count();
+        $dbRows = ProductProviderSku::where('product_provider_id', $p->id)->count();
         $meta = $this->lastSyncMeta($p);
-        $providerSku = (int) ($meta['provider_sku_total'] ?? $meta['synced_count'] ?? $db);
-        $difference = $providerSku - $db;
+        $providerSku = (int) ($meta['provider_sku_total'] ?? $p->product_count ?? $dbActive);
+        $difference = $providerSku - $dbActive;
 
         return [
             'providerSku' => $providerSku,
-            'databaseSku' => $db,
+            'databaseSku' => $dbActive,
+            'databaseRows' => $dbRows,
             'difference' => $difference,
             'warning' => $difference !== 0,
         ];

@@ -27,6 +27,9 @@ function settingToBackend(s: Partial<WebsiteSetting>): any {
   if (s.timezone !== undefined) backend.timezone = s.timezone;
   if (s.currency !== undefined) backend.currency = s.currency;
   if (s.language !== undefined) backend.language = s.language;
+  if (s.seoTitle !== undefined) backend.seo_title = s.seoTitle;
+  if (s.seoDescription !== undefined) backend.seo_description = s.seoDescription;
+  if (s.seoKeywords !== undefined) backend.seo_keywords = s.seoKeywords;
   return backend;
 }
 
@@ -40,6 +43,13 @@ function sectionToBackend(s: Partial<HomepageSection>): any {
   if (s.visible !== undefined) backend.visible = s.visible;
   if (s.status !== undefined) backend.status = s.status;
   if (s.description !== undefined) backend.description = s.description;
+  if (s.subtitle !== undefined) backend.subtitle = s.subtitle;
+  if (s.backgroundColor !== undefined) backend.background_color = s.backgroundColor;
+  if (s.textColor !== undefined) backend.text_color = s.textColor;
+  if (s.buttonLabel !== undefined) backend.button_label = s.buttonLabel;
+  if (s.buttonUrl !== undefined) backend.button_url = s.buttonUrl;
+  if (s.animation !== undefined) backend.animation = s.animation;
+  if (s.contentItems !== undefined) backend.content_items = s.contentItems;
   if (s.heroBackgroundMediaId !== undefined) backend.hero_background_media_id = s.heroBackgroundMediaId;
   if (s.heroIllustrationMediaId !== undefined) backend.hero_illustration_media_id = s.heroIllustrationMediaId;
   if (s.heroMobileImageMediaId !== undefined) backend.hero_mobile_image_media_id = s.heroMobileImageMediaId;
@@ -252,6 +262,102 @@ export const websiteService = {
 
   async deleteSection(id: number): Promise<void> {
     await apiClient.delete(`/admin/website/homepage-sections/${id}`);
+  },
+
+  // ==========================================
+  // HOMEPAGE BUILDER (Sprint 7.2)
+  // ==========================================
+  async getHomepageBuilder() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/website/homepage-builder', { timeout: 60000 });
+    return res.data;
+  },
+
+  async saveHomepageBuilderDraft(sections: any[]) {
+    const res = await apiClient.put<ApiResponse<any>>(
+      '/admin/website/homepage-builder/draft',
+      { sections },
+      { timeout: 60000 }
+    );
+    return res.data;
+  },
+
+  async reorderHomepageBuilder(orderedIds: Array<string | number>) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/website/homepage-builder/reorder', { orderedIds });
+    return res.data;
+  },
+
+  async discardHomepageBuilderDraft() {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/website/homepage-builder/discard');
+    return res.data;
+  },
+
+  async publishHomepageBuilder(label?: string) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/website/homepage-builder/publish', { label });
+    return res.data;
+  },
+
+  async rollbackHomepageBuilder(versionId: number) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/website/homepage-builder/rollback/${versionId}`);
+    return res.data;
+  },
+
+  async previewHomepageBuilder() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/website/homepage-builder/preview');
+    return res.data;
+  },
+
+  // ==========================================
+  // LEGAL CENTER (Sprint 7.3)
+  // ==========================================
+  async getPublicLegalIndex() {
+    const res = await apiClient.get<ApiResponse<any>>('/public/legal');
+    return res.data;
+  },
+
+  async getPublicLegalDocument(slug: string) {
+    const res = await apiClient.get<ApiResponse<any>>(`/public/legal/${slug}`);
+    return res.data;
+  },
+
+  async getLegalCenter() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/website/legal-center', { timeout: 60000 });
+    return res.data;
+  },
+
+  async getLegalDocument(slug: string) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/website/legal-center/${slug}`, { timeout: 60000 });
+    return res.data;
+  },
+
+  async saveLegalDraft(slug: string, payload: Record<string, unknown>) {
+    const res = await apiClient.put<ApiResponse<any>>(
+      `/admin/website/legal-center/${slug}/draft`,
+      payload,
+      { timeout: 60000 }
+    );
+    return res.data;
+  },
+
+  async discardLegalDraft(slug: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/website/legal-center/${slug}/discard`);
+    return res.data;
+  },
+
+  async publishLegal(slug: string, label?: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/website/legal-center/${slug}/publish`, { label });
+    return res.data;
+  },
+
+  async rollbackLegal(slug: string, versionId: number) {
+    const res = await apiClient.post<ApiResponse<any>>(
+      `/admin/website/legal-center/${slug}/rollback/${versionId}`
+    );
+    return res.data;
+  },
+
+  async previewLegal(slug: string) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/website/legal-center/${slug}/preview`);
+    return res.data;
   },
 
   // ==========================================

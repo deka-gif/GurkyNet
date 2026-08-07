@@ -6,7 +6,12 @@ import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader'
 import { useWebsiteStore } from '../store/website.store';
 
 export const PublicLayout = () => {
-  const { settings } = useWebsiteStore();
+  const { settings, fetchHomepage } = useWebsiteStore();
+
+  // Single public bootstrap — GET /public/homepage once (deduped in store).
+  useEffect(() => {
+    void fetchHomepage();
+  }, [fetchHomepage]);
 
   // Dynamically set favicon from backend WebsiteSettings
   useEffect(() => {
@@ -30,11 +35,11 @@ export const PublicLayout = () => {
     <div className="min-h-screen flex flex-col font-sans text-gray-900 selection:bg-primary-200 selection:text-primary-900">
       <NetworkStatusAndLoader />
       <Navbar />
-      
+
       <main className="flex-1">
         <Outlet />
       </main>
-      
+
       <Footer />
     </div>
   );

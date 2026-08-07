@@ -179,7 +179,9 @@ class ProductCentricProviderFailoverTest extends TestCase
 
         $res = $this->getJson('/api/v1/admin/operations/product-provider-control');
         $res->assertOk();
-        $card = collect($res->json('data'))->firstWhere('code', 'digiflazz');
+        $data = $res->json('data');
+        $providers = $data['providers'] ?? $data;
+        $card = collect($providers)->firstWhere('code', 'digiflazz');
         $this->assertNotNull($card);
         $this->assertSame('product_priority_failover', $card['routingMode']);
         $this->assertFalse($card['controlsCatalogAlone']);

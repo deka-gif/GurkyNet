@@ -36,9 +36,17 @@ const features = [
   },
 ];
 
-export const Features = () => {
+export const Features = (props: { section?: import('../../types').HomepageSection } = {}) => {
   const { settings, sections } = useWebsiteStore();
-  const featuresSection = sections.find((s) => s.componentType === 'promo');
+  const featuresSection = props.section || sections.find((s) => s.componentType === 'promo' || s.componentType === 'features');
+  const cmsItems = Array.isArray(featuresSection?.contentItems) ? featuresSection!.contentItems! : [];
+  const displayFeatures = cmsItems.length > 0
+    ? cmsItems.map((item) => ({
+        icon: Shield,
+        title: item.title || '',
+        description: item.description || '',
+      }))
+    : features;
 
   return (
     <section id="features" className="py-20 md:py-32 bg-gray-50">
@@ -68,7 +76,7 @@ export const Features = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
+          {displayFeatures.map((feature, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 20 }}

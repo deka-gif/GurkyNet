@@ -4,7 +4,7 @@ import { useWebsiteStore } from '../../store/website.store';
 import { formatIDR } from '../../utils/currency';
 import { catalogStatusLabel, isProductPurchasable } from '../../utils/catalogAvailability';
 
-export const FeaturedProducts = () => {
+export const FeaturedProducts = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const { featuredProducts } = useWebsiteStore();
 
   if (!featuredProducts.length) {

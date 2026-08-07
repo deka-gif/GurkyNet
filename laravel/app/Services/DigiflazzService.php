@@ -491,8 +491,8 @@ class DigiflazzService
                     'payload' => array_merge($payload, ['sign' => '***hidden***']),
                 ]);
 
-                $timeout = app()->environment('testing') ? 5 : 30;
-                $connectTimeout = app()->environment('testing') ? 2 : 10;
+                $timeout = app()->environment('testing') ? 5 : 90;
+                $connectTimeout = app()->environment('testing') ? 2 : 15;
 
                 $response = Http::timeout($timeout)
                     ->connectTimeout($connectTimeout)
@@ -505,9 +505,21 @@ class DigiflazzService
                     $body = [];
                 }
 
+                // Never dump full pricelist into logs (huge + noisy). Summarize for catalog endpoints.
+                $logBody = $body;
+                if ($endpoint === '/price-list' && isset($body['data']) && is_array($body['data']) && array_is_list($body['data'])) {
+                    $logBody = [
+                        'data_count' => count($body['data']),
+                        'data_sample_skus' => array_values(array_filter(array_map(
+                            static fn ($row) => is_array($row) ? ($row['buyer_sku_code'] ?? null) : null,
+                            array_slice($body['data'], 0, 5)
+                        ))),
+                    ];
+                }
+
                 Log::info("Digiflazz API Response Attempt {$attempt}", array_merge([
                     'status' => $response->status(),
-                    'body' => $body,
+                    'body' => $logBody,
                     'latency' => $latency,
                     'provider_reference' => $payload['ref_id'] ?? null,
                     'endpoint' => $endpoint,

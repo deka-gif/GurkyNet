@@ -177,6 +177,15 @@ export const MarketingHomepageSections = lazyNamed(
   () => import('../pages/dashboard/MarketingHomepageSections'),
   'MarketingHomepageSections'
 );
+
+export const MarketingHomepageBuilder = lazyNamed(
+  () => import('../pages/dashboard/MarketingHomepageBuilder'),
+  'MarketingHomepageBuilder'
+);
+export const MarketingLegalCenter = lazyNamed(
+  () => import('../pages/dashboard/MarketingLegalCenter'),
+  'MarketingLegalCenter'
+);
 export const MarketingWebsiteMenu = lazyNamed(
   () => import('../pages/dashboard/MarketingWebsiteMenu'),
   'MarketingWebsiteMenu'

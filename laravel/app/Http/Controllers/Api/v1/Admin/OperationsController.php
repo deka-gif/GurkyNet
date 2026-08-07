@@ -253,7 +253,7 @@ return $this->paginatedResponse(
     public function syncCatalog(Request $request, SyncDigiflazzCatalogAction $action): JsonResponse
     {
         $queue = filter_var($request->input('queue', false), FILTER_VALIDATE_BOOLEAN);
-        $cmds = $request->input('cmd', ['prepaid', 'pasca']);
+        $cmds = $request->input('cmd', ['prepaid']);
         if (!is_array($cmds)) {
             $cmds = [$cmds];
         }

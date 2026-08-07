@@ -140,6 +140,8 @@ export const DashboardLayout = () => {
           { path: '/dashboard/operations/payment-gateways', label: 'Payment Gateway Control', icon: CreditCard },
           { path: '/dashboard/operations/monitoring', label: 'Service Monitoring', icon: Activity },
           { path: '/dashboard/operations/pricing', label: 'Pricing & Margin', icon: Tag },
+          { path: '/dashboard/marketing/website/homepage-builder', label: 'Homepage Builder', icon: Layers },
+          { path: '/dashboard/marketing/website/legal-center', label: 'Legal Center', icon: FileText },
           { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
@@ -152,6 +154,8 @@ export const DashboardLayout = () => {
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/marketing/announcements', label: 'Announcement', icon: Bell },
           { path: '/dashboard/marketing/website/settings', label: 'Website Settings', icon: Settings },
+          { path: '/dashboard/marketing/website/homepage-builder', label: 'Homepage Builder', icon: Layers },
+          { path: '/dashboard/marketing/website/legal-center', label: 'Legal Center', icon: FileText },
           { path: '/dashboard/marketing/website/homepage-sections', label: 'Homepage Sections', icon: Layers },
           { path: '/dashboard/marketing/website/menus', label: 'Website Menu', icon: Menu },
           { path: '/dashboard/marketing/website/static-pages', label: 'Static Pages', icon: FileText },

@@ -14,14 +14,22 @@ import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 const COMPONENT_TYPE_OPTIONS = [
   { label: 'Semua Tipe', value: '' },
   { label: 'Hero Section', value: 'hero' },
-  { label: 'Banner Slider', value: 'banner' },
-  { label: 'Promo Grid', value: 'promo' },
+  { label: 'Banner / Promo Banner', value: 'banner' },
+  { label: 'Promo / Features', value: 'promo' },
+  { label: 'Features', value: 'features' },
   { label: 'Kategori Layanan', value: 'categories' },
   { label: 'Grid Produk', value: 'product_grid' },
-  { label: 'Pengumuman / Siaran', value: 'announcement' },
+  { label: 'Statistics', value: 'statistics' },
+  { label: 'Why Choose Us', value: 'why_us' },
+  { label: 'Partner', value: 'partners' },
+  { label: 'Testimonials', value: 'testimonials' },
+  { label: 'How It Works', value: 'how_it_works' },
+  { label: 'Pengumuman / Kontak', value: 'announcement' },
   { label: 'Berita & Artikel', value: 'news' },
   { label: 'Tanya Jawab (FAQ)', value: 'faq' },
-  { label: 'Footer', value: 'footer' },
+  { label: 'CTA', value: 'cta' },
+  { label: 'Footer CTA', value: 'footer' },
+  { label: 'SEO / Meta', value: 'seo' },
 ];
 
 export const MarketingHomepageSections: React.FC = () => {
@@ -51,12 +59,19 @@ export const MarketingHomepageSections: React.FC = () => {
 
   const [formState, setFormState] = useState<{
     title: string;
+    subtitle: string;
     slug: string;
     componentType: HomepageSectionComponentType;
     displayOrder: number;
     visible: boolean;
     status: string;
     description: string;
+    backgroundColor: string;
+    textColor: string;
+    buttonLabel: string;
+    buttonUrl: string;
+    animation: string;
+    contentItemsJson: string;
     heroBackgroundMediaId?: number;
     heroIllustrationMediaId?: number;
     heroMobileImageMediaId?: number;
@@ -68,12 +83,19 @@ export const MarketingHomepageSections: React.FC = () => {
     heroMobileImageMedia?: Media;
   }>({
     title: '',
+    subtitle: '',
     slug: '',
     componentType: 'hero',
     displayOrder: 1,
     visible: true,
     status: 'active',
     description: '',
+    backgroundColor: '',
+    textColor: '',
+    buttonLabel: '',
+    buttonUrl: '',
+    animation: 'fade',
+    contentItemsJson: '[]',
     heroBackgroundMediaId: undefined,
     heroIllustrationMediaId: undefined,
     heroMobileImageMediaId: undefined,
@@ -114,12 +136,19 @@ export const MarketingHomepageSections: React.FC = () => {
     setEditingItem(null);
     setFormState({
       title: '',
+      subtitle: '',
       slug: '',
       componentType: 'hero',
       displayOrder: sections.length > 0 ? Math.max(...sections.map(s => s.displayOrder)) + 1 : 1,
       visible: true,
       status: 'active',
       description: '',
+      backgroundColor: '',
+      textColor: '',
+      buttonLabel: '',
+      buttonUrl: '',
+      animation: 'fade',
+      contentItemsJson: '[]',
       heroBackgroundMediaId: undefined,
       heroIllustrationMediaId: undefined,
       heroMobileImageMediaId: undefined,
@@ -138,12 +167,19 @@ export const MarketingHomepageSections: React.FC = () => {
     setEditingItem(item);
     setFormState({
       title: item.title,
+      subtitle: item.subtitle || '',
       slug: item.slug,
       componentType: item.componentType,
       displayOrder: item.displayOrder,
       visible: item.visible,
       status: item.status || 'active',
       description: item.description || '',
+      backgroundColor: item.backgroundColor || '',
+      textColor: item.textColor || '',
+      buttonLabel: item.buttonLabel || '',
+      buttonUrl: item.buttonUrl || '',
+      animation: item.animation || 'fade',
+      contentItemsJson: JSON.stringify(item.contentItems || [], null, 2),
       heroBackgroundMediaId: item.heroBackgroundMediaId,
       heroIllustrationMediaId: item.heroIllustrationMediaId,
       heroMobileImageMediaId: item.heroMobileImageMediaId,
@@ -198,11 +234,26 @@ export const MarketingHomepageSections: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
+      let contentItems: any[] = [];
+      try {
+        contentItems = JSON.parse(formState.contentItemsJson || '[]');
+        if (!Array.isArray(contentItems)) throw new Error('content_items must be array');
+      } catch {
+        setError('Content Items harus JSON array yang valid.');
+        setSaving(false);
+        return;
+      }
+
+      const payload = {
+        ...formState,
+        contentItems,
+      };
+
       if (editingItem) {
-        await websiteService.updateSection(editingItem.id, formState);
+        await websiteService.updateSection(editingItem.id, payload);
         setSuccess('Homepage section berhasil diperbarui.');
       } else {
-        await websiteService.createSection(formState);
+        await websiteService.createSection(payload);
         setSuccess('Homepage section baru berhasil ditambahkan.');
       }
       setModalOpen(false);
@@ -486,6 +537,17 @@ export const MarketingHomepageSections: React.FC = () => {
               </div>
 
               <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700">Sub Judul</label>
+                <input
+                  type="text"
+                  value={formState.subtitle}
+                  onChange={(e) => handleFormChange('subtitle', e.target.value)}
+                  placeholder="Sub judul singkat untuk section"
+                  className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all placeholder-gray-400 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-700">Deskripsi</label>
                 <textarea
                   value={formState.description}
@@ -494,6 +556,79 @@ export const MarketingHomepageSections: React.FC = () => {
                   rows={3}
                   className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all placeholder-gray-400 font-medium resize-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Button Label</label>
+                  <input
+                    type="text"
+                    value={formState.buttonLabel}
+                    onChange={(e) => handleFormChange('buttonLabel', e.target.value)}
+                    placeholder="e.g. Mulai Sekarang"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 rounded-xl px-3.5 py-2.5 text-xs outline-none font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Button URL</label>
+                  <input
+                    type="text"
+                    value={formState.buttonUrl}
+                    onChange={(e) => handleFormChange('buttonUrl', e.target.value)}
+                    placeholder="/register atau #features"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 rounded-xl px-3.5 py-2.5 text-xs outline-none font-medium font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Background</label>
+                  <input
+                    type="text"
+                    value={formState.backgroundColor}
+                    onChange={(e) => handleFormChange('backgroundColor', e.target.value)}
+                    placeholder="#ffffff"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 rounded-xl px-3.5 py-2.5 text-xs outline-none font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Text Color</label>
+                  <input
+                    type="text"
+                    value={formState.textColor}
+                    onChange={(e) => handleFormChange('textColor', e.target.value)}
+                    placeholder="#111827"
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 rounded-xl px-3.5 py-2.5 text-xs outline-none font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Animation</label>
+                  <select
+                    value={formState.animation}
+                    onChange={(e) => handleFormChange('animation', e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none"
+                  >
+                    <option value="fade">Fade</option>
+                    <option value="slide_up">Slide Up</option>
+                    <option value="scale">Scale</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700">Content Items (JSON array)</label>
+                <textarea
+                  value={formState.contentItemsJson}
+                  onChange={(e) => handleFormChange('contentItemsJson', e.target.value)}
+                  placeholder='[{"title":"Aman","description":"...","value":"99%"}]'
+                  rows={5}
+                  className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 rounded-xl px-3.5 py-2.5 text-[11px] text-gray-900 outline-none font-mono resize-y"
+                />
+                <p className="text-[10px] text-gray-400 font-medium">
+                  Dipakai untuk statistics / partners / testimonials / features. Simpan sebagai array JSON.
+                </p>
               </div>
 
               {formState.componentType === 'hero' && (

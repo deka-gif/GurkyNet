@@ -19,16 +19,24 @@ class MarketingBannerAction
 
     public function create(array $data): BannerPromotion
     {
-        return $this->marketingRepository->createBanner($data);
+        $banner = $this->marketingRepository->createBanner($data);
+        \App\Services\Website\PublicHomepageCache::forget();
+
+        return $banner;
     }
 
     public function update(string|int $id, array $data): BannerPromotion
     {
-        return $this->marketingRepository->updateBanner($id, $data);
+        $banner = $this->marketingRepository->updateBanner($id, $data);
+        \App\Services\Website\PublicHomepageCache::forget();
+
+        return $banner;
     }
 
     public function delete(string|int $id): bool
     {
-        return $this->marketingRepository->deleteBanner($id);
+        $ok = $this->marketingRepository->deleteBanner($id);
+        \App\Services\Website\PublicHomepageCache::forget();
+
+        return $ok;
     }
-}

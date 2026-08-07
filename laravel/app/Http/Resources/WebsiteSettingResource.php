@@ -65,6 +65,9 @@ class WebsiteSettingResource extends JsonResource
             'timezone' => $this->timezone ?? 'Asia/Jakarta',
             'currency' => $this->currency ?? 'IDR',
             'language' => $this->language ?? 'id',
+            'seoTitle' => $this->seo_title ?? null,
+            'seoDescription' => $this->seo_description ?? null,
+            'seoKeywords' => $this->seo_keywords ?? null,
             'createdAt' => optional($this->created_at)?->toIso8601String(),
             'lastUpdated' => optional($this->updated_at)?->toIso8601String(),
         ];

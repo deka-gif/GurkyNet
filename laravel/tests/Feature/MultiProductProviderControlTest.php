@@ -43,13 +43,18 @@ class MultiProductProviderControlTest extends TestCase
         $response = $this->getJson('/api/v1/admin/operations/product-provider-control');
         $response->assertOk();
 
-        $codes = collect($response->json('data'))->pluck('code')->all();
+        $data = $response->json('data');
+        $providers = $data['providers'] ?? $data;
+        $codes = collect($providers)->pluck('code')->all();
         $this->assertContains('digiflazz', $codes);
         $this->assertContains('vip', $codes);
         $this->assertNotContains('midtrans', $codes);
         $this->assertNotContains('xendit', $codes);
         $this->assertNotContains('alterra', $codes);
         $this->assertNotContains('artajasa', $codes);
+        $this->assertArrayHasKey('autoSync', is_array($data) ? $data : []);
+        $this->assertTrue(array_key_exists('enabled', $data['autoSync'] ?? []));
+        $this->assertSame('23:59', $data['autoSync']['schedule']['time'] ?? null);
     }
 
     public function test_disable_provider_and_set_primary(): void

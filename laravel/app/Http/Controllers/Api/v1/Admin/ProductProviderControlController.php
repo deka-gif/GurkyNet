@@ -162,10 +162,21 @@ class ProductProviderControlController extends Controller
         ]));
     }
 
+    /**
+     * Automatic Synchronization panel status (Sprint 6.3).
+     */
+    public function autoSyncStatus(ProductProviderControlService $service): JsonResponse
+    {
+        return $this->successResponse(
+            'Automatic Synchronization status berhasil dimuat.',
+            $service->autoSyncStatus()
+        );
+    }
+
     public function sync(int $id, Request $request, ProductProviderControlService $service): JsonResponse
     {
         $provider = ProductProvider::findOrFail($id);
-        $cmds = $request->input('cmd', ['prepaid', 'pasca']);
+        $cmds = $request->input('cmd', ['prepaid']);
         if (!is_array($cmds)) {
             $cmds = [$cmds];
         }

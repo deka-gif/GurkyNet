@@ -11,7 +11,9 @@ interface WebsiteState {
   homepageCategories: HomepageCatalogBucket[];
   featuredProducts: HomepagePayload['featuredProducts'];
   faqs: HomepagePayload['faqs'];
-  
+  seo: HomepagePayload['seo'] | null;
+  homepageReady: boolean;
+
   loadingSettings: boolean;
   loadingSections: boolean;
   loadingMenus: boolean;
@@ -32,6 +34,9 @@ interface WebsiteState {
   fetchHomepage: (force?: boolean) => Promise<void>;
 }
 
+/** In-flight promise — ensures GET /public/homepage is never duplicated. */
+let homepageInflight: Promise<void> | null = null;
+
 export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   settings: null,
   sections: [],
@@ -41,6 +46,8 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   homepageCategories: [],
   featuredProducts: [],
   faqs: [],
+  seo: null,
+  homepageReady: false,
 
   loadingSettings: false,
   loadingSections: false,
@@ -53,45 +60,70 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
   errorMenus: null,
   errorPages: null,
   errorBanners: null,
+
   fetchHomepage: async (force = false) => {
-    if (get().settings && get().sections.length > 0 && get().homepageCategories.length > 0 && !force) return;
-    set({
-      loadingSettings: true,
-      loadingSections: true,
-      loadingBanners: true,
-      errorSettings: null,
-      errorSections: null,
-      errorBanners: null,
-    });
+    if (!force && get().homepageReady) return;
+    if (!force && homepageInflight) return homepageInflight;
+
+    homepageInflight = (async () => {
+      set({
+        loadingSettings: true,
+        loadingSections: true,
+        loadingBanners: true,
+        loadingMenus: true,
+        loadingPages: true,
+        errorSettings: null,
+        errorSections: null,
+        errorBanners: null,
+      });
+      try {
+        const response = await websiteService.getPublicHomepage();
+        const payload = response.data;
+        set({
+          settings: payload?.settings ?? null,
+          sections: payload?.sections ?? [],
+          banners: payload?.banners ?? [],
+          homepageCategories: payload?.homepageCategories ?? [],
+          featuredProducts: payload?.featuredProducts ?? [],
+          faqs: payload?.faqs ?? [],
+          menus: payload?.menus ?? get().menus,
+          pages: payload?.pages ?? get().pages,
+          seo: payload?.seo ?? null,
+          homepageReady: true,
+          loadingSettings: false,
+          loadingSections: false,
+          loadingBanners: false,
+          loadingMenus: false,
+          loadingPages: false,
+        });
+      } catch (err: any) {
+        const message = err?.message || 'Gagal memuat homepage publik.';
+        set({
+          errorSettings: message,
+          errorSections: message,
+          errorBanners: message,
+          loadingSettings: false,
+          loadingSections: false,
+          loadingBanners: false,
+          loadingMenus: false,
+          loadingPages: false,
+        });
+      }
+    })();
+
     try {
-      const response = await websiteService.getPublicHomepage();
-      const payload = response.data;
-      set({
-        settings: payload?.settings ?? null,
-        sections: payload?.sections ?? [],
-        banners: payload?.banners ?? [],
-        homepageCategories: payload?.homepageCategories ?? [],
-        featuredProducts: payload?.featuredProducts ?? [],
-        faqs: payload?.faqs ?? [],
-        loadingSettings: false,
-        loadingSections: false,
-        loadingBanners: false,
-      });
-    } catch (err: any) {
-      const message = err?.message || 'Gagal memuat homepage publik.';
-      set({
-        errorSettings: message,
-        errorSections: message,
-        errorBanners: message,
-        loadingSettings: false,
-        loadingSections: false,
-        loadingBanners: false,
-      });
+      await homepageInflight;
+    } finally {
+      homepageInflight = null;
     }
   },
 
   fetchSettings: async (force = false) => {
-    if (get().settings && !force) return; // Cache hit - avoid duplicate requests!
+    if (get().settings && !force) return;
+    if (!force && homepageInflight) {
+      await homepageInflight;
+      if (get().settings) return;
+    }
     set({ loadingSettings: true, errorSettings: null });
     try {
       const data = await websiteService.getPublicSettings();
@@ -104,6 +136,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
 
   fetchSections: async (force = false) => {
     if (get().sections.length > 0 && !force) return;
+    if (!force && homepageInflight) {
+      await homepageInflight;
+      if (get().sections.length > 0) return;
+    }
     set({ loadingSections: true, errorSections: null });
     try {
       const response = await websiteService.getPublicSections();
@@ -115,6 +151,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
 
   fetchMenus: async (force = false) => {
     if (get().menus.length > 0 && !force) return;
+    if (!force && homepageInflight) {
+      await homepageInflight;
+      if (get().menus.length > 0) return;
+    }
     set({ loadingMenus: true, errorMenus: null });
     try {
       const response = await websiteService.getPublicMenus();
@@ -126,6 +166,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
 
   fetchPages: async (force = false) => {
     if (get().pages.length > 0 && !force) return;
+    if (!force && homepageInflight) {
+      await homepageInflight;
+      if (get().pages.length > 0) return;
+    }
     set({ loadingPages: true, errorPages: null });
     try {
       const response = await websiteService.getPublicPages();
@@ -137,6 +181,10 @@ export const useWebsiteStore = create<WebsiteState>((set, get) => ({
 
   fetchBanners: async (force = false) => {
     if (get().banners.length > 0 && !force) return;
+    if (!force && homepageInflight) {
+      await homepageInflight;
+      if (get().banners.length > 0) return;
+    }
     set({ loadingBanners: true, errorBanners: null });
     try {
       const response = await websiteService.getPublicBanners();

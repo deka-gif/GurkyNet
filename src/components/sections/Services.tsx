@@ -39,11 +39,11 @@ function getCategoryIcon(iconName?: string, categorySlug?: string) {
   return Grid;
 }
 
-export const Services: React.FC = () => {
+export const Services: React.FC<{ section?: import('../../types').HomepageSection }> = ({ section: _section }) => {
   const navigate = useNavigate();
   const { categories, fetchCategories } = useProductStore();
   const { user, token } = useAuthStore();
-  const { homepageCategories, fetchHomepage } = useWebsiteStore();
+  const { homepageCategories } = useWebsiteStore();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +55,10 @@ export const Services: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
 
   const loadCategories = async () => {
+    if (homepageCategories.length > 0) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -67,9 +71,8 @@ export const Services: React.FC = () => {
   };
 
   useEffect(() => {
-    loadCategories();
-    void fetchHomepage();
-  }, []);
+    void loadCategories();
+  }, [homepageCategories.length]);
 
   const handleCategoryClick = async (category: any) => {
     // If logged in -> redirect directly to transaction page
