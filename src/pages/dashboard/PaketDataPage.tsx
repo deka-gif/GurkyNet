@@ -27,6 +27,7 @@ import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 const XL_REGIONS = ['Sumatera', 'West', 'Central', 'East', 'East Kalsul'];
 const TELKOMSEL_REGIONS = ['Area 1', 'Area 2', 'Area 3'];
@@ -155,6 +156,10 @@ export const PaketDataPage = () => {
       setErrorMsg('Silakan pilih paket internet terlebih dahulu.');
       return;
     }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
+      return;
+    }
     if (!wallet || wallet.balance < selectedProduct.price) {
       setErrorMsg('Saldo GurkyPay Anda tidak mencukupi untuk membeli paket data ini.');
       return;
@@ -182,7 +187,7 @@ export const PaketDataPage = () => {
   };
 
   const otherOperatorProducts = provider && !usesMasterCatalog
-    ? products.filter((p) => operatorsMatch(p.operatorName, provider) && p.status === 'tersedia')
+    ? products.filter((p) => operatorsMatch(p.operatorName, provider) && isCatalogListed(p))
     : [];
 
   const showSidePanel = Boolean(selectedProduct && showCheckoutPanel);

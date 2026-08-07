@@ -76,6 +76,7 @@ class ProductProviderControlService
             'enabled' => $poweredOn,
             // Top-badge power state — mirrors product_providers.is_active only.
             'status' => $poweredOn ? 'ON' : 'OFF',
+            'partnerStatus' => strtolower((string) ($p->partner_status ?? ($poweredOn ? 'online' : 'offline'))),
             'priority' => (int) $p->priority,
             'apiStatus' => $p->api_status,
             'apiStatusLabel' => $apiStatusLabel,
@@ -109,6 +110,10 @@ class ProductProviderControlService
 
         // Power ON — visibility only. Health fields are refreshed by the probe below.
         $provider->is_active = true;
+        if (strtolower((string) ($provider->partner_status ?? '')) === 'offline'
+            || strtolower((string) ($provider->partner_status ?? '')) === '') {
+            $provider->partner_status = 'online';
+        }
 
         Log::info('EXEC TRACE — Before save() Enable', [
             'Provider ID' => $provider->id,
@@ -195,6 +200,7 @@ class ProductProviderControlService
 
         // Power OFF only — do not mutate api_status / health_color.
         $provider->is_active = false;
+        $provider->partner_status = 'offline';
 
         Log::info('EXEC TRACE — Before save() Disable', [
             'Provider ID' => $provider->id,

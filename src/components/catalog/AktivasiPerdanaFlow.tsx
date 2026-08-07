@@ -23,6 +23,7 @@ import {
   providerApiName,
   providerBadgeLabel,
 } from '../../utils/detectOperator';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 const PER_PAGE = 24;
 const RETURN_PATH = '/dashboard/telekomunikasi/aktivasi-perdana';
@@ -117,7 +118,7 @@ export function AktivasiPerdanaFlow() {
       const names = Array.from(
         new Set(
           res.data
-            .filter((p) => p.status === 'tersedia')
+            .filter((p) => isCatalogListed(p))
             .map((p) => (p.operatorName || '').trim())
             .filter(Boolean)
         )
@@ -241,6 +242,10 @@ export function AktivasiPerdanaFlow() {
   const handleCheckout = () => {
     if (!activeOperator || !selectedProduct) {
       setErrorMsg('Pilih produk aktivasi terlebih dahulu.');
+      return;
+    }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
     if (serial.trim().length < 6) {
@@ -427,19 +432,24 @@ export function AktivasiPerdanaFlow() {
                         selectedProduct?.code === p.code
                           ? 'border-primary-500 ring-2 ring-primary-500/20'
                           : 'border-gray-100 shadow-sm'
-                      }`}
+                      } ${!isProductPurchasable(p) ? 'opacity-70' : ''}`}
                     >
                       <h4 className="font-extrabold text-sm text-gray-900 line-clamp-2 min-h-[2.5rem]">{p.name}</h4>
+                      {!isProductPurchasable(p) && (
+                        <p className="text-[10px] font-bold text-amber-700 mt-1">Sedang maintenance</p>
+                      )}
                       <span className="mt-3 text-base font-black text-red-600">{formatIDR(p.price)}</span>
                       <button
                         type="button"
+                        disabled={!isProductPurchasable(p)}
                         onClick={() => {
+                          if (!isProductPurchasable(p)) return;
                           setSelectedProduct(p);
                           setShowCheckoutPanel(true);
                         }}
-                        className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 text-white text-xs font-black"
+                        className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 text-white text-xs font-black disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Beli
+                        {isProductPurchasable(p) ? 'Beli' : 'Maintenance'}
                       </button>
                     </article>
                   ))}
@@ -487,8 +497,9 @@ export function AktivasiPerdanaFlow() {
             </div>
             <button
               type="button"
+              disabled={!isProductPurchasable(selectedProduct)}
               onClick={handleCheckout}
-              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white text-sm font-bold flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard className="w-4 h-4" /> Bayar Sekarang
             </button>

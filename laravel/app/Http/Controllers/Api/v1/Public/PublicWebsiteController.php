@@ -413,6 +413,8 @@ class PublicWebsiteController extends Controller
 
     protected function featuredProducts()
     {
+        $availability = resolve(\App\Services\AvailabilityService::class);
+
         return HomepageFeaturedProduct::query()
             ->with([
                 'product.category',
@@ -424,7 +426,26 @@ class PublicWebsiteController extends Controller
             ->orderBy('display_order')
             ->get()
             ->pluck('product')
-            ->filter()
+            ->filter(function ($product) use ($availability) {
+                if (!$product) {
+                    return false;
+                }
+
+                // Mirror User Dashboard: hide ops inactive; keep Active + Maintenance.
+                if (! $availability->isCatalogVisible($product)) {
+                    return false;
+                }
+
+                // Control Center gate — at least one active SKU on an enabled Product Provider.
+                $product->loadMissing('providerSkus.productProvider');
+                foreach ($product->providerSkus as $sku) {
+                    if ($sku->is_active && $sku->productProvider && $sku->productProvider->is_active) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
             ->values();
     }
 }

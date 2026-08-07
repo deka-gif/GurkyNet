@@ -19,7 +19,8 @@ class ProductResource extends JsonResource
 
         $pricingDetails = $pricingService->calculateForProduct($this->resource);
         $availabilityStatus = $availabilityService->getStatus($this->resource);
-        $sellable = $this->isSellableViaControlCenter();
+        $sellable = $availabilityStatus === 'active' && $this->isSellableViaControlCenter();
+        $catalogVisible = $availabilityStatus === 'active' || $availabilityStatus === 'maintenance';
 
         $resolver = resolve(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
         $metaSvc = $resolver->meta();
@@ -55,11 +56,17 @@ class ProductResource extends JsonResource
             'adminFee' => (float) $pricingDetails['admin_fee'],
             'price' => (float) $pricingDetails['sell_price'],
             'sellingPrice' => (float) ($pricingDetails['selling_price'] ?? $pricingDetails['sell_price']),
-            // Dashboard filters status === 'tersedia'. Digi may leave products.status=false
-            // even when an enabled VIP (or Digi) SKU offer is active — prefer Control Center.
-            'status' => $sellable ? 'tersedia' : 'gangguan',
+            // Dashboard lists status === 'tersedia' | 'maintenance'.
+            // Digi may leave products.status=false while VIP SKU remains sellable — prefer Control Center.
+            // Maintenance remains catalog-visible; purchase is disabled via availabilityStatus / isActive.
+            'status' => $availabilityStatus === 'maintenance'
+                ? 'maintenance'
+                : ($sellable ? 'tersedia' : 'gangguan'),
             'isActive' => $sellable,
+            'opsStatus' => $this->ops_status ?? $availabilityStatus,
             'availabilityStatus' => $availabilityStatus, // Engine calculated: active, inactive, maintenance
+            'isPurchasable' => $sellable,
+            'isCatalogVisible' => $catalogVisible,
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
 'operatorName' => $this->provider?->name ?? 'System',
@@ -77,19 +84,12 @@ class ProductResource extends JsonResource
     }
 
     /**
-     * Sellable when any active product_provider_skus row belongs to an enabled Product Provider.
+     * Sellable when any active SKU belongs to an enabled, non-maintenance Product Provider.
      * Falls back to products.status when SKU relations are not loaded.
      */
     protected function isSellableViaControlCenter(): bool
     {
-        $this->resource->loadMissing('providerSkus.productProvider');
-
-        foreach ($this->providerSkus as $sku) {
-            if ($sku->is_active && $sku->productProvider && $sku->productProvider->is_active) {
-                return true;
-            }
-        }
-
-        return (bool) $this->status;
+        return resolve(\App\Services\AvailabilityService::class)
+            ->isSellableViaControlCenter($this->resource);
     }
 }

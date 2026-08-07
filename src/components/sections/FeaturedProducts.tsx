@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { Star, ShoppingBag } from 'lucide-react';
 import { useWebsiteStore } from '../../store/website.store';
 import { formatIDR } from '../../utils/currency';
+import { catalogStatusLabel, isProductPurchasable } from '../../utils/catalogAvailability';
 
 export const FeaturedProducts = () => {
   const { featuredProducts } = useWebsiteStore();
@@ -53,8 +54,14 @@ export const FeaturedProducts = () => {
                   <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Harga</div>
                   <div className="text-lg font-black text-primary-600">{formatIDR(Number(product.price))}</div>
                 </div>
-                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${product.isActive !== false ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
-                  {product.isActive !== false ? 'Tersedia' : 'Gangguan'}
+                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+                  isProductPurchasable(product as any)
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                    : catalogStatusLabel(product as any) === 'Maintenance'
+                      ? 'bg-amber-50 text-amber-700 border-amber-100'
+                      : 'bg-red-50 text-red-700 border-red-100'
+                }`}>
+                  {catalogStatusLabel(product as any)}
                 </span>
               </div>
             </motion.div>

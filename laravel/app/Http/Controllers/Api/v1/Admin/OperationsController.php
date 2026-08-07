@@ -84,7 +84,10 @@ return $this->paginatedResponse(
         try {
             $data = $request->validated();
             $product = $action->update($id, $data);
-            return $this->successResponse('Data produk berhasil diperbarui.', $product);
+            return $this->successResponse(
+                'Data produk berhasil diperbarui.',
+                new \App\Http\Resources\ProductResource($product)
+            );
         } catch (\Exception $e) {
             $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 400;
             return $this->errorResponse($e->getMessage(), $code);
@@ -92,8 +95,9 @@ return $this->paginatedResponse(
     }
 
     /**
-     * Get Paginated Provider List with Filters.
+     * Provider Management Control Center (Digiflazz / VIP / Midtrans).
      * GET /api/v1/admin/operations/providers
+     * Params: status, supported_service, search, page, per_page, sort, refresh
      */
     public function providers(ProviderFilterRequest $request, OperationsProvidersAction $action): JsonResponse
     {
@@ -101,25 +105,40 @@ return $this->paginatedResponse(
         $paginator = $action->list($filters);
 
         return $this->paginatedResponse(
-            'Daftar penyedia (provider) berhasil dimuat.',
+            'Daftar partner provider berhasil dimuat.',
             $paginator->items(),
+            $paginator
+        );
+    }
+
+    /**
+     * Probe live health for all partners (Refresh Status).
+     * POST /api/v1/admin/operations/providers/refresh-status
+     */
+    public function refreshProviderStatuses(OperationsProvidersAction $action): JsonResponse
+    {
+        $updated = $action->refreshStatuses();
+
+        return $this->successResponse(
+            'Status partner provider berhasil di-refresh dari backend.',
             [
-                'current_page' => $paginator->currentPage(),
-                'last_page' => $paginator->lastPage(),
-                'per_page' => $paginator->perPage(),
-                'total' => $paginator->total(),
+                'updated_count' => count($updated),
+                'partners' => $updated,
             ]
         );
     }
 
     /**
-     * Update Provider Status / Maintenance Flag / Notes.
+     * Update partner status (Online / Maintenance / Offline) / notes.
      * PUT /api/v1/admin/operations/providers/{id}
      */
     public function updateProvider(string|int $id, UpdateProviderRequest $request, OperationsProvidersAction $action): JsonResponse
     {
         try {
             $data = $request->validated();
+            if (!empty($data['maintenance_flag']) && !isset($data['status']) && !isset($data['partner_status'])) {
+                $data['status'] = 'maintenance';
+            }
             $provider = $action->update($id, $data);
             return $this->successResponse('Status provider berhasil diperbarui.', $provider);
         } catch (\Exception $e) {
@@ -129,43 +148,102 @@ return $this->paginatedResponse(
     }
 
     /**
-     * Get Service Monitoring Data.
-     * GET /api/v1/admin/operations/monitoring
+     * Network Operations Center — service cards (not SKU dumps).
+     * GET /api/v1/admin/operations/monitoring?status=&search=&refresh=
      */
     public function monitoring(Request $request, OperationsMonitoringAction $action): JsonResponse
     {
-        $filters = $request->only(['status', 'search']);
+        $filters = $request->only(['status', 'search', 'refresh']);
         $data = $action->execute($filters);
 
-        return $this->successResponse('Data monitoring layanan operasional berhasil dimuat.', $data);
+        return $this->successResponse('NOC Service Monitoring berhasil dimuat.', $data);
     }
 
     /**
-     * Get Pricing Margin Rules.
-     * GET /api/v1/admin/operations/pricing
+     * Probe provider health then return fresh NOC overview.
+     * POST /api/v1/admin/operations/monitoring/refresh
      */
-    public function pricing(Request $request, OperationsPricingAction $action): JsonResponse
+    public function refreshMonitoring(Request $request, OperationsMonitoringAction $action): JsonResponse
     {
-        $filters = $request->only([
-            'product_provider_id',
-            'product_provider_code',
-            'provider',
-            'search',
-            'status',
-        ]);
-        $data = $action->get($filters);
-        return $this->successResponse('Aturan harga dan margin berhasil dimuat.', $data);
+        $filters = $request->only(['status', 'search']);
+        $data = $action->refresh($filters);
+
+        return $this->successResponse('Status layanan berhasil di-refresh dari provider.', $data);
     }
 
     /**
-     * Update Pricing Margin Rules.
+     * Level 1–2 service detail with provider summaries.
+     * GET /api/v1/admin/operations/monitoring/services/{serviceKey}
+     */
+    public function monitoringServiceDetail(string $serviceKey, OperationsMonitoringAction $action): JsonResponse
+    {
+        return $this->successResponse(
+            'Detail service monitoring berhasil dimuat.',
+            $action->serviceDetail($serviceKey)
+        );
+    }
+
+    /**
+     * Level 3 — problematic SKUs only (maintenance + offline).
+     * GET /api/v1/admin/operations/monitoring/services/{serviceKey}/issues
+     */
+    public function monitoringServiceIssues(string $serviceKey, Request $request, OperationsMonitoringAction $action): JsonResponse
+    {
+        $providerId = $request->filled('product_provider_id')
+            ? (int) $request->input('product_provider_id')
+            : null;
+
+        return $this->successResponse(
+            'Daftar SKU bermasalah berhasil dimuat.',
+            $action->problematicSkus(
+                $serviceKey,
+                $providerId,
+                max(1, (int) $request->input('page', 1)),
+                max(1, min(100, (int) $request->input('per_page', 50)))
+            )
+        );
+    }
+
+    /**
+     * Pricing & Margin Engine — paginated Product Mapping Layer catalog.
+     * GET /api/v1/admin/operations/pricing
+     * Same filters as Product Management: category, product_provider_id, status, search, page, per_page
+     */
+    public function pricing(ProductFilterRequest $request, OperationsPricingAction $action): JsonResponse
+    {
+        $data = $action->get($request->validated());
+
+        return $this->successResponse(
+            'Data Pricing & Margin berhasil dimuat.',
+            $data,
+            200,
+            [
+                'pagination' => $data['pagination'] ?? null,
+                'summary' => $data['summary'] ?? null,
+                'level' => $data['level'] ?? null,
+            ]
+        );
+    }
+
+    /**
+     * Update SKU sell price / margin / status, or global default margin rules.
      * PUT /api/v1/admin/operations/pricing
+     * PUT /api/v1/admin/operations/pricing/{id}
      */
     public function updatePricing(UpdatePricingRequest $request, OperationsPricingAction $action): JsonResponse
     {
-        $data = $request->validated();
-        $updated = $action->update($data);
-        return $this->successResponse('Aturan harga dan margin berhasil diperbarui.', $updated);
+        try {
+            $data = $request->validated();
+            $updated = $action->update($data);
+
+            return $this->successResponse('Skema harga berhasil diperbarui.', $updated);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? (int) $e->getCode() : 400;
+
+            return $this->errorResponse($e->getMessage(), $code);
+        }
     }
 
     /**

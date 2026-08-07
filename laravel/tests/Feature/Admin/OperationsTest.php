@@ -191,16 +191,21 @@ class OperationsTest extends TestCase
                     'pagination' => ['currentPage', 'lastPage', 'perPage', 'total'],
                 ],
             ]);
+
+        $codes = collect($response->json('data'))->pluck('code')->map(fn ($c) => strtolower((string) $c))->all();
+        $this->assertContains('digiflazz', $codes);
     }
 
     public function test_operations_user_can_update_provider(): void
     {
         Sanctum::actingAs($this->operationsUser);
 
-        $response = $this->putJson("/api/v1/admin/operations/providers/{$this->provider->id}", [
-            'is_active' => false,
-            'maintenance_flag' => true,
-            'notes' => 'Penyedia sedang mengalami ganguan jaringan',
+        $digi = \App\Models\ProductProvider::digiflazz();
+        $this->assertNotNull($digi);
+
+        $response = $this->putJson("/api/v1/admin/operations/providers/{$digi->id}", [
+            'status' => 'maintenance',
+            'notes' => 'Penyedia sedang mengalami gangguan jaringan',
         ]);
 
         $response->assertStatus(200)
@@ -208,9 +213,10 @@ class OperationsTest extends TestCase
                 'success' => true,
             ]);
 
-        $this->assertDatabaseHas('providers', [
-            'id' => $this->provider->id,
-            'is_active' => false,
+        $this->assertDatabaseHas('product_providers', [
+            'id' => $digi->id,
+            'partner_status' => 'maintenance',
+            'is_active' => true,
         ]);
     }
 

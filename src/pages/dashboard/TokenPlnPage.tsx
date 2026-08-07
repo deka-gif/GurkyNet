@@ -15,6 +15,7 @@ import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { plnService, PlnInquiryResult } from '../../services/pln/pln.service';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 export const TokenPlnPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -48,7 +49,7 @@ export const TokenPlnPage = () => {
   // Products from Product Mapping / provider catalog — never hardcoded nominals.
   const displayProducts = useMemo(() => {
     return products
-      .filter((p) => p.status === 'tersedia')
+      .filter((p) => isCatalogListed(p))
       .slice()
       .sort((a, b) => a.price - b.price);
   }, [products]);
@@ -101,6 +102,10 @@ export const TokenPlnPage = () => {
     }
     if (!selectedProduct) {
       setErrorMsg('Silakan pilih nominal token yang ingin dibeli.');
+      return;
+    }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk token sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
     if (!wallet || wallet.balance < selectedProduct.price) {
@@ -266,11 +271,14 @@ export const TokenPlnPage = () => {
                       selectedProduct?.id === opt.id
                         ? 'bg-amber-50/20 border-amber-500 ring-2 ring-amber-500/20 shadow-md'
                         : 'bg-gray-50/50 border-gray-100 hover:border-gray-300 hover:bg-white'
-                    }`}
+                    } ${!isProductPurchasable(opt) ? 'opacity-70' : ''}`}
                   >
                     <div>
                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PLN Prabayar</span>
                       <h4 className="font-extrabold text-gray-900 text-base mt-0.5 leading-snug">{opt.name}</h4>
+                      {!isProductPurchasable(opt) && (
+                        <p className="text-[10px] font-bold text-amber-700 mt-1">Sedang maintenance</p>
+                      )}
                     </div>
                     <div className="mt-4 pt-2.5 border-t border-gray-100/80 flex items-center justify-between w-full text-[10px]">
                       <span className="font-black text-gray-800">{formatIDR(opt.price)}</span>
@@ -325,10 +333,10 @@ export const TokenPlnPage = () => {
 
           <button
             type="button"
-            disabled={!inquiryReady || !selectedProduct}
+            disabled={!inquiryReady || !selectedProduct || !isProductPurchasable(selectedProduct)}
             onClick={handleBeli}
             className={`w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
-              inquiryReady && selectedProduct
+              inquiryReady && selectedProduct && isProductPurchasable(selectedProduct)
                 ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/10'
                 : 'bg-gray-200 cursor-not-allowed text-gray-400'
             }`}

@@ -3,7 +3,6 @@
 namespace App\Repositories\Contracts;
 
 use App\Models\Product;
-use App\Models\Provider;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 interface OperationsRepositoryInterface
@@ -29,14 +28,23 @@ interface OperationsRepositoryInterface
     public function updateProduct(string|int $id, array $data): Product;
 
     /**
-     * Get paginated providers list with filters.
+     * Get paginated integration partners (Digiflazz / VIP / Midtrans) with filters.
      */
     public function getProviders(array $filters): LengthAwarePaginator;
 
     /**
-     * Update provider details (status, maintenance flag, notes).
+     * Update partner status / notes (product provider or payment gateway).
+     *
+     * @return array<string, mixed>
      */
-    public function updateProvider(string|int $id, array $data): Provider;
+    public function updateProvider(string|int $id, array $data): array;
+
+    /**
+     * Probe live health for all partners and return refreshed list metadata.
+     *
+     * @return array<int, mixed>
+     */
+    public function refreshProviderStatuses(): array;
 
     /**
      * Get service monitoring data for Operations dashboard.

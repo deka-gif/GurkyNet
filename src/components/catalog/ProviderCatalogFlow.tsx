@@ -22,6 +22,7 @@ import {
   GameAccountField,
   GameInquiryResult,
 } from '../../services/game/game.service';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 export type CatalogTargetMode = 'phone' | 'game' | 'customer' | 'none';
 
@@ -134,7 +135,7 @@ export function ProviderCatalogFlow({
   const providers = useMemo(() => {
     const map = new Map<string, { name: string; count: number; sample?: Product }>();
     for (const p of products) {
-      if (p.status !== 'tersedia') continue;
+      if (!isCatalogListed(p)) continue;
       const name = (p.operatorName || 'Lainnya').trim();
       const key = name.toLowerCase();
       const prev = map.get(key);
@@ -158,7 +159,7 @@ export function ProviderCatalogFlow({
     return products
       .filter(
         (p) =>
-          p.status === 'tersedia' &&
+          isCatalogListed(p) &&
           (p.operatorName || '').trim().toLowerCase() === selectedProvider.toLowerCase()
       )
       .sort((a, b) => a.price - b.price);
@@ -218,6 +219,10 @@ export function ProviderCatalogFlow({
   const handleCheckout = () => {
     if (!selectedProduct || !selectedProvider) {
       setErrorMsg('Pilih provider dan produk terlebih dahulu.');
+      return;
+    }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
 
@@ -457,6 +462,7 @@ export function ProviderCatalogFlow({
 
   const nextDisabled =
     !selectedProduct ||
+    !isProductPurchasable(selectedProduct) ||
     inquiring ||
     (isEwalletInquiry && !phoneReady) ||
     (isGameInquiry && !gameAccountReady);
@@ -707,6 +713,7 @@ export function ProviderCatalogFlow({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[420px] overflow-y-auto pr-1">
                     {providerProducts.map((product) => {
                       const active = selectedProduct?.id === product.id;
+                      const purchasable = isProductPurchasable(product);
                       return (
                         <button
                           key={product.id}
@@ -716,9 +723,12 @@ export function ProviderCatalogFlow({
                             active
                               ? 'border-primary-500 bg-primary-50/40 shadow-sm'
                               : 'border-gray-100 bg-gray-50 hover:border-gray-300'
-                          }`}
+                          } ${!purchasable ? 'opacity-70' : ''}`}
                         >
                           <div className="font-extrabold text-gray-900 text-sm leading-snug">{product.name}</div>
+                          {!purchasable && (
+                            <div className="mt-1 text-[10px] font-bold text-amber-700">Sedang maintenance</div>
+                          )}
                           <div className="mt-2 flex items-center justify-between">
                             <span className="text-sm font-black text-primary-600">{formatIDR(product.price)}</span>
                             {active && <ChevronRight className="w-4 h-4 text-primary-600" />}

@@ -7,9 +7,7 @@ use App\Models\Product;
 use App\Models\Provider;
 use App\Models\Setting;
 use App\Models\ActivityLog;
-use App\Models\DigiflazzTransaction;
 use App\Models\DigiflazzProduct;
-use App\Models\MidtransTransaction;
 use App\Services\PricingService;
 use App\Services\AvailabilityService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -28,8 +26,23 @@ class OperationsRepository implements OperationsRepositoryInterface
     public function getDashboardMetrics(): array
     {
         $totalProducts = Product::count();
-        $inactiveProducts = Product::where('status', false)->count();
-        $maintenanceProducts = Product::where('status', true)->where('sku_code', 'like', '%MAINTENANCE%')->count();
+        $maintenanceProducts = Product::query()
+            ->where(function ($q) {
+                $q->where('ops_status', 'maintenance')
+                    ->orWhere('sku_code', 'like', '%MAINTENANCE%');
+            })
+            ->count();
+        $inactiveProducts = Product::query()
+            ->where(function ($q) {
+                $q->where('ops_status', 'inactive')
+                    ->orWhere(function ($legacy) {
+                        $legacy->where(function ($ops) {
+                            $ops->whereNull('ops_status')->orWhere('ops_status', 'active');
+                        })->where('status', false)
+                            ->where('sku_code', 'not like', '%MAINTENANCE%');
+                    });
+            })
+            ->count();
         $activeProducts = max(0, $totalProducts - $inactiveProducts - $maintenanceProducts);
 
         $providers = Provider::withCount('products')->select('id', 'name', 'logo', 'is_active', 'updated_at')->get();
@@ -170,22 +183,50 @@ class OperationsRepository implements OperationsRepositoryInterface
      * Get paginated products list with filters.
      * Product Provider filtering uses products.product_provider_id only.
      * Payment gateway names must never match Digiflazz products by accident.
+     * Category uses GurkyNet slug families (same as user dashboard Product Mapping).
      */
     public function getProducts(array $filters): LengthAwarePaginator
     {
-        $perPage = $filters['per_page'] ?? 15;
-        $query = Product::with(['category', 'provider', 'productProvider']);
+        $perPage = (int) ($filters['per_page'] ?? 25);
+        if ($perPage < 1) {
+            $perPage = 25;
+        }
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
+
+        $query = Product::query()->with([
+            'category',
+            'provider',
+            'productProvider',
+            'providerSkus.productProvider',
+        ]);
 
         if (!empty($filters['search'])) {
-            $search = $filters['search'];
+            $search = trim((string) $filters['search']);
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('sku_code', 'like', "%{$search}%");
+                $q->where('products.name', 'like', "%{$search}%")
+                    ->orWhere('products.sku_code', 'like', "%{$search}%")
+                    ->orWhereHas('provider', function ($pq) use ($search) {
+                        $pq->where('name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('productProvider', function ($pq) use ($search) {
+                        $pq->where('name', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%");
+                    });
             });
         }
 
         if (!empty($filters['product_category_id'])) {
-            $query->where('product_category_id', $filters['product_category_id']);
+            $query->where('product_category_id', (int) $filters['product_category_id']);
+        } elseif (!empty($filters['category'])) {
+            $category = (string) $filters['category'];
+            if ($category !== '' && strtolower($category) !== 'all') {
+                $slugs = \App\Services\ProductProviders\LogicalProductKey::categoryFilterSlugs($category);
+                $query->whereHas('category', function ($q) use ($slugs) {
+                    $q->whereIn('slug', $slugs);
+                });
+            }
         }
 
         if (!empty($filters['provider_id'])) {
@@ -202,17 +243,106 @@ class OperationsRepository implements OperationsRepositoryInterface
             $query->where('product_provider_id', $productProviderId);
         }
 
-        if (isset($filters['status'])) {
-            if ($filters['status'] === 'maintenance') {
-                $query->where('status', true)->where('sku_code', 'like', '%MAINTENANCE%');
-            } elseif ($filters['status'] === 'active' || $filters['status'] === '1' || $filters['status'] === true) {
-                $query->where('status', true)->where('sku_code', 'not like', '%MAINTENANCE%');
-            } elseif ($filters['status'] === 'inactive' || $filters['status'] === '0' || $filters['status'] === false) {
-                $query->where('status', false);
-            }
+        if (array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== '') {
+            $this->applyProductStatusFilter($query, $filters['status']);
         }
 
-        return $query->latest()->paginate($perPage);
+        $this->applyProductSort($query, (string) ($filters['sort'] ?? 'newest'));
+
+        return $query->paginate($perPage);
+    }
+
+    /**
+     * Public wrapper for PricingHierarchyService (same status semantics as Product Management).
+     */
+    public function applyProductStatusFilterPublic($query, mixed $status): void
+    {
+        $this->applyProductStatusFilter($query, $status);
+    }
+
+    /**
+     * Public wrapper for PricingHierarchyService summary cards.
+     *
+     * @return array{total_products:int,average_margin:float,active_sku_count:int}
+     */
+    public function pricingSummaryMetricsPublic(): array
+    {
+        return $this->pricingSummaryMetrics();
+    }
+
+    /**
+     * Public wrapper for PricingHierarchyService SKU rows.
+     *
+     * @return array<string, mixed>
+     */
+    public function mapPricingProductRowPublic(Product $product): array
+    {
+        return $this->mapPricingProductRow($product);
+    }
+
+    /**
+     * Status filter aligned with AvailabilityService (active / inactive / maintenance).
+     * Prefers products.ops_status; falls back to legacy MAINTENANCE sku_code / boolean status.
+     */
+    protected function applyProductStatusFilter($query, mixed $status): void
+    {
+        $normalized = is_bool($status)
+            ? ($status ? 'active' : 'inactive')
+            : strtolower(trim((string) $status));
+
+        $normalized = match ($normalized) {
+            '1', 'true', 'tersedia', 'active' => 'active',
+            '0', 'false', 'nonaktif', 'inactive', 'gangguan' => 'inactive',
+            'maintenance' => 'maintenance',
+            default => $normalized,
+        };
+
+        if ($normalized === 'maintenance') {
+            $query->where(function ($q) {
+                $q->where('products.ops_status', 'maintenance')
+                    ->orWhere('products.sku_code', 'like', '%MAINTENANCE%');
+            });
+
+            return;
+        }
+
+        if ($normalized === 'active') {
+            $query->where('products.sku_code', 'not like', '%MAINTENANCE%')
+                ->where(function ($q) {
+                    $q->where('products.ops_status', 'active')
+                        ->orWhere(function ($legacy) {
+                            $legacy->whereNull('products.ops_status')
+                                ->where('products.status', true);
+                        });
+                });
+
+            return;
+        }
+
+        if ($normalized === 'inactive') {
+            $query->where(function ($q) {
+                $q->where('products.ops_status', 'inactive')
+                    ->orWhere(function ($legacy) {
+                        $legacy->where(function ($ops) {
+                            $ops->whereNull('products.ops_status')
+                                ->orWhere('products.ops_status', 'active');
+                        })->where('products.status', false)
+                            ->where('products.sku_code', 'not like', '%MAINTENANCE%');
+                    });
+            });
+        }
+    }
+
+    protected function applyProductSort($query, string $sort): void
+    {
+        match ($sort) {
+            'oldest' => $query->orderBy('products.id'),
+            'name_asc' => $query->orderBy('products.name')->orderBy('products.id'),
+            'name_desc' => $query->orderByDesc('products.name')->orderByDesc('products.id'),
+            'price_asc' => $query->orderBy('products.sell_price')->orderBy('products.id'),
+            'price_desc' => $query->orderByDesc('products.sell_price')->orderByDesc('products.id'),
+            default => $query->orderByDesc('products.id'),
+        };
     }
 
     /**
@@ -298,23 +428,54 @@ class OperationsRepository implements OperationsRepositoryInterface
 
     /**
      * Update product details (sell price, margin, status, admin notes).
+     * Status changes write products.ops_status so User Dashboard catalog reacts immediately.
+     * Selling price is authoritative for Dashboard User (PricingService reads products.sell_price).
      */
     public function updateProduct(string|int $id, array $data): Product
     {
         $product = Product::findOrFail($id);
 
-        if (isset($data['margin']) && !isset($data['sell_price'])) {
-            $margin = (float) $data['margin'];
-            $product->sell_price = (float) $product->base_price + $margin + (float) $product->admin_fee;
-        } elseif (isset($data['sell_price'])) {
-            $product->sell_price = (float) $data['sell_price'];
+        if (isset($data['name']) && is_string($data['name']) && trim($data['name']) !== '') {
+            $product->name = trim($data['name']);
         }
 
-        if (isset($data['status'])) {
-            $product->status = filter_var($data['status'], FILTER_VALIDATE_BOOLEAN);
+        // Pricing Engine: base_price is supplier-owned unless explicitly allowed (Product Management sync).
+        if (isset($data['base_price']) && empty($data['lock_base_price'])) {
+            $product->base_price = (float) $data['base_price'];
+        }
+
+        if (isset($data['admin_fee'])) {
+            $product->admin_fee = (float) $data['admin_fee'];
+        }
+
+        $touchesPrice = array_key_exists('margin', $data) || array_key_exists('sell_price', $data);
+        if ($touchesPrice && (float) $product->base_price <= 0) {
+            throw new \InvalidArgumentException('Base Price kosong. Sinkron ulang produk dari Product Mapping / provider.');
+        }
+
+        if (isset($data['margin']) && ! isset($data['sell_price'])) {
+            $margin = (float) $data['margin'];
+            if ($margin < 0) {
+                throw new \InvalidArgumentException('Margin tidak boleh negatif.');
+            }
+            $product->sell_price = (float) $product->base_price + $margin + (float) $product->admin_fee;
+        } elseif (isset($data['sell_price'])) {
+            $sellPrice = (float) $data['sell_price'];
+            if ($sellPrice < (float) $product->base_price) {
+                throw new \InvalidArgumentException('Selling Price tidak boleh lebih kecil dari Base Price.');
+            }
+            $product->sell_price = $sellPrice;
+        }
+
+        if (array_key_exists('status', $data) && $data['status'] !== null && $data['status'] !== '') {
+            $opsStatus = $this->normalizeOpsStatus($data['status']);
+            $product->ops_status = $opsStatus;
+            $product->status = $opsStatus !== 'inactive';
         }
 
         $product->save();
+
+        \App\Services\ProductProviders\ProductCatalogCache::bump();
 
         ActivityLog::create([
             'user_id' => Auth::id(),
@@ -322,309 +483,136 @@ class OperationsRepository implements OperationsRepositoryInterface
             'payload' => [
                 'product_id' => $product->id,
                 'sku_code' => $product->sku_code,
+                'ops_status' => $product->ops_status,
                 'updated_fields' => $data,
                 'admin_notes' => $data['admin_notes'] ?? null,
             ],
         ]);
 
-        return $product->fresh(['category', 'provider']);
+        return $product->fresh(['category', 'provider', 'productProvider', 'providerSkus.productProvider']);
     }
 
     /**
-     * Get paginated providers list with filters.
+     * @return 'active'|'inactive'|'maintenance'
+     */
+    protected function normalizeOpsStatus(mixed $status): string
+    {
+        if (is_bool($status)) {
+            return $status ? 'active' : 'inactive';
+        }
+
+        $normalized = strtolower(trim((string) $status));
+
+        return match ($normalized) {
+            '1', 'true', 'tersedia', 'active' => 'active',
+            '0', 'false', 'nonaktif', 'inactive', 'gangguan' => 'inactive',
+            'maintenance' => 'maintenance',
+            default => filter_var($status, FILTER_VALIDATE_BOOLEAN) ? 'active' : 'inactive',
+        };
+    }
+
+    /**
+     * Get paginated integration partners (Digiflazz / VIP / Midtrans).
+     * Operator brands (Telkomsel, …) are not listed here — Product Mapping owns those.
      */
     public function getProviders(array $filters): LengthAwarePaginator
     {
-        $perPage = $filters['per_page'] ?? 15;
-        $query = Provider::withCount('products');
-
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $query->where('name', 'like', "%{$search}%");
-        }
-
-        if (isset($filters['status'])) {
-            $isActive = filter_var($filters['status'], FILTER_VALIDATE_BOOLEAN);
-            $query->where('is_active', $isActive);
-        }
-
-        $paginator = $query->latest()->paginate($perPage);
-        $sync = $this->getDigiflazzSyncStatus();
-
-        $paginator->getCollection()->transform(function (Provider $provider) use ($sync) {
-            $provider->setAttribute('last_sync', $sync['last_sync_at']);
-            $provider->setAttribute('lastSync', $sync['last_sync_at']);
-            $provider->setAttribute('sync_status', $sync['status']);
-            $provider->setAttribute('status', $provider->is_active ? 'active' : 'inactive');
-            return $provider;
-        });
-
-        return $paginator;
+        return app(\App\Services\ProductProviders\ProviderPartnerService::class)->list($filters);
     }
 
     /**
-     * Update provider details (status, maintenance flag, notes).
+     * Update partner status (Online / Maintenance / Offline) for product providers or Midtrans.
+     *
+     * @return array<string, mixed>
      */
-    public function updateProvider(string|int $id, array $data): Provider
+    public function updateProvider(string|int $id, array $data): array
     {
-        $provider = Provider::findOrFail($id);
-
-        if (isset($data['status'])) {
-            $provider->is_active = filter_var($data['status'], FILTER_VALIDATE_BOOLEAN);
-        } elseif (isset($data['is_active'])) {
-            $provider->is_active = filter_var($data['is_active'], FILTER_VALIDATE_BOOLEAN);
-        }
-
-        $provider->save();
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'activity' => 'UPDATE_PROVIDER_OPERATIONS',
-            'payload' => [
-                'provider_id' => $provider->id,
-                'provider_name' => $provider->name,
-                'maintenance_flag' => $data['maintenance_flag'] ?? false,
-                'notes' => $data['notes'] ?? null,
-                'updated_fields' => $data,
-            ],
-        ]);
-
-        return $provider->fresh();
+        return app(\App\Services\ProductProviders\ProviderPartnerService::class)->update($id, $data);
     }
 
     /**
-     * Get service monitoring data for Operations dashboard.
+     * @return array<int, mixed>
+     */
+    public function refreshProviderStatuses(): array
+    {
+        return app(\App\Services\ProductProviders\ProviderPartnerService::class)->refreshAllHealth();
+    }
+
+    /**
+     * Network Operations Center — service-level health (not SKU dumps).
      */
     public function getMonitoring(array $filters = []): array
     {
-        // Real average fulfillment time per provider, computed from Digiflazz
-        // transaction records of the last 7 days (created -> last status update).
-        $recentFulfillments = DigiflazzTransaction::whereIn('digiflazz_status', ['success', 'sukses'])
-            ->where('created_at', '>=', now()->subDays(7))
-            ->whereColumn('updated_at', '>', 'created_at')
-            ->get(['buyer_sku_code', 'created_at', 'updated_at']);
-
-        $skuToProvider = Product::whereNotNull('provider_id')->pluck('provider_id', 'sku_code');
-
-        $providerDurations = [];
-        foreach ($recentFulfillments as $fulfillment) {
-            $providerId = $skuToProvider[$fulfillment->buyer_sku_code] ?? null;
-            if ($providerId === null) {
-                continue;
-            }
-            $providerDurations[$providerId][] = $fulfillment->updated_at->diffInSeconds($fulfillment->created_at, true);
-        }
-
-        $providerResponseTimes = [];
-        foreach ($providerDurations as $providerId => $durations) {
-            $providerResponseTimes[$providerId] = round(array_sum($durations) / count($durations), 1) . 's';
-        }
-
-        $providersQuery = Provider::withCount([
-            'products as total_products',
-            'products as active_products' => fn ($query) => $query->where('status', true)->where('sku_code', 'not like', '%MAINTENANCE%'),
-            'products as inactive_products' => fn ($query) => $query->where('status', false),
-            'products as maintenance_products' => fn ($query) => $query->where('status', true)->where('sku_code', 'like', '%MAINTENANCE%'),
-        ]);
-
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $providersQuery->where('name', 'like', "%{$search}%");
-        }
-
-        $services = $providersQuery
-            ->orderBy('name')
-            ->get()
-            ->map(function (Provider $provider) use ($providerResponseTimes) {
-                $status = match (true) {
-                    ! $provider->is_active => 'Offline',
-                    $provider->maintenance_products > 0 => 'Maintenance',
-                    $provider->inactive_products > 0 => 'Degraded',
-                    default => 'Online',
-                };
-
-                $uptime = $provider->total_products > 0
-                    ? round(($provider->active_products / $provider->total_products) * 100, 2) . '%'
-                    : '0%';
-
-                return [
-                    'id' => $provider->id,
-                    'code' => 'PRV-' . $provider->id,
-                    'name' => $provider->name,
-                    'provider' => $provider->name,
-                    'category' => 'PPOB Provider',
-                    'status' => $status,
-                    'response_time' => $providerResponseTimes[$provider->id] ?? null,
-                    'responseTime' => $providerResponseTimes[$provider->id] ?? null,
-                    'uptime' => $uptime,
-                    'last_updated' => optional($provider->updated_at)->toISOString(),
-                    'lastUpdated' => optional($provider->updated_at)->toISOString(),
-                    'description' => sprintf(
-                        '%d active products, %d inactive products, %d products under maintenance.',
-                        $provider->active_products,
-                        $provider->inactive_products,
-                        $provider->maintenance_products
-                    ),
-                    'metrics' => [
-                        'total_products' => $provider->total_products,
-                        'active_products' => $provider->active_products,
-                        'inactive_products' => $provider->inactive_products,
-                        'maintenance_products' => $provider->maintenance_products,
-                    ],
-                ];
-            })
-            ->filter(function (array $service) use ($filters) {
-                if (empty($filters['status'])) {
-                    return true;
-                }
-
-                return strtolower($service['status']) === strtolower((string) $filters['status']);
-            })
-            ->values();
-
-        $maintenance = Product::with('provider:id,name')
-            ->where('status', true)
-            ->where('sku_code', 'like', '%MAINTENANCE%')
-            ->latest('updated_at')
-            ->take(20)
-            ->get()
-            ->map(fn (Product $product) => [
-                'id' => 'MNT-' . $product->id,
-                'service' => $product->name,
-                'service_name' => $product->name,
-                'provider' => $product->provider?->name ?? '-',
-                'start_time' => optional($product->updated_at)->toISOString(),
-                'startTime' => optional($product->updated_at)->toISOString(),
-                'end_time' => null,
-                'endTime' => null,
-                'status' => 'In Progress',
-                'description' => 'Product SKU is marked as maintenance in Operations.',
-            ]);
-
-        $digiflazzIncidents = DigiflazzTransaction::query()
-            ->whereNotIn('digiflazz_status', ['success', 'sukses', 'pending', 'processing'])
-            ->latest()
-            ->take(10)
-            ->get()
-            ->map(fn (DigiflazzTransaction $transaction) => [
-                'id' => 'DGF-' . $transaction->id,
-                'service' => 'Digiflazz',
-                'time' => optional($transaction->created_at)->toISOString(),
-                'timestamp' => optional($transaction->created_at)->toISOString(),
-                'status' => $transaction->digiflazz_status,
-                'currentStatus' => $transaction->digiflazz_status,
-                'incident' => 'Digiflazz transaction returned status: ' . $transaction->digiflazz_status,
-                'message' => 'Ref ID: ' . $transaction->ref_id . ', SKU: ' . $transaction->buyer_sku_code,
-            ]);
-
-        $midtransIncidents = MidtransTransaction::query()
-            ->whereNotIn('transaction_status', ['settlement', 'capture', 'pending'])
-            ->latest()
-            ->take(10)
-            ->get()
-            ->map(fn (MidtransTransaction $transaction) => [
-                'id' => 'MID-' . $transaction->id,
-                'service' => 'Midtrans',
-                'time' => optional($transaction->created_at)->toISOString(),
-                'timestamp' => optional($transaction->created_at)->toISOString(),
-                'status' => $transaction->transaction_status,
-                'currentStatus' => $transaction->transaction_status,
-                'incident' => 'Midtrans transaction returned status: ' . $transaction->transaction_status,
-                'message' => 'Order ID: ' . $transaction->order_id,
-            ]);
-
-        $incidents = $digiflazzIncidents
-            ->concat($midtransIncidents)
-            ->sortByDesc('timestamp')
-            ->values()
-            ->take(20);
-
-        return [
-            'summary' => [
-                'online_services' => $services->where('status', 'Online')->count(),
-                'maintenance_services' => $services->where('status', 'Maintenance')->count(),
-                'degraded_services' => $services->where('status', 'Degraded')->count(),
-                'offline_services' => $services->where('status', 'Offline')->count(),
-                'total_services' => $services->count(),
-            ],
-            'services' => $services,
-            'maintenance' => $maintenance,
-            'schedules' => $maintenance,
-            'incidents' => $incidents,
-            'logs' => $incidents,
-        ];
+        return app(\App\Services\Monitoring\ServiceMonitoringService::class)->overview($filters);
     }
 
     /**
-     * Get pricing margin rules configuration (+ master products for Pricing UI).
-     * Optional filters use products.product_provider_id (never payment gateways).
+     * Pricing & Margin Engine — hierarchical catalog (Category → Brand → Group → SKU).
+     * Same Product Mapping Layer as Product Management; no separate pricing table.
      */
     public function getPricing(array $filters = []): array
     {
-        $defaultMargin = Setting::where('key', 'default_margin')->value('value') ?? '1500';
-        $categoryMargins = json_decode(Setting::where('key', 'category_margins')->value('value') ?? '[]', true);
-        $providerMargins = json_decode(Setting::where('key', 'provider_margins')->value('value') ?? '[]', true);
-
-        $query = Product::with(['category:id,name,slug', 'provider:id,name', 'productProvider:id,name,code']);
-
-        $productProviderId = $this->resolveProductProviderFilterId($filters);
-        if ($productProviderId === 0) {
-            $query->whereRaw('1 = 0');
-        } elseif ($productProviderId !== null) {
-            $query->where('product_provider_id', $productProviderId);
-        }
-
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('sku_code', 'like', "%{$search}%");
-            });
-        }
-
-        $masterProducts = $query
-            ->orderByDesc('updated_at')
-            ->limit(50)
-            ->get()
-            ->map(function (Product $product) {
-                $pricing = $this->pricingService->calculateForProduct($product);
-                return [
-                    'id' => $product->id,
-                    'sku_code' => $product->sku_code,
-                    'name' => $product->name,
-                    'category' => $product->category?->name,
-                    'provider' => $product->provider?->name,
-                    'productProvider' => $product->productProvider?->name,
-                    'productProviderCode' => $product->productProvider?->code,
-                    'productProviderId' => $product->product_provider_id,
-                    'provider_cost' => $pricing['provider_cost'],
-                    'base_price' => $pricing['base_price'],
-                    'margin' => $pricing['margin'],
-                    'admin_fee' => $pricing['admin_fee'],
-                    'selling_price' => $pricing['selling_price'],
-                    'sell_price' => $pricing['sell_price'],
-                    'status' => $product->status,
-                ];
-            })
-            ->values()
-            ->all();
-
-        return [
-            'margin_rules' => [
-                'default_margin' => (float) $defaultMargin,
-                'category_margin' => $categoryMargins ?: [],
-                'provider_margin' => $providerMargins ?: [],
-            ],
-            'products' => $masterProducts,
-            'master_products' => $masterProducts,
-        ];
+        return app(\App\Services\Pricing\PricingHierarchyService::class)->browse($filters);
     }
 
     /**
-     * Update pricing margin rules configuration.
+     * Update SKU pricing (sell_price / margin / ops_status) or global margin rules.
+     * Product updates write the same products row Product Management & Dashboard User read.
      */
     public function updatePricing(array $data): array
     {
+        $productId = $data['product_id'] ?? $data['id'] ?? null;
+
+        if ($productId !== null && $productId !== '') {
+            $payload = [];
+
+            if (array_key_exists('margin', $data) && $data['margin'] !== null && $data['margin'] !== '') {
+                $payload['margin'] = (float) $data['margin'];
+            }
+
+            // Prefer explicit selling price; map FE aliases.
+            $sell = $data['sell_price'] ?? $data['selling_price'] ?? $data['sellingPrice'] ?? null;
+            if ($sell !== null && $sell !== '') {
+                $payload['sell_price'] = (float) $sell;
+                unset($payload['margin']);
+            }
+
+            if (array_key_exists('status', $data) && $data['status'] !== null && $data['status'] !== '') {
+                $payload['status'] = $data['status'];
+            }
+
+            if (array_key_exists('admin_notes', $data)) {
+                $payload['admin_notes'] = $data['admin_notes'];
+            }
+
+            // Base price is supplier-owned in Pricing Engine.
+            $payload['lock_base_price'] = true;
+
+            $product = $this->updateProduct($productId, $payload);
+
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'activity' => 'UPDATE_PRICING_PRODUCT_OPERATIONS',
+                'payload' => [
+                    'product_id' => $product->id,
+                    'sku_code' => $product->sku_code,
+                    'sell_price' => $product->sell_price,
+                    'ops_status' => $product->ops_status,
+                    'updated_fields' => $payload,
+                ],
+            ]);
+
+            return [
+                'product' => $this->mapPricingProductRow($product),
+                'margin_rules' => [
+                    'default_margin' => (float) (Setting::where('key', 'default_margin')->value('value') ?? 1500),
+                    'category_margin' => json_decode(Setting::where('key', 'category_margins')->value('value') ?? '[]', true) ?: [],
+                    'provider_margin' => json_decode(Setting::where('key', 'provider_margins')->value('value') ?? '[]', true) ?: [],
+                ],
+                'summary' => $this->pricingSummaryMetrics(),
+            ];
+        }
+
         if (isset($data['default_margin'])) {
             Setting::updateOrCreate(
                 ['key' => 'default_margin'],
@@ -653,5 +641,75 @@ class OperationsRepository implements OperationsRepositoryInterface
         ]);
 
         return $this->getPricing();
+    }
+
+    /**
+     * @return array{total_products:int,average_margin:float,active_sku_count:int}
+     */
+    protected function pricingSummaryMetrics(): array
+    {
+        $defaultMargin = $this->pricingService->defaultMargin();
+
+        $total = (int) Product::query()->count();
+
+        $activeQuery = Product::query();
+        $this->applyProductStatusFilter($activeQuery, 'active');
+        $active = (int) $activeQuery->count();
+
+        $avg = Product::query()
+            ->selectRaw(
+                'AVG(CASE WHEN sell_price > 0 THEN (sell_price - base_price - COALESCE(admin_fee, 0)) ELSE ? END) as avg_margin',
+                [$defaultMargin]
+            )
+            ->value('avg_margin');
+
+        return [
+            'total_products' => $total,
+            'average_margin' => round((float) ($avg ?? 0), 2),
+            'active_sku_count' => $active,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function mapPricingProductRow(Product $product): array
+    {
+        $pricing = $this->pricingService->calculateForProduct($product);
+        $opsStatus = $this->normalizeOpsStatus(
+            $product->ops_status
+                ?? ($product->status ? 'active' : 'inactive')
+        );
+        if (str_contains(strtoupper((string) $product->sku_code), 'MAINTENANCE')) {
+            $opsStatus = 'maintenance';
+        }
+
+        return [
+            'id' => $product->id,
+            'code' => $product->sku_code,
+            'sku_code' => $product->sku_code,
+            'name' => $product->name,
+            'category' => $product->category?->name,
+            'categorySlug' => $product->category?->slug,
+            'operator' => $product->provider?->name,
+            'operatorName' => $product->provider?->name,
+            // Legacy key: some UIs used provider for operator brand.
+            'provider' => $product->productProvider?->name ?? $product->provider?->name,
+            'productProvider' => $product->productProvider?->name,
+            'productProviderCode' => $product->productProvider?->code,
+            'productProviderId' => $product->product_provider_id,
+            'provider_cost' => $pricing['provider_cost'],
+            'base_price' => $pricing['base_price'],
+            'basePrice' => $pricing['base_price'],
+            'margin' => $pricing['margin'],
+            'admin_fee' => $pricing['admin_fee'],
+            'adminFee' => $pricing['admin_fee'],
+            'selling_price' => $pricing['selling_price'],
+            'sellingPrice' => $pricing['selling_price'],
+            'sell_price' => $pricing['sell_price'],
+            'status' => $opsStatus,
+            'opsStatus' => $opsStatus,
+            'availabilityStatus' => $opsStatus,
+        ];
     }
 }

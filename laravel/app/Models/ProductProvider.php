@@ -15,6 +15,8 @@ class ProductProvider extends Model
         'name',
         'logo',
         'is_active',
+        // Control Center partner mode: online | maintenance | offline
+        'partner_status',
         'sort_order',
         'priority',
         'api_status',
@@ -47,6 +49,25 @@ class ProductProvider extends Model
         'last_success_at' => 'datetime',
         'last_failure_at' => 'datetime',
     ];
+
+    public function isPartnerMaintenance(): bool
+    {
+        // Maintenance only applies while powered ON (products stay visible, buy disabled).
+        return $this->is_active
+            && strtolower((string) ($this->partner_status ?? 'online')) === 'maintenance';
+    }
+
+    public function isPartnerOffline(): bool
+    {
+        // Catalog offline follows Control Center power (is_active).
+        // partner_status=offline is kept in sync by Provider Management / disable().
+        return !$this->is_active;
+    }
+
+    public function isPartnerSellable(): bool
+    {
+        return $this->is_active && !$this->isPartnerMaintenance();
+    }
 
     protected static function booted(): void
     {

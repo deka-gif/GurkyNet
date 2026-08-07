@@ -19,6 +19,7 @@ import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { operatorsMatch } from '../../utils/operatorMatch';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 type Mode = 'tembak' | 'elektronik' | 'fisik';
 
@@ -111,7 +112,7 @@ export const VoucherInternetPage = () => {
   const zonas = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of products) {
-      if (p.status !== 'tersedia') continue;
+      if (!isCatalogListed(p)) continue;
       const name = (p.operatorName || 'Umum').trim();
       map.set(name, (map.get(name) || 0) + 1);
     }
@@ -123,7 +124,7 @@ export const VoucherInternetPage = () => {
   const zonaProducts = useMemo(() => {
     if (!zona) return [];
     return products
-      .filter((p) => p.status === 'tersedia' && operatorsMatch(p.operatorName, zona))
+      .filter((p) => isCatalogListed(p) && operatorsMatch(p.operatorName, zona))
       .sort((a, b) => a.price - b.price);
   }, [products, zona]);
 
@@ -131,7 +132,7 @@ export const VoucherInternetPage = () => {
     const provider = autoProvider || zona;
     if (!provider) return [];
     return products
-      .filter((p) => p.status === 'tersedia' && operatorsMatch(p.operatorName, provider))
+      .filter((p) => isCatalogListed(p) && operatorsMatch(p.operatorName, provider))
       .sort((a, b) => a.price - b.price);
   }, [products, autoProvider, zona]);
 
@@ -155,6 +156,10 @@ export const VoucherInternetPage = () => {
   const startCheckout = (opts?: { targetOverride?: string; qtyOverride?: number }) => {
     if (!selectedProduct) {
       setErrorMsg('Pilih produk voucher internet terlebih dahulu.');
+      return;
+    }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
     const target =

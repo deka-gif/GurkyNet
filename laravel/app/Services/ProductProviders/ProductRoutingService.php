@@ -94,6 +94,11 @@ class ProductRoutingService
                 continue;
             }
 
+            if (method_exists($pp, 'isPartnerMaintenance') && $pp->isPartnerMaintenance()) {
+                $this->logSkipped($transactionId, $product, $pp, 'provider_maintenance', $offer);
+                continue;
+            }
+
             if (!$offer->is_active) {
                 $this->logSkipped($transactionId, $product, $pp, 'sku_mapping_inactive', $offer);
                 continue;

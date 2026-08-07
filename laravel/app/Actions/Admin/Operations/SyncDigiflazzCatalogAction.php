@@ -94,6 +94,8 @@ class SyncDigiflazzCatalogAction
         $this->providerRepository->syncWithDigiflazz($products);
 
         Cache::forget('digiflazz_balance');
+        // Invalidate User Dashboard catalog caches immediately after sync.
+        \App\Services\ProductProviders\ProductCatalogCache::bump();
 
         $result = $this->persistSyncMeta([
             'status' => empty($errors) ? 'success' : 'partial',

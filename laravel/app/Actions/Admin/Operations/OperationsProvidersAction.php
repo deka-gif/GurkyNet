@@ -3,7 +3,6 @@
 namespace App\Actions\Admin\Operations;
 
 use App\Repositories\Contracts\OperationsRepositoryInterface;
-use App\Models\Provider;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class OperationsProvidersAction
@@ -17,8 +16,19 @@ class OperationsProvidersAction
         return $this->operationsRepository->getProviders($filters);
     }
 
-    public function update(string|int $id, array $data): Provider
+    /**
+     * @return array<string, mixed>
+     */
+    public function update(string|int $id, array $data): array
     {
         return $this->operationsRepository->updateProvider($id, $data);
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    public function refreshStatuses(): array
+    {
+        return $this->operationsRepository->refreshProviderStatuses();
     }
 }

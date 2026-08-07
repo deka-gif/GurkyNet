@@ -20,6 +20,7 @@ import { Product } from '../../types';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 export const PulsaPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -84,6 +85,10 @@ export const PulsaPage = () => {
       setErrorMsg('Pilih nominal pulsa yang ingin Anda beli.');
       return;
     }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
+      return;
+    }
     if (!wallet || wallet.balance < selectedProduct.price) {
       setErrorMsg('Saldo GurkyPay Anda tidak mencukupi untuk pembelian ini.');
       return;
@@ -109,7 +114,7 @@ export const PulsaPage = () => {
 
   // Get products based on selected provider (VIP brands may differ in casing/label)
   const displayProducts = provider
-    ? products.filter((p) => operatorsMatch(p.operatorName, provider) && p.status === 'tersedia')
+    ? products.filter((p) => operatorsMatch(p.operatorName, provider) && isCatalogListed(p))
     : [];
 
   return (
@@ -226,13 +231,16 @@ export const PulsaPage = () => {
                       selectedProduct?.id === opt.id 
                         ? 'bg-primary-50/40 border-primary-500 ring-2 ring-primary-500/20 shadow-md' 
                         : 'bg-gray-50/50 border-gray-100 hover:border-gray-300 hover:bg-white'
-                    }`}
+                    } ${!isProductPurchasable(opt) ? 'opacity-70' : ''}`}
                   >
                     <div>
                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{opt.operatorName}</span>
                       <h4 className="font-extrabold text-gray-900 text-sm mt-0.5 leading-tight">
                         {opt.name}
                       </h4>
+                      {!isProductPurchasable(opt) && (
+                        <p className="text-[10px] font-bold text-amber-700 mt-1">Sedang maintenance</p>
+                      )}
                     </div>
                     <div className="mt-4 pt-2.5 border-t border-gray-100 flex items-center justify-between w-full">
                       <span className="text-[10px] text-gray-500">Harga Agen</span>
@@ -285,12 +293,12 @@ export const PulsaPage = () => {
           </div>
 
           <button
-            disabled={loading || !selectedProduct}
+            disabled={loading || !selectedProduct || !isProductPurchasable(selectedProduct)}
             onClick={handleCheckout}
             className={`w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
               loading 
                 ? 'bg-primary-400 cursor-not-allowed' 
-                : selectedProduct 
+                : selectedProduct && isProductPurchasable(selectedProduct)
                 ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/10' 
                 : 'bg-gray-200 cursor-not-allowed text-gray-400'
             }`}

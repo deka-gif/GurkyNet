@@ -260,10 +260,15 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/product-provider-control/{id}/sync', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'sync']);
             Route::get('/product-provider-control/{id}/logs', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'logs']);
             Route::get('/providers', [OperationsController::class, 'providers']);
+            Route::post('/providers/refresh-status', [OperationsController::class, 'refreshProviderStatuses']);
             Route::put('/providers/{id}', [OperationsController::class, 'updateProvider']);
             Route::get('/monitoring', [OperationsController::class, 'monitoring']);
+            Route::post('/monitoring/refresh', [OperationsController::class, 'refreshMonitoring']);
+            Route::get('/monitoring/services/{serviceKey}', [OperationsController::class, 'monitoringServiceDetail']);
+            Route::get('/monitoring/services/{serviceKey}/issues', [OperationsController::class, 'monitoringServiceIssues']);
             Route::get('/pricing', [OperationsController::class, 'pricing']);
             Route::put('/pricing', [OperationsController::class, 'updatePricing']);
+            Route::put('/pricing/{id}', [OperationsController::class, 'updatePricing']);
             Route::post('/sync', [OperationsController::class, 'syncCatalog']);
             Route::get('/sync-status', [OperationsController::class, 'syncStatus']);
         });

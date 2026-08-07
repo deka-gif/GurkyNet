@@ -21,6 +21,7 @@ import {
   providerApiName,
   providerBadgeLabel,
 } from '../../utils/detectOperator';
+import { isProductPurchasable } from '../../utils/catalogAvailability';
 
 type Props = {
   category: string;
@@ -146,6 +147,10 @@ export function PhoneOperatorCatalogFlow({
   const handleCheckout = () => {
     if (!provider || !selectedProduct) {
       setErrorMsg('Pilih paket terlebih dahulu.');
+      return;
+    }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
     if (phoneNo.replace(/\D/g, '').length < 10) {
@@ -313,16 +318,21 @@ export function PhoneOperatorCatalogFlow({
                         {p.description && (
                           <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 flex-1">{p.description}</p>
                         )}
+                        {!isProductPurchasable(p) && (
+                          <p className="text-[10px] font-bold text-amber-700 mt-1">Sedang maintenance</p>
+                        )}
                         <span className="mt-3 text-base font-black text-red-600">{formatIDR(p.price)}</span>
                         <button
                           type="button"
+                          disabled={!isProductPurchasable(p)}
                           onClick={() => {
+                            if (!isProductPurchasable(p)) return;
                             setSelectedProduct(p);
                             setShowCheckoutPanel(true);
                           }}
-                          className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black"
+                          className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Beli
+                          {isProductPurchasable(p) ? 'Beli' : 'Maintenance'}
                         </button>
                       </article>
                     );

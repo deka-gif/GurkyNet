@@ -94,16 +94,17 @@ class CreateTransactionAction
                 ]);
             }
 
-            // Sellability follows Control Center (active provider SKU), not Digi products.status alone.
+            // Re-validate Ops Product + Provider status at checkout (never trust client).
+            // Sellability follows Control Center SKUs + ops_status + partner_status.
             if (!$this->availabilityService->isAvailable($product)) {
                 $statusAvailability = $this->availabilityService->getStatus($product);
                 if ($statusAvailability === 'maintenance') {
                     throw ValidationException::withMessages([
-                        'product_code' => ['Produk sedang dalam pemeliharaan.'],
+                        'product_code' => ['Produk atau provider sedang maintenance. Pembelian tidak dapat diproses.'],
                     ]);
                 }
                 throw ValidationException::withMessages([
-                    'product_code' => ['Produk sedang tidak tersedia.'],
+                    'product_code' => ['Produk tidak aktif atau provider offline. Transaksi dibatalkan.'],
                 ]);
             }
 

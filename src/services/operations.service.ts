@@ -27,6 +27,11 @@ export const operationsService = {
     return res.data;
   },
 
+  async refreshProviderStatuses() {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/operations/providers/refresh-status');
+    return res.data;
+  },
+
   async updateProvider(id: string | number, data: Record<string, any>) {
     const res = await apiClient.put<ApiResponse<any>>(`/admin/operations/providers/${id}`, data);
     return res.data;
@@ -44,13 +49,29 @@ export const operationsService = {
   },
 
   async getMonitoring(params?: Record<string, any>) {
-    try {
-      const res = await apiClient.get<ApiResponse<any>>('/admin/operations/monitoring', { params });
-      return res.data;
-    } catch {
-      const res = await apiClient.get<ApiResponse<any>>('/admin/operations/dashboard', { params });
-      return res.data;
-    }
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/monitoring', { params });
+    return res.data;
+  },
+
+  async refreshMonitoring(params?: Record<string, any>) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/operations/monitoring/refresh', params || {});
+    return res.data;
+  },
+
+  async getMonitoringServiceDetail(serviceKey: string) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/operations/monitoring/services/${serviceKey}`);
+    return res.data;
+  },
+
+  async getMonitoringServiceIssues(
+    serviceKey: string,
+    params?: { product_provider_id?: number; page?: number; per_page?: number }
+  ) {
+    const res = await apiClient.get<ApiResponse<any>>(
+      `/admin/operations/monitoring/services/${serviceKey}/issues`,
+      { params }
+    );
+    return res.data;
   },
 
   async syncCatalog(payload?: { queue?: boolean; cmd?: string[] }) {

@@ -19,7 +19,10 @@ class ProductCatalogCache
 
     public static function bump(): void
     {
-        Cache::forever(self::VERSION_KEY, time());
+        $previous = self::version();
+
+        // Always advance version even when multiple bumps occur in the same second.
+        Cache::forever(self::VERSION_KEY, max(time(), $previous + 1));
 
         try {
             Cache::tags(['products', 'active_products'])->flush();
@@ -27,17 +30,19 @@ class ProductCatalogCache
             // File/array drivers do not support tags.
         }
 
+        // Drop legacy + previous versioned keys so User Dashboard never serves stale catalog.
         Cache::forget('products_active_all');
-        Cache::forget('products_active_all_v' . self::version());
+        Cache::forget('products_active_all_v'.$previous);
+        Cache::forget(self::activeAllKey());
     }
 
     public static function searchKey(array $filters): string
     {
-        return 'products_search_v' . self::version() . '_' . md5(serialize($filters));
+        return 'products_search_v'.self::version().'_'.md5(serialize($filters));
     }
 
     public static function activeAllKey(): string
     {
-        return 'products_active_all_v' . self::version();
+        return 'products_active_all_v'.self::version();
     }
 }

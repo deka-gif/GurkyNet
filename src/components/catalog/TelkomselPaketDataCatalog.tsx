@@ -3,6 +3,7 @@ import { Search, Wifi, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-rea
 import { productService } from '../../services/product/product.service';
 import { Product } from '../../types';
 import { formatIDR } from '../../utils/currency';
+import { isProductPurchasable } from '../../utils/catalogAvailability';
 
 type Chip = {
   key: string;
@@ -315,6 +316,9 @@ export function TelkomselPaketDataCatalog({
   }, [loadPage]);
 
   const handleBuy = (p: Product) => {
+    if (!isProductPurchasable(p)) {
+      return;
+    }
     if (p.requiresRegion && onRegionNeeded) {
       onRegionNeeded(p);
     }
@@ -450,12 +454,16 @@ export function TelkomselPaketDataCatalog({
                   <span className="text-base font-black text-red-600 leading-none">{formatIDR(p.price)}</span>
                 </div>
 
+                {!isProductPurchasable(p) && (
+                  <p className="text-[10px] font-bold text-amber-700 mt-2">Sedang maintenance</p>
+                )}
                 <button
                   type="button"
+                  disabled={!isProductPurchasable(p)}
                   onClick={() => handleBuy(p)}
-                  className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black tracking-wide transition-colors"
+                  className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Beli
+                  {isProductPurchasable(p) ? 'Beli' : 'Maintenance'}
                 </button>
               </article>
             );

@@ -76,8 +76,12 @@ export interface Product {
   price: number;
   category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'voucher-internet' | 'game' | 'transfer' | 'tagihan' | string;
   operatorName: string;
-  status: 'tersedia' | 'gangguan';
+  status: 'tersedia' | 'gangguan' | 'maintenance';
   isActive?: boolean;
+  isPurchasable?: boolean;
+  isCatalogVisible?: boolean;
+  availabilityStatus?: 'active' | 'inactive' | 'maintenance' | string;
+  opsStatus?: string;
   description?: string | null;
   quota?: string | null;
   validity?: string | null;

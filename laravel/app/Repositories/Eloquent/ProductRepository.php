@@ -121,6 +121,11 @@ class ProductRepository implements ProductRepositoryInterface
             return null;
         }
 
+        if (strtolower((string) ($product->ops_status ?? 'active')) === 'inactive') {
+            $this->logFilterTrace($product, 'HIDDEN', 'ops_status_inactive');
+            return null;
+        }
+
         if (!$this->isVisibleViaControlCenter($product)) {
             $this->logFilterTrace($product, 'HIDDEN', 'no_active_product_provider_sku');
             return null;
@@ -139,6 +144,11 @@ class ProductRepository implements ProductRepositoryInterface
             ->first();
 
         if (!$product) {
+            return null;
+        }
+
+        if (strtolower((string) ($product->ops_status ?? 'active')) === 'inactive') {
+            $this->logFilterTrace($product, 'HIDDEN', 'ops_status_inactive');
             return null;
         }
 
@@ -193,6 +203,13 @@ class ProductRepository implements ProductRepositoryInterface
                 'priority' => $p->priority,
             ])->all(),
         ]);
+
+        // Product Management Control Center: hide ops_status=inactive from User Dashboard.
+        // Maintenance stays visible (buy disabled via AvailabilityService / ProductResource).
+        $query->where(function (Builder $q) {
+            $q->whereNull('products.ops_status')
+                ->orWhere('products.ops_status', '!=', 'inactive');
+        });
 
         $query->whereHas('providerSkus', function (Builder $q) {
             $q->where('product_provider_skus.is_active', true)

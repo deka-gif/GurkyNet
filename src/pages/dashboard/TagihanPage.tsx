@@ -21,6 +21,7 @@ import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary'
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 interface BillDetail {
   productName: string;
@@ -68,7 +69,7 @@ export const TagihanPage = () => {
 
   useEffect(() => {
     // Auto-select first product when products load
-    const available = products.filter(p => p.status === 'tersedia');
+    const available = products.filter((p) => isCatalogListed(p) && isProductPurchasable(p));
     if (available.length > 0) {
       // If pln_pasca, find the one that says pasca
       if (activeTab === 'pln_pasca') {
@@ -82,7 +83,7 @@ export const TagihanPage = () => {
     }
   }, [products, activeTab]);
 
-  const displayProducts = products.filter(p => p.status === 'tersedia');
+  const displayProducts = products.filter((p) => isCatalogListed(p));
 
   
 

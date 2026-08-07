@@ -2,32 +2,40 @@ import { create } from 'zustand';
 import { operationsService } from '../services/operations.service';
 import { Pagination } from '../types';
 
+function normalizePagination(raw: any): Pagination | null {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    currentPage: Number(raw.currentPage ?? raw.current_page ?? 1),
+    lastPage: Number(raw.lastPage ?? raw.last_page ?? 1),
+    perPage: Number(raw.perPage ?? raw.per_page ?? 25),
+    total: Number(raw.total ?? 0),
+  };
+}
+
 function extractListAndPagination(response: any): { items: any[]; pagination: Pagination | null } {
   if (!response) return { items: [], pagination: null };
-  
+
   const payload = response.data !== undefined ? response.data : response;
   let items: any[] = [];
-  let pagination: Pagination | null = response.pagination || null;
+  let pagination: Pagination | null =
+    normalizePagination(response.meta?.pagination) ||
+    normalizePagination(response.pagination) ||
+    null;
 
   if (Array.isArray(payload)) {
     items = payload;
   } else if (payload && Array.isArray(payload.data)) {
     items = payload.data;
     if (!pagination && (payload.current_page !== undefined || payload.currentPage !== undefined)) {
-      pagination = {
-        currentPage: payload.current_page ?? payload.currentPage ?? 1,
-        lastPage: payload.last_page ?? payload.lastPage ?? 1,
-        perPage: payload.per_page ?? payload.perPage ?? 10,
-        total: payload.total ?? items.length,
-      };
+      pagination = normalizePagination(payload);
     }
   } else if (payload && typeof payload === 'object') {
-    const listKey = Object.keys(payload).find(k => Array.isArray(payload[k]));
+    const listKey = Object.keys(payload).find((k) => Array.isArray(payload[k]));
     if (listKey) {
       items = payload[listKey];
     }
     if (!pagination && payload.pagination) {
-      pagination = payload.pagination;
+      pagination = normalizePagination(payload.pagination);
     }
   }
 
@@ -50,7 +58,15 @@ export interface OperationsState {
   providersError: string | null;
 
   pricingProducts: any[];
+  pricingNodes: any[];
+  pricingLevel: string | null;
+  pricingBreadcrumb: any[];
   pricingPagination: Pagination | null;
+  pricingSummary: {
+    total_products?: number;
+    average_margin?: number;
+    active_sku_count?: number;
+  } | null;
   pricingLoading: boolean;
   pricingError: string | null;
 
@@ -66,10 +82,20 @@ export interface OperationsState {
   fetchProducts: (params?: Record<string, any>) => Promise<void>;
   updateProduct: (id: string | number, data: any) => Promise<{ success: boolean; message?: string; errors?: any }>;
   fetchProviders: (params?: Record<string, any>) => Promise<void>;
+  refreshProviderStatuses: () => Promise<{ success: boolean; message?: string }>;
   updateProvider: (id: string | number, data: any) => Promise<{ success: boolean; message?: string; errors?: any }>;
   fetchPricing: (params?: Record<string, any>) => Promise<void>;
-  updatePricing: (data: any, id?: string | number) => Promise<{ success: boolean; message?: string; errors?: any }>;
+  updatePricing: (
+    data: any,
+    id?: string | number
+  ) => Promise<{ success: boolean; message?: string; errors?: any; data?: any }>;
   fetchMonitoring: (params?: Record<string, any>) => Promise<void>;
+  refreshMonitoring: (params?: Record<string, any>) => Promise<{ success: boolean; message?: string }>;
+  fetchMonitoringServiceDetail: (serviceKey: string) => Promise<any | null>;
+  fetchMonitoringServiceIssues: (
+    serviceKey: string,
+    params?: { product_provider_id?: number; page?: number; per_page?: number }
+  ) => Promise<any | null>;
   syncCatalog: (payload?: { queue?: boolean; cmd?: string[] }) => Promise<{ success: boolean; message?: string; data?: any }>;
 }
 
@@ -89,7 +115,11 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
   providersError: null,
 
   pricingProducts: [],
+  pricingNodes: [],
+  pricingLevel: null,
+  pricingBreadcrumb: [],
   pricingPagination: null,
+  pricingSummary: null,
   pricingLoading: false,
   pricingError: null,
 
@@ -178,6 +208,26 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
     }
   },
 
+  refreshProviderStatuses: async () => {
+    set({ providersLoading: true, providersError: null });
+    try {
+      const response = await operationsService.refreshProviderStatuses();
+      if (response && response.success !== false) {
+        // Reload list with refresh=false — health already persisted by backend probe.
+        await get().fetchProviders({ page: 1, per_page: 25, sort: 'priority' });
+        return { success: true, message: response.message || 'Status provider berhasil di-refresh.' };
+      }
+      set({ providersLoading: false });
+      return { success: false, message: response?.message || 'Gagal refresh status provider.' };
+    } catch (err: any) {
+      set({
+        providersError: err?.message || 'Gagal refresh status provider.',
+        providersLoading: false,
+      });
+      return { success: false, message: err?.message || 'Gagal refresh status provider.' };
+    }
+  },
+
   updateProvider: async (id, data) => {
     set({ providersLoading: true, providersError: null });
     try {
@@ -200,24 +250,24 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
       const response = await operationsService.getPricing(params);
       if (response && response.success !== false) {
         const payload = response.data || response;
-        const master =
+        const items =
           (Array.isArray(payload?.products) && payload.products) ||
           (Array.isArray(payload?.master_products) && payload.master_products) ||
+          [];
+        const meta = (response as any)?.meta;
+        const pagination =
+          normalizePagination(payload?.pagination) ||
+          normalizePagination(meta?.pagination) ||
           null;
-        if (master) {
-          set({
-            pricingProducts: master,
-            pricingPagination: null,
-            pricingLoading: false,
-          });
-        } else {
-          const { items, pagination } = extractListAndPagination(response);
-          set({
-            pricingProducts: items,
-            pricingPagination: pagination,
-            pricingLoading: false,
-          });
-        }
+        set({
+          pricingProducts: items,
+          pricingNodes: Array.isArray(payload?.nodes) ? payload.nodes : [],
+          pricingLevel: payload?.level || meta?.level || null,
+          pricingBreadcrumb: Array.isArray(payload?.breadcrumb) ? payload.breadcrumb : [],
+          pricingPagination: pagination,
+          pricingLoading: false,
+          pricingSummary: payload?.summary || meta?.summary || null,
+        });
       } else {
         set({ pricingError: response?.message || 'Gagal memuat data harga.', pricingLoading: false });
       }
@@ -232,16 +282,27 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
   updatePricing: async (data, id) => {
     set({ pricingLoading: true, pricingError: null });
     try {
-      const response = await operationsService.updatePricing(data, id);
+      const productId = id ?? data?.product_id ?? data?.id;
+      const response = await operationsService.updatePricing(
+        {
+          ...data,
+          product_id: productId,
+        },
+        productId
+      );
       set({ pricingLoading: false });
       if (response && response.success !== false) {
-        return { success: true, message: response.message || 'Skema harga berhasil diperbarui.' };
+        return {
+          success: true,
+          message: response.message || 'Skema harga berhasil diperbarui.',
+          data: response.data || response,
+        };
       }
       return { success: false, message: response?.message || 'Gagal memperbarui harga.', errors: response?.errors };
     } catch (err: any) {
-      const msg = err?.message || 'Gagal memperbarui harga.';
+      const msg = err?.response?.data?.message || err?.message || 'Gagal memperbarui harga.';
       set({ pricingError: msg, pricingLoading: false });
-      return { success: false, message: msg, errors: err?.errors };
+      return { success: false, message: msg, errors: err?.errors || err?.response?.data?.errors };
     }
   },
 
@@ -259,6 +320,47 @@ export const useOperationsStore = create<OperationsState>((set, get) => ({
         monitoringError: err?.message || 'Terjadi kesalahan saat memuat data monitoring.',
         monitoringLoading: false,
       });
+    }
+  },
+
+  refreshMonitoring: async (params) => {
+    set({ monitoringLoading: true, monitoringError: null });
+    try {
+      const response = await operationsService.refreshMonitoring(params);
+      if (response && response.success !== false) {
+        set({ monitoringData: response.data || response, monitoringLoading: false });
+        return { success: true, message: response.message || 'Status layanan berhasil di-refresh.' };
+      }
+      set({ monitoringError: response?.message || 'Gagal refresh status layanan.', monitoringLoading: false });
+      return { success: false, message: response?.message || 'Gagal refresh status layanan.' };
+    } catch (err: any) {
+      const msg = err?.message || 'Terjadi kesalahan saat refresh status layanan.';
+      set({ monitoringError: msg, monitoringLoading: false });
+      return { success: false, message: msg };
+    }
+  },
+
+  fetchMonitoringServiceDetail: async (serviceKey) => {
+    try {
+      const response = await operationsService.getMonitoringServiceDetail(serviceKey);
+      if (response && response.success !== false) {
+        return response.data || response;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  fetchMonitoringServiceIssues: async (serviceKey, params) => {
+    try {
+      const response = await operationsService.getMonitoringServiceIssues(serviceKey, params);
+      if (response && response.success !== false) {
+        return response.data || response;
+      }
+      return null;
+    } catch {
+      return null;
     }
   },
 

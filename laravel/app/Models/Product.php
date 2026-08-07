@@ -22,6 +22,7 @@ class Product extends Model
         'sell_price',
         'admin_fee',
         'status',
+        'ops_status',
     ];
 
     protected $casts = [

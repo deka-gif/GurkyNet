@@ -16,6 +16,7 @@ import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { tagihanService, TagihanInquiryResult } from '../../services/tagihan/tagihan.service';
+import { isCatalogListed } from '../../utils/catalogAvailability';
 
 export type BillPaymentFlowProps = {
   category: string;
@@ -70,7 +71,7 @@ export function BillPaymentFlow({
   const vendors = useMemo(() => {
     const map = new Map<string, { name: string; products: Product[] }>();
     for (const p of products) {
-      if (p.status !== 'tersedia') continue;
+      if (!isCatalogListed(p)) continue;
       const name = (p.operatorName || p.name || 'Lainnya').trim();
       const key = name.toLowerCase();
       const prev = map.get(key);

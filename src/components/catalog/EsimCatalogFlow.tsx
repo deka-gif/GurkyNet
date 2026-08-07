@@ -20,6 +20,7 @@ import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { providerApiName, providerBadgeLabel } from '../../utils/detectOperator';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 const PER_PAGE = 24;
 const RETURN_PATH = '/dashboard/telekomunikasi/esim';
@@ -121,7 +122,7 @@ export function EsimCatalogFlow() {
           page: 1,
         });
         if (res.success && Array.isArray(res.data)) {
-          setAllProducts(res.data.filter((p) => p.status === 'tersedia'));
+          setAllProducts(res.data.filter((p) => isCatalogListed(p)));
         }
       } finally {
         setProvidersLoading(false);
@@ -193,6 +194,10 @@ export function EsimCatalogFlow() {
   const handleCheckout = () => {
     if (!selectedProvider || !selectedProduct) {
       setErrorMsg('Pilih provider dan paket eSIM terlebih dahulu.');
+      return;
+    }
+    if (!isProductPurchasable(selectedProduct)) {
+      setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
     if (!wallet || wallet.balance < selectedProduct.price) {
@@ -452,16 +457,21 @@ export function EsimCatalogFlow() {
                       {p.description && (
                         <p className="text-[11px] text-gray-500 mt-2 line-clamp-2">{p.description}</p>
                       )}
+                      {!isProductPurchasable(p) && (
+                        <p className="text-[10px] font-bold text-amber-700 mt-1">Sedang maintenance</p>
+                      )}
                       <span className="mt-3 text-base font-black text-red-600">{formatIDR(p.price)}</span>
                       <button
                         type="button"
+                        disabled={!isProductPurchasable(p)}
                         onClick={() => {
+                          if (!isProductPurchasable(p)) return;
                           setSelectedProduct(p);
                           setShowCheckoutPanel(true);
                         }}
-                        className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 text-white text-xs font-black"
+                        className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 text-white text-xs font-black disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Beli
+                        {isProductPurchasable(p) ? 'Beli' : 'Maintenance'}
                       </button>
                     </article>
                   ))}
@@ -508,8 +518,9 @@ export function EsimCatalogFlow() {
             </div>
             <button
               type="button"
+              disabled={!isProductPurchasable(selectedProduct)}
               onClick={handleCheckout}
-              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white text-sm font-bold flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard className="w-4 h-4" /> Bayar Sekarang
             </button>

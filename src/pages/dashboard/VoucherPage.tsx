@@ -25,6 +25,7 @@ import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary'
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 
 export const VoucherPage = () => {
   const { wallet, fetchWallet, deductBalance } = useWalletStore();
@@ -69,7 +70,7 @@ export const VoucherPage = () => {
       const matchSearch = v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           v.operatorName?.toLowerCase().includes(searchQuery.toLowerCase());
       
-      return matchType && matchCategory && matchSearch && v.status === 'tersedia';
+      return matchType && matchCategory && matchSearch && isCatalogListed(v);
     });
   }, [products, activeTab, activeCategory, searchQuery]);
 
@@ -223,6 +224,10 @@ export const VoucherPage = () => {
             <div 
               key={vch.id}
               onClick={() => {
+                if (!isProductPurchasable(vch)) {
+                  setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
+                  return;
+                }
                 setCheckoutData({
                   serviceName: activeTab === 'digital' ? 'Voucher Digital' : 'Voucher Fisik',
                   productName: vch.name,
@@ -236,7 +241,7 @@ export const VoucherPage = () => {
                   }
                 });
               }}
-              className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xl shadow-gray-200/20 hover:border-primary-100 cursor-pointer transition-all flex flex-col justify-between group"
+              className={`bg-white rounded-3xl p-5 border border-gray-100 shadow-xl shadow-gray-200/20 hover:border-primary-100 cursor-pointer transition-all flex flex-col justify-between group ${!isProductPurchasable(vch) ? 'opacity-70' : ''}`}
             >
               <div>
                 {/* Brand card representation */}

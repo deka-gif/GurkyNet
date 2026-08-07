@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Layers,
   Search,
@@ -21,6 +21,21 @@ import {
 import { useOperationsStore } from '../../store/operations.store';
 import { operationsService } from '../../services/operations.service';
 
+function resolveOpsStatus(item: any): string {
+  const raw =
+    item?.availabilityStatus ||
+    item?.availability_status ||
+    item?.opsStatus ||
+    item?.ops_status ||
+    item?.status ||
+    'active';
+  const s = String(raw).toLowerCase();
+  if (s === 'active' || s === 'tersedia' || s === '1' || s === 'true') return 'active';
+  if (s === 'inactive' || s === 'nonaktif' || s === 'gangguan' || s === '0' || s === 'false') return 'inactive';
+  if (s === 'maintenance') return 'maintenance';
+  return s;
+}
+
 export const OperationsProductManagement: React.FC = () => {
   const {
     products,
@@ -34,15 +49,15 @@ export const OperationsProductManagement: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
 
-  // Filters — Product Providers from API only (never payment gateways)
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
-  const [providerFilter, setProviderFilter] = useState<string>('All'); // product_provider id as string, or All
+  const [providerFilter, setProviderFilter] = useState<string>('All');
   const [productProviders, setProductProviders] = useState<Array<{ id: number; code: string; name: string }>>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [searchInput, setSearchInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Toast / Status Message
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -50,7 +65,6 @@ export const OperationsProductManagement: React.FC = () => {
     (async () => {
       try {
         const res = await operationsService.getProductProviders();
-        // ApiResponse: { success, data: [{id,name,code}, ...] }
         const raw = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
         const paymentCodes = new Set(['midtrans', 'xendit', 'alterra', 'artajasa']);
         const items = raw
@@ -70,13 +84,28 @@ export const OperationsProductManagement: React.FC = () => {
     };
   }, []);
 
+  // Debounce search → backend (no page reload, no frontend catalog filter)
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      setCurrentPage(1);
+    }, 350);
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [searchInput]);
+
   const loadData = useCallback((page: number = 1) => {
-    const params: Record<string, any> = { page };
+    const params: Record<string, any> = {
+      page,
+      per_page: 25,
+      sort: 'newest',
+    };
     if (categoryFilter !== 'All') params.category = categoryFilter;
-    // Filter by products.product_provider_id — never payment gateway / operator brand
     if (providerFilter !== 'All') params.product_provider_id = Number(providerFilter);
-    if (statusFilter !== 'All') params.status = statusFilter;
-    if (searchQuery.trim() !== '') params.search = searchQuery.trim();
+    if (statusFilter !== 'All') params.status = statusFilter.toLowerCase();
+    if (searchQuery !== '') params.search = searchQuery;
 
     fetchProducts(params);
   }, [categoryFilter, providerFilter, statusFilter, searchQuery, fetchProducts]);
@@ -85,18 +114,18 @@ export const OperationsProductManagement: React.FC = () => {
     loadData(currentPage);
   }, [loadData, currentPage]);
 
-  const handleFilterChange = () => {
-    setCurrentPage(1);
+  const handleFilterChange = (nextPage = 1) => {
+    setCurrentPage(nextPage);
   };
 
   const handleToggleProductStatus = async (item: any, newStatus: string) => {
     const productId = item.id || item.code;
-    const result = await updateProduct(productId, { status: newStatus });
+    const result = await updateProduct(productId, { status: newStatus.toLowerCase() });
     if (result.success) {
       setActionMessage({ type: 'success', text: result.message || `Status SKU ${item.code || item.id} berhasil diperbarui.` });
       loadData(currentPage);
       if (selectedProduct && (selectedProduct.id === productId || selectedProduct.code === productId)) {
-        setSelectedProduct({ ...selectedProduct, status: newStatus });
+        setSelectedProduct({ ...selectedProduct, status: newStatus.toLowerCase(), availabilityStatus: newStatus.toLowerCase() });
       }
     } else {
       setActionMessage({ type: 'error', text: result.message || 'Gagal mengubah status produk.' });
@@ -108,11 +137,12 @@ export const OperationsProductManagement: React.FC = () => {
     if (!editingProduct) return;
 
     const productId = editingProduct.id || editingProduct.code;
+    const statusValue = String(editingProduct.status || 'active').toLowerCase();
     const payload = {
       name: editingProduct.name,
       base_price: Number(editingProduct.basePrice ?? editingProduct.base_price ?? 0),
       selling_price: Number(editingProduct.sellingPrice ?? editingProduct.selling_price ?? 0),
-      status: editingProduct.status,
+      status: statusValue,
       description: editingProduct.description,
     };
 
@@ -122,7 +152,7 @@ export const OperationsProductManagement: React.FC = () => {
       setEditingProduct(null);
       loadData(currentPage);
       if (selectedProduct && (selectedProduct.id === productId || selectedProduct.code === productId)) {
-        setSelectedProduct({ ...selectedProduct, ...payload });
+        setSelectedProduct({ ...selectedProduct, ...payload, availabilityStatus: statusValue });
       }
     } else {
       setActionMessage({ type: 'error', text: result.message || 'Gagal menyimpan perubahan produk.' });
@@ -143,7 +173,7 @@ export const OperationsProductManagement: React.FC = () => {
         </span>
       );
     }
-    if (s === 'inactive' || s === 'nonaktif') {
+    if (s === 'inactive' || s === 'nonaktif' || s === 'gangguan') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-gray-100 text-gray-700 border border-gray-200">
           <XCircle className="w-3.5 h-3.5 text-gray-500" />
@@ -151,7 +181,7 @@ export const OperationsProductManagement: React.FC = () => {
         </span>
       );
     }
-    if (s === 'maintenance' || s === 'gangguan') {
+    if (s === 'maintenance') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
           <Wrench className="w-3.5 h-3.5 text-amber-600" />
@@ -169,7 +199,6 @@ export const OperationsProductManagement: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Toast Notification */}
       {actionMessage && (
         <div className={`fixed top-20 right-6 z-50 max-w-md p-4 rounded-2xl shadow-2xl border flex items-center gap-3 text-xs font-semibold animate-bounce ${
           actionMessage.type === 'success' ? 'bg-slate-900 text-white border-slate-700' : 'bg-red-900 text-white border-red-700'
@@ -186,7 +215,6 @@ export const OperationsProductManagement: React.FC = () => {
         </div>
       )}
 
-      {/* HEADER BANNER */}
       <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5">
@@ -198,7 +226,7 @@ export const OperationsProductManagement: React.FC = () => {
               Product Management
             </h1>
             <p className="text-xs sm:text-sm text-indigo-100/90 leading-relaxed max-w-2xl">
-              Pusat pengelolaan katalog SKU produk, pemantauan margin harga jual, status ketersediaan provider, dan pemeliharaan produk operasional.
+              Control Center katalog produk real dari Digiflazz & VIP Payment. Filter, harga, dan status di sini langsung mempengaruhi Dashboard User.
             </p>
           </div>
 
@@ -215,7 +243,6 @@ export const OperationsProductManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* ERROR DISPLAY */}
       {productsError && (
         <div className="p-4 bg-red-50 rounded-2xl border border-red-200 flex items-center gap-3 text-red-900 text-xs">
           <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
@@ -223,7 +250,6 @@ export const OperationsProductManagement: React.FC = () => {
         </div>
       )}
 
-      {/* FILTER BAR SECTION */}
       <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <div className="flex items-center gap-2">
@@ -231,42 +257,43 @@ export const OperationsProductManagement: React.FC = () => {
             <h2 className="text-sm font-extrabold text-gray-900">Katalog Product Filter Bar</h2>
           </div>
           <span className="text-xs text-gray-400 font-mono">
-            Showing {products.length} of {totalCount} SKU
+            Showing {totalCount.toLocaleString('id-ID')} Products
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          {/* Category Filter */}
           <div>
             <label className="block text-[11px] font-bold text-gray-500 mb-1">Category</label>
             <select
               value={categoryFilter}
               onChange={(e) => {
                 setCategoryFilter(e.target.value);
-                handleFilterChange();
+                handleFilterChange(1);
               }}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
               <option value="All">Semua Kategori</option>
               <option value="pulsa">Pulsa</option>
-              <option value="data">Data</option>
+              <option value="data">Paket Data</option>
               <option value="pln">PLN Token</option>
-              <option value="ewallet">E-Wallet</option>
-              <option value="voucher">Voucher</option>
-              <option value="game">Game Voucher</option>
-              <option value="transfer">Transfer</option>
+              <option value="topup-digital">Top Up Digital / E-Wallet</option>
+              <option value="voucher-digital">Voucher Digital</option>
+              <option value="game">Game</option>
+              <option value="langganan-digital">Langganan Digital</option>
               <option value="tagihan">Tagihan</option>
+              <option value="voucher-internet">Voucher Internet</option>
+              <option value="international">International</option>
+              <option value="transfer">Transfer</option>
             </select>
           </div>
 
-          {/* Product Provider Filter — loaded from product_providers API only */}
           <div>
             <label className="block text-[11px] font-bold text-gray-500 mb-1">Product Provider</label>
             <select
               value={providerFilter}
               onChange={(e) => {
                 setProviderFilter(e.target.value);
-                handleFilterChange();
+                handleFilterChange(1);
               }}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
@@ -279,37 +306,32 @@ export const OperationsProductManagement: React.FC = () => {
             </select>
           </div>
 
-          {/* Status Filter */}
           <div>
             <label className="block text-[11px] font-bold text-gray-500 mb-1">Status</label>
             <select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
-                handleFilterChange();
+                handleFilterChange(1);
               }}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
               <option value="All">Semua Status</option>
-              <option value="Active">Active / Tersedia</option>
-              <option value="Inactive">Inactive / Nonaktif</option>
-              <option value="Maintenance">Maintenance / Gangguan</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="maintenance">Maintenance</option>
             </select>
           </div>
 
-          {/* Keyword Search */}
           <div>
             <label className="block text-[11px] font-bold text-gray-500 mb-1">Keyword Search</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  handleFilterChange();
-                }}
-                placeholder="Cari kode SKU, nama produk..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Nama, SKU, operator, provider..."
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
@@ -317,15 +339,14 @@ export const OperationsProductManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* PRODUCT TABLE SECTION */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden space-y-0">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
             <h2 className="text-base font-extrabold text-gray-900">Product Management Table</h2>
-            <p className="text-xs text-gray-500">Daftar SKU produk real-time dari server operasional GurkyNet</p>
+            <p className="text-xs text-gray-500">Daftar SKU produk real-time dari database operasional GurkyNet</p>
           </div>
           <span className="text-xs text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 font-mono">
-            {products.length} Items
+            {products.length} / {totalCount.toLocaleString('id-ID')} Items
           </span>
         </div>
 
@@ -368,7 +389,7 @@ export const OperationsProductManagement: React.FC = () => {
                     const basePrice = Number(item.basePrice ?? item.base_price ?? item.price ?? 0);
                     const sellingPrice = Number(item.sellingPrice ?? item.selling_price ?? item.price ?? 0);
                     const margin = Number(item.margin ?? (sellingPrice - basePrice));
-                    const status = item.status || 'Active';
+                    const status = resolveOpsStatus(item);
 
                     return (
                       <tr
@@ -417,17 +438,20 @@ export const OperationsProductManagement: React.FC = () => {
 
                             <button
                               type="button"
-                              onClick={() => setEditingProduct(item)}
+                              onClick={() => setEditingProduct({
+                                ...item,
+                                status: resolveOpsStatus(item),
+                              })}
                               className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
                               title="Edit Product"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
 
-                            {String(status).toLowerCase() === 'active' || String(status).toLowerCase() === 'tersedia' ? (
+                            {status === 'active' ? (
                               <button
                                 type="button"
-                                onClick={() => handleToggleProductStatus(item, 'Inactive')}
+                                onClick={() => handleToggleProductStatus(item, 'inactive')}
                                 className="p-1.5 rounded-lg bg-gray-100 hover:bg-amber-600 hover:text-white text-amber-700 transition"
                                 title="Disable Product"
                               >
@@ -436,7 +460,7 @@ export const OperationsProductManagement: React.FC = () => {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => handleToggleProductStatus(item, 'Active')}
+                                onClick={() => handleToggleProductStatus(item, 'active')}
                                 className="p-1.5 rounded-lg bg-gray-100 hover:bg-emerald-600 hover:text-white text-emerald-700 transition"
                                 title="Enable Product"
                               >
@@ -454,11 +478,10 @@ export const OperationsProductManagement: React.FC = () => {
           </div>
         )}
 
-        {/* PAGINATION CONTROLS */}
         {pageLast > 1 && (
           <div className="p-4 border-t border-gray-100 flex items-center justify-between text-xs bg-gray-50/50">
             <span className="text-gray-500 font-medium">
-              Halaman {pageCurrent} dari {pageLast}
+              Halaman {pageCurrent} dari {pageLast} · {totalCount.toLocaleString('id-ID')} Products
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -482,18 +505,16 @@ export const OperationsProductManagement: React.FC = () => {
         )}
       </div>
 
-      {/* DETAIL DRAWER */}
       {selectedProduct && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-end z-50">
           <div className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden animate-in slide-in-from-right duration-200">
-            {/* Header */}
             <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono font-bold text-indigo-400 bg-slate-800 px-2.5 py-0.5 rounded">
                     {selectedProduct.code || selectedProduct.id}
                   </span>
-                  {getStatusBadge(selectedProduct.status || 'Active')}
+                  {getStatusBadge(resolveOpsStatus(selectedProduct))}
                 </div>
                 <h2 className="text-lg font-extrabold">{selectedProduct.name || selectedProduct.title}</h2>
               </div>
@@ -505,7 +526,6 @@ export const OperationsProductManagement: React.FC = () => {
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-6 space-y-5 text-xs text-gray-800 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <div>
@@ -519,13 +539,18 @@ export const OperationsProductManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Provider</span>
-                  <div className="font-extrabold text-blue-700 mt-0.5">{selectedProduct.provider || selectedProduct.provider_name || '-'}</div>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Product Provider</span>
+                  <div className="font-extrabold text-indigo-700 mt-0.5">{selectedProduct.productProvider || '-'}</div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Operator</span>
+                  <div className="font-extrabold text-blue-700 mt-0.5">{selectedProduct.provider || selectedProduct.operatorName || '-'}</div>
                 </div>
 
                 <div>
                   <span className="text-[10px] text-gray-400 font-bold uppercase">Status</span>
-                  <div className="mt-0.5">{getStatusBadge(selectedProduct.status || 'Active')}</div>
+                  <div className="mt-0.5">{getStatusBadge(resolveOpsStatus(selectedProduct))}</div>
                 </div>
 
                 <div>
@@ -551,11 +576,10 @@ export const OperationsProductManagement: React.FC = () => {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2 shrink-0">
               <button
                 onClick={() => {
-                  setEditingProduct(selectedProduct);
+                  setEditingProduct({ ...selectedProduct, status: resolveOpsStatus(selectedProduct) });
                   setSelectedProduct(null);
                 }}
                 className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center gap-1.5"
@@ -574,7 +598,6 @@ export const OperationsProductManagement: React.FC = () => {
         </div>
       )}
 
-      {/* EDIT MODAL */}
       {editingProduct && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white max-w-lg w-full rounded-3xl p-6 shadow-2xl space-y-4 border border-gray-100 animate-in zoom-in-95">
@@ -630,13 +653,13 @@ export const OperationsProductManagement: React.FC = () => {
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Status</label>
                 <select
-                  value={editingProduct.status || 'Active'}
+                  value={String(editingProduct.status || 'active').toLowerCase()}
                   onChange={(e) => setEditingProduct({ ...editingProduct, status: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-900 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Maintenance">Maintenance</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="maintenance">Maintenance</option>
                 </select>
               </div>
 

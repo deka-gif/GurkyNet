@@ -430,6 +430,9 @@ class SyncVipCatalogAction
             'meta' => $result,
         ]);
 
+        // Invalidate User Dashboard catalog caches immediately after VIP sync.
+        \App\Services\ProductProviders\ProductCatalogCache::bump();
+
         return $result;
     }
 
