@@ -109,6 +109,15 @@ class ProductProviderControlService
             'routingMode' => 'product_priority_failover',
             'controlsCatalogAlone' => false,
             'note' => 'Status health memengaruhi kandidat transaksi. Produk tetap tampil jika provider cadangan siap memproses.',
+            'lastSyncDurationSec' => $this->lastSyncMeta($p)['duration_sec'] ?? null,
+            'nextRecommendedSyncAt' => $this->lastSyncMeta($p)['next_recommended_sync_at']
+                ?? ($p->last_sync_at ? $p->last_sync_at->copy()->addMinutes(30)->toIso8601String() : null),
+            'syncSummary' => $this->lastSyncMeta($p),
+            'productAudit' => $this->productAuditForCard($p),
+            'apiVersion' => $this->lastHealthMeta($p)['api_version']
+                ?? $this->lastHealthMeta($p)['provider_profile']['api_version']
+                ?? null,
+            'lastCheckedAt' => optional($p->last_health_check_at)?->toIso8601String(),
         ];
     }
 
@@ -346,14 +355,30 @@ class ProductProviderControlService
                 'product_provider_id' => $provider->id,
                 'event_type' => 'sync',
                 'selected_provider_code' => $provider->code,
-                'success' => true,
+                'success' => ($result['status'] ?? '') !== 'failed',
                 'reason' => 'sync_completed',
+                'response_time_ms' => $result['duration_ms'] ?? null,
                 'meta' => $result,
             ]);
 
             $this->flushProductCatalogCache();
 
-            return array_merge($result, ['provider' => $this->toCard($provider->fresh())]);
+            return array_merge($result, [
+                'summary' => [
+                    'providerSkuTotal' => $result['provider_sku_total'] ?? $result['synced_count'] ?? 0,
+                    'inserted' => $result['inserted'] ?? 0,
+                    'updated' => $result['updated'] ?? 0,
+                    'skipped' => $result['skipped'] ?? 0,
+                    'disabled' => $result['disabled'] ?? 0,
+                    'durationSec' => $result['duration_sec'] ?? null,
+                ],
+                'audit' => [
+                    'providerSku' => $result['provider_sku_total'] ?? 0,
+                    'databaseSku' => $result['database_sku_total'] ?? 0,
+                    'difference' => $result['difference'] ?? 0,
+                ],
+                'provider' => $this->toCard($provider->fresh()),
+            ]);
         }
 
         if ($provider->code === ProductProvider::CODE_VIP) {
@@ -361,11 +386,43 @@ class ProductProviderControlService
                 $result = $this->syncVip->execute($options);
                 $this->flushProductCatalogCache();
 
-                return array_merge($result, ['provider' => $this->toCard($provider->fresh())]);
-            } catch (\Throwable $e) {
-                throw ValidationException::withMessages([
-                    'provider' => [$e->getMessage()],
+                return array_merge($result, [
+                    'summary' => [
+                        'providerSkuTotal' => ($result['imported'] ?? 0) + ($result['updated'] ?? 0) + ($result['skipped'] ?? 0),
+                        'inserted' => $result['imported'] ?? 0,
+                        'updated' => $result['updated'] ?? 0,
+                        'skipped' => $result['skipped'] ?? 0,
+                        'disabled' => 0,
+                        'durationSec' => isset($result['api_latency_ms'])
+                            ? round(((int) $result['api_latency_ms']) / 1000, 1)
+                            : null,
+                    ],
+                    'audit' => [
+                        'providerSku' => $result['product_count'] ?? null,
+                        'databaseSku' => ProductProviderSku::where('product_provider_id', $provider->id)->count(),
+                        'difference' => null,
+                    ],
+                    'provider' => $this->toCard($provider->fresh()),
                 ]);
+            } catch (\App\Exceptions\ProviderCatalogException $e) {
+                throw $e;
+            } catch (\Throwable $e) {
+                ProductProviderLog::create([
+                    'product_provider_id' => $provider->id,
+                    'event_type' => 'sync',
+                    'selected_provider_code' => $provider->code,
+                    'success' => false,
+                    'reason' => 'sync_failed',
+                    'error_message' => $e->getMessage(),
+                ]);
+
+                throw new \App\Exceptions\ProviderCatalogException(
+                    $e->getMessage(),
+                    'VIPayment',
+                    'SYNC_FAILED',
+                    true,
+                    ['exception' => class_basename($e)]
+                );
             }
         }
 
@@ -378,9 +435,45 @@ class ProductProviderControlService
             'error_message' => 'Catalog sync for this provider is not configured yet.',
         ]);
 
-        throw ValidationException::withMessages([
-            'provider' => ['Sinkronisasi katalog untuk ' . $provider->name . ' belum dikonfigurasi.'],
-        ]);
+        throw new \App\Exceptions\ProviderCatalogException(
+            'Sinkronisasi katalog untuk ' . $provider->name . ' belum dikonfigurasi.',
+            $provider->name,
+            'NOT_IMPLEMENTED',
+            false
+        );
+    }
+
+    /**
+     * Probe every product provider and return fresh cards (balances, health, SKU, latency).
+     */
+    public function refreshAll(): array
+    {
+        $providers = ProductProvider::query()->orderBy('priority')->orderBy('id')->get();
+        $cards = [];
+        $errors = [];
+
+        foreach ($providers as $provider) {
+            try {
+                $cards[] = $this->healthCheck($provider);
+                $this->audit($provider, 'refresh', true, 'Global operations refresh');
+            } catch (\Throwable $e) {
+                report($e);
+                $errors[] = [
+                    'id' => $provider->id,
+                    'code' => $provider->code,
+                    'message' => $e->getMessage(),
+                ];
+                $this->audit($provider, 'refresh', false, 'Global refresh failed', [
+                    'error' => $e->getMessage(),
+                ]);
+                $cards[] = $this->toCard($provider->fresh() ?? $provider);
+            }
+        }
+
+        return [
+            'providers' => $cards,
+            'errors' => $errors,
+        ];
     }
 
     public function logs(ProductProvider $provider, int $limit = 50): array
@@ -416,6 +509,39 @@ class ProductProviderControlService
             'reason' => $reason,
             'meta' => $meta,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function lastSyncMeta(ProductProvider $p): array
+    {
+        $log = ProductProviderLog::query()
+            ->where('product_provider_id', $p->id)
+            ->where('event_type', 'sync')
+            ->where('success', true)
+            ->orderByDesc('id')
+            ->first();
+
+        return is_array($log?->meta) ? $log->meta : [];
+    }
+
+    /**
+     * @return array{providerSku:int,databaseSku:int,difference:int,warning:bool}
+     */
+    protected function productAuditForCard(ProductProvider $p): array
+    {
+        $db = ProductProviderSku::where('product_provider_id', $p->id)->count();
+        $meta = $this->lastSyncMeta($p);
+        $providerSku = (int) ($meta['provider_sku_total'] ?? $meta['synced_count'] ?? $db);
+        $difference = $providerSku - $db;
+
+        return [
+            'providerSku' => $providerSku,
+            'databaseSku' => $db,
+            'difference' => $difference,
+            'warning' => $difference !== 0,
+        ];
     }
 
     /**

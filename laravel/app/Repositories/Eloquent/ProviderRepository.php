@@ -37,7 +37,7 @@ class ProviderRepository implements ProviderRepositoryInterface
      * @param  array<int, array<string, mixed>>  $digiflazzProducts
      * @param  array<string, list<string>>  $seenSkusByListType
      */
-    public function syncWithDigiflazz(array $digiflazzProducts, array $seenSkusByListType = []): void
+    public function syncWithDigiflazz(array $digiflazzProducts, array $seenSkusByListType = []): array
     {
         $defaultMargin = (float) (Setting::where('key', 'default_margin')->value('value') ?? 1500);
         $categoryMargins = collect(json_decode(Setting::where('key', 'category_margins')->value('value') ?? '[]', true) ?: [])
@@ -46,10 +46,28 @@ class ProviderRepository implements ProviderRepositoryInterface
             ->keyBy(fn ($row) => Str::lower((string) ($row['provider'] ?? '')));
 
         $digiflazzProvider = ProductProvider::digiflazz();
+        if (! $digiflazzProvider) {
+            $digiflazzProvider = ProductProvider::query()->updateOrCreate(
+                ['code' => ProductProvider::CODE_DIGIFLAZZ],
+                [
+                    'name' => 'Digiflazz',
+                    'is_active' => true,
+                    'priority' => 1,
+                    'api_status' => 'unknown',
+                    'partner_status' => 'online',
+                ]
+            );
+        }
+
+        $inserted = 0;
+        $updated = 0;
+        $skipped = 0;
+        $disabled = 0;
 
         foreach ($digiflazzProducts as $dp) {
             $sku = $dp['buyer_sku_code'] ?? null;
             if (!$sku) {
+                $skipped++;
                 continue;
             }
 
@@ -108,10 +126,12 @@ class ProviderRepository implements ProviderRepositoryInterface
 
             // 4. Map & Sync master Product — preserve existing margin when updating cost
             $existing = Product::withTrashed()->where('sku_code', $sku)->first();
+            $wasNew = false;
 
             if ($existing) {
                 if ($existing->trashed()) {
                     $existing->restore();
+                    $wasNew = true; // restored counts as insert for ops visibility
                 }
 
                 $adminFee = (float) $existing->admin_fee;
@@ -129,13 +149,18 @@ class ProviderRepository implements ProviderRepositoryInterface
                 $existing->fill([
                     'product_category_id' => $category->id,
                     'provider_id' => $provider->id,
-                    'product_provider_id' => $digiflazzProvider?->id ?? $existing->product_provider_id,
+                    'product_provider_id' => $digiflazzProvider->id,
                     'name' => $dp['product_name'],
                     'base_price' => $basePrice,
                     'sell_price' => $basePrice + $previousMargin + $adminFee,
                     'status' => $isActive,
                 ]);
                 $existing->save();
+                if ($wasNew) {
+                    $inserted++;
+                } else {
+                    $updated++;
+                }
             } else {
                 $margin = $this->resolveMargin(
                     $defaultMargin,
@@ -148,7 +173,7 @@ class ProviderRepository implements ProviderRepositoryInterface
                 Product::create([
                     'product_category_id' => $category->id,
                     'provider_id' => $provider->id,
-                    'product_provider_id' => $digiflazzProvider?->id,
+                    'product_provider_id' => $digiflazzProvider->id,
                     'sku_code' => $sku,
                     'name' => $dp['product_name'],
                     'base_price' => $basePrice,
@@ -156,11 +181,12 @@ class ProviderRepository implements ProviderRepositoryInterface
                     'admin_fee' => 0.00,
                     'status' => $isActive,
                 ]);
+                $inserted++;
             }
 
             // 5. Upsert Digiflazz SKU offer mapping (internal SKU → provider SKU)
             $master = Product::withTrashed()->where('sku_code', $sku)->first();
-            if ($master && $digiflazzProvider) {
+            if ($master) {
                 ProductProviderSku::updateOrCreate(
                     [
                         'product_id' => $master->id,
@@ -176,14 +202,25 @@ class ProviderRepository implements ProviderRepositoryInterface
             }
         }
 
-        $this->deactivateMissingDigiflazzSkus($seenSkusByListType, $digiflazzProvider);
+        $disabled = $this->deactivateMissingDigiflazzSkus($seenSkusByListType, $digiflazzProvider);
 
-        if ($digiflazzProvider) {
-            $digiflazzProvider->forceFill([
-                'last_sync_at' => now(),
-                'product_count' => ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count(),
-            ])->save();
-        }
+        $dbSkuTotal = ProductProviderSku::where('product_provider_id', $digiflazzProvider->id)->count();
+        $providerSkuTotal = count($digiflazzProducts);
+
+        $digiflazzProvider->forceFill([
+            'last_sync_at' => now(),
+            'product_count' => $dbSkuTotal,
+        ])->save();
+
+        return [
+            'inserted' => $inserted,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'disabled' => $disabled,
+            'provider_sku_total' => $providerSkuTotal,
+            'database_sku_total' => $dbSkuTotal,
+            'difference' => $providerSkuTotal - $dbSkuTotal,
+        ];
     }
 
     /**
@@ -192,8 +229,10 @@ class ProviderRepository implements ProviderRepositoryInterface
      *
      * @param  array<string, list<string>>  $seenSkusByListType
      */
-    protected function deactivateMissingDigiflazzSkus(array $seenSkusByListType, ?ProductProvider $digiflazzProvider): void
+    protected function deactivateMissingDigiflazzSkus(array $seenSkusByListType, ?ProductProvider $digiflazzProvider): int
     {
+        $disabled = 0;
+
         foreach ($seenSkusByListType as $listType => $seenSkus) {
             $listType = (string) $listType;
             if ($listType === '' || ! is_array($seenSkus)) {
@@ -211,6 +250,8 @@ class ProviderRepository implements ProviderRepositoryInterface
             if ($missingSkus === []) {
                 continue;
             }
+
+            $disabled += count($missingSkus);
 
             DigiflazzProduct::whereIn('buyer_sku_code', $missingSkus)->update([
                 'buyer_product_status' => false,
@@ -230,6 +271,8 @@ class ProviderRepository implements ProviderRepositoryInterface
                     ->update(['is_active' => false]);
             }
         }
+
+        return $disabled;
     }
 
     protected function nullableInt(mixed $value): ?int

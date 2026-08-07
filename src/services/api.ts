@@ -54,6 +54,10 @@ export interface StandardApiError {
   message: string;
   errors?: Record<string, string[]>;
   code?: string | number;
+  provider?: string;
+  providerCode?: string;
+  retryable?: boolean;
+  data?: unknown;
 }
 
 export function parseApiError(error: any): StandardApiError {
@@ -91,6 +95,10 @@ export function parseApiError(error: any): StandardApiError {
         errorMessage = 'Sesi telah berakhir.';
       } else if (status === 422) {
         errorMessage = 'Data yang dikirim tidak valid.';
+      } else if (error.code === 'ECONNABORTED' || /timeout/i.test(String(error.message || ''))) {
+        errorMessage = 'Request timeout. Proses provider masih berjalan atau jaringan lambat — coba lagi tanpa reload.';
+      } else if (error.code === 'ERR_CANCELED' || /canceled|cancelled/i.test(String(error.message || ''))) {
+        errorMessage = 'Request terputus. Silakan coba kembali (bukan pembatalan manual).';
       } else if (typeof status === 'number' && status >= 500) {
         errorMessage = 'Server sedang bermasalah.';
       } else {
@@ -102,7 +110,11 @@ export function parseApiError(error: any): StandardApiError {
       status,
       message: errorMessage,
       errors: data?.errors || {},
-      code: data?.code,
+      code: data?.code ?? data?.provider_code,
+      provider: data?.provider,
+      providerCode: data?.provider_code,
+      retryable: data?.retryable,
+      data: data?.data,
     };
   }
 

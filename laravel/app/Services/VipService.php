@@ -357,12 +357,18 @@ class VipService
         Log::info('VIP REQUEST HEADERS', ['REQUEST_HEADERS' => $headers]);
 
         try {
-            $timeout = app()->environment('testing') ? 5 : 30;
+            // Catalog sync can exceed default probe timeout — do not abort mid-download.
+            $isSync = in_array($logEvent, ['sync', 'catalog', 'price_list'], true);
+            $timeout = app()->environment('testing') ? 5 : ($isSync ? 90 : 30);
             /** @var Response $response */
             $response = Http::asForm()
                 ->withHeaders(['Accept' => 'application/json'])
                 ->timeout($timeout)
                 ->connectTimeout(app()->environment('testing') ? 2 : 10)
+                ->retry($isSync ? 2 : 0, 2000, function ($exception) {
+                    return $exception instanceof \Illuminate\Http\Client\ConnectionException
+                        || $exception instanceof \Illuminate\Http\Client\RequestException;
+                }, throw: false)
                 ->post($url, $params);
 
             $ms = (int) ((microtime(true) - $started) * 1000);

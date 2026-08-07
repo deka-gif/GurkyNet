@@ -147,6 +147,21 @@ class ProductProviderControlController extends Controller
         return $this->successResponse('Health check selesai.', $card);
     }
 
+    /**
+     * Global Operations Refresh — health + balances + SKU counts for all product providers.
+     * Never reloads the browser; AJAX only.
+     */
+    public function refreshAll(ProductProviderControlService $service): JsonResponse
+    {
+        $started = microtime(true);
+        $result = $service->refreshAll();
+
+        return $this->successResponse('Product Provider Control Center diperbarui.', array_merge($result, [
+            'duration_ms' => (int) round((microtime(true) - $started) * 1000),
+            'refreshed_at' => now()->toIso8601String(),
+        ]));
+    }
+
     public function sync(int $id, Request $request, ProductProviderControlService $service): JsonResponse
     {
         $provider = ProductProvider::findOrFail($id);
@@ -159,10 +174,26 @@ class ProductProviderControlController extends Controller
             $result = $service->syncNow($provider, ['cmd' => $cmds]);
 
             return $this->successResponse($result['message'] ?? 'Sync berhasil.', $result);
+        } catch (\App\Exceptions\ProviderCatalogException $e) {
+            // Provider RC (e.g. Digiflazz RC83) — NOT Laravel validation 422.
+            return response()->json(array_merge($e->toArray(), [
+                'meta' => null,
+                'errors' => null,
+            ]), 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            // Keep true validation (priority etc.) as 422 — not provider RC.
             throw $e;
         } catch (\Throwable $e) {
-            return $this->errorResponse($e->getMessage(), 422);
+            return response()->json([
+                'success' => false,
+                'provider' => $provider->name,
+                'provider_code' => null,
+                'message' => $e->getMessage(),
+                'retryable' => true,
+                'data' => null,
+                'meta' => null,
+                'errors' => null,
+            ], 200);
         }
     }
 

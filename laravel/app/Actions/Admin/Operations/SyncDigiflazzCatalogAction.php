@@ -2,6 +2,7 @@
 
 namespace App\Actions\Admin\Operations;
 
+use App\Exceptions\ProviderCatalogException;
 use App\Models\ActivityLog;
 use App\Models\DigiflazzProduct;
 use App\Models\Product;
@@ -28,7 +29,7 @@ class SyncDigiflazzCatalogAction
      */
     public function execute(array $options = []): array
     {
-        // Power (is_active) does not gate sync — visibility is independent of catalog sync.
+        $startedAt = microtime(true);
 
         if (!$this->digiflazzService->isConfigured()) {
             $result = $this->persistSyncMeta([
@@ -38,7 +39,13 @@ class SyncDigiflazzCatalogAction
                 'failed_count' => 1,
             ]);
 
-            throw new \RuntimeException($result['message']);
+            throw new ProviderCatalogException(
+                $result['message'],
+                'Digiflazz',
+                'CONFIG',
+                false,
+                $result
+            );
         }
 
         $cmds = $options['cmd'] ?? ['prepaid', 'pasca'];
@@ -49,58 +56,93 @@ class SyncDigiflazzCatalogAction
         $normalized = [];
         $seenSkusByListType = [];
         $errors = [];
+        $rateLimited = null;
 
         foreach ($cmds as $cmd) {
             $cmd = (string) $cmd;
-            try {
-                $response = $this->digiflazzService->fetchPriceList($cmd);
-                $rows = $response['data'] ?? null;
+            $attempt = 0;
+            $maxAttempts = 2;
 
-                if (!is_array($rows)) {
-                    $errors[] = "Digiflazz {$cmd} price-list returned no data.";
-                    continue;
-                }
+            while ($attempt < $maxAttempts) {
+                $attempt++;
+                try {
+                    $response = $this->digiflazzService->fetchPriceList($cmd);
+                    $rows = $response['data'] ?? null;
 
-                if ($this->isDigiflazzRcErrorPayload($rows)) {
-                    $classifier = DigiflazzResponseCodeClassifier::fromResponseData($rows);
-                    Log::warning('Digiflazz price-list RC error', array_merge(
-                        ['cmd' => $cmd],
-                        $classifier->toOfficialMetadata()
-                    ));
-                    $message = trim((string) ($rows['message'] ?? ''));
-                    if ($message === '' && ! $classifier->isUnknown()) {
-                        $message = $classifier->message;
+                    if (!is_array($rows)) {
+                        $errors[] = "Digiflazz {$cmd} price-list returned no data.";
+                        break;
                     }
-                    $errors[] = "Digiflazz {$cmd} price-list RC {$classifier->code}"
-                        .($message !== '' ? ": {$message}" : '');
-                    continue;
-                }
 
-                $seenForCmd = [];
+                    if ($this->isDigiflazzRcErrorPayload($rows)) {
+                        $classifier = DigiflazzResponseCodeClassifier::fromResponseData($rows);
+                        Log::warning('Digiflazz price-list RC error', array_merge(
+                            ['cmd' => $cmd, 'attempt' => $attempt],
+                            $classifier->toOfficialMetadata()
+                        ));
+                        $message = trim((string) ($rows['message'] ?? ''));
+                        if ($message === '' && ! $classifier->isUnknown()) {
+                            $message = $classifier->message;
+                        }
 
-                foreach ($rows as $row) {
-                    if (!is_array($row)) {
+                        if ($classifier->isRateLimited()) {
+                            $rateLimited = [
+                                'code' => $classifier->code,
+                                'message' => $message !== ''
+                                    ? $message
+                                    : 'Anda telah mencapai limitasi pengecekan pricelist.',
+                                'cmd' => $cmd,
+                                'retryable' => true,
+                            ];
+                            $errors[] = "Digiflazz {$cmd} price-list RC {$classifier->code}"
+                                .($message !== '' ? ": {$message}" : '');
+                            break;
+                        }
+
+                        if ($classifier->shouldRetry && $attempt < $maxAttempts) {
+                            usleep(2_000_000);
+                            continue;
+                        }
+
+                        $errors[] = "Digiflazz {$cmd} price-list RC {$classifier->code}"
+                            .($message !== '' ? ": {$message}" : '');
+                        break;
+                    }
+
+                    $seenForCmd = [];
+
+                    foreach ($rows as $row) {
+                        if (!is_array($row)) {
+                            continue;
+                        }
+
+                        $sku = $row['buyer_sku_code'] ?? null;
+                        if (!$sku) {
+                            continue;
+                        }
+
+                        $sku = (string) $sku;
+                        $normalized[$sku] = $this->normalizeDigiflazzRow($row, $cmd);
+                        $seenForCmd[] = $sku;
+                    }
+
+                    $seenSkusByListType[$cmd] = array_values(array_unique($seenForCmd));
+                    break;
+                } catch (ProviderCatalogException $e) {
+                    throw $e;
+                } catch (\Throwable $e) {
+                    Log::error('Digiflazz catalog sync fetch failed', [
+                        'cmd' => $cmd,
+                        'attempt' => $attempt,
+                        'message' => $e->getMessage(),
+                    ]);
+                    if ($attempt < $maxAttempts) {
+                        usleep(2_000_000);
                         continue;
                     }
-
-                    $sku = $row['buyer_sku_code'] ?? null;
-                    if (!$sku) {
-                        continue;
-                    }
-
-                    $sku = (string) $sku;
-                    $normalized[$sku] = $this->normalizeDigiflazzRow($row, $cmd);
-                    $seenForCmd[] = $sku;
+                    $errors[] = "{$cmd}: " . $e->getMessage();
+                    break;
                 }
-
-                // Only mark this list_type as successfully observed when Digiflazz returned a data array.
-                $seenSkusByListType[$cmd] = array_values(array_unique($seenForCmd));
-            } catch (\Throwable $e) {
-                Log::error('Digiflazz catalog sync fetch failed', [
-                    'cmd' => $cmd,
-                    'message' => $e->getMessage(),
-                ]);
-                $errors[] = "{$cmd}: " . $e->getMessage();
             }
         }
 
@@ -112,15 +154,35 @@ class SyncDigiflazzCatalogAction
                 'failed_count' => count($errors),
             ]);
 
-            throw new \RuntimeException($result['message']);
+            if ($rateLimited) {
+                throw new ProviderCatalogException(
+                    $rateLimited['message'],
+                    'Digiflazz',
+                    (string) $rateLimited['code'],
+                    true,
+                    array_merge($result, [
+                        'steps' => ['Connecting Provider', 'Authenticating', 'Downloading Pricelist'],
+                        'provider_rc' => $rateLimited,
+                    ])
+                );
+            }
+
+            throw new ProviderCatalogException(
+                $result['message'],
+                'Digiflazz',
+                'SYNC_FAILED',
+                true,
+                $result
+            );
         }
 
         $products = array_values($normalized);
-        $this->providerRepository->syncWithDigiflazz($products, $seenSkusByListType);
+        $stats = $this->providerRepository->syncWithDigiflazz($products, $seenSkusByListType);
 
         Cache::forget('digiflazz_balance');
-        // Invalidate User Dashboard catalog caches immediately after sync.
         \App\Services\ProductProviders\ProductCatalogCache::bump();
+
+        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
 
         $result = $this->persistSyncMeta([
             'status' => empty($errors) ? 'success' : 'partial',
@@ -132,6 +194,16 @@ class SyncDigiflazzCatalogAction
             'product_count' => Product::count(),
             'provider_count' => Provider::count(),
             'digiflazz_product_count' => DigiflazzProduct::count(),
+            'inserted' => $stats['inserted'] ?? 0,
+            'updated' => $stats['updated'] ?? 0,
+            'skipped' => $stats['skipped'] ?? 0,
+            'disabled' => $stats['disabled'] ?? 0,
+            'provider_sku_total' => $stats['provider_sku_total'] ?? count($products),
+            'database_sku_total' => $stats['database_sku_total'] ?? 0,
+            'difference' => $stats['difference'] ?? 0,
+            'duration_ms' => $durationMs,
+            'duration_sec' => round($durationMs / 1000, 1),
+            'next_recommended_sync_at' => now()->addMinutes(30)->toIso8601String(),
         ]);
 
         ActivityLog::create([
@@ -158,9 +230,6 @@ class SyncDigiflazzCatalogAction
     }
 
     /**
-     * Normalize Digiflazz price-list row to the shape expected by ProviderRepository::syncWithDigiflazz.
-     * Includes official Digiflazz prepaid + pasca fields without changing GurkyNet pricing inputs.
-     *
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
      */
@@ -190,9 +259,6 @@ class SyncDigiflazzCatalogAction
         ];
     }
 
-    /**
-     * Persist sync metadata into settings (single source for Operations / Owner dashboards).
-     */
     protected function persistSyncMeta(array $meta): array
     {
         $payload = array_merge([
@@ -222,6 +288,19 @@ class SyncDigiflazzCatalogAction
         Setting::updateOrCreate(
             ['key' => 'digiflazz_last_sync_message'],
             ['value' => (string) ($payload['message'] ?? '')]
+        );
+        Setting::updateOrCreate(
+            ['key' => 'digiflazz_last_sync_summary'],
+            ['value' => json_encode([
+                'inserted' => $payload['inserted'] ?? 0,
+                'updated' => $payload['updated'] ?? 0,
+                'skipped' => $payload['skipped'] ?? 0,
+                'disabled' => $payload['disabled'] ?? 0,
+                'duration_sec' => $payload['duration_sec'] ?? null,
+                'provider_sku_total' => $payload['provider_sku_total'] ?? null,
+                'database_sku_total' => $payload['database_sku_total'] ?? null,
+                'difference' => $payload['difference'] ?? null,
+            ])]
         );
 
         if (($payload['status'] ?? '') === 'failed') {

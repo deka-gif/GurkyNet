@@ -255,6 +255,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/product-providers', [OperationsController::class, 'productProviders']);
             // Product Provider Control Center (PPOB suppliers only — not payment gateways)
             Route::get('/product-provider-control', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'index']);
+            Route::post('/product-provider-control/refresh', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'refreshAll']);
             Route::get('/product-provider-control/{id}', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'show']);
             Route::post('/product-provider-control/{id}/enable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'enable']);
             Route::post('/product-provider-control/{id}/disable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'disable']);

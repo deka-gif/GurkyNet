@@ -86,7 +86,19 @@ export const operationsService = {
 
   // —— Product Provider Control Center (not payment gateways) ——
   async getProductProviderControl() {
-    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/product-provider-control');
+    const res = await apiClient.get<ApiResponse<any>>('/admin/operations/product-provider-control', {
+      timeout: 60000,
+    });
+    return res.data;
+  },
+
+  /** Global refresh: health + balance + SKU + latency for all providers (no page reload). */
+  async refreshProductProviderControl() {
+    const res = await apiClient.post<ApiResponse<any>>(
+      '/admin/operations/product-provider-control/refresh',
+      {},
+      { timeout: 180000 }
+    );
     return res.data;
   },
 
@@ -111,18 +123,28 @@ export const operationsService = {
   },
 
   async healthCheckProductProvider(id: number | string) {
-    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/health-check`);
+    const res = await apiClient.post<ApiResponse<any>>(
+      `/admin/operations/product-provider-control/${id}/health-check`,
+      {},
+      { timeout: 90000 }
+    );
     return res.data;
   },
 
   async syncProductProvider(id: number | string, payload?: { cmd?: string[] }) {
-    const res = await apiClient.post<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/sync`, payload || {});
+    // Catalog sync can take minutes — never use the default 15s axios timeout (causes Canceled).
+    const res = await apiClient.post<ApiResponse<any>>(
+      `/admin/operations/product-provider-control/${id}/sync`,
+      payload || {},
+      { timeout: 300000 }
+    );
     return res.data;
   },
 
   async getProductProviderLogs(id: number | string, limit = 50) {
     const res = await apiClient.get<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/logs`, {
       params: { limit },
+      timeout: 60000,
     });
     return res.data;
   },

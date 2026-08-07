@@ -391,9 +391,14 @@ class DigiflazzPriceListSyncTest extends TestCase
 
         try {
             app(SyncDigiflazzCatalogAction::class)->execute(['cmd' => ['prepaid']]);
-            $this->fail('Expected RuntimeException for RC 83 price-list failure');
-        } catch (\RuntimeException $e) {
-            $this->assertStringContainsString('RC 83', $e->getMessage());
+            $this->fail('Expected ProviderCatalogException for RC 83 price-list failure');
+        } catch (\App\Exceptions\ProviderCatalogException $e) {
+            $this->assertSame('Digiflazz', $e->provider);
+            $this->assertSame('83', $e->providerCode);
+            $this->assertTrue($e->retryable);
+            $payload = $e->toArray();
+            $this->assertFalse($payload['success']);
+            $this->assertSame('RC83', $payload['provider_code']);
             $this->assertStringContainsString('pricelist', strtolower($e->getMessage()));
         }
 
