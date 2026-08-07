@@ -51,41 +51,90 @@ class PublicWebsiteController extends Controller
 
     public function settings(): JsonResponse
     {
-        $payload = \Illuminate\Support\Facades\Cache::remember('public:website:settings', 60, function () {
-            $setting = $this->settingAction->getLatest();
+        try {
+            $payload = \Illuminate\Support\Facades\Cache::remember('public:website:settings', 60, function () {
+                try {
+                    $setting = $this->settingAction->getLatest();
+                } catch (\Throwable $e) {
+                    report($e);
+                    $setting = null;
+                }
 
-            if (! $setting) {
-                $setting = WebsiteSetting::firstOrCreate(
-                    ['id' => 1],
-                    [
-                        'website_name' => 'GurkyNet',
-                        'tagline' => 'Platform PPOB & Solusi Pembayaran Digital Tercepat di Indonesia',
-                        'logo' => '/assets/logo.png',
-                        'logo_dark' => '/assets/logo-dark.png',
-                        'favicon' => '/favicon.ico',
-                        'support_email' => 'support@gurkynet.com',
-                        'support_phone' => '+62 812-3456-7890',
-                        'whatsapp' => '6281234567890',
-                        'office_address' => 'Jl. Gatot Subroto No. 88, Jakarta',
-                        'google_maps_url' => 'https://maps.google.com/?q=Jakarta',
-                        'facebook' => 'https://facebook.com/gurkynet',
-                        'instagram' => 'https://instagram.com/gurkynet',
-                        'tiktok' => 'https://tiktok.com/@gurkynet',
-                        'youtube' => 'https://youtube.com/@gurkynet',
-                        'twitter' => 'https://x.com/gurkynet',
-                        'copyright' => '© 2026 PT Gurky Solusi Digital. Hak cipta dilindungi undang-undang.',
-                        'maintenance_mode' => false,
-                        'timezone' => 'Asia/Jakarta',
-                        'currency' => 'IDR',
-                        'language' => 'id',
-                    ]
-                )->load(['logoMedia', 'logoDarkMedia', 'faviconMedia']);
+                if (! $setting) {
+                    try {
+                        $setting = WebsiteSetting::query()->latest('id')->first();
+                    } catch (\Throwable $e) {
+                        report($e);
+                        $setting = null;
+                    }
+                }
+
+                if (! $setting) {
+                    return $this->defaultPublicSettingsPayload();
+                }
+
+                try {
+                    return (new WebsiteSettingResource($setting))->resolve();
+                } catch (\Throwable $e) {
+                    report($e);
+                    return $this->defaultPublicSettingsPayload($setting);
+                }
+            });
+
+            if (! is_array($payload) || $payload === []) {
+                $payload = $this->defaultPublicSettingsPayload();
             }
 
-            return (new WebsiteSettingResource($setting))->resolve();
-        });
+            return $this->successResponse('Pengaturan website berhasil dimuat.', $payload);
+        } catch (\Throwable $e) {
+            report($e);
+            try {
+                \Illuminate\Support\Facades\Cache::forget('public:website:settings');
+            } catch (\Throwable) {
+                // ignore cache flush failures
+            }
 
-        return $this->successResponse('Pengaturan website berhasil dimuat.', $payload);
+            return $this->successResponse(
+                'Pengaturan website berhasil dimuat.',
+                $this->defaultPublicSettingsPayload()
+            );
+        }
+    }
+
+    /**
+     * Safe public defaults — never 500 when CMS settings row/media is missing.
+     */
+    protected function defaultPublicSettingsPayload(?WebsiteSetting $setting = null): array
+    {
+        return [
+            'id' => $setting?->id ?? 0,
+            'websiteName' => $setting?->website_name ?: 'GurkyNet',
+            'tagline' => $setting?->tagline ?: 'Platform PPOB & Solusi Pembayaran Digital Tercepat di Indonesia',
+            'logo' => $setting?->logo ?: '/assets/logo.png',
+            'logoDark' => $setting?->logo_dark ?: '/assets/logo-dark.png',
+            'favicon' => $setting?->favicon ?: '/favicon.ico',
+            'apkUrl' => null,
+            'logoMediaId' => $setting?->logo_media_id,
+            'logoDarkMediaId' => $setting?->logo_dark_media_id,
+            'faviconMediaId' => $setting?->favicon_media_id,
+            'supportEmail' => $setting?->support_email ?: 'support@gurkynet.com',
+            'supportPhone' => $setting?->support_phone ?: '+62 812-3456-7890',
+            'whatsapp' => $setting?->whatsapp ?: '6281234567890',
+            'officeAddress' => $setting?->office_address,
+            'googleMapsUrl' => $setting?->google_maps_url,
+            'facebook' => $setting?->facebook,
+            'instagram' => $setting?->instagram,
+            'tiktok' => $setting?->tiktok,
+            'youtube' => $setting?->youtube,
+            'twitter' => $setting?->twitter,
+            'copyright' => $setting?->copyright ?: '© 2026 PT Gurky Solusi Digital. Hak cipta dilindungi undang-undang.',
+            'maintenanceMode' => (bool) ($setting?->maintenance_mode ?? false),
+            'timezone' => $setting?->timezone ?: 'Asia/Jakarta',
+            'currency' => $setting?->currency ?: 'IDR',
+            'language' => $setting?->language ?: 'id',
+            'createdAt' => optional($setting?->created_at)?->toIso8601String(),
+            'lastUpdated' => optional($setting?->updated_at)?->toIso8601String(),
+        ];
     }
 
     public function menus(): JsonResponse

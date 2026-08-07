@@ -32,11 +32,16 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
 
     public function getLatest(): ?WebsiteSetting
     {
-        $setting = WebsiteSetting::with(self::WITH)->latest('id')->first();
-        if (!$setting) {
+        try {
+            $setting = WebsiteSetting::with(self::WITH)->latest('id')->first();
+            if (!$setting) {
+                return $this->createDefault();
+            }
+            return $setting;
+        } catch (\Throwable $e) {
+            report($e);
             return $this->createDefault();
         }
-        return $setting;
     }
 
     public function create(array $data): WebsiteSetting
@@ -68,9 +73,13 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
 
     public function createDefault(): WebsiteSetting
     {
-        return WebsiteSetting::firstOrCreate(
-            ['id' => 1],
-            [
+        try {
+            $existing = WebsiteSetting::with(self::WITH)->latest('id')->first();
+            if ($existing) {
+                return $existing;
+            }
+
+            return WebsiteSetting::create([
                 'website_name' => 'GurkyNet',
                 'tagline' => 'Platform PPOB & Solusi Pembayaran Digital Tercepat di Indonesia',
                 'logo' => '/assets/logo.png',
@@ -91,7 +100,27 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
                 'timezone' => 'Asia/Jakarta',
                 'currency' => 'IDR',
                 'language' => 'id',
-            ]
-        )->load(self::WITH);
+            ])->load(self::WITH);
+        } catch (\Throwable $e) {
+            report($e);
+            // Last resort in-memory model so callers never get null/exception.
+            $fallback = new WebsiteSetting([
+                'website_name' => 'GurkyNet',
+                'tagline' => 'Platform PPOB & Solusi Pembayaran Digital Tercepat di Indonesia',
+                'logo' => '/assets/logo.png',
+                'logo_dark' => '/assets/logo-dark.png',
+                'favicon' => '/favicon.ico',
+                'support_email' => 'support@gurkynet.com',
+                'support_phone' => '+62 812-3456-7890',
+                'whatsapp' => '6281234567890',
+                'maintenance_mode' => false,
+                'timezone' => 'Asia/Jakarta',
+                'currency' => 'IDR',
+                'language' => 'id',
+                'copyright' => '© 2026 PT Gurky Solusi Digital. Hak cipta dilindungi undang-undang.',
+            ]);
+            $fallback->id = 0;
+            return $fallback;
+        }
     }
 }

@@ -56,6 +56,7 @@ import { NotificationToast } from '../components/notifications/NotificationToast
 // @ts-ignore
 import logoImg from '../logo.png';
 import { formatIDR } from '../utils/currency';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 export const DashboardLayout = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -67,18 +68,14 @@ export const DashboardLayout = () => {
   const { wallet, fetchWallet } = useWalletStore();
   const { settings, fetchSettings } = useWebsiteStore();
   const { unreadCount, notifications, fetchNotifications, markAllAsRead, markAsRead } = useNotificationStore();
-  const { logout } = useAuthStore();
+  const logout = useAuthStore((s) => s.logout);
+  const authUser = useAuthStore((s) => s.user);
 
-  const currentUser = (storageService.getUser() as {
-    name?: string;
-    email?: string;
-    role?: UserRole;
-    avatar?: string;
-  } | null) || {
-    name: 'User',
-    email: '',
-    role: 'User' as UserRole,
-    avatar: ''
+  const currentUser = {
+    name: authUser?.name || 'User',
+    email: authUser?.email || '',
+    role: (authUser?.role || 'User') as UserRole,
+    avatar: resolveMediaUrl(authUser?.avatar || ''),
   };
 
   const userRole: UserRole = currentUser.role || 'User';
@@ -558,12 +555,24 @@ export const DashboardLayout = () => {
 
             {/* Profile Avatar & Name */}
             <Link to="/dashboard/account" className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 p-1.5 pr-3.5 rounded-2xl border border-gray-100 transition-all group">
-              <LazyImage
-                src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'} 
-                alt={currentUser.name} 
-                referrerPolicy="no-referrer"
-                className="w-8 h-8 rounded-xl object-cover border border-white shrink-0 shadow-sm"
-              />
+              {currentUser.avatar ? (
+                <LazyImage
+                  key={currentUser.avatar}
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  referrerPolicy="no-referrer"
+                  className="w-8 h-8 rounded-xl object-cover border border-white shrink-0 shadow-sm"
+                />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white bg-primary-100 text-[10px] font-black text-primary-700 shadow-sm">
+                  {(currentUser.name || 'U')
+                    .split(' ')
+                    .map((n) => n[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase()}
+                </div>
+              )}
               <div className="text-left hidden lg:block">
                 <div className="text-xs font-bold text-gray-900 leading-tight group-hover:text-primary-600 transition-colors">{currentUser.name}</div>
                 <div className="text-[10px] font-bold text-indigo-600 mt-0.5 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100 inline-block">{currentUser.role}</div>

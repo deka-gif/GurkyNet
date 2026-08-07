@@ -72,9 +72,11 @@ interface AuthState {
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<boolean>;
   logout: () => Promise<void>;
   fetchUser: () => Promise<void>;
+  /** Merge partial user fields into store + storage (avatar sync without reload). */
+  patchUser: (partial: Partial<User>) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: (() => {
     const stored = storageService.getUser() as unknown as User | null;
     if (!stored) return null;
@@ -243,5 +245,18 @@ export const useAuthStore = create<AuthState>((set) => ({
         loading: false,
       });
     }
+  },
+
+  patchUser: (partial) => {
+    const current = get().user;
+    if (!current) return;
+    const next: User = {
+      ...current,
+      ...partial,
+      role: partial.role ? normalizeRole(partial.role) : current.role,
+      avatar: partial.avatar !== undefined ? String(partial.avatar || '') : current.avatar,
+    };
+    storageService.setUser(next as unknown as Record<string, unknown>);
+    set({ user: next });
   },
 }));

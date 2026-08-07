@@ -1,4 +1,4 @@
-import { memo, useState, type ImgHTMLAttributes } from 'react';
+import { memo, useEffect, useState, type ImgHTMLAttributes } from 'react';
 
 type LazyImageProps = ImgHTMLAttributes<HTMLImageElement> & {
   /** Eager + high priority for LCP (e.g. first banner) */
@@ -12,11 +12,17 @@ export const LazyImage = memo(function LazyImage({
   priority = false,
   className,
   alt,
+  src,
   ...rest
 }: LazyImageProps) {
   const [failed, setFailed] = useState(false);
 
-  if (failed) {
+  // Reset error state when src changes (avatar sync after upload)
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (failed || !src) {
     return (
       <div
         className={`flex items-center justify-center bg-slate-100 text-[10px] font-medium text-slate-400 ${className || ''}`}
@@ -30,6 +36,7 @@ export const LazyImage = memo(function LazyImage({
   return (
     <img
       {...rest}
+      src={src}
       alt={alt || ''}
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"

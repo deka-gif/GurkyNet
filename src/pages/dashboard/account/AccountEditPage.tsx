@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useAuthStore } from '../../../store/auth.store';
 import { profileService } from '../../../services/profile/profile.service';
+import { resolveMediaUrl } from '../../../utils/mediaUrl';
 import { AccountShell, AccountCard } from './AccountShell';
 
 export const AccountEditPage: React.FC = () => {
   const { user, fetchUser } = useAuth();
+  const patchUser = useAuthStore((s) => s.patchUser);
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [oldPassword, setOldPassword] = useState('');
@@ -76,6 +79,16 @@ export const AccountEditPage: React.FC = () => {
     try {
       const res = await profileService.uploadAvatar(file);
       if (res.success) {
+        const payload: any = (res as any).data?.data ?? res.data ?? res;
+        const avatar =
+          payload?.avatar ||
+          payload?.avatar_url ||
+          payload?.user?.avatar ||
+          payload?.user?.avatar_url ||
+          '';
+        if (avatar) {
+          patchUser({ avatar: String(avatar) });
+        }
         setMsg('Foto profil diperbarui.');
         await fetchUser();
       } else setErr(res.message);
@@ -83,6 +96,7 @@ export const AccountEditPage: React.FC = () => {
       setErr(err?.message || 'Gagal upload avatar');
     } finally {
       setBusy(false);
+      e.target.value = '';
     }
   };
 
@@ -95,7 +109,10 @@ export const AccountEditPage: React.FC = () => {
         <h3 className="text-sm font-extrabold text-gray-900 mb-3">Foto Profil</h3>
         <div className="flex items-center gap-4">
           <img
-            src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'}
+            src={
+              resolveMediaUrl(user?.avatar) ||
+              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'
+            }
             alt=""
             className="w-16 h-16 rounded-2xl object-cover border"
           />

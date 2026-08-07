@@ -110,12 +110,12 @@ export const DashboardHomePage = () => {
   };
 
   return (
-    <div className="space-y-6 pb-24 md:pb-8 max-w-7xl mx-auto">
+    <div className="space-y-4 pb-24 md:pb-8 max-w-7xl mx-auto">
 
       {/* Sticky top notification banner removed — transactional notices use NotificationToast (queued, 15s). */}
 
       {/* 2. Compact Hero — greeting + CTAs (loyalty deferred to later sprint) */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 text-white shadow-lg shadow-primary-900/10 border border-primary-400/20 px-5 py-5 md:px-6 md:py-[1.35rem] md:min-h-[200px] flex">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 text-white shadow-lg shadow-primary-900/10 border border-primary-400/20 px-5 py-4 md:px-6 md:py-5 md:min-h-[168px] flex">
         <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 right-16 h-28 w-28 rounded-full bg-emerald-300/15 blur-2xl" />
 
@@ -186,99 +186,109 @@ export const DashboardHomePage = () => {
         </div>
       </div>
 
-      {/* 3. Core Cards Grid: Wallet Card & Banner Promo Carousel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* 3. Saldo (40%) + Promo Banner (60%) — equal height, compact */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-stretch">
 
-        {/* 3A. Modern GurkyPay Wallet Card */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/50 flex flex-col justify-between relative overflow-hidden group">
-          {/* Subtle Background Shape */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary-50/50 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none"></div>
+        {/* 3A. Compact GurkyNet Wallet Card */}
+        <div className="relative flex h-auto max-h-[300px] flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white p-5 shadow-xl shadow-gray-200/50 lg:h-[280px]">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-primary-50/50 blur-2xl" />
 
-          <div>
-            {/* Wallet Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-gray-400 tracking-wider uppercase">Saldo GurkyPay</span>
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+            {/* Title + wallet number */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wider text-gray-400">
+                  Saldo GurkyNet
+                </span>
                 <button
+                  type="button"
                   onClick={() => setShowBalance(!showBalance)}
-                  className="p-1 text-gray-400 hover:text-gray-700 transition-colors rounded-lg hover:bg-gray-100 cursor-pointer"
+                  className="cursor-pointer rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
                   title={showBalance ? 'Sembunyikan Saldo' : 'Tampilkan Saldo'}
                   aria-label="Toggle Tampilan Saldo"
                 >
-                  {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showBalance ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
               </div>
 
-              {/* Wallet Number with Copy Button */}
               <button
+                type="button"
                 onClick={handleCopyWalletNo}
-                className="group/copy flex items-center gap-1.5 text-xs font-bold bg-primary-50 hover:bg-primary-100 text-primary-700 px-2.5 py-1 rounded-full border border-primary-100 transition-all cursor-pointer"
+                className="group/copy flex cursor-pointer items-center gap-1.5 rounded-full border border-primary-100 bg-primary-50 px-2.5 py-1 text-[11px] font-bold text-primary-700 transition-all hover:bg-primary-100"
                 title="Klik untuk salin nomor dompet"
               >
-                <span>{wallet?.walletNo || 'GK-XXXXXXXX'}</span>
+                <span className="max-w-[9.5rem] truncate">{wallet?.walletNo || 'GK-XXXXXXXX'}</span>
                 {copiedWalletNo ? (
-                  <Check className="w-3.5 h-3.5 text-green-600 animate-in fade-in zoom-in" />
+                  <Check className="h-3.5 w-3.5 text-green-600" />
                 ) : (
-                  <Copy className="w-3.5 h-3.5 text-primary-500 group-hover/copy:text-primary-700 transition-colors" />
-                )}
-                {copiedWalletNo && (
-                  <span className="text-[10px] text-green-600 font-bold ml-0.5">Tersalin</span>
+                  <Copy className="h-3.5 w-3.5 text-primary-500 transition-colors group-hover/copy:text-primary-700" />
                 )}
               </button>
             </div>
 
-            {/* Wallet Balance Amount */}
-            <div className="mb-6">
+            {/* Balance + update */}
+            <div className="mt-3">
               {walletLoading && !wallet ? (
                 <div className="space-y-2">
-                  <div className="h-9 w-44 bg-gray-200 animate-pulse rounded-xl"></div>
-                  <div className="h-4 w-28 bg-gray-100 animate-pulse rounded-md"></div>
+                  <div className="h-9 w-40 animate-pulse rounded-xl bg-gray-200" />
+                  <div className="h-3.5 w-24 animate-pulse rounded-md bg-gray-100" />
                 </div>
               ) : (
                 <>
-                  <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                  <h2 className="text-3xl font-black tracking-tight text-gray-900 tabular-nums md:text-[2rem]">
                     {showBalance ? formatIDR(wallet?.balance ?? 0) : 'Rp ••••••••'}
                   </h2>
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="mt-1.5 flex items-center gap-1.5">
                     <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400">
-                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                      Update: {wallet?.lastUpdated ? new Date(wallet.lastUpdated).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Realtime'}
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+                      Update:{' '}
+                      {wallet?.lastUpdated
+                        ? new Date(wallet.lastUpdated).toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'Realtime'}
                     </span>
                     <button
+                      type="button"
                       onClick={handleRefreshBalance}
                       disabled={isRefreshingWallet}
-                      className={`p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all cursor-pointer ${isRefreshingWallet ? 'animate-spin text-primary-600' : ''}`}
+                      className={`cursor-pointer rounded-lg p-1 text-gray-400 transition-all hover:bg-primary-50 hover:text-primary-600 ${
+                        isRefreshingWallet ? 'animate-spin text-primary-600' : ''
+                      }`}
                       title="Perbarui Saldo"
                       aria-label="Perbarui Saldo"
                     >
-                      <RotateCw className="w-3.5 h-3.5" />
+                      <RotateCw className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </>
               )}
             </div>
-          </div>
 
-          {/* Quick Actions for Wallet */}
-          <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-5 mt-auto">
-            <button
-              onClick={() => navigate('/dashboard/wallet')}
-              className="flex items-center justify-center gap-2 py-3 px-4 bg-primary-600 hover:bg-primary-700 active:scale-[0.98] text-white rounded-2xl font-extrabold text-sm shadow-md shadow-primary-600/20 transition-all cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Top Up Saldo</span>
-            </button>
-            <button
-              onClick={() => navigate('/dashboard/riwayat')}
-              className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 hover:bg-gray-100 active:scale-[0.98] text-gray-700 hover:text-gray-900 rounded-2xl font-extrabold text-sm border border-gray-200 hover:border-gray-300 transition-all cursor-pointer"
-            >
-              <History className="w-4 h-4 text-gray-500" />
-              <span>Riwayat Transaksi</span>
-            </button>
+            {/* Actions — tight spacing under balance (≈20–24px), not pushed to bottom of oversized card */}
+            <div className="mt-5 grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/wallet')}
+                className="flex cursor-pointer items-center justify-center gap-1.5 rounded-2xl bg-primary-600 px-3 py-2.5 text-sm font-extrabold text-white shadow-md shadow-primary-600/20 transition-all hover:bg-primary-700 active:scale-[0.98]"
+              >
+                <PlusCircle className="h-4 w-4" />
+                <span>Top Up</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/riwayat')}
+                className="flex cursor-pointer items-center justify-center gap-1.5 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-extrabold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 active:scale-[0.98]"
+              >
+                <History className="h-4 w-4 text-gray-500" />
+                <span>Riwayat</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* 3B. Promo Banner — full image CMS carousel */}
+        {/* 3B. Promo Banner — same height as saldo card */}
         <PromoBannerCarousel
           banners={banners}
           loading={bannerLoading}

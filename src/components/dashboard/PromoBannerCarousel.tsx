@@ -13,9 +13,23 @@ type PromoBannerCarouselProps = {
   onRetry: () => void;
 };
 
+function bannerObjectPosition(banner: Banner): string {
+  const anyBanner = banner as Banner & {
+    focalPoint?: string | null;
+    objectPosition?: string | null;
+    focal_point?: string | null;
+  };
+  return (
+    anyBanner.focalPoint ||
+    anyBanner.objectPosition ||
+    anyBanner.focal_point ||
+    'center'
+  );
+}
+
 /**
  * Full-image marketing carousel (Tokopedia / GoPay style).
- * Image-only slides — detail content lives on /dashboard/promo/:slug
+ * Matches saldo card height on desktop (≈280px); wider aspect on mobile.
  */
 export const PromoBannerCarousel = memo(function PromoBannerCarousel({
   banners,
@@ -93,10 +107,11 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
   };
 
   const current = banners[index];
+  const objectPosition = current ? bannerObjectPosition(current) : 'center';
 
   return (
     <div
-      className="lg:col-span-7 relative overflow-hidden rounded-2xl bg-slate-100 aspect-[16/9] min-h-[160px] md:min-h-[200px]"
+      className="relative h-[168px] max-h-[300px] w-full overflow-hidden rounded-2xl bg-slate-100 aspect-[16/7] sm:h-[200px] lg:aspect-auto lg:h-[280px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={onTouchStart}
@@ -147,6 +162,7 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
                     src={resolveMediaUrl(current.image || current.imageUrl || '')}
                     alt={current.title}
                     className="h-full w-full object-cover"
+                    style={{ objectPosition }}
                   />
                 </picture>
               </motion.button>

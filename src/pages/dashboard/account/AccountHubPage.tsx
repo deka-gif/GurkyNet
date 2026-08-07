@@ -16,6 +16,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useWalletStore } from '../../../store/wallet.store';
 import { AccountCard } from './AccountShell';
 import { formatIDR as formatIdr } from '../../../utils/currency';
+import { resolveMediaUrl } from '../../../utils/mediaUrl';
 
 export const AccountHubPage: React.FC = () => {
   const { user, fetchUser } = useAuth();
@@ -49,7 +50,10 @@ export const AccountHubPage: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
-              src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'}
+              src={
+                resolveMediaUrl(user?.avatar) ||
+                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'
+              }
               alt=""
               className="w-16 h-16 rounded-2xl object-cover border border-gray-100"
             />
