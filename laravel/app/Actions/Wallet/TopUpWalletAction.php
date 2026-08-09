@@ -11,6 +11,7 @@ use App\Models\Wallet;
 use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
 use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Services\Payment\PaymentGatewayFactory;
+use App\Services\Transactions\IdempotencyGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -19,17 +20,30 @@ class TopUpWalletAction
     public function __construct(
         protected WalletRepositoryInterface $walletRepository,
         protected WalletHistoryRepositoryInterface $historyRepository,
-        protected PaymentGatewayFactory $paymentGatewayFactory
+        protected PaymentGatewayFactory $paymentGatewayFactory,
+        protected IdempotencyGuard $idempotencyGuard
     ) {}
 
-    public function execute(User $user, float $amount, float $adminFee = 0.00, string $status = 'pending', string $paymentMethod = 'midtrans'): Transaction
-    {
+    public function execute(
+        User $user,
+        float $amount,
+        float $adminFee = 0.00,
+        string $status = 'pending',
+        string $paymentMethod = 'midtrans',
+        ?string $idempotencyKey = null
+    ): Transaction {
         $gateway = $this->paymentGatewayFactory->default();
 
         // Direct-credit bypass is only allowed outside production (testing/local).
         $allowDirectCredit = app()->environment('local', 'testing');
         if ($allowDirectCredit && in_array(strtolower($status), ['sukses', 'success'], true)) {
-            return $this->executeDirectCredit($user, $amount, $adminFee);
+            return $this->executeDirectCredit($user, $amount, $adminFee, $idempotencyKey);
+        }
+
+        // SRS 14.1 — replay check before any DB write (no side effect to unwind on a hit).
+        $existing = $idempotencyKey ? $this->idempotencyGuard->findActive($user->id, $idempotencyKey) : null;
+        if ($existing) {
+            return $existing;
         }
 
         // Fail fast before any DB writes when Midtrans keys are missing.
@@ -37,7 +51,7 @@ class TopUpWalletAction
             throw new PaymentGatewayNotConfiguredException();
         }
 
-        return DB::transaction(function () use ($user, $amount, $adminFee, $paymentMethod, $gateway) {
+        return DB::transaction(function () use ($user, $amount, $adminFee, $paymentMethod, $gateway, $idempotencyKey) {
             $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
 
             if (!$wallet) {
@@ -46,18 +60,34 @@ class TopUpWalletAction
 
             $invoiceNumber = 'TRX-TOPUP-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
 
-            $transaction = Transaction::create([
-                'user_id' => $user->id,
-                'invoice_number' => $invoiceNumber,
-                'service_name' => 'Top Up Saldo',
-                'target_number' => $wallet->wallet_number,
-                'amount' => $amount,
-                'admin_fee' => $adminFee,
-                'total_payment' => $amount + $adminFee,
-                'payment_method' => $paymentMethod,
-                'status' => 'pending',
-                'notes' => 'Top up saldo via Midtrans',
-            ]);
+            // Idempotency claim — top up never debits the wallet here (credit happens
+            // only later, on Midtrans settlement), so this insert is safe as the sole
+            // write to guard: a losing/expired race simply returns the other transaction.
+            $claim = $this->idempotencyGuard->claim(
+                $user->id,
+                $idempotencyKey,
+                function () use ($user, $invoiceNumber, $wallet, $amount, $adminFee, $paymentMethod, $idempotencyKey) {
+                    return Transaction::create([
+                        'user_id' => $user->id,
+                        'invoice_number' => $invoiceNumber,
+                        'service_name' => 'Top Up Saldo',
+                        'target_number' => $wallet->wallet_number,
+                        'amount' => $amount,
+                        'admin_fee' => $adminFee,
+                        'total_payment' => $amount + $adminFee,
+                        'payment_method' => $paymentMethod,
+                        'status' => 'pending',
+                        'notes' => 'Top up saldo via Midtrans',
+                        'idempotency_key' => $idempotencyKey,
+                    ]);
+                }
+            );
+
+            if (!$claim['is_new']) {
+                return $claim['transaction'];
+            }
+
+            $transaction = $claim['transaction'];
 
             try {
                 $checkout = $gateway->createCheckout([
@@ -115,9 +145,15 @@ class TopUpWalletAction
         });
     }
 
-    protected function executeDirectCredit(User $user, float $amount, float $adminFee): Transaction
+    protected function executeDirectCredit(User $user, float $amount, float $adminFee, ?string $idempotencyKey = null): Transaction
     {
-        return DB::transaction(function () use ($user, $amount, $adminFee) {
+        // SRS 14.1 — replay check before any DB write (no side effect to unwind on a hit).
+        $existing = $idempotencyKey ? $this->idempotencyGuard->findActive($user->id, $idempotencyKey) : null;
+        if ($existing) {
+            return $existing;
+        }
+
+        return DB::transaction(function () use ($user, $amount, $adminFee, $idempotencyKey) {
             $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
 
             if (!$wallet) {
@@ -126,18 +162,33 @@ class TopUpWalletAction
 
             $invoiceNumber = 'TRX-TOPUP-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
 
-            $transaction = Transaction::create([
-                'user_id' => $user->id,
-                'invoice_number' => $invoiceNumber,
-                'service_name' => 'Top Up Saldo',
-                'target_number' => $wallet->wallet_number,
-                'amount' => $amount,
-                'admin_fee' => $adminFee,
-                'total_payment' => $amount + $adminFee,
-                'payment_method' => 'dummy_gateway',
-                'status' => 'success',
-                'notes' => 'Top up saldo via dummy gateway',
-            ]);
+            // Direct-credit debits nothing from the sender's own balance (it adds to it),
+            // so the idempotency claim only needs to guard the transaction row + credit below.
+            $claim = $this->idempotencyGuard->claim(
+                $user->id,
+                $idempotencyKey,
+                function () use ($user, $invoiceNumber, $wallet, $amount, $adminFee, $idempotencyKey) {
+                    return Transaction::create([
+                        'user_id' => $user->id,
+                        'invoice_number' => $invoiceNumber,
+                        'service_name' => 'Top Up Saldo',
+                        'target_number' => $wallet->wallet_number,
+                        'amount' => $amount,
+                        'admin_fee' => $adminFee,
+                        'total_payment' => $amount + $adminFee,
+                        'payment_method' => 'dummy_gateway',
+                        'status' => 'success',
+                        'notes' => 'Top up saldo via dummy gateway',
+                        'idempotency_key' => $idempotencyKey,
+                    ]);
+                }
+            );
+
+            if (!$claim['is_new']) {
+                return $claim['transaction'];
+            }
+
+            $transaction = $claim['transaction'];
 
             $wallet->balance += $amount;
             $wallet->save();

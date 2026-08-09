@@ -16,6 +16,7 @@ import { websiteService } from '../../services';
 import { CmsPageHeader, CmsSaveButton } from '../../components/common/CmsCommon';
 import { LegalRichTextEditor } from '../../components/legal/LegalRichTextEditor';
 import { LegalProse } from '../../components/legal/legalContent';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 type Permissions = {
   canView: boolean;
@@ -65,6 +66,8 @@ const DOC_ICON: Record<string, typeof Shield> = {
 };
 
 export const MarketingLegalCenter: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -337,7 +340,7 @@ export const MarketingLegalCenter: React.FC = () => {
                   >
                     <ExternalLink className="w-4 h-4" /> Live
                   </Link>
-                  {permissions.canDraft && (
+                  {permissions.canDraft && !isOwnerReadOnly && (
                     <CmsSaveButton
                       type="button"
                       isLoading={saving}
@@ -345,7 +348,7 @@ export const MarketingLegalCenter: React.FC = () => {
                       label="Save Draft"
                     />
                   )}
-                  {permissions.canDraft && (
+                  {permissions.canDraft && !isOwnerReadOnly && (
                     <button
                       type="button"
                       disabled={saving}
@@ -355,7 +358,7 @@ export const MarketingLegalCenter: React.FC = () => {
                       Discard
                     </button>
                   )}
-                  {permissions.canPublish && (
+                  {permissions.canPublish && !isOwnerReadOnly && (
                     <button
                       type="button"
                       disabled={publishing}
@@ -374,7 +377,7 @@ export const MarketingLegalCenter: React.FC = () => {
                   <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 mb-1.5">Title</label>
                   <input
                     value={title}
-                    disabled={!permissions.canDraft}
+                    disabled={!permissions.canDraft || isOwnerReadOnly}
                     onChange={(e) => {
                       setTitle(e.target.value);
                       markDirty();
@@ -387,7 +390,7 @@ export const MarketingLegalCenter: React.FC = () => {
                   <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 mb-1.5">Content</label>
                   <LegalRichTextEditor
                     value={draftContent}
-                    disabled={!permissions.canDraft}
+                    disabled={!permissions.canDraft || isOwnerReadOnly}
                     onChange={(html) => {
                       setDraftContent(html);
                       markDirty();
@@ -403,7 +406,7 @@ export const MarketingLegalCenter: React.FC = () => {
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Meta Title</label>
                     <input
                       value={seoTitle}
-                      disabled={!permissions.canDraft}
+                      disabled={!permissions.canDraft || isOwnerReadOnly}
                       onChange={(e) => {
                         setSeoTitle(e.target.value);
                         markDirty();
@@ -415,7 +418,7 @@ export const MarketingLegalCenter: React.FC = () => {
                     <label className="block text-xs font-semibold text-gray-500 mb-1">SEO Keywords</label>
                     <input
                       value={seoKeywords}
-                      disabled={!permissions.canDraft}
+                      disabled={!permissions.canDraft || isOwnerReadOnly}
                       onChange={(e) => {
                         setSeoKeywords(e.target.value);
                         markDirty();
@@ -427,7 +430,7 @@ export const MarketingLegalCenter: React.FC = () => {
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Meta Description</label>
                     <textarea
                       value={seoDescription}
-                      disabled={!permissions.canDraft}
+                      disabled={!permissions.canDraft || isOwnerReadOnly}
                       rows={2}
                       onChange={(e) => {
                         setSeoDescription(e.target.value);
@@ -440,7 +443,7 @@ export const MarketingLegalCenter: React.FC = () => {
                     <label className="block text-xs font-semibold text-gray-500 mb-1">Canonical URL</label>
                     <input
                       value={canonicalUrl}
-                      disabled={!permissions.canDraft}
+                      disabled={!permissions.canDraft || isOwnerReadOnly}
                       onChange={(e) => {
                         setCanonicalUrl(e.target.value);
                         markDirty();
@@ -452,7 +455,7 @@ export const MarketingLegalCenter: React.FC = () => {
                     <label className="block text-xs font-semibold text-gray-500 mb-1">OG Image URL</label>
                     <input
                       value={ogImage}
-                      disabled={!permissions.canDraft}
+                      disabled={!permissions.canDraft || isOwnerReadOnly}
                       onChange={(e) => {
                         setOgImage(e.target.value);
                         markDirty();
@@ -512,7 +515,7 @@ export const MarketingLegalCenter: React.FC = () => {
                       {v.publishedAt ? new Date(v.publishedAt).toLocaleString('id-ID') : '—'}
                     </p>
                   </div>
-                  {permissions.canPublish && (
+                  {permissions.canPublish && !isOwnerReadOnly && (
                     <button
                       type="button"
                       onClick={() => void rollback(v.id)}

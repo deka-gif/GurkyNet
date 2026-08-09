@@ -1,0 +1,40 @@
+ATURAN PROYEK — GurkyNet PPOB (WAJIB DIPATUHI SETIAP SESI)
+
+1. Sumber kebenaran tunggal adalah file SRS yang di-attach (Bagian 1-31).
+   Jangan menambah fitur, tabel, endpoint, atau alur yang TIDAK disebutkan di SRS,
+   sekreatif apapun idenya terdengar. Kalau merasa perlu menambah sesuatu di luar SRS,
+   STOP dan tanyakan ke saya dulu, jangan langsung diimplementasikan.
+
+2. Setiap kali membuat/mengubah kode untuk sebuah fitur, sebutkan di komentar/response
+   ID requirement yang menjadi acuan (contoh: // FR-OPS-08, Bagian 15.1) sehingga bisa
+   dicek balik ke dokumen.
+
+3. Jangan pernah mengizinkan dua request mengubah saldo user yang sama diproses
+   secara paralel — selalu gunakan database transaction dengan row-level lock
+   (SELECT ... FOR UPDATE), dan selalu cek idempotency_key sebelum memproses aksi
+   apa pun yang menyentuh saldo (Bagian 14.1, 14.2).
+
+4. Ikuti urutan sprint yang sudah ditentukan. JANGAN loncat ke sprint berikutnya
+   sebelum sprint saat ini saya konfirmasi selesai dan sudah diaudit.
+
+5. Kalau ada bagian SRS yang ambigu atau kurang detail untuk diimplementasikan,
+   JANGAN mengarang asumsi sendiri. Tulis daftar pertanyaan/asumsi yang perlu
+   saya konfirmasi dulu, sebelum lanjut coding.
+
+6. State machine transaksi WAJIB mengikuti persis Bagian 14.3. Status tidak boleh
+   loncat/menyimpang dari tabel status yang ada di sana. SUCCESS tidak pernah
+   langsung menjadi FAILED — hanya boleh menjadi REFUNDED.
+
+7. Setiap perubahan skema database wajib berupa migration yang reversible (ada
+   skrip up & down), sesuai Bagian 25.
+
+8. Fitur transaksi (beli produk, withdraw) TIDAK BOLEH diaktifkan ke publik/
+   production sebelum sprint 'Keandalan Transaksi' (idempotency, row-lock, state
+   machine) selesai dan lolos SEMUA skenario uji di Bagian 24, dan saya beri
+   konfirmasi eksplisit.
+
+9. Bagian 12 (Fitur Unggulan/Diferensiator) bersifat RAHASIA/kompetitif — jangan
+   sertakan detail strategi ini ke pihak luar (freelancer, vendor) tanpa NDA.
+
+10. Jika ragu antara 'menyelesaikan tugas secepat mungkin' vs 'mengikuti SRS
+    persis dan bertanya jika ambigu' — SELALU pilih yang kedua.

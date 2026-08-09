@@ -687,6 +687,18 @@ class DatabaseSeeder extends Seeder
             SystemSetting::updateOrCreate(['key' => $key], ['value' => $value]);
         }
 
+        // 12. RBAC — ROLES, PERMISSIONS & BACKFILL (Sprint 2 — Authentication & RBAC)
+        // SRS Bagian 7.2 & Bagian 5 (Matriks Hak Akses). Additive & idempotent —
+        // tidak menyentuh/menghapus data seeding di atas. Urutan wajib: roles →
+        // permissions → role_permissions → backfill user (backfill butuh roles).
+        $this->command?->info('Seeding RBAC roles, permissions, role-permission matrix & user backfill...');
+        $this->call([
+            RoleSeeder::class,
+            PermissionSeeder::class,
+            RolePermissionSeeder::class,
+            UserRbacBackfillSeeder::class,
+        ]);
+
         $this->command?->info('Database seeding completed successfully!');
     }
 }

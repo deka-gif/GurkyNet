@@ -284,7 +284,9 @@ class WalletModuleTest extends TestCase
             'amount' => 30000.00,
             'admin_fee' => 1000.00,
             'total_payment' => 31000.00,
-            'status' => 'sukses',
+            // Sprint 3 (SRS §6) — canonical write status is SUCCESS; legacy SUKSES rows
+            // from before this sprint remain readable but are never written anew.
+            'status' => 'success',
         ]);
 
         // Verify history exists

@@ -31,6 +31,12 @@ Schedule::command('transactions:reconcile-pending')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Sprint 3 (SRS 14.1) — housekeeping only; TTL correctness never depends on this running.
+Schedule::command('transactions:archive-expired-idempotency-keys')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Operational hygiene
 Schedule::command('queue:prune-failed --hours=168')->daily();
 

@@ -20,8 +20,11 @@ import {
 } from 'lucide-react';
 
 import { useCustomerSupportStore, RefundItem } from '../../store/customerSupport.store';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const CustomerSupportRefundCenter: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Customer Support.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const navigate = useNavigate();
 
   const {
@@ -344,40 +347,44 @@ export const CustomerSupportRefundCenter: React.FC = () => {
       <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Refund Action Panel</div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Create Refund Request</span>
-          </button>
+          {!isOwnerReadOnly && (
+            <>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Create Refund Request</span>
+              </button>
 
-          <button
-            onClick={handleSubmitForReview}
-            disabled={!selectedRefund || selectedRefund.status !== 'Draft'}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Submit for Review</span>
-          </button>
+              <button
+                onClick={handleSubmitForReview}
+                disabled={!selectedRefund || selectedRefund.status !== 'Draft'}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Submit for Review</span>
+              </button>
 
-          <button
-            onClick={() => setShowEscalateModal(true)}
-            disabled={!selectedRefund}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-          >
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>Escalate Case</span>
-          </button>
+              <button
+                onClick={() => setShowEscalateModal(true)}
+                disabled={!selectedRefund}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                <span>Escalate Case</span>
+              </button>
 
-          <button
-            onClick={handleCancelRequest}
-            disabled={!selectedRefund || selectedRefund.status === 'Completed' || selectedRefund.status === 'Cancelled'}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 rounded-xl text-xs font-medium transition"
-          >
-            <XCircle className="w-3.5 h-3.5 text-gray-500" />
-            <span>Cancel Request</span>
-          </button>
+              <button
+                onClick={handleCancelRequest}
+                disabled={!selectedRefund || selectedRefund.status === 'Completed' || selectedRefund.status === 'Cancelled'}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 rounded-xl text-xs font-medium transition"
+              >
+                <XCircle className="w-3.5 h-3.5 text-gray-500" />
+                <span>Cancel Request</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={handleExportSummary}

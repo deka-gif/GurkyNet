@@ -15,6 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
             'health.token' => \App\Http\Middleware\ProtectHealthMetrics::class,
+            'owner.readonly' => \App\Http\Middleware\EnsureOwnerReadOnly::class,
+            'renew.token' => \App\Http\Middleware\RenewTokenExpiration::class,
         ]);
         $middleware->api(prepend: [
             \App\Http\Middleware\TraceRequest::class,

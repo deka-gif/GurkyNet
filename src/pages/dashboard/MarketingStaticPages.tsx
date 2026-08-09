@@ -11,8 +11,11 @@ import {
   CmsSaveButton,
   CmsPublishBadge,
 } from '../../components/common/CmsCommon';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const MarketingStaticPages: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [pages, setPages] = useState<StaticPage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -230,11 +233,15 @@ export const MarketingStaticPages: React.FC = () => {
         title="Static Pages"
         subtitle="Kelola konten informasi statis seperti Tentang Kami, Kebijakan Privasi, Ketentuan Layanan, FAQ, dan SEO Meta tags."
         icon={FileText}
-        action={{
-          label: 'Buat Halaman',
-          onClick: handleOpenCreate,
-          icon: Plus,
-        }}
+        action={
+          !isOwnerReadOnly
+            ? {
+                label: 'Buat Halaman',
+                onClick: handleOpenCreate,
+                icon: Plus,
+              }
+            : undefined
+        }
       />
 
       {error && (
@@ -334,20 +341,24 @@ export const MarketingStaticPages: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-2 bg-gray-50 hover:bg-primary-50 text-gray-500 hover:text-primary-700 border border-gray-100 hover:border-primary-100 rounded-xl transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleOpenDelete(item)}
-                          className="p-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-700 border border-gray-100 hover:border-red-100 rounded-xl transition-colors"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!isOwnerReadOnly && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-2 bg-gray-50 hover:bg-primary-50 text-gray-500 hover:text-primary-700 border border-gray-100 hover:border-primary-100 rounded-xl transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleOpenDelete(item)}
+                              className="p-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-700 border border-gray-100 hover:border-red-100 rounded-xl transition-colors"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

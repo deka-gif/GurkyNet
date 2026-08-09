@@ -116,7 +116,14 @@ class WalletController extends Controller
             $amount = (float) $request->amount;
             $adminFee = (float) $request->input('admin_fee', 0.00);
             // Always pending — never accept client-controlled settlement status.
-            $transaction = $this->topUpWalletAction->execute($user, $amount, $adminFee, 'pending');
+            $transaction = $this->topUpWalletAction->execute(
+                $user,
+                $amount,
+                $adminFee,
+                'pending',
+                'midtrans',
+                $request->input('idempotency_key')
+            );
 
             return $this->successResponse('Top up berhasil diajukan.', [
                 'transaction' => $transaction,
@@ -161,7 +168,8 @@ class WalletController extends Controller
                 $recipientWalletNumber,
                 $amount,
                 $pin,
-                $fee
+                $fee,
+                $request->input('idempotency_key')
             );
 
             return $this->successResponse('Transfer dana berhasil dikirimkan.', [
@@ -192,7 +200,8 @@ class WalletController extends Controller
                 (string) $request->pin,
                 (string) $request->bank_name,
                 (string) $request->account_number,
-                (float) $request->input('admin_fee', 0)
+                (float) $request->input('admin_fee', 0),
+                $request->input('idempotency_key')
             );
 
             return $this->successResponse('Permintaan penarikan dana berhasil diajukan.', [

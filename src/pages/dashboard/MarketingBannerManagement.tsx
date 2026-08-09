@@ -27,8 +27,11 @@ import { resolveMediaUrl, resolveMediaSrc } from '../../utils/mediaUrl';
 import { useMarketingStore } from '../../store/marketing.store';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const MarketingBannerManagement: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const user = storageService.getUser();
   const {
     banners,
@@ -331,13 +334,15 @@ export const MarketingBannerManagement: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => handleOpenAdd()}
-              className="px-4 py-2.5 bg-pink-600 text-white rounded-2xl font-black text-xs shadow-md hover:bg-pink-700 transition flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Banner</span>
-            </button>
+            {!isOwnerReadOnly && (
+              <button
+                onClick={() => handleOpenAdd()}
+                className="px-4 py-2.5 bg-pink-600 text-white rounded-2xl font-black text-xs shadow-md hover:bg-pink-700 transition flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Banner</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 fetchBanners({ page: currentPage });
@@ -545,27 +550,31 @@ export const MarketingBannerManagement: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleOpenEdit(banner)}
-                          title="Edit Banner"
-                          className="p-1.5 rounded-lg text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(banner)}
-                          title={banner.is_active ? 'Sembunyikan Banner' : 'Tampilkan Banner'}
-                          className="p-1.5 rounded-lg text-slate-700 hover:bg-white hover:text-purple-600 shadow-xs transition"
-                        >
-                          {banner.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-emerald-600" />}
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(banner.id)}
-                          title="Hapus Banner"
-                          className="p-1.5 rounded-lg text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isOwnerReadOnly && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(banner)}
+                              title="Edit Banner"
+                              className="p-1.5 rounded-lg text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleActive(banner)}
+                              title={banner.is_active ? 'Sembunyikan Banner' : 'Tampilkan Banner'}
+                              className="p-1.5 rounded-lg text-slate-700 hover:bg-white hover:text-purple-600 shadow-xs transition"
+                            >
+                              {banner.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-emerald-600" />}
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(banner.id)}
+                              title="Hapus Banner"
+                              className="p-1.5 rounded-lg text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -776,16 +785,18 @@ export const MarketingBannerManagement: React.FC = () => {
               >
                 Tutup
               </button>
-              <button
-                onClick={() => {
-                  const b = selectedBanner;
-                  setSelectedBanner(null);
-                  handleOpenEdit(b);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 transition shadow-sm"
-              >
-                Edit Banner
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  onClick={() => {
+                    const b = selectedBanner;
+                    setSelectedBanner(null);
+                    handleOpenEdit(b);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 transition shadow-sm"
+                >
+                  Edit Banner
+                </button>
+              )}
             </div>
           </div>
         </div>

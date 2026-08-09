@@ -16,6 +16,7 @@ use App\Services\AvailabilityService;
 use App\Services\Tagihan\TagihanInquiryService;
 use App\Services\Pln\PlnInquiryService;
 use App\Services\Game\GameInquiryService;
+use App\Services\Transactions\IdempotencyGuard;
 use App\Enums\TransactionStatus;
 use App\Enums\WalletHistoryType;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,7 @@ class CreateTransactionAction
     protected TagihanInquiryService $tagihanInquiryService;
     protected PlnInquiryService $plnInquiryService;
     protected GameInquiryService $gameInquiryService;
+    protected IdempotencyGuard $idempotencyGuard;
 
     public function __construct(
         TransactionRepositoryInterface $transactionRepository,
@@ -43,7 +45,8 @@ class CreateTransactionAction
         AvailabilityService $availabilityService,
         TagihanInquiryService $tagihanInquiryService,
         PlnInquiryService $plnInquiryService,
-        GameInquiryService $gameInquiryService
+        GameInquiryService $gameInquiryService,
+        IdempotencyGuard $idempotencyGuard
     ) {
         $this->transactionRepository = $transactionRepository;
         $this->itemRepository = $itemRepository;
@@ -54,6 +57,7 @@ class CreateTransactionAction
         $this->gameInquiryService = $gameInquiryService;
         $this->tagihanInquiryService = $tagihanInquiryService;
         $this->plnInquiryService = $plnInquiryService;
+        $this->idempotencyGuard = $idempotencyGuard;
     }
 
     /**
@@ -66,25 +70,47 @@ class CreateTransactionAction
         string $skuCode,
         string $targetNumber,
         string $pin,
-        ?string $inquiryRefId = null
+        ?string $inquiryRefId = null,
+        ?string $idempotencyKey = null
     ): Transaction {
-        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $inquiryRefId) {
-            
-            // 1. Create Draft
+        // SRS 14.1 — replay detection is reported back out of the DB transaction so the
+        // caller can skip re-dispatching the provider job / re-arming the timeout below.
+        $isReplay = false;
+
+        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $inquiryRefId, $idempotencyKey, &$isReplay) {
+
+            // 1. Create Draft — this MUST be the first write in the transaction: if the
+            // idempotency claim collides (duplicate key), nothing else has happened yet,
+            // so it is always safe to short-circuit here without any wallet side effect.
             $invoiceNumber = $this->generateUniqueInvoice();
-            
-            $transaction = $this->transactionRepository->create([
-                'user_id' => $user->id,
-                'invoice_number' => $invoiceNumber,
-                'service_name' => 'Draft Transaction',
-                'target_number' => $targetNumber,
-                'amount' => 0.00,
-                'admin_fee' => 0.00,
-                'total_payment' => 0.00,
-                'payment_method' => 'wallet',
-                'status' => TransactionStatus::DRAFT->value,
-                'notes' => 'Transaksi draf baru',
-            ]);
+
+            $claim = $this->idempotencyGuard->claim(
+                $user->id,
+                $idempotencyKey,
+                function () use ($user, $invoiceNumber, $targetNumber, $idempotencyKey) {
+                    return $this->transactionRepository->create([
+                        'user_id' => $user->id,
+                        'invoice_number' => $invoiceNumber,
+                        'service_name' => 'Draft Transaction',
+                        'target_number' => $targetNumber,
+                        'amount' => 0.00,
+                        'admin_fee' => 0.00,
+                        'total_payment' => 0.00,
+                        'payment_method' => 'wallet',
+                        'status' => TransactionStatus::DRAFT->value,
+                        'notes' => 'Transaksi draf baru',
+                        'idempotency_key' => $idempotencyKey,
+                    ]);
+                }
+            );
+
+            if (!$claim['is_new']) {
+                $isReplay = true;
+
+                return $claim['transaction'];
+            }
+
+            $transaction = $claim['transaction'];
 
             // 2. Validate Product (findBySku already applies Control Center visibility)
             $product = $this->productRepository->findBySku($skuCode);
@@ -327,6 +353,12 @@ class CreateTransactionAction
 
             return $transaction;
         });
+
+        // SRS 14.1 — a replayed request must never re-debit, re-dispatch to the provider,
+        // or re-arm the timeout ladder; those all already happened for the original attempt.
+        if ($isReplay) {
+            return $transaction;
+        }
 
         // Dispatch Transaction Created & processing events
         event(new \App\Events\TransactionCreated($transaction));

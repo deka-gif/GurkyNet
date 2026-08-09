@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
 import { operationsService } from '../../services/operations.service';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 function resolveOpsStatus(item: any): string {
   const raw =
@@ -37,6 +38,8 @@ function resolveOpsStatus(item: any): string {
 }
 
 export const OperationsProductManagement: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Operations.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     products,
     productsPagination,
@@ -436,19 +439,21 @@ export const OperationsProductManagement: React.FC = () => {
                               <Eye className="w-3.5 h-3.5" />
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => setEditingProduct({
-                                ...item,
-                                status: resolveOpsStatus(item),
-                              })}
-                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
-                              title="Edit Product"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
+                            {!isOwnerReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingProduct({
+                                  ...item,
+                                  status: resolveOpsStatus(item),
+                                })}
+                                className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
+                                title="Edit Product"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
-                            {status === 'active' ? (
+                            {!isOwnerReadOnly && (status === 'active' ? (
                               <button
                                 type="button"
                                 onClick={() => handleToggleProductStatus(item, 'inactive')}
@@ -466,7 +471,7 @@ export const OperationsProductManagement: React.FC = () => {
                               >
                                 <Power className="w-3.5 h-3.5" />
                               </button>
-                            )}
+                            ))}
                           </div>
                         </td>
                       </tr>
@@ -577,16 +582,18 @@ export const OperationsProductManagement: React.FC = () => {
             </div>
 
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2 shrink-0">
-              <button
-                onClick={() => {
-                  setEditingProduct({ ...selectedProduct, status: resolveOpsStatus(selectedProduct) });
-                  setSelectedProduct(null);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center gap-1.5"
-              >
-                <Edit className="w-4 h-4" />
-                <span>Edit Produk</span>
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  onClick={() => {
+                    setEditingProduct({ ...selectedProduct, status: resolveOpsStatus(selectedProduct) });
+                    setSelectedProduct(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition flex items-center gap-1.5"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span>Edit Produk</span>
+                </button>
+              )}
               <button
                 onClick={() => setSelectedProduct(null)}
                 className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition"

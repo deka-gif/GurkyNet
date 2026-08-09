@@ -21,6 +21,7 @@ use App\Models\UserDevice;
 use App\Repositories\Contracts\OtpRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Services\Security\OtpService;
+use App\Support\TokenPolicy;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -146,6 +147,21 @@ class AuthController extends Controller
                 $device
             );
 
+            // SRS Bagian 8.1 — Sprint 2 keputusan #2: Finance & Owner wajib 2FA.
+            // Password sudah valid, TAPI token belum diterbitkan — menunggu
+            // verifikasi OTP via /auth/login/2fa/verify.
+            if (!empty($result['requires_2fa'])) {
+                $this->writeSecurityAudit($result['user'], 'login_2fa_challenge_issued');
+
+                return $this->successResponse('Kode verifikasi 2FA telah dikirim ke email Anda.', [
+                    'requires_2fa' => true,
+                    'identifier' => $result['identifier'],
+                    'expires_at' => optional($result['expires_at'])->toIso8601String(),
+                    'resend_available_at' => optional($result['resend_available_at'])->toIso8601String(),
+                    'dummy_sent_code' => app()->environment('local', 'testing') ? ($result['dummy_sent_code'] ?? null) : null,
+                ]);
+            }
+
             $result['user'] = new \App\Http\Resources\ProfileResource($result['user']);
             $this->writeSecurityAudit($result['user']->resource ?? $result['user'], 'login_password');
 
@@ -155,6 +171,53 @@ class AuthController extends Controller
         } catch (\Exception $e) {
             Log::error('Login failed: ' . $e->getMessage());
             return $this->errorResponse('Terjadi kesalahan saat mencoba masuk.', 500);
+        }
+    }
+
+    /**
+     * Verifikasi OTP 2FA (Finance/Owner) dan selesaikan login dengan
+     * menerbitkan token Sanctum. SRS Bagian 8.1 — Sprint 2 keputusan #2.
+     * Menggunakan OtpService existing (tidak membuat mekanisme OTP baru).
+     */
+    public function verifyLogin2fa(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'identity' => 'required|string',
+            'code' => 'required|string|size:6',
+        ], [], [
+            'identity' => 'identitas (email/nomor HP)',
+        ]);
+
+        try {
+            $user = filter_var($data['identity'], FILTER_VALIDATE_EMAIL)
+                ? User::query()->where('email', $data['identity'])->first()
+                : User::query()->where('phone_number', $data['identity'])->first();
+
+            if (!$user || !\App\Actions\Auth\LoginUserAction::requiresTwoFactor($user)) {
+                return $this->errorResponse('Permintaan verifikasi 2FA tidak valid.', 422);
+            }
+
+            $this->unifiedOtpService->verify(
+                $user->email,
+                $data['code'],
+                \App\Actions\Auth\LoginUserAction::TWO_FACTOR_OTP_ACTION,
+                'email',
+                $user->id
+            );
+
+            $tokenName = $this->deviceTokenName($request);
+            $token = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
+            $this->writeSecurityAudit($user, 'login_2fa_verified');
+
+            return $this->successResponse('Verifikasi 2FA berhasil. Login selesai.', [
+                'user' => new \App\Http\Resources\ProfileResource($user->fresh(['wallet'])),
+                'token' => $token,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        } catch (\Exception $e) {
+            Log::error('2FA login verification failed: ' . $e->getMessage());
+            return $this->errorResponse('Terjadi kesalahan saat memverifikasi kode 2FA.', 500);
         }
     }
 
@@ -190,7 +253,7 @@ class AuthController extends Controller
         $tokenName = trim($platform . '|' . ($deviceUuid ?: $request->header('User-Agent', 'Refreshed-Device')));
 
         $user->currentAccessToken()->delete();
-        $newToken = $user->createToken($tokenName)->plainTextToken;
+        $newToken = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
 
         if ($deviceUuid) {
             \App\Models\UserDevice::updateOrCreate(
@@ -261,7 +324,7 @@ class AuthController extends Controller
         $request->validate([
             'phone_number' => 'nullable|string',
             'email' => 'nullable|email',
-            'action' => 'required|string|in:registration,pin_reset,password_reset,verification,forgot_password,forgot_pin,change_password,change_pin,change_phone,change_email_old,change_email_new,onboarding_registration',
+            'action' => 'required|string|in:registration,pin_reset,password_reset,verification,forgot_password,forgot_pin,change_password,change_pin,change_phone,change_email_old,change_email_new,onboarding_registration,login_2fa',
         ], [
             'action.in' => 'Format aksi OTP tidak valid.',
         ]);
@@ -359,7 +422,7 @@ class AuthController extends Controller
             ]);
 
             $tokenName = $this->deviceTokenName($request);
-            $token = $user->createToken($tokenName)->plainTextToken;
+            $token = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
             $this->rememberTrustedDevice($user, $request, (bool) ($data['remember_device'] ?? true));
             $this->writeSecurityAudit($user, 'REGISTER_AND_CREATE_PIN', [
                 'channel' => 'email_otp',
@@ -450,7 +513,22 @@ class AuthController extends Controller
             return $this->errorResponse('Perangkat ini belum dipercaya. Gunakan login email + password terlebih dahulu.', 403);
         }
 
-        $token = $user->createToken($this->deviceTokenName($request))->plainTextToken;
+        // SRS Bagian 8.1 — Sprint 2 keputusan #2: 2FA wajib Finance & Owner,
+        // berlaku juga untuk jalur PIN login (tidak boleh jadi jalur bypass 2FA).
+        if (\App\Actions\Auth\LoginUserAction::requiresTwoFactor($user)) {
+            $result = $this->loginAction->challengeTwoFactor($user);
+            $this->writeSecurityAudit($user, 'login_2fa_challenge_issued');
+
+            return $this->successResponse('Kode verifikasi 2FA telah dikirim ke email Anda.', [
+                'requires_2fa' => true,
+                'identifier' => $result['identifier'],
+                'expires_at' => optional($result['expires_at'])->toIso8601String(),
+                'resend_available_at' => optional($result['resend_available_at'])->toIso8601String(),
+                'dummy_sent_code' => app()->environment('local', 'testing') ? ($result['dummy_sent_code'] ?? null) : null,
+            ]);
+        }
+
+        $token = $user->createToken($this->deviceTokenName($request), ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
         $this->rememberTrustedDevice($user, $request, true);
         $this->writeSecurityAudit($user, 'login_pin');
 

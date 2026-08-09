@@ -9,8 +9,11 @@ import { useAuthStore } from '../../store/auth.store'; // Auth store for checkin
 import { DashboardHeader } from '../../components/common/DashboardHeader';
 import { Media } from '../../types';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const MarketingMediaLibrary = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const { user } = useAuthStore() as any; // Retrieve logged in user to verify role authorization
   const { 
     items, loading, error, filters, pagination, 
@@ -50,6 +53,8 @@ export const MarketingMediaLibrary = () => {
 
   // Authorization validation
   const isAuthorized = user && ['Super Admin', 'Marketing', 'Owner'].includes(user.role);
+  // Owner can view/browse the library but cannot upload/delete/rename (read-only guard).
+  const canManageMedia = isAuthorized && !isOwnerReadOnly;
 
   useEffect(() => {
     // Sync filters with store and trigger API
@@ -262,7 +267,7 @@ export const MarketingMediaLibrary = () => {
             </button>
 
             {/* Add Media Button */}
-            {isAuthorized && (
+            {canManageMedia && (
               <button
                 onClick={() => setIsUploadOpen(true)}
                 className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-md shadow-primary-500/20 transition-all cursor-pointer"
@@ -315,7 +320,7 @@ export const MarketingMediaLibrary = () => {
               ? 'Tidak ada berkas media yang cocok dengan kata kunci pencarian Anda.' 
               : 'Belum ada gambar yang diunggah di folder ini. Mulai dengan mengunggah aset gambar pertama Anda.'}
           </p>
-          {isAuthorized && (
+          {canManageMedia && (
             <button
               onClick={() => setIsUploadOpen(true)}
               className="mt-6 inline-flex items-center gap-2 bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold px-5 py-2.5 rounded-xl text-sm transition-all cursor-pointer"
@@ -381,7 +386,7 @@ export const MarketingMediaLibrary = () => {
                     <Eye className="w-3.5 h-3.5" />
                   </button>
 
-                  {isAuthorized && (
+                  {canManageMedia && (
                     <>
                       <button
                         onClick={() => openRenameModal(media)}
@@ -477,7 +482,7 @@ export const MarketingMediaLibrary = () => {
                           <Eye className="w-3.5 h-3.5" />
                         </button>
 
-                        {isAuthorized && (
+                        {canManageMedia && (
                           <>
                             <button
                               onClick={() => openRenameModal(media)}
@@ -812,7 +817,7 @@ export const MarketingMediaLibrary = () => {
                     )}
                   </button>
 
-                  {isAuthorized && (
+                  {canManageMedia && (
                     <>
                       {/* Replace Image Button (File Input trigger) */}
                       <div className="relative">

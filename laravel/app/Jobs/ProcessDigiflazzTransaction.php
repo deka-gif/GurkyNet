@@ -12,13 +12,21 @@ use App\Services\WalletRefundService;
 use App\Enums\TransactionStatus;
 use App\Enums\UserRole;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class ProcessDigiflazzTransaction implements ShouldQueue
+/**
+ * Legacy Digiflazz-only fulfillment job.
+ *
+ * Sprint 3 (SRS 15.3) — ShouldBeUnique (keyed by transaction id) prevents two queued
+ * instances of this job from ever running concurrently for the same transaction, on top
+ * of the atomic `provider_dispatch_started_at` claim added below.
+ */
+class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -31,9 +39,19 @@ class ProcessDigiflazzTransaction implements ShouldQueue
 
     public int $timeout = 90;
 
+    /**
+     * Unique lock lifetime — matches $timeout so the lock never outlives a single attempt.
+     */
+    public int $uniqueFor = 90;
+
     public function __construct(int $transactionId)
     {
         $this->transactionId = $transactionId;
+    }
+
+    public function uniqueId(): string
+    {
+        return (string) $this->transactionId;
     }
 
     public function handle(DigiflazzService $digiflazzService, WalletRefundService $refundService): void
@@ -50,6 +68,20 @@ class ProcessDigiflazzTransaction implements ShouldQueue
                 'id' => $this->transactionId,
                 'status' => $transaction->status,
             ]);
+            return;
+        }
+
+        // Sprint 3 (SRS 15.3 / locked decision #2) — atomic local claim. If a prior attempt
+        // already claimed this transaction (retry after an ambiguous exception/timeout),
+        // never blindly call buy() again — go through the three-outcome retry guard instead.
+        $claimed = Transaction::where('id', $transaction->id)
+            ->whereIn('status', [TransactionStatus::PENDING->value, TransactionStatus::PROCESSING->value])
+            ->whereNull('provider_dispatch_started_at')
+            ->update(['provider_dispatch_started_at' => now()]);
+
+        if ($claimed === 0) {
+            $this->handleDispatchRetry($transaction->fresh(['items']) ?? $transaction, $digiflazzService, $refundService);
+
             return;
         }
 
@@ -146,6 +178,116 @@ class ProcessDigiflazzTransaction implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    /**
+     * Sprint 3 (SRS 15.3 / locked decision #2/#9) — three-outcome retry guard. Invoked only
+     * when a prior dispatch attempt already claimed this transaction. Never calls buy()
+     * again; only checkStatus() may run, and only one of three outcomes may result:
+     *
+     *   A. CONFIRMED EXISTS  — apply existing success handling, never resend.
+     *   B. CONFIRMED FAILED  — existing refundOnce() path, never dispatch again.
+     *   C. UNKNOWN / TIMEOUT — no resend, no refund; existing TransactionTimeoutService /
+     *      transactions:reconcile-pending resolves it.
+     */
+    protected function handleDispatchRetry(
+        Transaction $transaction,
+        DigiflazzService $digiflazzService,
+        WalletRefundService $refundService
+    ): void {
+        if ($transaction->status !== TransactionStatus::PENDING->value
+            && $transaction->status !== TransactionStatus::PROCESSING->value) {
+            return;
+        }
+
+        $firstItem = $transaction->items->first();
+        $sku = $firstItem ? $firstItem->product_code : '';
+
+        if ($sku === '') {
+            Log::warning('ProcessDigiflazzTransaction: dispatch retry with no SKU context, deferring to reconciliation', [
+                'transaction_id' => $transaction->id,
+            ]);
+
+            return;
+        }
+
+        Log::info('ProcessDigiflazzTransaction: dispatch retry — checkStatus before any possible resend', [
+            'transaction_id' => $transaction->id,
+            'ref_id' => $transaction->invoice_number,
+        ]);
+
+        try {
+            $response = $digiflazzService->checkStatus($sku, $transaction->target_number, $transaction->invoice_number);
+        } catch (\Throwable $e) {
+            Log::warning('ProcessDigiflazzTransaction: dispatch retry checkStatus failed, deferring to reconciliation', [
+                'transaction_id' => $transaction->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        $data = is_array($response) ? ($response['data'] ?? null) : null;
+        if (!is_array($data)) {
+            Log::warning('ProcessDigiflazzTransaction: dispatch retry inconclusive (empty data), deferring to reconciliation', [
+                'transaction_id' => $transaction->id,
+            ]);
+
+            return;
+        }
+
+        $status = strtolower((string) ($data['status'] ?? 'pending'));
+        $sn = $data['sn'] ?? null;
+
+        if (in_array($status, ['sukses', 'success'], true)) {
+            $digiflazzTx = DigiflazzTransaction::where('transaction_id', $transaction->id)->first();
+            $digiflazzTx?->update(DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                'success',
+                $response,
+                is_string($sn) ? $sn : null
+            ));
+
+            $transaction->update([
+                'status' => TransactionStatus::SUCCESS->value,
+                'notes' => 'Transaksi sukses. SN: ' . ($sn ?? '-'),
+            ]);
+
+            PaymentHistory::recordFor($transaction, 'digiflazz', 'success', $response, $response, $transaction->invoice_number);
+
+            event(new \App\Events\TransactionSuccess($transaction));
+            event(new \App\Events\PaymentSettled($transaction, $response));
+
+            return;
+        }
+
+        if (in_array($status, ['gagal', 'failed'], true)) {
+            $result = $refundService->refundOnce(
+                $transaction,
+                'Refund Gagal Transaksi: ' . $transaction->invoice_number,
+                'digiflazz_job_retry_check',
+                'Transaksi gagal dari operator (dikonfirmasi via checkStatus).',
+                TransactionStatus::FAILED->value
+            );
+
+            DigiflazzTransaction::where('transaction_id', $transaction->id)->update(['digiflazz_status' => 'failed']);
+
+            $refundService->writeAudit(null, 'DIGIFLAZZ_JOB_RETRY_CHECK_FAILED_REFUND', [
+                'transaction_id' => $transaction->id,
+                'credited' => $result['credited'],
+                'already_refunded' => $result['already_refunded'],
+            ]);
+
+            event(new \App\Events\TransactionFailed($result['transaction']));
+
+            return;
+        }
+
+        // Outcome C — still pending / unresolved. Leave in-flight; existing reconciliation
+        // (TransactionTimeoutService / transactions:reconcile-pending) will settle it.
+        Log::info('ProcessDigiflazzTransaction: dispatch retry still pending/unknown, deferring to reconciliation', [
+            'transaction_id' => $transaction->id,
+            'status' => $status,
+        ]);
     }
 
     /**

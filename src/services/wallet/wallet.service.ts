@@ -42,16 +42,26 @@ export const walletService = {
     return response.data;
   },
 
-  topUp: async (amount: number, paymentMethod: string): Promise<ApiResponse<any>> => {
-    const response = await apiClient.post<ApiResponse<any>>('/wallet/topup', { amount, paymentMethod });
+  topUp: async (amount: number, paymentMethod: string, idempotencyKey?: string): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>('/wallet/topup', {
+      amount,
+      paymentMethod,
+      idempotency_key: idempotencyKey,
+    });
     return response.data;
   },
 
-  transfer: async (recipient_wallet_number: string, amount: number, pin?: string): Promise<ApiResponse<any>> => {
+  transfer: async (
+    recipient_wallet_number: string,
+    amount: number,
+    pin?: string,
+    idempotencyKey?: string
+  ): Promise<ApiResponse<any>> => {
     const response = await apiClient.post<ApiResponse<any>>('/wallet/transfer', {
       recipient_wallet_number,
       amount,
       pin,
+      idempotency_key: idempotencyKey,
     });
     return response.data;
   },
@@ -62,6 +72,7 @@ export const walletService = {
     bank_name: string;
     account_number: string;
     admin_fee?: number;
+    idempotency_key?: string;
   }): Promise<ApiResponse<any>> => {
     const response = await apiClient.post<ApiResponse<any>>('/wallet/withdraw', payload);
     return response.data;

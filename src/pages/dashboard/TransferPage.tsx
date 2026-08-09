@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, 
@@ -14,6 +14,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { buildCreatePinUrl, PENDING_TRANSFER_KEY } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
+import { getOrCreateIdempotencyKey } from '../../utils/idempotency';
 
 /**
  * Transfer page — P2P wallet transfer only.
@@ -30,6 +31,10 @@ export const TransferPage = () => {
   const [pin, setPin] = useState('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // SRS 14.1 — one idempotency key per logical transfer; reused across retries, reset
+  // only once the transfer reaches a terminal (successful) outcome.
+  const transferIdemRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchWallet();
@@ -90,13 +95,15 @@ export const TransferPage = () => {
       return;
     }
 
-    const res = await transfer(accountNo.trim(), parsedAmount, pin);
+    const idempotencyKey = getOrCreateIdempotencyKey(transferIdemRef);
+    const res = await transfer(accountNo.trim(), parsedAmount, pin, idempotencyKey);
     if (res) {
       setSuccessMsg(`Transfer sebesar ${formatIDR(parsedAmount)} berhasil diproses ke ${accountNo.trim()}.`);
       setAccountNo('');
       setAmount('');
       setPin('');
       fetchWallet();
+      transferIdemRef.current = null;
     } else {
       setErrorMsg('Gagal memproses transfer. Pastikan PIN benar, wallet tujuan valid, dan saldo mencukupi.');
     }

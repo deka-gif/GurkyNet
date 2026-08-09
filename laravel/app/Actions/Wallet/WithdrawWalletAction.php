@@ -9,6 +9,7 @@ use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
 use App\Enums\WalletHistoryType;
 use App\Enums\TransactionStatus;
+use App\Services\Transactions\IdempotencyGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -17,7 +18,8 @@ class WithdrawWalletAction
 {
     public function __construct(
         protected WalletRepositoryInterface $walletRepository,
-        protected WalletHistoryRepositoryInterface $historyRepository
+        protected WalletHistoryRepositoryInterface $historyRepository,
+        protected IdempotencyGuard $idempotencyGuard
     ) {}
 
     /**
@@ -29,7 +31,8 @@ class WithdrawWalletAction
         string $pin,
         string $bankName,
         string $accountNumber,
-        float $adminFee = 0.00
+        float $adminFee = 0.00,
+        ?string $idempotencyKey = null
     ): Transaction {
         if ($user->transaction_pin === null) {
             throw ValidationException::withMessages([
@@ -49,7 +52,13 @@ class WithdrawWalletAction
             ]);
         }
 
-        return DB::transaction(function () use ($user, $amount, $bankName, $accountNumber, $adminFee) {
+        // SRS 14.1 — replay check before any lock/debit (no side effect to unwind on a hit).
+        $existing = $idempotencyKey ? $this->idempotencyGuard->findActive($user->id, $idempotencyKey) : null;
+        if ($existing) {
+            return $existing;
+        }
+
+        return DB::transaction(function () use ($user, $amount, $bankName, $accountNumber, $adminFee, $idempotencyKey) {
             $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
             if (!$wallet) {
                 throw new \Exception('Wallet tidak ditemukan.');
@@ -62,23 +71,39 @@ class WithdrawWalletAction
                 ]);
             }
 
-            $wallet->balance -= $totalDebit;
-            $wallet->save();
-
             $invoiceNumber = 'TRX-WD-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
 
-            $transaction = Transaction::create([
-                'user_id' => $user->id,
-                'invoice_number' => $invoiceNumber,
-                'service_name' => 'Penarikan Dana',
-                'target_number' => $bankName . ':' . $accountNumber,
-                'amount' => $amount,
-                'admin_fee' => $adminFee,
-                'total_payment' => $totalDebit,
-                'payment_method' => 'wallet',
-                'status' => TransactionStatus::PROCESSING->value,
-                'notes' => "Withdraw ke {$bankName} {$accountNumber}",
-            ]);
+            // Idempotency claim FIRST (before touching the balance): if this insert loses
+            // a race or hits an expired key, the wallet has not been mutated yet, so it is
+            // always safe to short-circuit and return the other transaction untouched.
+            $claim = $this->idempotencyGuard->claim(
+                $user->id,
+                $idempotencyKey,
+                function () use ($user, $invoiceNumber, $bankName, $accountNumber, $amount, $adminFee, $totalDebit, $idempotencyKey) {
+                    return Transaction::create([
+                        'user_id' => $user->id,
+                        'invoice_number' => $invoiceNumber,
+                        'service_name' => 'Penarikan Dana',
+                        'target_number' => $bankName . ':' . $accountNumber,
+                        'amount' => $amount,
+                        'admin_fee' => $adminFee,
+                        'total_payment' => $totalDebit,
+                        'payment_method' => 'wallet',
+                        'status' => TransactionStatus::PROCESSING->value,
+                        'notes' => "Withdraw ke {$bankName} {$accountNumber}",
+                        'idempotency_key' => $idempotencyKey,
+                    ]);
+                }
+            );
+
+            if (!$claim['is_new']) {
+                return $claim['transaction'];
+            }
+
+            $transaction = $claim['transaction'];
+
+            $wallet->balance -= $totalDebit;
+            $wallet->save();
 
             $this->historyRepository->create([
                 'wallet_id' => $wallet->id,

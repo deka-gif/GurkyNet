@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -119,6 +120,17 @@ class User extends Authenticatable
     public function isUser(): bool
     {
         return $this->hasRole(\App\Enums\UserRole::USER);
+    }
+
+    /**
+     * RBAC database-driven role record (Bagian 7.1/7.2, Sprint 2).
+     * Bernama `roleRecord` (bukan `role`) agar tidak bertabrakan dengan
+     * kolom/atribut `role` (cast ke enum UserRole) yang sudah ada.
+     * Hanya terisi untuk user_type = 'staff' (role != user).
+     */
+    public function roleRecord(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'role_id');
     }
 
     /**

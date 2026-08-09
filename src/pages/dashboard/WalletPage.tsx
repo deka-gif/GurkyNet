@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import { buildCreatePinUrl, PENDING_WALLET_ACTION_KEY } from '../../utils/pinGate';
 import { caretFromDigitIndex, formatIDR, formatIDRInput, parseIDRDigits } from '../../utils/currency';
 import { PaymentPlaceholderModal, PaymentPlaceholderKind } from '../../components/wallet/PaymentPlaceholderModal';
+import { getOrCreateIdempotencyKey } from '../../utils/idempotency';
 
 declare global {
   interface Window {
@@ -66,6 +67,12 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentModalKind, setPaymentModalKind] = useState<PaymentPlaceholderKind | null>(null);
   const [paymentModalAmount, setPaymentModalAmount] = useState(0);
+
+  // SRS 14.1 — one idempotency key per logical action; reused across retries of the same
+  // submission, reset only once that logical action reaches a terminal outcome.
+  const topupIdemRef = useRef<string | null>(null);
+  const transferIdemRef = useRef<string | null>(null);
+  const withdrawIdemRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchWallet();
@@ -124,7 +131,8 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       return;
     }
 
-    const res = await topUp(amount, topupMethod);
+    const idempotencyKey = getOrCreateIdempotencyKey(topupIdemRef);
+    const res = await topUp(amount, topupMethod, idempotencyKey);
 
     if (res?.__error) {
       const msg = res.message || 'Gagal melakukan top up. Silakan coba lagi.';
@@ -146,12 +154,14 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
           setSuccessMsg(`Top Up berhasil! Saldo Anda otomatis ditambahkan sebesar ${formatIDR(amount)}.`);
           setTopupAmount('');
           setActiveTab('index');
+          topupIdemRef.current = null;
         },
         onPending: function () {
           fetchWallet();
           setSuccessMsg(`Top up sedang diproses. Silakan selesaikan pembayaran Anda.`);
           setTopupAmount('');
           setActiveTab('index');
+          topupIdemRef.current = null;
         },
         onError: function () {
           setErrorMsg('Pembayaran gagal atau dibatalkan.');
@@ -164,6 +174,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
        setSuccessMsg(`Top Up diajukan. Saldo Anda akan bertambah jika sukses.`);
        setTopupAmount('');
        setActiveTab('index');
+       topupIdemRef.current = null;
     } else {
       setErrorMsg('Gagal melakukan top up. Silakan coba lagi.');
     }
@@ -212,7 +223,8 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       return;
     }
 
-    const res = await transfer(targetAccount, amount, transferPin);
+    const idempotencyKey = getOrCreateIdempotencyKey(transferIdemRef);
+    const res = await transfer(targetAccount, amount, transferPin, idempotencyKey);
     if (res) {
       setSuccessMsg(`Transfer sebesar ${formatIDR(amount)} berhasil diproses ke ${targetAccount}.`);
       setTransferAmount('');
@@ -220,6 +232,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       setTransferNote('');
       setTransferPin('');
       setActiveTab('index');
+      transferIdemRef.current = null;
     } else {
       setErrorMsg('Gagal memproses transfer. Pastikan PIN benar, wallet tujuan valid, dan saldo mencukupi.');
     }
@@ -260,6 +273,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       bank_name: withdrawBank,
       account_number: withdrawAccount.trim(),
       admin_fee: 5000,
+      idempotencyKey: getOrCreateIdempotencyKey(withdrawIdemRef),
     });
 
     if (res) {
@@ -268,6 +282,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       setWithdrawAccount('');
       setWithdrawPin('');
       setActiveTab('index');
+      withdrawIdemRef.current = null;
     } else {
       setErrorMsg('Gagal memproses penarikan. Periksa PIN, saldo, dan nomor rekening.');
     }

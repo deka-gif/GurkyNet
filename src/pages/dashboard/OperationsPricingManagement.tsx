@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
 import { operationsService } from '../../services/operations.service';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 function resolveOpsStatus(item: any): string {
   const raw = item?.opsStatus || item?.ops_status || item?.availabilityStatus || item?.status || 'active';
@@ -45,6 +46,8 @@ const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 export const OperationsPricingManagement: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Operations.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     pricingProducts,
     pricingNodes,
@@ -561,13 +564,15 @@ export const OperationsPricingManagement: React.FC = () => {
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => openEdit(item)}
-                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
+                            {!isOwnerReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => openEdit(item)}
+                                className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -696,16 +701,18 @@ export const OperationsPricingManagement: React.FC = () => {
               {getStatusBadge(resolveOpsStatus(selectedProduct))}
             </div>
             <div className="p-4 border-t flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  openEdit(selectedProduct);
-                  setSelectedProduct(null);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center gap-1.5"
-              >
-                <Edit className="w-4 h-4" /> Edit Harga
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    openEdit(selectedProduct);
+                    setSelectedProduct(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center gap-1.5"
+                >
+                  <Edit className="w-4 h-4" /> Edit Harga
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSelectedProduct(null)}

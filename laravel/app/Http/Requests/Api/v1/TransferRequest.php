@@ -20,6 +20,8 @@ class TransferRequest extends FormRequest
             'amount' => 'required|numeric|min:1000',
             'pin' => 'required|string|size:6|regex:/^\d{6}$/',
             'admin_fee' => 'nullable|numeric|min:0',
+            // SRS 14.1 — optional for backward compatibility with clients not yet upgraded.
+            'idempotency_key' => 'nullable|string|max:80',
         ];
     }
 

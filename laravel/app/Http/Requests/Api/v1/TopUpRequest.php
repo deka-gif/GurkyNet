@@ -18,6 +18,8 @@ class TopUpRequest extends FormRequest
         return [
             'amount' => 'required|numeric|min:10000',
             'admin_fee' => 'nullable|numeric|min:0',
+            // SRS 14.1 — optional for backward compatibility with clients not yet upgraded.
+            'idempotency_key' => 'nullable|string|max:80',
             // Client-supplied status removed — top-up always starts as pending via Midtrans.
         ];
     }

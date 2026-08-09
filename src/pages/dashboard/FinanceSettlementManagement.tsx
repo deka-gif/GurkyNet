@@ -5,8 +5,11 @@ import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
 import { CmsPageHeader } from '../../components/common/CmsCommon';
 import { RefreshPolicy } from '../../lib/refreshPolicy';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const FinanceSettlementManagement: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Finance.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [items, setItems] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<any>(null);
@@ -116,9 +119,11 @@ export const FinanceSettlementManagement: React.FC = () => {
             <button type="button" onClick={() => void load()} className="px-3 border rounded-xl">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button type="button" onClick={() => void create()} className="px-3 bg-emerald-600 text-white rounded-xl">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            {!isOwnerReadOnly && (
+              <button type="button" onClick={() => void create()} className="px-3 bg-emerald-600 text-white rounded-xl">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto divide-y">
             {loading && (
@@ -156,26 +161,28 @@ export const FinanceSettlementManagement: React.FC = () => {
                 <p className="text-xs text-gray-400 mt-1">Workflow: {detail.workflowCode || '—'} · Auto payout: tidak</p>
               </div>
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.notes || '—'}</p>
-              <div className="flex flex-wrap gap-2">
-                {detail.status === 'pending' && (
-                  <button type="button" disabled={busy} onClick={() => void setStatus('processing')} className="px-3 py-1.5 rounded-xl border text-xs font-bold">
-                    Start Processing
-                  </button>
-                )}
-                {['pending', 'processing'].includes(detail.status) && (
-                  <>
-                    <button type="button" disabled={busy} onClick={() => void setStatus('completed')} className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold">
-                      Complete
+              {!isOwnerReadOnly && (
+                <div className="flex flex-wrap gap-2">
+                  {detail.status === 'pending' && (
+                    <button type="button" disabled={busy} onClick={() => void setStatus('processing')} className="px-3 py-1.5 rounded-xl border text-xs font-bold">
+                      Start Processing
                     </button>
-                    <button type="button" disabled={busy} onClick={() => void setStatus('cancelled')} className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 text-xs font-bold">
-                      Cancel
-                    </button>
-                    <button type="button" disabled={busy} onClick={() => void setStatus('failed')} className="px-3 py-1.5 rounded-xl border text-xs font-bold">
-                      Mark Failed
-                    </button>
-                  </>
-                )}
-              </div>
+                  )}
+                  {['pending', 'processing'].includes(detail.status) && (
+                    <>
+                      <button type="button" disabled={busy} onClick={() => void setStatus('completed')} className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold">
+                        Complete
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => void setStatus('cancelled')} className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 text-xs font-bold">
+                        Cancel
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => void setStatus('failed')} className="px-3 py-1.5 rounded-xl border text-xs font-bold">
+                        Mark Failed
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

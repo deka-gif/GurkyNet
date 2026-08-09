@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { operationsService } from '../../services/operations.service';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 type GatewayCard = {
   id: string;
@@ -56,6 +57,8 @@ const healthTone = (color?: string) => {
 };
 
 export const OperationsPaymentGatewayControl: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Operations.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [cards, setCards] = useState<GatewayCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +213,7 @@ export const OperationsPaymentGatewayControl: React.FC = () => {
                 </p>
 
                 <div className="flex flex-wrap gap-2">
-                  {canControl && (
+                  {canControl && !isOwnerReadOnly && (
                     <>
                       <ActionBtn
                         disabled={busy}

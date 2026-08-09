@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import { useCustomerSupportStore } from '../../store/customerSupport.store';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export interface TicketData {
   id: string;
@@ -35,6 +36,8 @@ export interface TicketData {
 }
 
 export const CustomerSupportTickets: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Customer Support.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     tickets,
     ticketsPagination,
@@ -323,13 +326,15 @@ export const CustomerSupportTickets: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCreateTicketModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Buat Tiket Baru
-          </button>
+          {!isOwnerReadOnly && (
+            <button
+              onClick={() => setCreateTicketModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Buat Tiket Baru
+            </button>
+          )}
           <button
             onClick={() => fetchTickets({ page: currentPage, per_page: pageSize })}
             disabled={ticketsLoading}
@@ -673,27 +678,31 @@ export const CustomerSupportTickets: React.FC = () => {
                           <Eye className="w-4 h-4" />
                         </Link>
 
-                        <button
-                          onClick={() => {
-                            setAssignTicket(t);
-                            setSelectedStaff(t.assignedTo === 'Unassigned' ? 'CS Budi' : t.assignedTo);
-                          }}
-                          title="Assign Staff"
-                          className="p-1.5 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        >
-                          <UserPlus className="w-4 h-4" />
-                        </button>
+                        {!isOwnerReadOnly && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setAssignTicket(t);
+                                setSelectedStaff(t.assignedTo === 'Unassigned' ? 'CS Budi' : t.assignedTo);
+                              }}
+                              title="Assign Staff"
+                              className="p-1.5 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                            </button>
 
-                        <button
-                          onClick={() => {
-                            setStatusTicketModal(t);
-                            setSelectedStatus(t.status);
-                          }}
-                          title="Change Status"
-                          className="p-1.5 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
+                            <button
+                              onClick={() => {
+                                setStatusTicketModal(t);
+                                setSelectedStatus(t.status);
+                              }}
+                              title="Change Status"
+                              className="p-1.5 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

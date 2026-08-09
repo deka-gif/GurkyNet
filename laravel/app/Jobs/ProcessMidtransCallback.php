@@ -115,7 +115,41 @@ class ProcessMidtransCallback implements ShouldQueue
                 return;
             }
 
+            // Sprint 3 (SRS 16.5 / locked decision #8) — never blindly credit on a settlement
+            // signal without validating the webhook amount against the authoritative local
+            // amount (total_payment already includes admin fee, matching what TopUpWalletAction
+            // used to build the Midtrans checkout). Tolerance matches the rounding tolerance
+            // already used elsewhere in the repository (CreateTransactionAction pasca reconciliation).
             if ($localStatus === TransactionStatus::SUCCESS->value) {
+                $expected = (float) $transaction->total_payment;
+                $received = (float) $grossAmount;
+
+                if (abs($received - $expected) > 0.01) {
+                    Log::critical('ProcessMidtransCallback: gross_amount mismatch — refusing to credit wallet', [
+                        'transaction_id' => $transaction->id,
+                        'invoice_number' => $transaction->invoice_number,
+                        'expected_total_payment' => $expected,
+                        'webhook_gross_amount' => $received,
+                    ]);
+
+                    \App\Models\ActivityLog::create([
+                        'user_id' => $transaction->user_id,
+                        'activity' => 'MIDTRANS_AMOUNT_MISMATCH',
+                        'payload' => [
+                            'transaction_id' => $transaction->id,
+                            'invoice_number' => $transaction->invoice_number,
+                            'expected_total_payment' => $expected,
+                            'webhook_gross_amount' => $received,
+                            'midtrans_status' => $midtransStatus,
+                        ],
+                    ]);
+
+                    // Leave the transaction in-flight (do not silently credit, do not mark
+                    // FAILED either — money may genuinely have arrived) so the existing
+                    // reconciliation/timeout ladder surfaces this for manual review.
+                    return;
+                }
+
                 // If it is a wallet top-up, execute the wallet credit
                 if (strtolower($transaction->service_name) === 'top up saldo' || strtolower($transaction->service_name) === 'top up') {
                     $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();

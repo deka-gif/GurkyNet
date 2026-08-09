@@ -5,8 +5,11 @@ import { CmsPageHeader } from '../../components/common/CmsCommon';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
 import { RefreshPolicy } from '../../lib/refreshPolicy';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const OperationsAlertsPage: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Operations.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,16 +62,18 @@ export const OperationsAlertsPage: React.FC = () => {
           <option value="closed">Closed</option>
           <option value="">All</option>
         </select>
-        <button
-          type="button"
-          onClick={async () => {
-            await operationsService.evaluateAlerts();
-            await load();
-          }}
-          className="px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold inline-flex items-center gap-2"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Evaluate Now
-        </button>
+        {!isOwnerReadOnly && (
+          <button
+            type="button"
+            onClick={async () => {
+              await operationsService.evaluateAlerts();
+              await load();
+            }}
+            className="px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold inline-flex items-center gap-2"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Evaluate Now
+          </button>
+        )}
       </div>
       <div className="rounded-2xl border bg-white shadow-sm divide-y">
         {loading && (
@@ -88,56 +93,58 @@ export const OperationsAlertsPage: React.FC = () => {
                 {a.alertCode} · {a.severity} · {a.type} · {a.status}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {a.status === 'open' && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await operationsService.ackAlert(a.id);
-                    await load();
-                  }}
-                  className="px-3 py-1.5 rounded-xl border text-xs font-bold"
-                >
-                  Ack
-                </button>
-              )}
-              {['open', 'acknowledged'].includes(a.status) && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await operationsService.investigateAlert(a.id);
-                    await load();
-                  }}
-                  className="px-3 py-1.5 rounded-xl border text-xs font-bold"
-                >
-                  Investigate
-                </button>
-              )}
-              {!['resolved', 'closed'].includes(a.status) && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await operationsService.resolveAlert(a.id);
-                    await load();
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold"
-                >
-                  Resolve
-                </button>
-              )}
-              {a.status === 'resolved' && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await operationsService.closeAlert(a.id);
-                    await load();
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-bold"
-                >
-                  Close
-                </button>
-              )}
-            </div>
+            {!isOwnerReadOnly && (
+              <div className="flex flex-wrap gap-2">
+                {a.status === 'open' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await operationsService.ackAlert(a.id);
+                      await load();
+                    }}
+                    className="px-3 py-1.5 rounded-xl border text-xs font-bold"
+                  >
+                    Ack
+                  </button>
+                )}
+                {['open', 'acknowledged'].includes(a.status) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await operationsService.investigateAlert(a.id);
+                      await load();
+                    }}
+                    className="px-3 py-1.5 rounded-xl border text-xs font-bold"
+                  >
+                    Investigate
+                  </button>
+                )}
+                {!['resolved', 'closed'].includes(a.status) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await operationsService.resolveAlert(a.id);
+                      await load();
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold"
+                  >
+                    Resolve
+                  </button>
+                )}
+                {a.status === 'resolved' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await operationsService.closeAlert(a.id);
+                      await load();
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-bold"
+                  >
+                    Close
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>

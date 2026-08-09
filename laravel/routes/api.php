@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\v1\ProfileController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
 use App\Http\Controllers\Api\v1\Public\PublicMediaController;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureOwnerReadOnly;
+use App\Http\Middleware\RenewTokenExpiration;
 
 /*
 |--------------------------------------------------------------------------
@@ -124,6 +126,9 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::post('/auth/register', [AuthController::class, 'register']);
         Route::post('/auth/login', [AuthController::class, 'login']);
         Route::post('/auth/login/pin', [AuthController::class, 'pinLogin']);
+        // SRS Bagian 8.1 — Sprint 2 keputusan #2: kelanjutan login untuk role
+        // yang wajib 2FA (Finance/Owner). Tetap di grup throttle login (#7).
+        Route::post('/auth/login/2fa/verify', [AuthController::class, 'verifyLogin2fa']);
         Route::post('/auth/register/finalize', [AuthController::class, 'finalizeRegistration']);
         Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
         Route::post('/auth/password/forgot/request', [AccountSecurityController::class, 'requestForgotPassword']);
@@ -138,7 +143,10 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     });
 
     // Protected API Endpoints (Requires Laravel Sanctum)
-    Route::middleware('auth:sanctum')->group(function () {
+    // RenewTokenExpiration: SRS Bagian 8.1 — Sprint 2 keputusan #3. Memperpanjang
+    // expires_at token pada setiap request aktif (idle timeout staf 30 menit;
+    // refresh otomatis token customer 30 hari).
+    Route::middleware(['auth:sanctum', RenewTokenExpiration::class])->group(function () {
         
         // Session and Profile Management
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -254,7 +262,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Finance Administration Module
-        Route::prefix('admin/finance')->middleware([EnsureRole::class . ':finance,owner'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" di modul Finance.
+        Route::prefix('admin/finance')->middleware([EnsureRole::class . ':finance,owner', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/dashboard', [FinanceController::class, 'dashboard']);
             Route::get('/command-center', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'commandCenter']);
             Route::get('/treasury', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'treasury']);
@@ -286,7 +295,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             ->where('audience', 'customer_support|cs|operations|marketing');
 
         // Operations Administration Module
-        Route::prefix('admin/operations')->middleware([EnsureRole::class . ':operations,owner'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" di modul Operations.
+        Route::prefix('admin/operations')->middleware([EnsureRole::class . ':operations,owner', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/dashboard', [OperationsController::class, 'dashboard']);
             Route::get('/command-center', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'commandCenter']);
             Route::get('/monitoring/infra', [\App\Http\Controllers\Api\v1\Admin\OpsCommandCenterController::class, 'infra']);
@@ -340,7 +350,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Marketing Administration Module
-        Route::prefix('admin/marketing')->middleware([EnsureRole::class . ':marketing,owner'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" di modul Marketing.
+        Route::prefix('admin/marketing')->middleware([EnsureRole::class . ':marketing,owner', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/dashboard', [MarketingController::class, 'dashboard']);
             Route::get('/featured-products', [MarketingController::class, 'featuredProducts']);
             Route::post('/featured-products', [MarketingController::class, 'storeFeaturedProduct']);
@@ -369,7 +380,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Customer Support Administration Module
-        Route::prefix('admin/customer-support')->middleware([EnsureRole::class . ':customer_support,owner'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" di modul Customer Support.
+        Route::prefix('admin/customer-support')->middleware([EnsureRole::class . ':customer_support,owner', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/dashboard', [CustomerSupportController::class, 'dashboard']);
             Route::get('/stats', [CustomerSupportController::class, 'stats']);
             Route::get('/hub-stats', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'hubStats']);
@@ -407,7 +419,14 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::put('/notifications/{id}/read', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'markNotificationRead']);
             Route::get('/{division}', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'index'])
                 ->where('division', 'operations|finance|marketing|customer_support');
-            Route::patch('/items/{id}', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'update']);
+
+            // Sprint 2 Revision — Finding 1: `update` adalah transisi status
+            // operasional (assign/resolve/reject/close) milik divisi, BUKAN
+            // approval/override khusus Owner (FR-OWN04). Owner harus tetap
+            // read-only di sini; role divisi pemilik tidak terdampak.
+            Route::middleware([EnsureOwnerReadOnly::class])->group(function () {
+                Route::patch('/items/{id}', [\App\Http\Controllers\Api\v1\Admin\EscalationController::class, 'update']);
+            });
         });
 
         // Workflow Engine (Sprint 8.2)
@@ -417,11 +436,26 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/stats/{division}', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'stats'])
                 ->where('division', 'customer-support|customer_support|operations|finance|marketing|admin|owner');
             Route::get('/{id}', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'show'])->whereNumber('id');
-            Route::post('/{id}/escalate', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'escalate'])->whereNumber('id');
-            Route::post('/{id}/actions', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'action'])->whereNumber('id');
-            Route::post('/{id}/close', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'close'])->whereNumber('id');
-            Route::post('/{id}/assign', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'assign'])->whereNumber('id');
-            Route::post('/{id}/reassign', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'reassign'])->whereNumber('id');
+
+            // Sprint 2 Revision — Finding 1 (Owner Read-Only Bypass):
+            // escalate/actions/close/assign/reassign adalah operasi workflow
+            // OPERASIONAL harian milik divisi (Finance/Operations/Marketing/
+            // CS), bukan mekanisme "Approval Pengecualian/Override" FR-OWN04.
+            // Owner wajib read-only di sini; role divisi (finance/operations/
+            // marketing/customer_support) dan Super Admin tidak terdampak.
+            Route::middleware([EnsureOwnerReadOnly::class])->group(function () {
+                Route::post('/{id}/escalate', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'escalate'])->whereNumber('id');
+                Route::post('/{id}/actions', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'action'])->whereNumber('id');
+                Route::post('/{id}/close', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'close'])->whereNumber('id');
+                Route::post('/{id}/assign', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'assign'])->whereNumber('id');
+                Route::post('/{id}/reassign', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'reassign'])->whereNumber('id');
+            });
+
+            // override & force-resolve TETAP TANPA EnsureOwnerReadOnly — ini
+            // adalah mekanisme approval/override khusus Owner (SRS FR-OWN04 /
+            // Bagian 5 baris "Approval Pengecualian/Override" = Penuh untuk
+            // Owner). Sudah dibatasi assertOwner() di controller (hanya
+            // owner/super_admin yang boleh memanggilnya).
             Route::post('/{id}/override', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'override'])->whereNumber('id');
             Route::post('/{id}/force-resolve', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'forceResolve'])->whereNumber('id');
         });
@@ -456,7 +490,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Website Content Foundation CRUD APIs
-        Route::prefix('admin/website')->middleware([EnsureRole::class . ':marketing,owner,operations'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" (Marketing/Operations tidak terpengaruh).
+        Route::prefix('admin/website')->middleware([EnsureRole::class . ':marketing,owner,operations', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/homepage-builder', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'show']);
             Route::get('/homepage-builder/permissions', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'permissions']);
             Route::get('/homepage-builder/preview', [\App\Http\Controllers\Api\v1\Admin\HomepageBuilderController::class, 'preview']);
@@ -477,7 +512,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/legal-center/{slug}/rollback/{versionId}', [\App\Http\Controllers\Api\v1\Admin\LegalCenterController::class, 'rollback']);
         });
 
-        Route::prefix('admin/website')->middleware([EnsureRole::class . ':marketing,owner'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" di modul Marketing (Banner & Konten Promosi).
+        Route::prefix('admin/website')->middleware([EnsureRole::class . ':marketing,owner', EnsureOwnerReadOnly::class])->group(function () {
             // Website Settings
             Route::get('/settings', [WebsiteSettingController::class, 'index']);
             Route::post('/settings', [WebsiteSettingController::class, 'store']);
@@ -509,7 +545,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Media Library (admin: marketing, owner)
-        Route::prefix('admin/media')->middleware([EnsureRole::class . ':marketing,owner'])->group(function () {
+        // EnsureOwnerReadOnly: SRS Bagian 5 — Sprint 2 keputusan #1. Owner hanya "Lihat" (Banner & Konten Promosi).
+        Route::prefix('admin/media')->middleware([EnsureRole::class . ':marketing,owner', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/', [MediaController::class, 'index']);
             Route::post('/', [MediaController::class, 'store']);
             Route::get('/{id}', [MediaController::class, 'show']);

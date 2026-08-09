@@ -26,9 +26,12 @@ import { useMarketingStore } from '../../store/marketing.store';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
 import { resolveMediaUrl, resolveMediaSrc } from '../../utils/mediaUrl';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const MarketingPromotionManagement: React.FC = () => {
   const user = storageService.getUser();
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     promotions,
     promotionsPagination,
@@ -354,13 +357,15 @@ export const MarketingPromotionManagement: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => handleOpenAdd()}
-              className="px-4 py-2.5 bg-purple-600 text-white rounded-2xl font-black text-xs shadow-md hover:bg-purple-700 transition flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Promosi</span>
-            </button>
+            {!isOwnerReadOnly && (
+              <button
+                onClick={() => handleOpenAdd()}
+                className="px-4 py-2.5 bg-purple-600 text-white rounded-2xl font-black text-xs shadow-md hover:bg-purple-700 transition flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Promosi</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 fetchPromotions({ page: currentPage });
@@ -589,22 +594,26 @@ export const MarketingPromotionManagement: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
-                          title="Edit Promotion"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmId(item.id)}
-                          className="p-1.5 rounded-lg bg-gray-100 hover:bg-rose-600 hover:text-white text-gray-600 transition"
-                          title="Hapus Promotion"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isOwnerReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
+                            title="Edit Promotion"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {!isOwnerReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(item.id)}
+                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-rose-600 hover:text-white text-gray-600 transition"
+                            title="Hapus Promotion"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -731,17 +740,19 @@ export const MarketingPromotionManagement: React.FC = () => {
             </div>
 
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
-              <button
-                onClick={() => {
-                  const p = selectedPromo;
-                  setSelectedPromo(null);
-                  handleOpenEdit(p);
-                }}
-                className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-xs transition flex items-center gap-1.5"
-              >
-                <Edit className="w-4 h-4 text-purple-700" />
-                <span>Edit Promo</span>
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  onClick={() => {
+                    const p = selectedPromo;
+                    setSelectedPromo(null);
+                    handleOpenEdit(p);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-xs transition flex items-center gap-1.5"
+                >
+                  <Edit className="w-4 h-4 text-purple-700" />
+                  <span>Edit Promo</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setSelectedPromo(null)}

@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { operationsService } from '../../services/operations.service';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 import { formatIDR } from '../../utils/currency';
 
 type ProviderCard = {
@@ -211,6 +212,8 @@ const unwrapAutoSync = (payload: any): AutoSyncStatus | null => {
 };
 
 export const OperationsProductProviderControl: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Operations.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [cards, setCards] = useState<ProviderCard[]>([]);
   const [autoSync, setAutoSync] = useState<AutoSyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -450,15 +453,17 @@ export const OperationsProductProviderControl: React.FC = () => {
             <p className="mt-2 text-[11px] font-semibold text-rose-600">Refresh gagal. Silakan coba kembali.</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void globalRefresh()}
-          disabled={globalRefreshing}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition disabled:opacity-70"
-        >
-          <RefreshCw className={`w-4 h-4 ${globalRefreshing ? 'animate-spin' : ''}`} />
-          {globalRefreshing ? 'Refreshing Product Provider...' : 'Refresh'}
-        </button>
+        {!isOwnerReadOnly && (
+          <button
+            type="button"
+            onClick={() => void globalRefresh()}
+            disabled={globalRefreshing}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition disabled:opacity-70"
+          >
+            <RefreshCw className={`w-4 h-4 ${globalRefreshing ? 'animate-spin' : ''}`} />
+            {globalRefreshing ? 'Refreshing Product Provider...' : 'Refresh'}
+          </button>
+        )}
       </div>
 
       {toast && (
@@ -828,62 +833,66 @@ export const OperationsProductProviderControl: React.FC = () => {
                 )}
 
                 <div className="flex flex-wrap gap-2">
-                  <ActionBtn disabled={busy} onClick={() => void runSync(card)}>
-                    Sync Now
-                  </ActionBtn>
-                  <ActionBtn
-                    disabled={busy}
-                    onClick={() =>
-                      void runAction(
-                        card.id,
-                        () => operationsService.healthCheckProductProvider(card.id),
-                        'Health check done'
-                      )
-                    }
-                  >
-                    Health Check
-                  </ActionBtn>
-                  {card.enabled ? (
-                    <ActionBtn
-                      disabled={busy}
-                      tone="warn"
-                      onClick={() =>
-                        void runAction(
-                          card.id,
-                          () => operationsService.disableProductProvider(card.id),
-                          'Provider OFF — products hidden'
-                        )
-                      }
-                    >
-                      <PowerOff className="w-3.5 h-3.5" /> Turn OFF
-                    </ActionBtn>
-                  ) : (
-                    <ActionBtn
-                      disabled={busy}
-                      tone="ok"
-                      onClick={() =>
-                        void runAction(
-                          card.id,
-                          () => operationsService.enableProductProvider(card.id),
-                          'Provider ON — products visible'
-                        )
-                      }
-                    >
-                      <Power className="w-3.5 h-3.5" /> Turn ON
-                    </ActionBtn>
+                  {!isOwnerReadOnly && (
+                    <>
+                      <ActionBtn disabled={busy} onClick={() => void runSync(card)}>
+                        Sync Now
+                      </ActionBtn>
+                      <ActionBtn
+                        disabled={busy}
+                        onClick={() =>
+                          void runAction(
+                            card.id,
+                            () => operationsService.healthCheckProductProvider(card.id),
+                            'Health check done'
+                          )
+                        }
+                      >
+                        Health Check
+                      </ActionBtn>
+                      {card.enabled ? (
+                        <ActionBtn
+                          disabled={busy}
+                          tone="warn"
+                          onClick={() =>
+                            void runAction(
+                              card.id,
+                              () => operationsService.disableProductProvider(card.id),
+                              'Provider OFF — products hidden'
+                            )
+                          }
+                        >
+                          <PowerOff className="w-3.5 h-3.5" /> Turn OFF
+                        </ActionBtn>
+                      ) : (
+                        <ActionBtn
+                          disabled={busy}
+                          tone="ok"
+                          onClick={() =>
+                            void runAction(
+                              card.id,
+                              () => operationsService.enableProductProvider(card.id),
+                              'Provider ON — products visible'
+                            )
+                          }
+                        >
+                          <Power className="w-3.5 h-3.5" /> Turn ON
+                        </ActionBtn>
+                      )}
+                      <ActionBtn
+                        disabled={busy || card.isPrimary}
+                        onClick={() =>
+                          void runAction(
+                            card.id,
+                            () => operationsService.setPrimaryProductProvider(card.id),
+                            'Set as primary'
+                          )
+                        }
+                      >
+                        <Star className="w-3.5 h-3.5" /> Set Primary
+                      </ActionBtn>
+                    </>
                   )}
-                  <ActionBtn
-                    disabled={busy || card.isPrimary}
-                    onClick={() =>
-                      void runAction(
-                        card.id,
-                        () => operationsService.setPrimaryProductProvider(card.id),
-                        'Set as primary'
-                      )
-                    }
-                  >
-                    <Star className="w-3.5 h-3.5" /> Set Primary
-                  </ActionBtn>
                   <ActionBtn disabled={busy} onClick={() => void openLogs(card)}>
                     Activity Log
                   </ActionBtn>

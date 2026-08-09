@@ -35,6 +35,8 @@ class Transaction extends Model
         'refunded_at',
         'refund_reference',
         'completed_at',
+        'idempotency_key',
+        'provider_dispatch_started_at',
     ];
 
     protected $casts = [
@@ -47,6 +49,7 @@ class Transaction extends Model
         'provider_transaction_time' => 'datetime',
         'refunded_at' => 'datetime',
         'completed_at' => 'datetime',
+        'provider_dispatch_started_at' => 'datetime',
     ];
 
     /**

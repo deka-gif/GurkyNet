@@ -7,8 +7,11 @@ import { CmsPageHeader, CmsSaveButton } from '../../components/common/CmsCommon'
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { resolveMediaSrc } from '../../utils/mediaUrl';
 import { notifyCmsLocalSync } from '../../lib/cmsSync';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const MarketingWebsiteSettings: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,41 +246,45 @@ export const MarketingWebsiteSettings: React.FC = () => {
                         {formState.logoMedia?.filename || 'Logo Terang'}
                       </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => openMediaChooser('logo')}
-                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600 transition"
-                        title="Ganti Logo"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormState((prev) => ({
-                            ...prev,
-                            logo: '',
-                            logoMediaId: undefined,
-                            logoMedia: undefined,
-                          }));
-                        }}
-                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition"
-                        title="Hapus Logo"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {!isOwnerReadOnly && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openMediaChooser('logo')}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600 transition"
+                          title="Ganti Logo"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormState((prev) => ({
+                              ...prev,
+                              logo: '',
+                              logoMediaId: undefined,
+                              logoMedia: undefined,
+                            }));
+                          }}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition"
+                          title="Hapus Logo"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => openMediaChooser('logo')}
-                    className="w-full h-[68px] border-2 border-dashed border-gray-200 hover:border-primary-500 hover:bg-primary-50/10 rounded-2xl flex flex-col items-center justify-center gap-1 transition group text-gray-500 hover:text-primary-600 cursor-pointer"
-                  >
-                    <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition" />
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Pilih Logo</span>
-                  </button>
+                  !isOwnerReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => openMediaChooser('logo')}
+                      className="w-full h-[68px] border-2 border-dashed border-gray-200 hover:border-primary-500 hover:bg-primary-50/10 rounded-2xl flex flex-col items-center justify-center gap-1 transition group text-gray-500 hover:text-primary-600 cursor-pointer"
+                    >
+                      <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition" />
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Pilih Logo</span>
+                    </button>
+                  )
                 )}
               </div>
 
@@ -297,41 +304,45 @@ export const MarketingWebsiteSettings: React.FC = () => {
                         {formState.logoDarkMedia?.filename || 'Logo Gelap'}
                       </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => openMediaChooser('logoDark')}
-                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600 transition"
-                        title="Ganti Logo Gelap"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormState((prev) => ({
-                            ...prev,
-                            logoDark: '',
-                            logoDarkMediaId: undefined,
-                            logoDarkMedia: undefined,
-                          }));
-                        }}
-                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition"
-                        title="Hapus Logo Gelap"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {!isOwnerReadOnly && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openMediaChooser('logoDark')}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600 transition"
+                          title="Ganti Logo Gelap"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormState((prev) => ({
+                              ...prev,
+                              logoDark: '',
+                              logoDarkMediaId: undefined,
+                              logoDarkMedia: undefined,
+                            }));
+                          }}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition"
+                          title="Hapus Logo Gelap"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => openMediaChooser('logoDark')}
-                    className="w-full h-[68px] border-2 border-dashed border-gray-200 hover:border-primary-500 hover:bg-primary-50/10 rounded-2xl flex flex-col items-center justify-center gap-1 transition group text-gray-500 hover:text-primary-600 cursor-pointer"
-                  >
-                    <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition" />
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Pilih Logo Gelap</span>
-                  </button>
+                  !isOwnerReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => openMediaChooser('logoDark')}
+                      className="w-full h-[68px] border-2 border-dashed border-gray-200 hover:border-primary-500 hover:bg-primary-50/10 rounded-2xl flex flex-col items-center justify-center gap-1 transition group text-gray-500 hover:text-primary-600 cursor-pointer"
+                    >
+                      <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition" />
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Pilih Logo Gelap</span>
+                    </button>
+                  )
                 )}
               </div>
 
@@ -351,41 +362,45 @@ export const MarketingWebsiteSettings: React.FC = () => {
                         {formState.faviconMedia?.filename || 'Favicon'}
                       </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => openMediaChooser('favicon')}
-                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600 transition"
-                        title="Ganti Favicon"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormState((prev) => ({
-                            ...prev,
-                            favicon: '',
-                            faviconMediaId: undefined,
-                            faviconMedia: undefined,
-                          }));
-                        }}
-                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition"
-                        title="Hapus Favicon"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {!isOwnerReadOnly && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openMediaChooser('favicon')}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600 transition"
+                          title="Ganti Favicon"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormState((prev) => ({
+                              ...prev,
+                              favicon: '',
+                              faviconMediaId: undefined,
+                              faviconMedia: undefined,
+                            }));
+                          }}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition"
+                          title="Hapus Favicon"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => openMediaChooser('favicon')}
-                    className="w-full h-[68px] border-2 border-dashed border-gray-200 hover:border-primary-500 hover:bg-primary-50/10 rounded-2xl flex flex-col items-center justify-center gap-1 transition group text-gray-500 hover:text-primary-600 cursor-pointer"
-                  >
-                    <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition" />
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Pilih Favicon</span>
-                  </button>
+                  !isOwnerReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => openMediaChooser('favicon')}
+                      className="w-full h-[68px] border-2 border-dashed border-gray-200 hover:border-primary-500 hover:bg-primary-50/10 rounded-2xl flex flex-col items-center justify-center gap-1 transition group text-gray-500 hover:text-primary-600 cursor-pointer"
+                    >
+                      <ImageIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition" />
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Pilih Favicon</span>
+                    </button>
+                  )
                 )}
               </div>
             </div>
@@ -551,15 +566,17 @@ export const MarketingWebsiteSettings: React.FC = () => {
                   <ShieldAlert className="w-4 h-4 text-amber-600" />
                   <span>Maintenance Mode</span>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formState.maintenanceMode || false}
-                    onChange={(e) => handleChange('maintenanceMode', e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-                </label>
+                {!isOwnerReadOnly && (
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formState.maintenanceMode || false}
+                      onChange={(e) => handleChange('maintenanceMode', e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                )}
               </div>
               <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
                 Aktifkan mode pemeliharaan untuk memblokir akses publik ke website dan menampilkan halaman maintenance.
@@ -613,7 +630,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-wider">Aksi Konfigurasi</h3>
             <div className="flex flex-col gap-2">
-              <CmsSaveButton label="Simpan Perubahan" isLoading={saving} />
+              {!isOwnerReadOnly && <CmsSaveButton label="Simpan Perubahan" isLoading={saving} />}
               <button
                 type="button"
                 onClick={handleReset}

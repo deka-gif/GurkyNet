@@ -36,8 +36,25 @@ class CancelTransactionAction
                 ]);
             }
 
-            // Refund balance if status was pending or processing (implying wallet balance was deducted)
-            if (in_array($lockedTransaction->status, [TransactionStatus::PENDING->value, 'processing'])) {
+            // Sprint 3 (SRS 15.3 / locked decision #3) — UNSAFE CANCEL guard.
+            // Once the transaction is `processing`, or a provider dispatch has already been
+            // claimed (provider_dispatch_started_at set — see ProductProviderFulfillmentService),
+            // the order may already be in flight at the supplier. Cancelling + refunding here
+            // would risk "user cancel + provider fulfillment = double loss". Reject instead and
+            // let the existing reconciliation/timeout/provider-status flow resolve the outcome.
+            $unsafeToCancel = $lockedTransaction->status === TransactionStatus::PROCESSING->value
+                || $lockedTransaction->provider_dispatch_started_at !== null;
+
+            if ($unsafeToCancel) {
+                throw ValidationException::withMessages([
+                    'transaction' => ['Transaksi sudah dikirim ke penyedia layanan dan tidak dapat dibatalkan langsung. Sistem akan menyelesaikan status transaksi secara otomatis.'],
+                ]);
+            }
+
+            // SAFE CANCEL: status PENDING and no provider dispatch claimed yet — wallet was
+            // debited but nothing has been sent to a supplier, so refund is always safe here.
+            // (PROCESSING is already rejected by the unsafe-cancel guard above.)
+            if ($lockedTransaction->status === TransactionStatus::PENDING->value) {
                 $wallet = Wallet::where('user_id', $lockedTransaction->user_id)->lockForUpdate()->first();
                 if ($wallet) {
                     $wallet->balance += $lockedTransaction->total_payment;

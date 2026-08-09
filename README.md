@@ -1,20 +1,45 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# GurkyNet — Sistem PPOB
 
-# Run and deploy your AI Studio app
+Monorepo resmi untuk Website/Dashboard Admin (React + Vite) dan API (Laravel 12).
 
-This contains everything you need to run your app locally.
+**Sumber kebenaran:** SRS Sistem PPOB GurkyNet v2.2 + aturan di [`.cursorrules`](.cursorrules).
 
-View your app in AI Studio: https://ai.studio/apps/54d0be0d-b941-4d04-9c21-2889d3072cbb
+## Stack final (Sprint 0)
 
-## Run Locally
+| Lapisan | Teknologi |
+|---|---|
+| Website + Dashboard Admin | React 19, Vite, TypeScript (`src/`) |
+| Mobile | Placeholder `apps/mobile/` (stack belum dipilih) |
+| API / Application Server | Laravel 12, PHP 8.2+, Sanctum (`laravel/`) |
+| Database | MySQL |
+| Cache / Queue | Database driver |
+| Storage | Disk lokal (`public`) |
 
-**Prerequisites:**  Node.js
+Keputusan lengkap: [`docs/SPRINT0_DECISIONS.md`](docs/SPRINT0_DECISIONS.md)  
+Peta folder ↔ SRS 3.2: [`docs/STRUCTURE.md`](docs/STRUCTURE.md)
 
+## Menjalankan lokal
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Backend
+
+```bash
+cd laravel
+cp .env.example .env
+composer install
+php artisan key:generate
+php artisan serve
+```
+
+### Frontend
+
+```bash
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Set `VITE_API_BASE_URL` di root `.env` ke URL API Laravel (default contoh: `http://127.0.0.1:8000/api/v1`).
+
+## Catatan Sprint 0
+
+Sprint ini hanya menetapkan aturan tetap, struktur folder, dan env fondasi. Tidak menambah tabel, migration, endpoint, UI, auth baru, atau integrasi provider.

@@ -48,6 +48,21 @@ class ProductProviderFulfillmentService
             return;
         }
 
+        // Sprint 3 (SRS 15.3 / locked decision #2) — atomic local claim. If a prior attempt
+        // already claimed this transaction (retry after an ambiguous exception/timeout, or
+        // ShouldBeUnique somehow overlapped), never blindly call the provider again — go
+        // through the three-outcome retry guard instead (checkStatus first, never blind resend).
+        $claimed = Transaction::where('id', $transaction->id)
+            ->whereIn('status', [TransactionStatus::PENDING->value, TransactionStatus::PROCESSING->value])
+            ->whereNull('provider_dispatch_started_at')
+            ->update(['provider_dispatch_started_at' => now()]);
+
+        if ($claimed === 0) {
+            $this->handleDispatchRetry($transaction->fresh(['items']) ?? $transaction);
+
+            return;
+        }
+
         $transaction->loadMissing('items');
         $firstItem = $transaction->items->first();
         $internalSku = $firstItem?->product_code ?? '';
@@ -176,6 +191,16 @@ class ProductProviderFulfillmentService
                     'internal_sku' => $internalSku,
                 ]
             );
+
+            // Sprint 3 — record intent BEFORE calling the adapter (not only after a confirmed
+            // response). If this exact call throws/times out ambiguously, a retry-guard
+            // invocation (handleDispatchRetry) needs this context to call checkStatus() on
+            // the right provider/sku/ref instead of blindly resending.
+            $transaction->forceFill([
+                'fulfillment_provider_code' => $provider->code,
+                'provider_sku_used' => $fulfillSku,
+                'provider_ref' => $transaction->provider_ref ?: $providerRef,
+            ])->save();
 
             $result = $adapter->fulfill(
                 $transaction,
@@ -444,6 +469,116 @@ class ProductProviderFulfillmentService
         }
 
         return (string) $transaction->invoice_number;
+    }
+
+    /**
+     * Sprint 3 (SRS 15.3 / locked decision #2/#9) — three-outcome retry guard.
+     * Invoked only when a prior dispatch attempt already claimed this transaction
+     * (provider_dispatch_started_at set). Never calls fulfill()/buy() again; only
+     * checkStatus() may run, and only one of three outcomes may result:
+     *
+     *   A. CONFIRMED EXISTS  (ok=true, success|pending) — apply existing success/pending
+     *      handling, never resend.
+     *   B. CONFIRMED FAILED  (ok=false, status=failed, not a local/ambiguous guard reason)
+     *      — existing failAndRefund()/refundOnce() path, never dispatch again.
+     *   C. UNKNOWN / TIMEOUT / UNABLE TO DETERMINE — no resend, no refund, transaction
+     *      stays in-flight; existing TransactionTimeoutService / reconcile-pending resolves it.
+     */
+    protected function handleDispatchRetry(Transaction $transaction): void
+    {
+        if (!in_array($transaction->status, [
+            TransactionStatus::PENDING->value,
+            TransactionStatus::PROCESSING->value,
+        ], true)) {
+            return;
+        }
+
+        $code = $transaction->fulfillment_provider_code;
+        if (!$code || !$this->registry->has($code)) {
+            // Outcome C — the earlier attempt never got far enough to record which provider
+            // it targeted (e.g. crashed before the adapter call context could be persisted).
+            // Nothing safe to check; defer entirely to existing reconciliation.
+            Log::warning('PRODUCT ROUTING — dispatch retry: no known provider context, deferring to reconciliation', [
+                'transaction_id' => $transaction->id,
+            ]);
+
+            return;
+        }
+
+        $provider = ProductProvider::query()->where('code', $code)->first();
+        $sku = $transaction->provider_sku_used ?: $transaction->items->first()?->product_code;
+        $refId = (string) ($transaction->provider_ref ?: $transaction->invoice_number);
+
+        if (!$provider || !$sku) {
+            Log::warning('PRODUCT ROUTING — dispatch retry: insufficient context, deferring to reconciliation', [
+                'transaction_id' => $transaction->id,
+                'provider_code' => $code,
+            ]);
+
+            return;
+        }
+
+        $adapter = $this->registry->get($code);
+
+        Log::info('PRODUCT ROUTING — dispatch retry: checkStatus before any possible resend', [
+            'transaction_id' => $transaction->id,
+            'provider_code' => $code,
+            'provider_sku' => $sku,
+            'ref_id' => $refId,
+        ]);
+
+        $result = $adapter->checkStatus($transaction, (string) $sku, (string) $transaction->target_number, $refId);
+
+        ProductProviderLog::create([
+            'product_provider_id' => $provider->id,
+            'transaction_id' => $transaction->id,
+            'event_type' => 'dispatch_retry_check',
+            'selected_provider_code' => $code,
+            'reason' => $result->reason ?? $result->status,
+            'response_time_ms' => $result->responseTimeMs,
+            'success' => $result->ok,
+            'error_message' => $result->ok ? null : ($result->message ?? $result->reason),
+            'meta' => ['status' => $result->status],
+        ]);
+
+        // A. CONFIRMED EXISTS — order handle exists at the provider (resolved or still
+        // in flight). Never resend; use the same success/pending handling as the normal path.
+        if ($result->ok && $result->status === 'success') {
+            $this->markSuccess($transaction, $provider, $result);
+
+            return;
+        }
+
+        if ($result->ok && $result->status === 'pending') {
+            $this->markPending($transaction, $provider, $result);
+
+            return;
+        }
+
+        // B. CONFIRMED FAILED — an explicit, provider-confirmed rejection for this ref_id
+        // (not a local/ambiguous guard reason such as provider_not_configured or the
+        // Digiflazz prepaid status_check_window_expired guard). Safe to close out via the
+        // existing refund path; never dispatch again.
+        $ambiguousReasons = ['provider_not_configured', 'status_check_window_expired'];
+        if (!$result->ok && $result->status === 'failed' && !in_array($result->reason, $ambiguousReasons, true)) {
+            $this->failAndRefund(
+                $transaction,
+                'Transaksi gagal diproses. Saldo akan dikembalikan bila sudah dipotong.',
+                $result->reason ?? 'provider_rejected_on_retry_check'
+            );
+
+            return;
+        }
+
+        // C. UNKNOWN / TIMEOUT / UNABLE TO DETERMINE — status='error', or a local/ambiguous
+        // guard reason. Never resend, never refund here; leave in-flight for the existing
+        // TransactionTimeoutService ladder / transactions:reconcile-pending to resolve.
+        Log::warning('PRODUCT ROUTING — dispatch retry inconclusive, deferring to reconciliation', [
+            'transaction_id' => $transaction->id,
+            'provider_code' => $code,
+            'status' => $result->status,
+            'reason' => $result->reason,
+        ]);
     }
 
     protected function failAndRefund(Transaction $transaction, string $userMessage, string $reason): void

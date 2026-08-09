@@ -147,10 +147,17 @@ class HomepageBuilderTest extends TestCase
         $this->postJson('/api/v1/admin/website/homepage-builder/publish')->assertStatus(403);
     }
 
+    /**
+     * SRS Bagian 5 — Sprint 2 (Authentication & RBAC) keputusan #1: Owner
+     * READ-ONLY di modul Marketing (Homepage Builder termasuk domain
+     * "Banner & Konten Promosi"/website). Rollback adalah aksi tulis,
+     * sehingga aktor yang benar adalah Marketing (bukan Owner) — disesuaikan
+     * dari asumsi lama sebelum RBAC boundary dikunci.
+     */
     public function test_rollback_restores_previous_version(): void
     {
         $this->seedSection();
-        $this->actingAsRole(UserRole::OWNER);
+        $this->actingAsRole(UserRole::MARKETING);
 
         $state = $this->getJson('/api/v1/admin/website/homepage-builder')->json('data');
         $sections = $state['draft']['sections'];
@@ -168,6 +175,25 @@ class HomepageBuilderTest extends TestCase
         $this->postJson('/api/v1/admin/website/homepage-builder/rollback/'.$v1->id)->assertOk();
         $this->assertSame('Hero V1', HomepageSection::where('slug', 'hero-builder')->value('title'));
         $this->assertDatabaseHas('activity_logs', ['activity' => 'HOMEPAGE_BUILDER_ROLLBACK']);
+    }
+
+    /**
+     * SRS Bagian 5 — Sprint 2 (Authentication & RBAC) keputusan #1: Owner
+     * bersifat "Lihat" (read-only) pada modul Marketing. GET tetap boleh,
+     * aksi tulis (draft/publish/rollback) ditolak 403 oleh EnsureOwnerReadOnly.
+     */
+    public function test_owner_is_read_only_on_homepage_builder(): void
+    {
+        $this->seedSection();
+        $this->actingAsRole(UserRole::OWNER);
+
+        $this->getJson('/api/v1/admin/website/homepage-builder')->assertOk();
+
+        $this->putJson('/api/v1/admin/website/homepage-builder/draft', ['sections' => []])
+            ->assertStatus(403);
+
+        $this->postJson('/api/v1/admin/website/homepage-builder/publish', ['label' => 'blocked'])
+            ->assertStatus(403);
     }
 
     public function test_discard_resets_draft_to_published(): void

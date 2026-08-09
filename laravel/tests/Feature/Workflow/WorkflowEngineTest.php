@@ -234,11 +234,20 @@ class WorkflowEngineTest extends TestCase
         ])->assertStatus(403);
     }
 
-    public function test_owner_force_resolve_and_reassign(): void
+    /**
+     * Sprint 2 Revision — Finding 1 (Owner Read-Only Bypass).
+     * `reassign` adalah operasi workflow OPERASIONAL (bukan approval/
+     * override FR-OWN04), sehingga Owner sekarang wajib mendapat 403.
+     * Super Admin tidak terdampak (masih bisa reassign lintas divisi).
+     * `force-resolve` TETAP bisa dipakai Owner — itu mekanisme approval/
+     * override khusus Owner yang memang diizinkan SRS.
+     */
+    public function test_owner_force_resolve_but_cannot_reassign(): void
     {
         $cs = $this->makeUser(UserRole::CUSTOMER_SUPPORT, 'cs7');
         $ops = $this->makeUser(UserRole::OPERATIONS, 'ops7');
         $owner = $this->makeUser(UserRole::OWNER, 'own');
+        $superAdmin = $this->makeUser(UserRole::SUPER_ADMIN, 'sa7');
 
         Sanctum::actingAs($cs);
         $wfId = $this->postJson('/api/v1/admin/workflows', [
@@ -249,15 +258,62 @@ class WorkflowEngineTest extends TestCase
         Sanctum::actingAs($owner);
         $this->postJson("/api/v1/admin/workflows/{$wfId}/reassign", [
             'assignedTo' => $ops->id,
+        ])->assertStatus(403);
+
+        Sanctum::actingAs($superAdmin);
+        $this->postJson("/api/v1/admin/workflows/{$wfId}/reassign", [
+            'assignedTo' => $ops->id,
         ])->assertOk();
 
         $this->assertSame($ops->id, (int) Workflow::find($wfId)->assigned_to);
 
+        Sanctum::actingAs($owner);
         $this->postJson("/api/v1/admin/workflows/{$wfId}/force-resolve", [
             'note' => 'Admin closed',
         ])->assertOk();
 
         $this->assertSame('resolved', Workflow::find($wfId)->status);
+    }
+
+    /**
+     * Sprint 2 Revision — Finding 1 (Owner Read-Only Bypass).
+     * `action`, `close`, `escalate` (Workflow Engine) dan `update`
+     * (Escalation Queue legacy alias) adalah operasi operasional harian
+     * milik divisi Finance/Operations/Marketing/CS — Owner harus read-only.
+     * Role divisi pemilik (mis. Operations) tetap dapat menjalankannya.
+     */
+    public function test_owner_is_read_only_on_workflow_operational_actions(): void
+    {
+        $cs = $this->makeUser(UserRole::CUSTOMER_SUPPORT, 'cs9');
+        $ops = $this->makeUser(UserRole::OPERATIONS, 'ops9');
+        $owner = $this->makeUser(UserRole::OWNER, 'own9');
+
+        Sanctum::actingAs($cs);
+        $wfId = $this->postJson('/api/v1/admin/workflows', [
+            'title' => 'Owner read-only case',
+            'targetDivision' => 'operations',
+        ])->assertCreated()->json('data.id');
+
+        Sanctum::actingAs($owner);
+        $this->getJson("/api/v1/admin/workflows/{$wfId}")->assertOk();
+        $this->postJson("/api/v1/admin/workflows/{$wfId}/actions", [
+            'action' => 'retry',
+        ])->assertStatus(403);
+        $this->postJson("/api/v1/admin/workflows/{$wfId}/close", [])->assertStatus(403);
+        $this->postJson("/api/v1/admin/workflows/{$wfId}/escalate", [
+            'targetDivision' => 'finance',
+        ])->assertStatus(403);
+        $this->patchJson("/api/v1/admin/escalations/items/{$wfId}", [
+            'status' => 'closed',
+        ])->assertStatus(403);
+
+        // Role pemilik modul (Operations) tidak terdampak — tetap bisa
+        // menjalankan operasi normalnya.
+        Sanctum::actingAs($ops);
+        $this->postJson("/api/v1/admin/workflows/{$wfId}/actions", [
+            'action' => 'retry',
+            'note' => 'Masih ditangani Operations',
+        ])->assertOk();
     }
 
     public function test_sse_rejects_foreign_workflow_channel(): void

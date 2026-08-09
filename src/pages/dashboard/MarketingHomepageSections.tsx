@@ -10,6 +10,7 @@ import {
   CmsSaveButton,
 } from '../../components/common/CmsCommon';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 const COMPONENT_TYPE_OPTIONS = [
   { label: 'Semua Tipe', value: '' },
@@ -33,6 +34,8 @@ const COMPONENT_TYPE_OPTIONS = [
 ];
 
 export const MarketingHomepageSections: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [sections, setSections] = useState<HomepageSection[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -308,11 +311,15 @@ export const MarketingHomepageSections: React.FC = () => {
         title="Homepage Sections"
         subtitle="Atur tata letak, komponen utama, urutan baris, dan visibilitas di halaman depan website."
         icon={Layers}
-        action={{
-          label: 'Tambah Section',
-          onClick: handleOpenCreate,
-          icon: Plus,
-        }}
+        action={
+          !isOwnerReadOnly
+            ? {
+                label: 'Tambah Section',
+                onClick: handleOpenCreate,
+                icon: Plus,
+              }
+            : undefined
+        }
       />
 
       {error && (
@@ -414,34 +421,40 @@ export const MarketingHomepageSections: React.FC = () => {
                       <CmsStatusBadge status={item.status} />
                     </td>
                     <td className="py-4 px-4 text-center">
-                      <button
-                        onClick={() => toggleVisibility(item)}
-                        className={`inline-flex items-center transition-colors outline-none focus:outline-none`}
-                        title={item.visible ? 'Sembunyikan' : 'Tampilkan'}
-                      >
-                        {item.visible ? (
-                          <ToggleRight className="w-8 h-8 text-emerald-500" />
-                        ) : (
-                          <ToggleLeft className="w-8 h-8 text-gray-300" />
-                        )}
-                      </button>
+                      {!isOwnerReadOnly && (
+                        <button
+                          onClick={() => toggleVisibility(item)}
+                          className={`inline-flex items-center transition-colors outline-none focus:outline-none`}
+                          title={item.visible ? 'Sembunyikan' : 'Tampilkan'}
+                        >
+                          {item.visible ? (
+                            <ToggleRight className="w-8 h-8 text-emerald-500" />
+                          ) : (
+                            <ToggleLeft className="w-8 h-8 text-gray-300" />
+                          )}
+                        </button>
+                      )}
                     </td>
                     <td className="py-4 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-2 bg-gray-50 hover:bg-primary-50 text-gray-500 hover:text-primary-700 border border-gray-100 hover:border-primary-100 rounded-xl transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleOpenDelete(item)}
-                          className="p-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-700 border border-gray-100 hover:border-red-100 rounded-xl transition-colors"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!isOwnerReadOnly && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-2 bg-gray-50 hover:bg-primary-50 text-gray-500 hover:text-primary-700 border border-gray-100 hover:border-primary-100 rounded-xl transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleOpenDelete(item)}
+                              className="p-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-700 border border-gray-100 hover:border-red-100 rounded-xl transition-colors"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

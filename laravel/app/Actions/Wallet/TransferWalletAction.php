@@ -9,6 +9,7 @@ use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
 use App\Enums\WalletHistoryType;
 use App\Enums\TransactionStatus;
+use App\Services\Transactions\IdempotencyGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -17,17 +18,26 @@ class TransferWalletAction
 {
     protected WalletRepositoryInterface $walletRepository;
     protected WalletHistoryRepositoryInterface $historyRepository;
+    protected IdempotencyGuard $idempotencyGuard;
 
     public function __construct(
         WalletRepositoryInterface $walletRepository,
-        WalletHistoryRepositoryInterface $historyRepository
+        WalletHistoryRepositoryInterface $historyRepository,
+        IdempotencyGuard $idempotencyGuard
     ) {
         $this->walletRepository = $walletRepository;
         $this->historyRepository = $historyRepository;
+        $this->idempotencyGuard = $idempotencyGuard;
     }
 
-    public function execute(User $sender, string $recipientWalletNumber, float $amount, string $pin, float $fee = 0.00): Transaction
-    {
+    public function execute(
+        User $sender,
+        string $recipientWalletNumber,
+        float $amount,
+        string $pin,
+        float $fee = 0.00,
+        ?string $idempotencyKey = null
+    ): Transaction {
         // 1. PIN Validation (pre-checks before transaction to fail fast)
         if ($sender->transaction_pin === null) {
             throw ValidationException::withMessages([
@@ -60,8 +70,14 @@ class TransferWalletAction
             ]);
         }
 
+        // SRS 14.1 — replay check before any lock/debit (no side effect to unwind on a hit).
+        $existingTransfer = $idempotencyKey ? $this->idempotencyGuard->findActive($sender->id, $idempotencyKey) : null;
+        if ($existingTransfer) {
+            return $existingTransfer;
+        }
+
         // 3. DB Transaction with lockForUpdate in a deadlock-free order
-        return DB::transaction(function () use ($sender, $senderWallet, $recipientWallet, $amount, $fee) {
+        return DB::transaction(function () use ($sender, $senderWallet, $recipientWallet, $amount, $fee, $idempotencyKey) {
             // Sort wallet IDs to prevent deadlock / race condition
             $walletIds = [$senderWallet->id, $recipientWallet->id];
             sort($walletIds);
@@ -80,28 +96,44 @@ class TransferWalletAction
                 ]);
             }
 
+            $invoiceNumber = 'TRX-TF-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
+
+            // Idempotency claim FIRST (before touching either balance): if this insert
+            // loses a race or hits an expired key, neither wallet has been mutated yet.
+            $claim = $this->idempotencyGuard->claim(
+                $sender->id,
+                $idempotencyKey,
+                function () use ($sender, $invoiceNumber, $recipientWalletLocked, $amount, $fee, $totalDebit, $idempotencyKey) {
+                    return Transaction::create([
+                        'user_id' => $sender->id,
+                        'invoice_number' => $invoiceNumber,
+                        'service_name' => 'Transfer Saldo',
+                        'target_number' => $recipientWalletLocked->wallet_number,
+                        'amount' => $amount,
+                        'admin_fee' => $fee,
+                        'total_payment' => $totalDebit,
+                        'payment_method' => 'wallet',
+                        // Canonical write status (Sprint 3 §6) — legacy SUKSES kept only for
+                        // backward-compatible reads of historical rows, never written anew.
+                        'status' => TransactionStatus::SUCCESS->value,
+                        'notes' => 'Transfer ke ' . ($recipientWalletLocked->user->name ?? $recipientWalletLocked->wallet_number),
+                        'idempotency_key' => $idempotencyKey,
+                    ]);
+                }
+            );
+
+            if (!$claim['is_new']) {
+                return $claim['transaction'];
+            }
+
+            $transaction = $claim['transaction'];
+
             // Perform balance changes atomically
             $senderWalletLocked->balance -= $totalDebit;
             $senderWalletLocked->save();
 
             $recipientWalletLocked->balance += $amount;
             $recipientWalletLocked->save();
-
-            $invoiceNumber = 'TRX-TF-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
-
-            // Create general transaction record
-            $transaction = Transaction::create([
-                'user_id' => $sender->id,
-                'invoice_number' => $invoiceNumber,
-                'service_name' => 'Transfer Saldo',
-                'target_number' => $recipientWalletLocked->wallet_number,
-                'amount' => $amount,
-                'admin_fee' => $fee,
-                'total_payment' => $totalDebit,
-                'payment_method' => 'wallet',
-                'status' => TransactionStatus::SUKSES->value,
-                'notes' => 'Transfer ke ' . ($recipientWalletLocked->user->name ?? $recipientWalletLocked->wallet_number),
-            ]);
 
             // Create sender wallet history (Debit)
             $this->historyRepository->create([

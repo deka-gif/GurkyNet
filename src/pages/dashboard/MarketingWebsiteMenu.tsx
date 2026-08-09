@@ -10,6 +10,7 @@ import {
   CmsDeleteConfirmation,
   CmsSaveButton,
 } from '../../components/common/CmsCommon';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 // Helper to render dynamic Lucide icon by name
 const DynamicIcon: React.FC<{ name?: string; className?: string }> = ({ name, className = 'w-4 h-4' }) => {
@@ -24,6 +25,8 @@ const DynamicIcon: React.FC<{ name?: string; className?: string }> = ({ name, cl
 };
 
 export const MarketingWebsiteMenu: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [menus, setMenus] = useState<WebsiteMenu[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -248,34 +251,40 @@ export const MarketingWebsiteMenu: React.FC = () => {
             )}
           </td>
           <td className="py-3.5 px-4 text-center">
-            <button
-              onClick={() => toggleVisibility(item)}
-              className="inline-flex items-center outline-none focus:outline-none"
-              title={item.visible ? 'Sembunyikan' : 'Tampilkan'}
-            >
-              {item.visible ? (
-                <ToggleRight className="w-8 h-8 text-emerald-500" />
-              ) : (
-                <ToggleLeft className="w-8 h-8 text-gray-300" />
-              )}
-            </button>
+            {!isOwnerReadOnly && (
+              <button
+                onClick={() => toggleVisibility(item)}
+                className="inline-flex items-center outline-none focus:outline-none"
+                title={item.visible ? 'Sembunyikan' : 'Tampilkan'}
+              >
+                {item.visible ? (
+                  <ToggleRight className="w-8 h-8 text-emerald-500" />
+                ) : (
+                  <ToggleLeft className="w-8 h-8 text-gray-300" />
+                )}
+              </button>
+            )}
           </td>
           <td className="py-3.5 px-4 text-right">
             <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => handleOpenEdit(item)}
-                className="p-2 bg-gray-50 hover:bg-primary-50 text-gray-500 hover:text-primary-700 border border-gray-100 hover:border-primary-100 rounded-xl transition-colors"
-                title="Edit"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleOpenDelete(item)}
-                className="p-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-700 border border-gray-100 hover:border-red-100 rounded-xl transition-colors"
-                title="Hapus"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {!isOwnerReadOnly && (
+                <>
+                  <button
+                    onClick={() => handleOpenEdit(item)}
+                    className="p-2 bg-gray-50 hover:bg-primary-50 text-gray-500 hover:text-primary-700 border border-gray-100 hover:border-primary-100 rounded-xl transition-colors"
+                    title="Edit"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleOpenDelete(item)}
+                    className="p-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-700 border border-gray-100 hover:border-red-100 rounded-xl transition-colors"
+                    title="Hapus"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
           </td>
         </tr>
@@ -304,11 +313,15 @@ export const MarketingWebsiteMenu: React.FC = () => {
         title="Website Menu"
         subtitle="Kelola link navigasi utama, hierarki submenu, urutan, ikon, serta sasaran target halaman portal."
         icon={Menu}
-        action={{
-          label: 'Tambah Menu',
-          onClick: handleOpenCreate,
-          icon: Plus,
-        }}
+        action={
+          !isOwnerReadOnly
+            ? {
+                label: 'Tambah Menu',
+                onClick: handleOpenCreate,
+                icon: Plus,
+              }
+            : undefined
+        }
       />
 
       {error && (

@@ -21,6 +21,7 @@ import {
 import { websiteService } from '../../services';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { CmsPageHeader, CmsSaveButton } from '../../components/common/CmsCommon';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 import type { Media } from '../../types';
 
 type BuilderSection = {
@@ -82,6 +83,8 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export const MarketingHomepageBuilder: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -332,33 +335,39 @@ export const MarketingHomepageBuilder: React.FC = () => {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={!permissions.canDraft || saving}
-          onClick={() => void persistDraft(ordered)}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <Save className="w-4 h-4" />
-          Save Draft
-        </button>
-        <button
-          type="button"
-          disabled={!permissions.canPublish || publishing}
-          onClick={() => void publish()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
-        >
-          {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-          Publish
-        </button>
-        <button
-          type="button"
-          disabled={!permissions.canDraft || saving}
-          onClick={() => void discard()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <Trash2 className="w-4 h-4" />
-          Discard
-        </button>
+        {!isOwnerReadOnly && (
+          <button
+            type="button"
+            disabled={!permissions.canDraft || saving}
+            onClick={() => void persistDraft(ordered)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            Save Draft
+          </button>
+        )}
+        {!isOwnerReadOnly && (
+          <button
+            type="button"
+            disabled={!permissions.canPublish || publishing}
+            onClick={() => void publish()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
+          >
+            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Publish
+          </button>
+        )}
+        {!isOwnerReadOnly && (
+          <button
+            type="button"
+            disabled={!permissions.canDraft || saving}
+            onClick={() => void discard()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+            Discard
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void openPreview()}
@@ -397,15 +406,15 @@ export const MarketingHomepageBuilder: React.FC = () => {
           {ordered.map((sec, index) => (
             <li
               key={sec.tempKey}
-              draggable={permissions.canDraft}
+              draggable={permissions.canDraft && !isOwnerReadOnly}
               onDragStart={() => onDragStart(index)}
               onDragOver={(e) => onDragOver(e, index)}
               onDragEnd={() => void onDragEnd()}
               className={`flex items-center gap-3 px-4 py-3 ${dragIndex === index ? 'bg-indigo-50' : 'bg-white'} ${
-                permissions.canDraft ? 'cursor-grab active:cursor-grabbing' : ''
+                permissions.canDraft && !isOwnerReadOnly ? 'cursor-grab active:cursor-grabbing' : ''
               }`}
             >
-              <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+              {!isOwnerReadOnly && <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-extrabold text-slate-900 truncate">{sec.title}</p>
@@ -417,27 +426,31 @@ export const MarketingHomepageBuilder: React.FC = () => {
                   Order {sec.displayOrder} · {sec.slug}
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={!permissions.canDraft}
-                onClick={() => void toggleEnabled(sec)}
-                className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${
-                  sec.enabled
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : 'bg-slate-50 text-slate-500 border-slate-200'
-                }`}
-              >
-                {sec.enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                {sec.enabled ? 'ON' : 'OFF'}
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(sec)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  type="button"
+                  disabled={!permissions.canDraft}
+                  onClick={() => void toggleEnabled(sec)}
+                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${
+                    sec.enabled
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-slate-50 text-slate-500 border-slate-200'
+                  }`}
+                >
+                  {sec.enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  {sec.enabled ? 'ON' : 'OFF'}
+                </button>
+              )}
+              {!isOwnerReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => openEdit(sec)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </button>
+              )}
             </li>
           ))}
           {ordered.length === 0 && (
@@ -609,7 +622,7 @@ export const MarketingHomepageBuilder: React.FC = () => {
               <button type="button" onClick={() => setEditOpen(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600">
                 Batal
               </button>
-              {permissions.canDraft && (
+              {permissions.canDraft && !isOwnerReadOnly && (
                 <CmsSaveButton
                   type="button"
                   isLoading={saving}
@@ -694,7 +707,7 @@ export const MarketingHomepageBuilder: React.FC = () => {
                       {v.publishedAt ? new Date(v.publishedAt).toLocaleString('id-ID') : '—'}
                     </p>
                   </div>
-                  {permissions.canPublish && (
+                  {permissions.canPublish && !isOwnerReadOnly && (
                     <button
                       type="button"
                       onClick={() => void rollback(v.id)}

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 import { useCustomerSupportStore } from '../../store/customerSupport.store';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 interface TimelineItem {
   id: string;
@@ -30,6 +31,8 @@ interface TimelineItem {
 }
 
 export const CustomerSupportTicketDetail: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Customer Support.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -251,20 +254,22 @@ export const CustomerSupportTicketDetail: React.FC = () => {
             <h1 className="text-xl font-bold text-gray-900 mt-2">{issue.subject}</h1>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAssignModal(true)}
-              className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-medium transition"
-            >
-              Assign Staff
-            </button>
-            <button
-              onClick={() => setShowStatusModal(true)}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition shadow-xs"
-            >
-              Ubah Status
-            </button>
-          </div>
+          {!isOwnerReadOnly && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAssignModal(true)}
+                className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-medium transition"
+              >
+                Assign Staff
+              </button>
+              <button
+                onClick={() => setShowStatusModal(true)}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition shadow-xs"
+              >
+                Ubah Status
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Header Metadata Ribbon */}
@@ -392,50 +397,52 @@ export const CustomerSupportTicketDetail: React.FC = () => {
           </div>
 
           {/* ACTION PANEL */}
-          <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Action Panel</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-              <button
-                onClick={() => setShowAssignModal(true)}
-                className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-indigo-50 text-indigo-700 border border-gray-200 hover:border-indigo-200 rounded-xl text-xs font-semibold transition"
-              >
-                <UserCheck className="w-4 h-4" />
-                <span>Assign Staff</span>
-              </button>
+          {!isOwnerReadOnly && (
+            <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-3">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Action Panel</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <button
+                  onClick={() => setShowAssignModal(true)}
+                  className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-indigo-50 text-indigo-700 border border-gray-200 hover:border-indigo-200 rounded-xl text-xs font-semibold transition"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Assign Staff</span>
+                </button>
 
-              <button
-                onClick={() => setShowStatusModal(true)}
-                className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-blue-50 text-blue-700 border border-gray-200 hover:border-blue-200 rounded-xl text-xs font-semibold transition"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Change Status</span>
-              </button>
+                <button
+                  onClick={() => setShowStatusModal(true)}
+                  className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-blue-50 text-blue-700 border border-gray-200 hover:border-blue-200 rounded-xl text-xs font-semibold transition"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Change Status</span>
+                </button>
 
-              <button
-                onClick={() => setShowNoteModal(true)}
-                className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-amber-50 text-amber-700 border border-gray-200 hover:border-amber-200 rounded-xl text-xs font-semibold transition"
-              >
-                <MessageSquarePlus className="w-4 h-4" />
-                <span>Add Note</span>
-              </button>
+                <button
+                  onClick={() => setShowNoteModal(true)}
+                  className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-amber-50 text-amber-700 border border-gray-200 hover:border-amber-200 rounded-xl text-xs font-semibold transition"
+                >
+                  <MessageSquarePlus className="w-4 h-4" />
+                  <span>Add Note</span>
+                </button>
 
-              <button
-                onClick={handleMarkAsResolved}
-                className="flex items-center justify-center gap-1.5 p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition shadow-xs"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Resolved</span>
-              </button>
+                <button
+                  onClick={handleMarkAsResolved}
+                  className="flex items-center justify-center gap-1.5 p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition shadow-xs"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Resolved</span>
+                </button>
 
-              <button
-                onClick={handleCloseTicket}
-                className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 p-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-xs font-semibold transition shadow-xs"
-              >
-                <XCircle className="w-4 h-4" />
-                <span>Close Ticket</span>
-              </button>
+                <button
+                  onClick={handleCloseTicket}
+                  className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 p-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-xs font-semibold transition shadow-xs"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Close Ticket</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* TIMELINE SECTION */}
           <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-4">

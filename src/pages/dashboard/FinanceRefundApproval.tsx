@@ -16,8 +16,11 @@ import {
 } from 'lucide-react';
 import { useFinanceStore } from '../../store/finance.store';
 import { DataTableCard, StatCard, EmptyState, StatusBadge } from '../../components/common';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const FinanceRefundApproval: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Finance.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     refunds,
     refundsPagination,
@@ -575,35 +578,45 @@ export const FinanceRefundApproval: React.FC = () => {
             {/* ACTION BUTTONS FOOTER */}
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
               <div className="flex flex-wrap items-center gap-2">
-                {/* Approve Refund */}
-                <button
-                  disabled={submittingAction}
-                  onClick={() => handleDecisionSubmit('Approved')}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Approve Refund</span>
-                </button>
+                {/* Sprint 2 Revision — Frontend Alignment: Owner read-only (Lihat),
+                    tombol write disembunyikan sesuai SRS 13.1. */}
+                {isOwnerReadOnly ? (
+                  <span className="text-[11px] font-bold text-gray-400 italic">
+                    Mode lihat-saja (Owner) — keputusan refund ditangani divisi Finance.
+                  </span>
+                ) : (
+                  <>
+                    {/* Approve Refund */}
+                    <button
+                      disabled={submittingAction}
+                      onClick={() => handleDecisionSubmit('Approved')}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Approve Refund</span>
+                    </button>
 
-                {/* Reject Refund */}
-                <button
-                  disabled={submittingAction}
-                  onClick={() => handleDecisionSubmit('Rejected')}
-                  className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-red-600/20 transition flex items-center gap-1.5"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>Reject Refund</span>
-                </button>
+                    {/* Reject Refund */}
+                    <button
+                      disabled={submittingAction}
+                      onClick={() => handleDecisionSubmit('Rejected')}
+                      className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-red-600/20 transition flex items-center gap-1.5"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Reject Refund</span>
+                    </button>
 
-                {/* Request More Information */}
-                <button
-                  disabled={submittingAction}
-                  onClick={() => handleDecisionSubmit('Need More Information')}
-                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition flex items-center gap-1.5"
-                >
-                  <HelpCircle className="w-4 h-4" />
-                  <span>Request Info</span>
-                </button>
+                    {/* Request More Information */}
+                    <button
+                      disabled={submittingAction}
+                      onClick={() => handleDecisionSubmit('Need More Information')}
+                      className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition flex items-center gap-1.5"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      <span>Request Info</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               <button

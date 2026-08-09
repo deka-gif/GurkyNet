@@ -6,6 +6,10 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 
+/**
+ * Dipindahkan dari root database/seeders/ pada Sprint 0 (keputusan #13).
+ * Seeder demo development — bukan data produksi.
+ */
 class DemoUserSeeder extends Seeder
 {
     /**

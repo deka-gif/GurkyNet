@@ -12,15 +12,21 @@ interface WalletState {
   fetchWallet: () => Promise<void>;
   fetchHistory: (params?: Record<string, any>) => Promise<void>;
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
-  topUp: (amount: number, paymentMethod: string) => Promise<any | null>;
+  topUp: (amount: number, paymentMethod: string, idempotencyKey?: string) => Promise<any | null>;
   lastTopUpError: { code?: string; message: string } | null;
-  transfer: (recipient_wallet_number: string, amount: number, pin: string) => Promise<any | null>;
+  transfer: (
+    recipient_wallet_number: string,
+    amount: number,
+    pin: string,
+    idempotencyKey?: string
+  ) => Promise<any | null>;
   withdraw: (payload: {
     amount: number;
     pin: string;
     bank_name: string;
     account_number: string;
     admin_fee?: number;
+    idempotencyKey?: string;
   }) => Promise<any | null>;
   addBalance: (amount: number) => Promise<boolean>;
   deductBalance: (amount: number) => Promise<boolean>;
@@ -162,10 +168,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  topUp: async (amount, paymentMethod) => {
+  topUp: async (amount, paymentMethod, idempotencyKey) => {
     set({ loading: true, error: null, lastTopUpError: null });
     try {
-      const response = await walletService.topUp(amount, paymentMethod);
+      const response = await walletService.topUp(amount, paymentMethod, idempotencyKey);
       if (response.success && response.data) {
         set({ loading: false });
         return response.data;
@@ -187,10 +193,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  transfer: async (recipient_wallet_number, amount, pin) => {
+  transfer: async (recipient_wallet_number, amount, pin, idempotencyKey) => {
     set({ loading: true, error: null });
     try {
-      const response = await walletService.transfer(recipient_wallet_number, amount, pin);
+      const response = await walletService.transfer(recipient_wallet_number, amount, pin, idempotencyKey);
       if (response.success && response.data) {
         set({ loading: false });
         await get().fetchWallet();
@@ -205,10 +211,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  withdraw: async (payload) => {
+  withdraw: async ({ idempotencyKey, ...payload }) => {
     set({ loading: true, error: null });
     try {
-      const response = await walletService.withdraw(payload);
+      const response = await walletService.withdraw({ ...payload, idempotency_key: idempotencyKey });
       if (response.success && response.data) {
         set({ loading: false });
         await get().fetchWallet();

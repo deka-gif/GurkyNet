@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useOperationsStore } from '../../store/operations.store';
 import { Link } from 'react-router-dom';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 function resolvePartnerStatus(item: any): string {
   const raw = item?.status || item?.partnerStatus || item?.partner_status || 'Online';
@@ -31,6 +32,8 @@ function resolvePartnerStatus(item: any): string {
 }
 
 export const OperationsProviderManagement: React.FC = () => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Operations.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     providers,
     providersPagination,
@@ -185,14 +188,16 @@ export const OperationsProviderManagement: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={() => void handleRefreshStatus()}
-            disabled={providersLoading || refreshing}
-            className="px-4 py-2.5 bg-white text-slate-900 rounded-2xl font-extrabold text-xs shadow-md hover:bg-slate-100 transition flex items-center gap-2 disabled:opacity-50 shrink-0"
-          >
-            <RefreshCw className={`w-4 h-4 text-blue-600 ${refreshing || providersLoading ? 'animate-spin' : ''}`} />
-            <span>{refreshing ? 'Memeriksa...' : 'Refresh Status'}</span>
-          </button>
+          {!isOwnerReadOnly && (
+            <button
+              onClick={() => void handleRefreshStatus()}
+              disabled={providersLoading || refreshing}
+              className="px-4 py-2.5 bg-white text-slate-900 rounded-2xl font-extrabold text-xs shadow-md hover:bg-slate-100 transition flex items-center gap-2 disabled:opacity-50 shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 text-blue-600 ${refreshing || providersLoading ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Memeriksa...' : 'Refresh Status'}</span>
+            </button>
+          )}
         </div>
       </div>
 

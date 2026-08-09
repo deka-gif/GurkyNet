@@ -25,6 +25,7 @@ import { useAuth } from '../hooks/useAuth';
 import { buildCreatePinUrl, savePendingCheckout } from '../utils/pinGate';
 import { isFailedStatus, isSuccessStatus } from '../utils/transactionStatus';
 import { formatIDR } from '../utils/currency';
+import { getOrCreateIdempotencyKey } from '../utils/idempotency';
 import { extractPlnToken, formatPlnTokenGrouped } from '../utils/plnToken';
 
 // Dynamic transaction properties
@@ -74,6 +75,9 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const pinInputRef = useRef<HTMLInputElement>(null);
   const submittingRef = useRef(false);
   const statusPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // SRS 14.1 — one idempotency key per checkout attempt (this modal instance); reused
+  // across PIN retries so a network retry or resubmission never creates a second purchase.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchUser();
@@ -196,6 +200,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
       sku_code: data.skuCode,
       target_number: data.targetNo,
       pin: completedPin,
+      idempotency_key: getOrCreateIdempotencyKey(idempotencyKeyRef),
     };
     if (data.inquiryRefId) {
       requestPayload.inquiry_ref_id = data.inquiryRefId;
@@ -238,6 +243,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
       }
       fetchWallet();
       submittingRef.current = false;
+      idempotencyKeyRef.current = null;
       return;
     }
 

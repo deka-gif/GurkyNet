@@ -104,9 +104,16 @@ class LegalCenterTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_owner_can_rollback(): void
+    /**
+     * SRS Bagian 5 — Sprint 2 (Authentication & RBAC) keputusan #1: Owner
+     * READ-ONLY di modul Marketing (Legal Center termasuk domain "Banner &
+     * Konten Promosi"/website). Rollback adalah aksi tulis, sehingga aktor
+     * yang benar adalah Marketing (bukan Owner) — disesuaikan dari
+     * `test_owner_can_rollback` (asumsi lama sebelum RBAC boundary dikunci).
+     */
+    public function test_marketing_can_rollback(): void
     {
-        $this->actingAsRole(UserRole::OWNER);
+        $this->actingAsRole(UserRole::MARKETING);
 
         $this->getJson('/api/v1/admin/website/legal-center')->assertOk();
         $slug = 'refund-policy';
@@ -131,6 +138,25 @@ class LegalCenterTest extends TestCase
 
         $live = $this->getJson("/api/v1/public/legal/{$slug}")->assertOk()->json('data');
         $this->assertStringNotContainsString('Version two body', (string) $live['content']);
+    }
+
+    /**
+     * SRS Bagian 5 — Sprint 2 (Authentication & RBAC) keputusan #1: Owner
+     * bersifat "Lihat" (read-only) pada modul Marketing. GET tetap boleh,
+     * aksi tulis (draft/publish/rollback) ditolak 403 oleh EnsureOwnerReadOnly.
+     */
+    public function test_owner_is_read_only_on_legal_center(): void
+    {
+        $this->actingAsRole(UserRole::OWNER);
+
+        $this->getJson('/api/v1/admin/website/legal-center')->assertOk();
+
+        $this->putJson('/api/v1/admin/website/legal-center/refund-policy/draft', [
+            'draftContent' => '<h2>Owner tidak boleh menulis</h2>',
+        ])->assertStatus(403);
+
+        $this->postJson('/api/v1/admin/website/legal-center/refund-policy/publish', ['label' => 'v2'])
+            ->assertStatus(403);
     }
 
     public function test_public_legal_index_lists_published_documents(): void

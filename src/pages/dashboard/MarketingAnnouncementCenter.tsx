@@ -32,6 +32,7 @@ import { marketingService } from '../../services/marketing.service';
 import { useMarketingStore } from '../../store/marketing.store';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export interface Announcement {
   id: number;
@@ -51,6 +52,8 @@ export interface Announcement {
 
 export const MarketingAnnouncementCenter: React.FC = () => {
   const user = storageService.getUser();
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
 
   const {
     announcements,
@@ -347,13 +350,15 @@ export const MarketingAnnouncementCenter: React.FC = () => {
               <RefreshCw className={`w-4 h-4 text-blue-300 ${announcementsLoading ? 'animate-spin' : ''}`} />
               <span>Refresh List</span>
             </button>
-            <button
-              onClick={handleOpenCreate}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs shadow-md transition flex items-center gap-2 border border-blue-500/35"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Buat Pengumuman</span>
-            </button>
+            {!isOwnerReadOnly && (
+              <button
+                onClick={handleOpenCreate}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs shadow-md transition flex items-center gap-2 border border-blue-500/35"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Buat Pengumuman</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -494,12 +499,14 @@ export const MarketingAnnouncementCenter: React.FC = () => {
             <p className="text-sm font-extrabold text-gray-900">Belum Ada Pengumuman</p>
             <p className="text-xs text-gray-400">Tidak ada pengumuman yang sesuai dengan filter saat ini.</p>
           </div>
-          <button
-            onClick={handleOpenCreate}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold transition"
-          >
-            Buat Pengumuman Baru
-          </button>
+          {!isOwnerReadOnly && (
+            <button
+              onClick={handleOpenCreate}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold transition"
+            >
+              Buat Pengumuman Baru
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -570,34 +577,40 @@ export const MarketingAnnouncementCenter: React.FC = () => {
                           </button>
 
                           {/* Edit */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(item)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-purple-600 hover:text-white text-gray-600 transition"
-                            title="Edit"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
+                          {!isOwnerReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-purple-600 hover:text-white text-gray-600 transition"
+                              title="Edit"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           {/* Duplicate */}
-                          <button
-                            type="button"
-                            onClick={() => handleDuplicate(item)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-emerald-600 hover:text-white text-gray-600 transition"
-                            title="Duplicate"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
+                          {!isOwnerReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicate(item)}
+                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-emerald-600 hover:text-white text-gray-600 transition"
+                              title="Duplicate"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           {/* Delete */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDelete(item)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-red-600 hover:text-white text-gray-600 transition"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!isOwnerReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDelete(item)}
+                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-red-600 hover:text-white text-gray-600 transition"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -736,16 +749,18 @@ export const MarketingAnnouncementCenter: React.FC = () => {
 
             {/* Drawer Footer */}
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
-              <button
-                onClick={() => {
-                  handleDuplicate(selectedAnnouncement);
-                  setSelectedAnnouncement(null);
-                }}
-                className="px-4 py-2 rounded-xl bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold text-xs transition flex items-center gap-1.5"
-              >
-                <Copy className="w-4 h-4 text-blue-700" />
-                <span>Duplicate</span>
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  onClick={() => {
+                    handleDuplicate(selectedAnnouncement);
+                    setSelectedAnnouncement(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold text-xs transition flex items-center gap-1.5"
+                >
+                  <Copy className="w-4 h-4 text-blue-700" />
+                  <span>Duplicate</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setSelectedAnnouncement(null)}

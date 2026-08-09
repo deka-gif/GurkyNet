@@ -15,6 +15,7 @@ import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { storageService } from '../../services/storage.service';
 import { CmsPageHeader } from '../../components/common/CmsCommon';
 import { RefreshPolicy } from '../../lib/refreshPolicy';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 type Division = 'operations' | 'finance' | 'marketing' | 'admin' | 'customer_support';
 
@@ -38,8 +39,26 @@ const STATUS_LABEL: Record<string, string> = {
   closed: 'Closed',
 };
 
-function actionsFor(division: Division, item: WorkflowItem | null): { key: string; label: string; tone?: 'primary' | 'danger' | 'muted' }[] {
+function actionsFor(
+  division: Division,
+  item: WorkflowItem | null,
+  ownerReadOnly: boolean
+): { key: string; label: string; tone?: 'primary' | 'danger' | 'muted' }[] {
   if (!item || ['resolved', 'rejected', 'cancelled', 'closed'].includes(item.status)) {
+    return [];
+  }
+
+  // Sprint 2 Revision — Frontend Alignment (SRS Bagian 5 & 13.1): Owner
+  // dapat membuka queue lintas divisi (Operations/Finance/Marketing/CS)
+  // untuk memantau (read-only), tapi backend (EnsureOwnerReadOnly) menolak
+  // semua aksi operasional harian di sini dengan 403. Satu-satunya aksi
+  // yang tetap diizinkan untuk Owner adalah "Force Resolve" pada Global
+  // Workflow Queue — itu mekanisme approval/override khusus Owner
+  // (FR-OWN04) yang tidak dilindungi EnsureOwnerReadOnly di backend.
+  if (ownerReadOnly) {
+    if (division === 'admin') {
+      return [{ key: 'force_resolve', label: 'Force Resolve', tone: 'primary' }];
+    }
     return [];
   }
 
@@ -89,6 +108,8 @@ function actionsFor(division: Division, item: WorkflowItem | null): { key: strin
 }
 
 export const WorkflowQueuePage: React.FC<Props> = ({ division, title, subtitle, global }) => {
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada Workflow Queue.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const [items, setItems] = useState<WorkflowItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<WorkflowItem | null>(null);
@@ -210,7 +231,10 @@ export const WorkflowQueuePage: React.FC<Props> = ({ division, title, subtitle, 
     }
   };
 
-  const actionButtons = useMemo(() => actionsFor(division, detail), [division, detail]);
+  const actionButtons = useMemo(
+    () => actionsFor(division, detail, isOwnerReadOnly),
+    [division, detail, isOwnerReadOnly]
+  );
 
   return (
     <div className="space-y-4 pb-10">
@@ -340,6 +364,11 @@ export const WorkflowQueuePage: React.FC<Props> = ({ division, title, subtitle, 
                       {a.label}
                     </button>
                   ))}
+                  {isOwnerReadOnly && actionButtons.length === 0 && (
+                    <span className="text-[11px] font-bold text-gray-400 italic">
+                      Mode lihat-saja (Owner) — aksi ditangani divisi terkait.
+                    </span>
+                  )}
                 </div>
               </div>
 

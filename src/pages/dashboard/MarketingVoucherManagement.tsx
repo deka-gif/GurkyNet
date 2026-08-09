@@ -26,9 +26,12 @@ import { useMarketingStore } from '../../store/marketing.store';
 import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
 import { resolveMediaUrl, resolveMediaSrc } from '../../utils/mediaUrl';
+import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
 export const MarketingVoucherManagement: React.FC = () => {
   const user = storageService.getUser();
+  // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
+  const isOwnerReadOnly = useOwnerReadOnly();
   const {
     vouchers,
     vouchersPagination,
@@ -355,13 +358,15 @@ export const MarketingVoucherManagement: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleOpenAdd}
-              className="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-md hover:bg-indigo-700 transition flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Voucher</span>
-            </button>
+            {!isOwnerReadOnly && (
+              <button
+                onClick={handleOpenAdd}
+                className="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-md hover:bg-indigo-700 transition flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Voucher</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 fetchVouchers({ page: currentPage });
@@ -610,22 +615,26 @@ export const MarketingVoucherManagement: React.FC = () => {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(item)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
-                            title="Edit Voucher"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirmId(item.id)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-rose-600 hover:text-white text-gray-600 transition"
-                            title="Hapus Voucher"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!isOwnerReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-blue-600 hover:text-white text-gray-600 transition"
+                              title="Edit Voucher"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!isOwnerReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmId(item.id)}
+                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-rose-600 hover:text-white text-gray-600 transition"
+                              title="Hapus Voucher"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -753,17 +762,19 @@ export const MarketingVoucherManagement: React.FC = () => {
             </div>
 
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
-              <button
-                onClick={() => {
-                  const v = selectedVoucher;
-                  setSelectedVoucher(null);
-                  handleOpenEdit(v);
-                }}
-                className="px-4 py-2 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-xs transition flex items-center gap-1.5"
-              >
-                <Edit className="w-4 h-4 text-indigo-700" />
-                <span>Edit Voucher</span>
-              </button>
+              {!isOwnerReadOnly && (
+                <button
+                  onClick={() => {
+                    const v = selectedVoucher;
+                    setSelectedVoucher(null);
+                    handleOpenEdit(v);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-xs transition flex items-center gap-1.5"
+                >
+                  <Edit className="w-4 h-4 text-indigo-700" />
+                  <span>Edit Voucher</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setSelectedVoucher(null)}
