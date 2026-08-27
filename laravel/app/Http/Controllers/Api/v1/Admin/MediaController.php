@@ -58,8 +58,9 @@ class MediaController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        // FR-MKT04 — PNG/SVG (+ existing jpeg/webp/ico); MIME + extension allowlist (not extension alone).
         $request->validate([
-            'file'     => 'required|file|mimetypes:image/jpeg,image/png,image/webp,image/x-icon,image/vnd.microsoft.icon|max:5120',
+            'file'     => 'required|file|mimetypes:image/jpeg,image/png,image/webp,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,text/xml,application/xml|max:5120',
             'folder'   => ['nullable', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_\\/\\-]+$/'],
             'alt_text' => 'nullable|string|max:255',
         ]);
@@ -73,9 +74,17 @@ class MediaController extends Controller
 
         // Generate unique filename (never trust client extension alone)
         $extension    = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension() ?: 'bin');
-        $allowedExt   = ['jpg', 'jpeg', 'png', 'webp', 'ico'];
+        // Symfony may map SVG mime to "xml" — normalize when content is SVG.
+        $clientExt = strtolower((string) $file->getClientOriginalExtension());
+        $allowedExt   = ['jpg', 'jpeg', 'png', 'webp', 'ico', 'svg'];
+        if ($extension === 'xml' && ($clientExt === 'svg' || $this->isSvgUpload($file))) {
+            $extension = 'svg';
+        }
         if (!in_array($extension, $allowedExt, true)) {
             return $this->errorResponse('Tipe file tidak diizinkan.', 422);
+        }
+        if ($extension === 'svg' && ! $this->isSvgUpload($file)) {
+            return $this->errorResponse('File SVG tidak valid.', 422);
         }
         $filename     = Str::uuid() . '.' . $extension;
         $storagePath  = $folder . '/' . $filename;
@@ -250,5 +259,29 @@ class MediaController extends Controller
         $media->delete();
 
         return $this->successResponse('Media berhasil dihapus.');
+    }
+
+    /**
+     * FR-MKT04 — accept real SVG content only (reject spoofed extension / script payloads).
+     */
+    private function isSvgUpload(\Illuminate\Http\UploadedFile $file): bool
+    {
+        $mime = strtolower((string) ($file->getMimeType() ?: ''));
+        $allowedMime = ['image/svg+xml', 'text/xml', 'application/xml', 'text/plain'];
+        if ($mime !== '' && ! in_array($mime, $allowedMime, true)) {
+            return false;
+        }
+
+        $contents = (string) @file_get_contents($file->getRealPath() ?: '');
+        if ($contents === '') {
+            return false;
+        }
+
+        // Reject embedded script / event handlers commonly used in malicious SVG.
+        if (preg_match('/<\s*script\b|onload\s*=|onerror\s*=|javascript:/i', $contents)) {
+            return false;
+        }
+
+        return (bool) preg_match('/^\s*(<\?xml\b[\s\S]*?)?<\s*svg\b/i', $contents);
     }
 }

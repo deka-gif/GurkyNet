@@ -22,6 +22,7 @@ class WebsiteSetting extends Model
         'support_phone',
         'whatsapp',
         'office_address',
+        'operating_hours', // FR-MKT01
         'google_maps_url',
         'facebook',
         'instagram',

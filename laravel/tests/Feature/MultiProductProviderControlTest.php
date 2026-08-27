@@ -340,8 +340,9 @@ class MultiProductProviderControlTest extends TestCase
         $digiAdapter = Mockery::mock(DigiflazzProductProviderAdapter::class);
         $digiAdapter->shouldReceive('code')->andReturn('digiflazz');
         $digiAdapter->shouldReceive('isConfigured')->andReturn(true);
+        // Pre-processed provider error (not ambiguous timeout) — failover to VIP allowed (SRS 15.3).
         $digiAdapter->shouldReceive('fulfill')->once()->andReturn(
-            ProviderFulfillmentResult::error(1200, 'timeout', true, 'Connection timed out')
+            ProviderFulfillmentResult::failed(400, 'provider_error', true, 'HTTP 503', [])
         );
 
         $vipAdapter = Mockery::mock(\App\Services\ProductProviders\VipPulsaProductProviderAdapter::class);

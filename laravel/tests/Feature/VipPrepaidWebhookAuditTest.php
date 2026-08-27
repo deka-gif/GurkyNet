@@ -219,7 +219,7 @@ class VipPrepaidWebhookAuditTest extends TestCase
         ]);
 
         $response->assertOk();
-        $this->assertSame(TransactionStatus::PENDING->value, $tx->fresh()->status);
+        $this->assertSame(TransactionStatus::PENDING_SUPPLIER->value, $tx->fresh()->status);
         $this->assertSame('pending', $tx->fresh()->provider_last_status);
     }
 
@@ -239,6 +239,6 @@ class VipPrepaidWebhookAuditTest extends TestCase
         ]);
 
         $response->assertOk();
-        $this->assertSame(TransactionStatus::PENDING->value, $tx->fresh()->status);
+        $this->assertSame(TransactionStatus::PENDING_SUPPLIER->value, $tx->fresh()->status);
     }
 }

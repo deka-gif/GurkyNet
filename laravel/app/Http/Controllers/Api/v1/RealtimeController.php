@@ -36,9 +36,11 @@ class RealtimeController extends Controller
             }
         }
 
+        // FR-CS-01 — honor after[] cursor on reconnect (same contract as /realtime/poll).
+        $after = (array) $request->input('after', []);
         $lastIds = [];
         foreach ($channels as $ch) {
-            $lastIds[$ch] = null;
+            $lastIds[$ch] = is_string($after[$ch] ?? null) ? $after[$ch] : null;
         }
 
         return response()->stream(function () use ($channels, $lastIds) {
@@ -51,6 +53,7 @@ class RealtimeController extends Controller
 
             $started = time();
             $maxSeconds = 55; // stay under typical proxy timeouts; client reconnects
+            $testingOnce = app()->runningUnitTests();
 
             echo ": connected\n\n";
             if (ob_get_level() > 0) {
@@ -67,6 +70,7 @@ class RealtimeController extends Controller
                         echo 'id: '.($entry['id'] ?? '')."\n";
                         echo 'event: '.($entry['event'] ?? 'message')."\n";
                         echo 'data: '.json_encode([
+                            'id' => $entry['id'] ?? null,
                             'channel' => $channel,
                             'event' => $entry['event'] ?? 'message',
                             'payload' => $entry['payload'] ?? [],
@@ -87,7 +91,14 @@ class RealtimeController extends Controller
                         @ob_flush();
                     }
                     @flush();
-                    usleep(1_500_000);
+                    if (! $testingOnce) {
+                        usleep(1_500_000);
+                    }
+                }
+
+                // PHPUnit: one drain pass so stream tests do not hang for 55s.
+                if ($testingOnce) {
+                    break;
                 }
 
                 if ($emitted) {

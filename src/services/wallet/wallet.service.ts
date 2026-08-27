@@ -78,8 +78,27 @@ export const walletService = {
     return response.data;
   },
 
+  /** FR-FIN-03 — manual bank transfer deposit with proof. */
+  depositManual: async (form: FormData): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>('/wallet/deposit-manual', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   getHistory: async (params?: Record<string, any>): Promise<ApiResponse<any>> => {
     const response = await apiClient.get<ApiResponse<any>>('/wallet/history', { params });
+    return response.data;
+  },
+
+  /** Sprint 11 — public Midtrans Snap bootstrap (no server_key). */
+  getPaymentConfig: async (): Promise<ApiResponse<{
+    client_key: string;
+    is_production: boolean;
+    snap_js_url: string;
+    configured: boolean;
+  }>> => {
+    const response = await apiClient.get('/wallet/payment-config');
     return response.data;
   },
 };

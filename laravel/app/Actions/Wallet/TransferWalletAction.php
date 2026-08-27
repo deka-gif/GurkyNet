@@ -5,11 +5,11 @@ namespace App\Actions\Wallet;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\Transaction;
+use App\Models\WalletMutation;
 use App\Repositories\Contracts\WalletRepositoryInterface;
-use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
-use App\Enums\WalletHistoryType;
 use App\Enums\TransactionStatus;
 use App\Services\Transactions\IdempotencyGuard;
+use App\Services\Wallet\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -17,19 +17,22 @@ use Illuminate\Validation\ValidationException;
 class TransferWalletAction
 {
     protected WalletRepositoryInterface $walletRepository;
-    protected WalletHistoryRepositoryInterface $historyRepository;
     protected IdempotencyGuard $idempotencyGuard;
+    protected WalletLedgerService $ledgerService;
 
     public function __construct(
         WalletRepositoryInterface $walletRepository,
-        WalletHistoryRepositoryInterface $historyRepository,
-        IdempotencyGuard $idempotencyGuard
+        IdempotencyGuard $idempotencyGuard,
+        WalletLedgerService $ledgerService
     ) {
         $this->walletRepository = $walletRepository;
-        $this->historyRepository = $historyRepository;
         $this->idempotencyGuard = $idempotencyGuard;
+        $this->ledgerService = $ledgerService;
     }
 
+    /**
+     * SRS 14.2 — transfer dual-writes mutations: sender withdraw + recipient topup.
+     */
     public function execute(
         User $sender,
         string $recipientWalletNumber,
@@ -38,6 +41,9 @@ class TransferWalletAction
         float $fee = 0.00,
         ?string $idempotencyKey = null
     ): Transaction {
+        // FR-KYC-01 / SRS Bagian 21 — Tier 1 before identity-gated transfers.
+        app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1($sender);
+
         // 1. PIN Validation (pre-checks before transaction to fail fast)
         if ($sender->transaction_pin === null) {
             throw ValidationException::withMessages([
@@ -135,23 +141,27 @@ class TransferWalletAction
             $recipientWalletLocked->balance += $amount;
             $recipientWalletLocked->save();
 
-            // Create sender wallet history (Debit)
-            $this->historyRepository->create([
-                'wallet_id' => $senderWalletLocked->id,
-                'amount' => $totalDebit,
-                'type' => WalletHistoryType::DEBIT->value,
-                'description' => 'Transfer ke ' . $recipientWalletLocked->wallet_number,
-                'reference_id' => $transaction->id,
-            ]);
+            $senderDesc = 'Transfer ke ' . $recipientWalletLocked->wallet_number;
+            $recipientDesc = 'Transfer masuk dari ' . $senderWalletLocked->wallet_number;
 
-            // Create recipient wallet history (Credit)
-            $this->historyRepository->create([
-                'wallet_id' => $recipientWalletLocked->id,
-                'amount' => $amount,
-                'type' => WalletHistoryType::CREDIT->value,
-                'description' => 'Transfer masuk dari ' . $senderWalletLocked->wallet_number,
-                'reference_id' => $transaction->id,
-            ]);
+            // SRS 14.2 — debit→withdraw, credit→topup (descriptions clarify transfer)
+            $this->ledgerService->record(
+                $senderWalletLocked,
+                WalletMutation::TYPE_WITHDRAW,
+                $totalDebit,
+                'debit',
+                $senderDesc,
+                $transaction->id
+            );
+
+            $this->ledgerService->record(
+                $recipientWalletLocked,
+                WalletMutation::TYPE_TOPUP,
+                $amount,
+                'credit',
+                $recipientDesc,
+                $transaction->id
+            );
 
             \App\Models\PaymentHistory::recordFor(
                 $transaction,
@@ -166,13 +176,13 @@ class TransferWalletAction
             event(new \App\Events\WalletDebited(
                 $senderWalletLocked,
                 $totalDebit,
-                'Transfer ke ' . $recipientWalletLocked->wallet_number,
+                $senderDesc,
                 $transaction->id
             ));
             event(new \App\Events\WalletCredited(
                 $recipientWalletLocked,
                 $amount,
-                'Transfer masuk dari ' . $senderWalletLocked->wallet_number,
+                $recipientDesc,
                 $transaction->id
             ));
             event(new \App\Events\TransactionCreated($transaction));

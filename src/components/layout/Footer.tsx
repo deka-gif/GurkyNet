@@ -170,6 +170,15 @@ export const Footer = () => {
                   </span>
                 </li>
               )}
+              {/* FR-MKT01 */}
+              {settings?.operatingHours && (
+                <li className="flex items-start gap-2.5">
+                  <span className="text-primary-500 font-extrabold shrink-0 mt-0.5 text-xs">Jam</span>
+                  <span className="leading-relaxed">
+                    {settings.operatingHours}
+                  </span>
+                </li>
+              )}
             </ul>
           </div>
 

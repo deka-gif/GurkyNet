@@ -44,6 +44,10 @@ import {
   AccountPinPage,
   AccountSecurityPage,
   AccountWalletPage,
+  AccountKycPage,
+  AccountLoyaltyPage,
+  AccountReferralPage,
+  AccountSubscriptionsPage,
   AccountComplaintsPage,
   AccountComplaintCreatePage,
   AccountComplaintDetailPage,
@@ -57,6 +61,8 @@ import {
   CustomerSupportRefundCenter,
   CustomerSupportKnowledgeBase,
   CustomerSupportInbox,
+  KycReviewQueuePage,
+  KycReviewDetailPage,
   HelpCenterPage,
   OperationsIssueQueue,
   FinanceEscalationQueue,
@@ -70,7 +76,12 @@ import {
   FinanceTreasuryPage,
   FinanceLedgerPage,
   FinanceAlertsPage,
+  FinanceReconciliationPage,
   FinanceWalletMonitorPage,
+  FinanceLoyaltyPage,
+  FinanceReferralPage,
+  FinanceDepositPage,
+  FinanceWithdrawPage,
   OperationsDashboard,
   OperationsAlertsPage,
   OperationsLiveTransactionsPage,
@@ -78,6 +89,7 @@ import {
   OperationsProviderManagement,
   OperationsServiceMonitoring,
   OperationsPricingManagement,
+  OperationsAgentMarginPage,
   OperationsProductProviderControl,
   OperationsPaymentGatewayControl,
   MarketingDashboard,
@@ -93,6 +105,7 @@ import {
   MarketingStaticPages,
   MarketingMediaLibrary,
   OwnerDashboard,
+  OwnerCashFlowProjectionPage,
   OwnerExecutiveAlertsPage,
   OwnerExecutiveApprovalsPage,
   OwnerAuditCenterPage,
@@ -176,6 +189,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
             <OwnerDashboard />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'owner/cash-flow',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Owner']}>
+            <OwnerCashFlowProjectionPage />
           </ProtectedRoute>
         )
       },
@@ -280,10 +301,66 @@ export const router = createBrowserRouter([
         )
       },
       {
+        path: 'finance/reconciliation',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceReconciliationPage />
+          </ProtectedRoute>
+        )
+      },
+      {
         path: 'finance/wallets',
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
             <FinanceWalletMonitorPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/loyalty',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceLoyaltyPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/referral',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceReferralPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/deposits',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceDepositPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/withdrawals',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceWithdrawPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/kyc',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <KycReviewQueuePage base="finance" />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/kyc/:id',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <KycReviewDetailPage base="finance" />
           </ProtectedRoute>
         )
       },
@@ -364,6 +441,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
             <OperationsPricingManagement />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'operations/agent-margin',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Operations', 'Owner']}>
+            <OperationsAgentMarginPage />
           </ProtectedRoute>
         )
       },
@@ -726,6 +811,22 @@ export const router = createBrowserRouter([
         element: <AccountWalletPage />
       },
       {
+        path: 'account/loyalty',
+        element: <AccountLoyaltyPage />
+      },
+      {
+        path: 'account/referral',
+        element: <AccountReferralPage />
+      },
+      {
+        path: 'account/subscriptions',
+        element: <AccountSubscriptionsPage />
+      },
+      {
+        path: 'account/kyc',
+        element: <AccountKycPage />
+      },
+      {
         path: 'account/pin/create',
         element: <AccountPinPage mode="create" />
       },
@@ -751,7 +852,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'account/help',
-        element: <AccountHelpPage />
+        element: <Navigate to="/dashboard/help" replace />
       },
       {
         path: 'account/privacy',
@@ -852,7 +953,23 @@ export const router = createBrowserRouter([
             <CustomerSupportKnowledgeBase />
           </ProtectedRoute>
         )
-      }
+      },
+      {
+        path: 'customer-support/kyc',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Customer Support', 'Owner']}>
+            <KycReviewQueuePage base="customer-support" />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'customer-support/kyc/:id',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Customer Support', 'Owner']}>
+            <KycReviewDetailPage base="customer-support" />
+          </ProtectedRoute>
+        )
+      },
     ],
   },
   {

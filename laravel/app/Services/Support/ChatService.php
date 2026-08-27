@@ -319,7 +319,8 @@ class ChatService
                 'subject' => $conversation->subject ?: 'Tiket dari Live Chat',
                 'description' => $conversation->last_message_preview,
                 'priority' => $priority ?: 'Sedang',
-                'status' => 'Terbuka',
+                'status' => \App\Support\Support\TicketStatus::ASSIGNED_CS, // FR-CS-02
+                'assigned_to' => $agent->id,
                 'source' => 'chat_convert',
             ]);
 
@@ -373,8 +374,13 @@ class ChatService
         return [
             'liveChats' => Conversation::query()->whereIn('status', ['open', 'waiting', 'assigned'])->count(),
             'waitingReply' => Conversation::query()->where('status', 'waiting')->count(),
-            'openTickets' => SupportTicket::query()->whereIn('status', ['Terbuka', 'Pending'])->count(),
-            'openEscalations' => \App\Models\SupportEscalation::query()->whereIn('status', ['open', 'in_progress'])->count(),
+            'openTickets' => SupportTicket::query()
+                ->whereIn('status', \App\Support\Support\TicketStatus::openWorkStatuses())
+                ->count(),
+            'openEscalations' => \App\Models\Workflow::query()
+                ->whereNotIn('status', ['resolved', 'rejected', 'cancelled', 'closed'])
+                ->whereIn('current_division', ['operations', 'finance', 'marketing'])
+                ->count(),
             'pendingRefunds' => Transaction::query()
                 ->whereIn('status', ['failed', 'canceled', 'cancelled'])
                 ->whereNull('refunded_at')

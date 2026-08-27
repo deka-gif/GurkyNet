@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
 class CustomerSupportController extends Controller
 {
     use ApiResponseTrait;
+    use \App\Http\Concerns\HandlesIdempotentRequests;
 
     /**
      * Get Customer Support Dashboard.
@@ -136,7 +137,9 @@ class CustomerSupportController extends Controller
     {
         try {
             $data = $request->validated();
-            $ticket = $action->updateStatus($id, $data['status']);
+            $ticket = $action->updateStatus($id, $data['status'], [
+                'assigned_to' => $data['assigned_to'] ?? null,
+            ]);
             return $this->successResponse('Status tiket berhasil diperbarui.', new SupportTicketResource($ticket));
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return $this->errorResponse('Tiket tidak ditemukan.', 404);
@@ -315,8 +318,9 @@ class CustomerSupportController extends Controller
     }
 
     /**
-     * Update Refund Claim.
+     * Update Refund Claim (notes only).
      * PUT /api/v1/admin/customer-support/refunds/{id}
+     * SRS 4.4.5 / Sprint 6 — CS MUST NOT perform balance-mutating approve/reject.
      */
     public function updateRefund(string|int $id, Request $request, RefundQueueAction $action): JsonResponse
     {
@@ -327,10 +331,24 @@ class CustomerSupportController extends Controller
                 'note' => 'nullable|string|max:500',
                 'notes' => 'nullable|string|max:500',
             ]);
+
+            $status = strtolower((string) ($data['status'] ?? ''));
+            if (in_array($status, ['approved', 'approve', 'disetujui', 'rejected', 'reject', 'ditolak'], true)) {
+                return $this->errorResponse(
+                    'CS tidak berwenang menyetujui/menolak refund yang mengubah saldo. Eskalasikan ke Finance (FR-CS-07).',
+                    403
+                );
+            }
+
             $transaction = $action->update($id, $data);
             return $this->successResponse('Refund berhasil diperbarui.', new TransactionResource($transaction));
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return $this->errorResponse('Refund tidak ditemukan.', 404);
+        } catch (\InvalidArgumentException $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? (int) $e->getCode() : 422;
+            return $this->errorResponse($e->getMessage(), $code);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }

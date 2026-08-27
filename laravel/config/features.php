@@ -1,0 +1,16 @@
+<?php
+
+/**
+ * Sprint 8 — public User/Agen transaction go-live gates.
+ * SRS Bagian 20 Tahap 3 + .cursorrules #8: purchase/withdraw must stay off
+ * until explicit production confirmation.
+ */
+return [
+    'purchase_enabled' => filter_var(env('PURCHASE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+    'withdraw_enabled' => filter_var(env('WITHDRAW_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+    /** Automatic Midtrans VA/QRIS top-up (manual deposit remains available). */
+    'auto_topup_enabled' => filter_var(env('AUTO_TOPUP_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+    /** SRS 30 — Partner H2H API production gate (separate from User PURCHASE_ENABLED). */
+    'partner_api_enabled' => filter_var(env('PARTNER_API_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+    'partner_api_sandbox_enabled' => filter_var(env('PARTNER_API_SANDBOX_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+];

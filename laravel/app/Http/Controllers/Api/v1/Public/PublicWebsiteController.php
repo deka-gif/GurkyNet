@@ -132,6 +132,7 @@ class PublicWebsiteController extends Controller
             'supportPhone' => $setting?->support_phone ?: '+62 812-3456-7890',
             'whatsapp' => $setting?->whatsapp ?: '6281234567890',
             'officeAddress' => $setting?->office_address,
+            'operatingHours' => $setting?->operating_hours, // FR-MKT01
             'googleMapsUrl' => $setting?->google_maps_url,
             'facebook' => $setting?->facebook,
             'instagram' => $setting?->instagram,

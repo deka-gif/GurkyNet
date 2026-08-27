@@ -28,6 +28,8 @@ export interface WebsiteSetting {
   supportPhone?: string;
   whatsapp?: string;
   officeAddress?: string;
+  /** FR-MKT01 — jam operasional (footer / kontak / help). */
+  operatingHours?: string;
   googleMapsUrl?: string;
   facebook?: string;
   instagram?: string;

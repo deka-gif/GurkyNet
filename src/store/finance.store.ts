@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { financeService } from '../services/finance.service';
 import { Pagination } from '../types';
+import {
+  clearIdempotencyKeyForLogicalAction,
+  getOrCreateIdempotencyKeyForLogicalAction,
+} from '../utils/idempotency';
 
 export interface FinanceDashboardData {
   summary?: any;
@@ -42,6 +46,13 @@ export interface FinanceState {
   approveRefund: (id: string, note?: string) => Promise<boolean>;
   rejectRefund: (id: string, note?: string) => Promise<boolean>;
   updateRefundStatus: (id: string, status: string, note?: string) => Promise<boolean>;
+  adjustWallet: (payload: {
+    user_id?: number;
+    email?: string;
+    amount: number;
+    direction: 'credit' | 'debit';
+    reason: string;
+  }) => Promise<boolean>;
   fetchSettlements: (params?: Record<string, any>) => Promise<void>;
 }
 
@@ -133,9 +144,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   approveRefund: async (id, note) => {
+    const logicalId = `finance-refund-approve:${id}`;
+    const idempotencyKey = getOrCreateIdempotencyKeyForLogicalAction(logicalId);
     try {
-      const response = await financeService.approveRefund(id, { note, internalReviewNote: note });
+      const response = await financeService.approveRefund(id, {
+        note,
+        internalReviewNote: note,
+        idempotency_key: idempotencyKey,
+      } as any);
       if (response && response.success !== false) {
+        clearIdempotencyKeyForLogicalAction(logicalId);
         await get().fetchRefunds();
         return true;
       }
@@ -170,6 +188,26 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       return false;
     } catch (err: any) {
       set({ refundsError: err?.message || 'Gagal memperbarui status refund.' });
+      return false;
+    }
+  },
+
+  // SRS 14.1 — manual adjustment balance mutation; stable key per logical attempt.
+  adjustWallet: async (payload) => {
+    const logicalId = `finance-wallet-adjust:${payload.user_id ?? payload.email}:${payload.direction}:${payload.amount}:${payload.reason}`;
+    const idempotencyKey = getOrCreateIdempotencyKeyForLogicalAction(logicalId);
+    try {
+      const response = await financeService.adjustWallet({
+        ...payload,
+        idempotency_key: idempotencyKey,
+      });
+      if (response && response.success !== false) {
+        clearIdempotencyKeyForLogicalAction(logicalId);
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      set({ refundsError: err?.message || 'Gagal penyesuaian saldo.' });
       return false;
     }
   },

@@ -60,6 +60,7 @@ class FinanceCommandCenterTest extends TestCase
         Sanctum::actingAs($fin);
         $this->postJson("/api/v1/admin/finance/refunds/{$tx->id}/approve", [
             'notes' => 'OK',
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
         ])->assertOk();
 
         $this->assertNotNull($tx->fresh()->refunded_at);

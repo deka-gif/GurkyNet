@@ -3,6 +3,7 @@
 namespace App\Services\Workflow;
 
 use App\Actions\Admin\Website\StaticPageAction;
+use App\Enums\TransactionStatus;
 use App\Enums\UserRole;
 use App\Models\DivisionNotification;
 use App\Models\Faq;
@@ -15,6 +16,7 @@ use App\Models\Workflow;
 use App\Repositories\Contracts\MarketingRepositoryInterface;
 use App\Services\ProductProviders\ProductProviderControlService;
 use App\Services\WalletRefundService;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -260,12 +262,24 @@ class WorkflowActionService
 
         /** @var Transaction $tx */
         $tx = Transaction::query()->findOrFail($workflow->transaction_id);
-        $result = $this->walletRefund->refundOnce(
-            $tx,
-            'Refund workflow '.$workflow->workflow_code,
-            'finance',
-            $note ? ('WF: '.$note) : ('WF '.$workflow->workflow_code)
-        );
+
+        // FR-DIFF-09 / SRS 14.3 + 14.5 — SUCCESS complaint → REFUNDED (never FAILED).
+        if (TransactionStatusMapper::isSuccess($tx->status)) {
+            $result = $this->walletRefund->refundSuccessToRefunded(
+                $tx,
+                'Refund workflow '.$workflow->workflow_code,
+                'finance',
+                $note ? ('WF: '.$note) : ('WF '.$workflow->workflow_code)
+            );
+        } else {
+            $result = $this->walletRefund->refundOnce(
+                $tx,
+                'Refund workflow '.$workflow->workflow_code,
+                'finance',
+                $note ? ('WF: '.$note) : ('WF '.$workflow->workflow_code),
+                TransactionStatus::CANCELED->value
+            );
+        }
 
         $this->engine->recordAction(
             $workflow,

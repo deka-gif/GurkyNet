@@ -43,7 +43,7 @@ interface CustomerSupportRepositoryInterface
     /**
      * Update ticket status.
      */
-    public function updateTicketStatus(string|int $id, string $status): SupportTicket;
+    public function updateTicketStatus(string|int $id, string $status, array $extra = []): SupportTicket;
 
     /**
      * Get paginated customers with search.

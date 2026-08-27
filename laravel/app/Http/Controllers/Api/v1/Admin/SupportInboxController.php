@@ -150,11 +150,18 @@ class SupportInboxController extends Controller
             'transaction_id' => 'nullable|integer|exists:transactions,id',
         ]);
 
+        // FR-CS-02 — ensure a ticket exists so escalation status can be persisted.
+        if (! $conv->support_ticket_id) {
+            $this->chat->convertToTicket($conv, $request->user());
+            $conv->refresh();
+        }
+
+        $target = $data['targetDivision'] ?? $data['target_division'];
         $workflow = $this->workflows->createFromCs($request->user(), [
             'conversation_id' => $conv->id,
             'support_ticket_id' => $conv->support_ticket_id,
             'transaction_id' => $data['transactionId'] ?? $data['transaction_id'] ?? $conv->transaction_id,
-            'target_division' => $data['targetDivision'] ?? $data['target_division'],
+            'target_division' => $target,
             'type' => $data['type'] ?? null,
             'category' => $data['category'] ?? null,
             'title' => $data['title'],

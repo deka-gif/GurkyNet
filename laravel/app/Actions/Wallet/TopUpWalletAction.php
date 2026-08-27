@@ -2,16 +2,16 @@
 
 namespace App\Actions\Wallet;
 
-use App\Enums\WalletHistoryType;
 use App\Exceptions\Payment\PaymentGatewayNotConfiguredException;
 use App\Models\MidtransTransaction;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
-use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
+use App\Models\WalletMutation;
 use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Services\Payment\PaymentGatewayFactory;
 use App\Services\Transactions\IdempotencyGuard;
+use App\Services\Wallet\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -19,9 +19,9 @@ class TopUpWalletAction
 {
     public function __construct(
         protected WalletRepositoryInterface $walletRepository,
-        protected WalletHistoryRepositoryInterface $historyRepository,
         protected PaymentGatewayFactory $paymentGatewayFactory,
-        protected IdempotencyGuard $idempotencyGuard
+        protected IdempotencyGuard $idempotencyGuard,
+        protected WalletLedgerService $ledgerService
     ) {}
 
     public function execute(
@@ -193,16 +193,19 @@ class TopUpWalletAction
             $wallet->balance += $amount;
             $wallet->save();
 
-            $this->historyRepository->create([
-                'wallet_id' => $wallet->id,
-                'amount' => $amount,
-                'type' => WalletHistoryType::CREDIT->value,
-                'description' => 'Top Up Saldo - Invoice: ' . $invoiceNumber,
-                'reference_id' => $transaction->id,
-            ]);
+            // SRS 14.2 — dual-write wallet_mutations + wallet_histories via ledger
+            $desc = 'Top Up Saldo - Invoice: ' . $invoiceNumber;
+            $this->ledgerService->record(
+                $wallet,
+                WalletMutation::TYPE_TOPUP,
+                $amount,
+                'credit',
+                $desc,
+                $transaction->id
+            );
 
             event(new \App\Events\TransactionCreated($transaction));
-            event(new \App\Events\WalletCredited($wallet, $amount, 'Top Up Saldo - Invoice: ' . $invoiceNumber, $transaction->id));
+            event(new \App\Events\WalletCredited($wallet, $amount, $desc, $transaction->id));
             event(new \App\Events\TransactionSuccess($transaction));
 
             return $transaction;

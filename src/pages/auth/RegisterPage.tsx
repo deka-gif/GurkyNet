@@ -114,6 +114,7 @@ export const RegisterPage: React.FC = () => {
         pin,
         pin_confirmation: pinConfirmation,
         remember_device: true,
+        accept_policies: true,
       });
       if (response.success) {
         storageService.setToken(response.data.token, true);

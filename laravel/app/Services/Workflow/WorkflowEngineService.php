@@ -144,6 +144,16 @@ class WorkflowEngineService
         $this->notifyDivision('customer_support', 'workflow_escalated', 'Eskalasi dikirim: '.$workflow->title, $workflow);
         $this->publish($workflow, 'WorkflowStatusChanged');
 
+        // FR-CS-02 / 06 / 07 — mark linked ticket with explicit escalation status (SRS 7.8).
+        if ($workflow->support_ticket_id) {
+            $ticket = \App\Models\SupportTicket::query()->find($workflow->support_ticket_id);
+            if ($ticket) {
+                $ticket->update([
+                    'status' => \App\Support\Support\TicketStatus::forEscalationDivision($target),
+                ]);
+            }
+        }
+
         return $workflow->fresh($this->defaultRelations());
     }
 
@@ -283,6 +293,19 @@ class WorkflowEngineService
         ]);
 
         $this->notifyDivision('customer_support', 'workflow_update', 'Workflow diupdate: '.$workflow->workflow_code, $workflow);
+
+        // FR-CS-02 / FR-CS-08 — when escalation resolves, return ticket to resolved for CS follow-up.
+        if ($workflow->support_ticket_id && in_array($toStatus, ['resolved', 'rejected', 'closed'], true)) {
+            $ticket = \App\Models\SupportTicket::query()->find($workflow->support_ticket_id);
+            if ($ticket) {
+                $ticket->update([
+                    'status' => $toStatus === 'closed'
+                        ? \App\Support\Support\TicketStatus::CLOSED
+                        : \App\Support\Support\TicketStatus::RESOLVED,
+                    'resolved_at' => now(),
+                ]);
+            }
+        }
 
         if ($workflow->conversation_id && in_array($toStatus, ['resolved', 'rejected', 'closed'], true)) {
             $conv = $workflow->conversation;

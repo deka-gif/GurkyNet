@@ -13,8 +13,10 @@ class UpdateStatusRequest extends FormRequest
 
     public function rules(): array
     {
+        // FR-CS-02 — SRS 7.8 statuses + legacy aliases (normalized in repository).
         return [
-            'status' => 'required|string|in:Open,Pending,Resolved,Closed,Terbuka,Selesai,Tertutup,open,pending,resolved,closed',
+            'status' => 'required|string|max:64',
+            'assigned_to' => 'nullable|integer|exists:users,id',
         ];
     }
 }

@@ -21,7 +21,7 @@ import {
 
 import { useCustomerSupportStore } from '../../store/customerSupport.store';
 import { DashboardHeader, StatCard } from '../../components/common';
-import { chatService } from '../../services/chat/chat.service';
+import { chatService, supportHubService } from '../../services/chat/chat.service';
 import { workflowService } from '../../services/workflow/workflow.service';
 import { FinanceCrossWidgets } from '../../components/finance/FinanceCrossWidgets';
 
@@ -31,6 +31,7 @@ export const CustomerSupportDashboard: React.FC = () => {
   const [notification, setNotification] = useState<string | null>(null);
   const [hubStats, setHubStats] = useState<Record<string, number>>({});
   const [wfStats, setWfStats] = useState<Record<string, number | null>>({});
+  const [divisionNotifs, setDivisionNotifs] = useState<any[]>([]);
 
   const {
     dashboardData,
@@ -47,6 +48,11 @@ export const CustomerSupportDashboard: React.FC = () => {
     fetchTickets();
     chatService.hubStats().then(setHubStats).catch(() => setHubStats({}));
     workflowService.stats('customer-support').then((s) => setWfStats(s as Record<string, number | null>)).catch(() => setWfStats({}));
+    // FR-CS-08
+    supportHubService.divisionNotifications(1).then((page: any) => {
+      const rows = page?.data ?? page?.items ?? (Array.isArray(page) ? page : []);
+      setDivisionNotifs(Array.isArray(rows) ? rows.slice(0, 8) : []);
+    }).catch(() => setDivisionNotifs([]));
   }, [fetchDashboard, fetchTickets]);
 
   // Statistics from hub + dashboard (real API values only)
@@ -134,13 +140,22 @@ export const CustomerSupportDashboard: React.FC = () => {
     switch (status) {
       case 'Terbuka':
       case 'Open':
+      case 'open':
         return 'bg-blue-100 text-blue-800';
       case 'Pending':
       case 'Under Review':
+      case 'assigned_cs':
+      case 'Processing':
         return 'bg-amber-100 text-amber-800';
+      case 'escalated_ops':
+      case 'escalated_finance':
+      case 'Escalated':
+        return 'bg-purple-100 text-purple-800';
       case 'Selesai':
       case 'Resolved':
       case 'Closed':
+      case 'resolved':
+      case 'closed':
         return 'bg-emerald-100 text-emerald-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -216,6 +231,24 @@ export const CustomerSupportDashboard: React.FC = () => {
           >
             Tutup
           </button>
+        </div>
+      )}
+
+      {/* FR-CS-08 — notifikasi balik eskalasi */}
+      {divisionNotifs.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-2">
+          <h3 className="text-xs font-black uppercase tracking-wider text-gray-500">Notifikasi Eskalasi</h3>
+          <ul className="space-y-2">
+            {divisionNotifs.map((n: any) => (
+              <li key={n.id ?? n.title} className="text-sm text-gray-800 border border-gray-100 rounded-xl px-3 py-2">
+                <span className="font-semibold">{n.title || n.type}</span>
+                {n.body ? <span className="text-gray-500"> — {n.body}</span> : null}
+              </li>
+            ))}
+          </ul>
+          <Link to="/dashboard/customer-support/workflows" className="text-xs font-semibold text-primary-600 hover:underline">
+            Buka antrean workflow →
+          </Link>
         </div>
       )}
 

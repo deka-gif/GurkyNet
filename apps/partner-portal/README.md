@@ -1,11 +1,23 @@
-# Portal Mitra API
+# Partner Portal (FR-API-09)
 
-**Rujukan SRS:** Bagian 30 (API H2H untuk Mitra/Reseller), FR-API-09.
+**SRS:** Bagian 30 — API H2H Mitra/Reseller.
 
-Dashboard self-service Mitra (saldo, riwayat transaksi API, kelola API Key/Secret/callback URL), terpisah dari Dashboard Admin & App biasa.
+Minimal self-service API for Mitra (Sprint 17):
 
-## Status Sprint 0
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/v1/partner-portal/apply` | FR-API-01 application |
+| `GET /api/v1/partner-portal/me` | Approval status + wallet balance |
+| `GET /api/v1/partner-portal/credentials` | API key metadata (no secret) |
+| `POST .../credentials/{id}/rotate` | FR-API-11 rotate (secret once) |
+| `POST .../credentials/{id}/revoke` | FR-API-11 revoke |
+| `GET /api/v1/partner-portal/logs` | Own request logs |
+| `GET /api/v1/partner-portal/transactions` | Own partner_api transactions |
+| `POST/GET /api/v1/partner-portal/deposits` | Manual deposit request |
+| `GET /api/v1/partner-portal/docs` | Link to OpenAPI |
 
-- Folder placeholder saja.
-- Implementasi dijadwalkan pada **Sprint 17** (Panduan Prompt Cursor).
-- Jangan menambah endpoint/UI Mitra di luar sprint tersebut.
+H2H machine API: `/api/v1/partner/price|execute|status` (HMAC).
+
+OpenAPI: `/api/v1/partner/openapi.json`
+
+Auth for portal: Sanctum (same user bound to `api_partners.user_id`).

@@ -219,20 +219,20 @@ class CustomerSupportTest extends TestCase
         ]);
 
         $response = $this->putJson("/api/v1/admin/customer-support/tickets/{$ticket->id}/status", [
-            'status' => 'Pending',
+            'status' => 'assigned_cs',
         ]);
 
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,
                 'data' => [
-                    'status' => 'Pending',
+                    'status' => 'assigned_cs',
                 ],
             ]);
 
         $this->assertDatabaseHas('support_tickets', [
             'id' => $ticket->id,
-            'status' => 'Pending',
+            'status' => 'assigned_cs',
         ]);
     }
 

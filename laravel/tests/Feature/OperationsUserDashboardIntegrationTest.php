@@ -199,6 +199,7 @@ class OperationsUserDashboardIntegrationTest extends TestCase
             'sku_code' => 'INT-DIGI-10',
             'target_number' => '081234567890',
             'pin' => '123456',
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
         ]);
         $res->assertStatus(422);
         $this->assertStringContainsString('maintenance', strtolower((string) $res->json('message').' '.json_encode($res->json('errors'))));
@@ -213,6 +214,7 @@ class OperationsUserDashboardIntegrationTest extends TestCase
             'sku_code' => 'INT-DIGI-10',
             'target_number' => '081234567890',
             'pin' => '123456',
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
         ]);
         $res2->assertStatus(422);
     }

@@ -11,6 +11,8 @@ import {
   Info,
   MessageSquareWarning,
   KeyRound,
+  Gift,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useWalletStore } from '../../../store/wallet.store';
@@ -100,8 +102,12 @@ export const AccountHubPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
           { to: '/dashboard/account/settings', icon: Settings, label: 'Pengaturan Akun', desc: 'Semua pengaturan di satu tempat' },
+          { to: '/dashboard/account/kyc', icon: Shield, label: 'Verifikasi KYC', desc: 'Tier 1 HP/email & Tier 2 KTP' },
           { to: '/dashboard/account/security', icon: Shield, label: 'Keamanan', desc: 'PIN, sesi, riwayat login' },
           { to: '/dashboard/account/wallet', icon: Wallet, label: 'Informasi Wallet', desc: 'Nomor & saldo GurkyPay' },
+          { to: '/dashboard/account/loyalty', icon: Gift, label: 'Poin & Loyalitas', desc: 'Saldo poin, tier, redeem' },
+          { to: '/dashboard/account/referral', icon: Users, label: 'Referral', desc: 'Kode & komisi ajak teman' },
+          { to: '/dashboard/account/subscriptions', icon: Settings, label: 'Langganan Otomatis', desc: 'Auto-reorder per tanggal' },
           { to: '/dashboard/account/pin/create', icon: KeyRound, label: 'Transaction PIN', desc: user?.hasPin ? 'Kelola PIN transaksi' : 'Buat PIN transaksi' },
           { to: '/dashboard/account/complaints', icon: MessageSquareWarning, label: 'Complaint Center', desc: 'Buat & lacak tiket' },
           { to: '/dashboard/account/help', icon: HelpCircle, label: 'Help Center', desc: 'FAQ & kontak support' },

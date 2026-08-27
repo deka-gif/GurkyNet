@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\v1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Concerns\HandlesIdempotentRequests;
 use App\Http\Requests\Api\v1\CreateTransactionRequest;
 use App\Http\Resources\TransactionResource;
 use App\Actions\Transaction\CreateTransactionAction;
@@ -10,11 +11,14 @@ use App\Actions\Transaction\CancelTransactionAction;
 use App\Actions\Transaction\GetTransactionAction;
 use App\Actions\Transaction\GetReceiptAction;
 use App\Repositories\Contracts\TransactionRepositoryInterface;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class TransactionController extends Controller
 {
+    use HandlesIdempotentRequests;
+
     protected TransactionRepositoryInterface $transactionRepository;
 
     public function __construct(TransactionRepositoryInterface $transactionRepository)
@@ -53,6 +57,7 @@ class TransactionController extends Controller
 
     /**
      * Create a new transaction.
+     * SRS 14.1 — idempotency_requests SoT via HandlesIdempotentRequests.
      */
     public function store(CreateTransactionRequest $request, CreateTransactionAction $createAction): JsonResponse
     {
@@ -65,21 +70,28 @@ class TransactionController extends Controller
         }
 
         try {
-            // status / admin_fee / settlement values are never accepted from the client.
-            $transaction = $createAction->execute(
-                $user,
-                $request->input('sku_code'),
-                $request->input('target_number'),
-                $request->input('pin'),
-                $request->input('inquiry_ref_id'),
-                $request->input('idempotency_key')
-            );
+            return $this->withIdempotency(
+                $request,
+                'POST /api/v1/transactions',
+                $request->only(['sku_code', 'target_number', 'inquiry_ref_id', 'pin']),
+                function () use ($request, $createAction, $user) {
+                    // status / admin_fee / settlement values are never accepted from the client.
+                    $transaction = $createAction->execute(
+                        $user,
+                        $request->input('sku_code'),
+                        $request->input('target_number'),
+                        $request->input('pin'),
+                        $request->input('inquiry_ref_id'),
+                        $request->input('idempotency_key')
+                    );
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Transaksi berhasil dibuat.',
-                'data' => new TransactionResource($transaction),
-            ], 201);
+                    return $this->idempotentJson(
+                        'Transaksi berhasil dibuat.',
+                        (new TransactionResource($transaction))->resolve(),
+                        201
+                    );
+                }
+            );
         } catch (\Illuminate\Validation\ValidationException $e) {
             $errors = $e->errors();
             $firstMessage = collect($errors)->flatten()->first();
@@ -208,6 +220,39 @@ class TransactionController extends Controller
             'message' => 'Struk transaksi berhasil dibuat.',
             'data' => $receipt,
         ]);
+    }
+
+    /**
+     * Sprint 8 / FR-USR04 — download real PDF receipt (own transaction only, no mutation).
+     */
+    public function receiptPdf(string $idOrInvoice, GetTransactionAction $getAction, GetReceiptAction $receiptAction, Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
+        $transaction = is_numeric($idOrInvoice)
+            ? $getAction->execute((int) $idOrInvoice)
+            : $getAction->executeByInvoice($idOrInvoice);
+
+        if (!$transaction || $transaction->user_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaksi tidak ditemukan.',
+            ], 404);
+        }
+
+        $receipt = $receiptAction->execute($transaction);
+        $filename = 'struk-'.preg_replace('/[^A-Za-z0-9\-_]/', '', (string) $transaction->invoice_number).'.pdf';
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('receipts.transaction', [
+            'receipt' => $receipt,
+            'transaction' => $transaction,
+        ])->download($filename);
     }
 
     /**
@@ -368,7 +413,7 @@ class TransactionController extends Controller
                 continue;
             }
 
-            $inFlight = in_array($transaction->status, ['pending', 'processing'], true);
+            $inFlight = TransactionStatusMapper::isFulfillOpen($transaction->status);
             if (! $inFlight) {
                 \Illuminate\Support\Facades\Log::info('Digiflazz webhook duplicate — transaction already terminal', [
                     'ref_id' => $refId,
@@ -425,8 +470,9 @@ class TransactionController extends Controller
 
                 event(new \App\Events\TransactionFailed($result['transaction']));
             } else {
+                // SRS 14.3 — unclear supplier outcome → PENDING_SUPPLIER
                 $transaction->update([
-                    'status' => \App\Enums\TransactionStatus::PROCESSING->value,
+                    'status' => \App\Enums\TransactionStatus::PENDING_SUPPLIER->value,
                     'notes' => 'Sedang diproses oleh operator.',
                 ]);
             }
@@ -566,7 +612,7 @@ class TransactionController extends Controller
                 continue;
             }
 
-            $inFlight = in_array($transaction->status, ['pending', 'processing'], true);
+            $inFlight = TransactionStatusMapper::isFulfillOpen($transaction->status);
             if (! $inFlight) {
                 \Illuminate\Support\Facades\Log::info('VIP webhook duplicate — transaction already terminal', [
                     'trxid' => $trxid,
@@ -625,9 +671,9 @@ class TransactionController extends Controller
 
                 event(new \App\Events\TransactionFailed($result['transaction']));
             } else {
-                // waiting / processing — keep in-flight; polling may still resolve later.
+                // SRS 14.3 — unclear supplier outcome → PENDING_SUPPLIER; polling may still resolve later.
                 $transaction->update([
-                    'status' => \App\Enums\TransactionStatus::PENDING->value,
+                    'status' => \App\Enums\TransactionStatus::PENDING_SUPPLIER->value,
                     'notes' => 'Sedang diproses oleh operator.',
                 ]);
             }
@@ -685,7 +731,7 @@ class TransactionController extends Controller
             ], 400);
         }
 
-        $serverKey = (string) (config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
+        $serverKey = app(\App\Services\Payment\MidtransCredentialResolver::class)->resolve()['server_key'];
         $isTestRuntime = app()->runningUnitTests() || app()->environment('testing');
 
         if (!$isTestRuntime && ($serverKey === '' || $serverKey === 'dummy_server_key')) {
@@ -700,11 +746,12 @@ class TransactionController extends Controller
             $serverKey = 'testing_server_key';
         }
         
-        // Calculate expected signature
+        // Calculate expected signature — SRS 16.5 / Bagian 24 #8.
         // SHA512(order_id + status_code + gross_amount + ServerKey)
+        // Always verified (including tests) so forged signatures cannot credit wallets.
         $expectedSignature = hash('sha512', $orderId . $statusCode . $grossAmount . $serverKey);
-        
-        if (!$isTestRuntime && !hash_equals($expectedSignature, (string) $signatureKey)) {
+
+        if (!hash_equals($expectedSignature, (string) $signatureKey)) {
             \Illuminate\Support\Facades\Log::warning('Midtrans Webhook Signature Mismatch', [
                 'order_id' => $orderId,
             ]);

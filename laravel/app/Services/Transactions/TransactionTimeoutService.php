@@ -14,6 +14,7 @@ use App\Services\ProductProviders\DigiflazzResponseCodeClassifier;
 use App\Services\ProductProviders\ProductProviderRegistry;
 use App\Services\ProductProviders\ProviderFulfillmentResult;
 use App\Services\WalletRefundService;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -255,10 +256,7 @@ class TransactionTimeoutService
     public function reconcileOverdue(int $limit = 100): int
     {
         $ids = Transaction::query()
-            ->whereIn('status', [
-                TransactionStatus::PENDING->value,
-                TransactionStatus::PROCESSING->value,
-            ])
+            ->whereIn('status', TransactionStatusMapper::reconcileOpenStatuses())
             ->where(function ($q) {
                 $q->whereNotNull('timeout_at')->where('timeout_at', '<=', now())
                     ->orWhere(function ($q2) {
@@ -279,10 +277,9 @@ class TransactionTimeoutService
 
     protected function isInFlight(Transaction $transaction): bool
     {
-        return in_array($transaction->status, [
-            TransactionStatus::PENDING->value,
-            TransactionStatus::PROCESSING->value,
-        ], true);
+        // SRS 14.3 / 14.4 — LOCKED / SENT_TO_SUPPLIER / PENDING_SUPPLIER + legacy pending
+        return TransactionStatusMapper::isFulfillOpen($transaction->status)
+            || $transaction->status === TransactionStatus::DRAFT->value;
     }
 
     protected function probeProvider(Transaction $transaction): ?ProviderFulfillmentResult
@@ -472,6 +469,7 @@ class TransactionTimeoutService
             'reason' => $reason,
         ]);
 
+        // FR-DIFF-09 / SRS 14.5 — timeout settle-as-fail → auto refund via WalletRefundService.
         $result = $this->refundService->refundOnce(
             $transaction,
             'Refund Timeout/Gagal Transaksi: ' . $transaction->invoice_number,

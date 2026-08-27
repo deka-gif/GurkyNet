@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { walletService } from '../services/wallet/wallet.service';
 import { Wallet, WalletOverviewSummary, WalletLedgerEntry } from '../types';
-import { CacheTTL, cachedFetch, getCachedStale } from '../utils/queryCache';
+import { CacheTTL, cachedFetch, getCachedStale, invalidateCache } from '../utils/queryCache';
 
 interface WalletState {
   wallet: Wallet | null;
@@ -9,9 +9,12 @@ interface WalletState {
   history: WalletLedgerEntry[];
   loading: boolean;
   error: string | null;
-  fetchWallet: () => Promise<void>;
+  /** Sprint 11 — force=true bypasses 10-minute cache after settlement. */
+  fetchWallet: (opts?: { force?: boolean }) => Promise<void>;
   fetchHistory: (params?: Record<string, any>) => Promise<void>;
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
+  /** Apply balance from SSE balance_updated (notification only; then force-sync). */
+  applyRealtimeBalance: (balance: number) => void;
   topUp: (amount: number, paymentMethod: string, idempotencyKey?: string) => Promise<any | null>;
   lastTopUpError: { code?: string; message: string } | null;
   transfer: (
@@ -28,6 +31,7 @@ interface WalletState {
     admin_fee?: number;
     idempotencyKey?: string;
   }) => Promise<any | null>;
+  depositManual: (amount: number, proof: File, notes?: string) => Promise<any | null>;
   addBalance: (amount: number) => Promise<boolean>;
   deductBalance: (amount: number) => Promise<boolean>;
 }
@@ -79,18 +83,24 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   error: null,
   lastTopUpError: null,
 
-  fetchWallet: async () => {
+  fetchWallet: async (opts) => {
+    const force = Boolean(opts?.force);
+    if (force) {
+      invalidateCache('wallet:overview');
+    }
+
     const stale = getCachedStale<{
       wallet: Wallet | null;
       summary: WalletOverviewSummary | null;
       recent: WalletLedgerEntry[];
     }>('wallet:overview');
 
-    if (stale?.fresh && get().wallet) {
+    // Sprint 11 — never skip network after settlement (force) or when cache is stale.
+    if (!force && stale?.fresh && get().wallet) {
       return;
     }
 
-    if (stale && !get().wallet) {
+    if (!force && stale && !get().wallet) {
       set({
         wallet: stale.data.wallet,
         summary: stale.data.summary,
@@ -128,6 +138,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         set({ loading: false });
       }
     }
+  },
+
+  applyRealtimeBalance: (balance) => {
+    const current = get().wallet;
+    if (!current) return;
+    invalidateCache('wallet:overview');
+    const next = Number(balance);
+    set({
+      wallet: { ...current, balance: next },
+    });
   },
 
   fetchHistory: async (params) => {
@@ -224,6 +244,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       return null;
     } catch (err: any) {
       set({ error: err.message || 'Gagal melakukan penarikan.', loading: false });
+      return null;
+    }
+  },
+
+  depositManual: async (amount, proof, notes) => {
+    set({ loading: true, error: null });
+    try {
+      const form = new FormData();
+      form.append('amount', String(amount));
+      form.append('proof', proof);
+      if (notes) form.append('notes', notes);
+      const response = await walletService.depositManual(form);
+      if (response.success) {
+        set({ loading: false });
+        return response.data;
+      }
+      set({ error: response.message, loading: false });
+      return null;
+    } catch (err: any) {
+      set({ error: err.message || 'Gagal mengajukan deposit manual.', loading: false });
       return null;
     }
   },

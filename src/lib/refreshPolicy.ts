@@ -15,8 +15,10 @@ export const RefreshPolicy = {
   cms: 30_000,
   historyPending: 10_000,
   chat: 5_000,
-  /** Absolute floor for any realtime event poll */
-  realtimeFloor: 5_000,
+  /** Sprint 11 / SRS 16.3 — wallet balance fallback ~3s when SSE unhealthy */
+  walletBalance: 3_000,
+  /** Absolute floor for any realtime event poll (aligned with 3–5s balance NFR) */
+  realtimeFloor: 3_000,
   providerBalance: 600_000,
   settlement: 60_000,
 } as const;

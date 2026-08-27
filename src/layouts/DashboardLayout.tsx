@@ -35,6 +35,8 @@ import {
   Tag,
   Ticket,
   Crown,
+  TrendingUp,
+  Users,
   ImageIcon,
   PlusCircle,
   Gamepad2,
@@ -47,6 +49,8 @@ import {
   AlertCircle,
   MessageSquare,
   ShieldCheck,
+  Landmark,
+  Banknote,
 } from 'lucide-react';
 
 import { storageService } from '../services/storage.service';
@@ -144,13 +148,17 @@ export const DashboardLayout = () => {
         return [
           { path: '/dashboard/finance', label: 'Dashboard', icon: DollarSign },
           { path: '/dashboard/finance/treasury', label: 'Treasury', icon: Building },
+          { path: '/dashboard/finance/wallets', label: 'Saldo Pengguna', icon: Wallet },
+          { path: '/dashboard/finance/loyalty', label: 'Program Poin', icon: Gift },
+          { path: '/dashboard/finance/referral', label: 'Program Referral', icon: Users },
+          { path: '/dashboard/finance/deposits', label: 'Deposit', icon: Landmark },
+          { path: '/dashboard/finance/withdrawals', label: 'Withdraw', icon: Banknote },
           { path: '/dashboard/finance/refund-queue', label: 'Refund Queue', icon: Share2 },
           { path: '/dashboard/finance/refund-approval', label: 'Refund Approval', icon: Receipt },
           { path: '/dashboard/finance/settlement', label: 'Settlement Queue', icon: Building },
           { path: '/dashboard/finance/ledger', label: 'Ledger', icon: FileSpreadsheet },
-          { path: '/dashboard/finance/financial-report', label: 'Reports', icon: FileSpreadsheet },
+          { path: '/dashboard/finance/financial-report', label: 'Laporan Keuangan', icon: FileSpreadsheet },
           { path: '/dashboard/finance/alerts', label: 'Alerts', icon: Bell },
-          { path: '/dashboard/finance/wallets', label: 'Wallets', icon: Wallet },
           { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
         ];
@@ -167,6 +175,7 @@ export const DashboardLayout = () => {
           { path: '/dashboard/operations/payment-gateways', label: 'Payment Gateway Control', icon: CreditCard },
           { path: '/dashboard/operations/monitoring', label: 'Service Monitoring', icon: Activity },
           { path: '/dashboard/operations/pricing', label: 'Pricing & Margin', icon: Tag },
+          { path: '/dashboard/operations/agent-margin', label: 'Margin Agen', icon: TrendingUp },
           { path: '/dashboard/marketing/website/homepage-builder', label: 'Homepage Builder', icon: Layers },
           { path: '/dashboard/marketing/website/legal-center', label: 'Legal Center', icon: FileText },
           { path: '/dashboard/account', label: 'Akun', icon: User },
@@ -208,6 +217,7 @@ export const DashboardLayout = () => {
       case 'Owner':
         return [
           { path: '/dashboard/owner', label: 'Executive Dashboard', icon: Crown },
+          { path: '/dashboard/owner/cash-flow', label: 'Prediksi Cash Flow', icon: TrendingUp },
           { path: '/dashboard/admin/workflows', label: 'Global Workflows', icon: Share2 },
           { path: '/dashboard/owner/alerts', label: 'Executive Alerts', icon: Bell },
           { path: '/dashboard/owner/approvals', label: 'Approvals', icon: ShieldCheck },
@@ -250,6 +260,9 @@ export const DashboardLayout = () => {
           { path: '/dashboard/international', label: 'International Top Up', icon: Globe },
           { divider: true },
           { path: '/dashboard/transfer', label: 'Transfer', icon: Send },
+          { path: '/dashboard/account/loyalty', label: 'Poin & Loyalitas', icon: Sparkles },
+          { path: '/dashboard/account/referral', label: 'Referral', icon: Users },
+          { path: '/dashboard/account/subscriptions', label: 'Langganan Otomatis', icon: Settings },
           { path: '/dashboard/riwayat', label: 'Riwayat', icon: History },
           { path: '/dashboard/help', label: 'Help Center', icon: Headset },
           { path: '/dashboard/account', label: 'Akun', icon: User },

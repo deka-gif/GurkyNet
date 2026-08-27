@@ -35,6 +35,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
     supportPhone: '',
     whatsapp: '',
     officeAddress: '',
+    operatingHours: '',
     googleMapsUrl: '',
     facebook: '',
     instagram: '',
@@ -88,6 +89,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
         supportPhone: '',
         whatsapp: '',
         officeAddress: '',
+        operatingHours: '',
         googleMapsUrl: '',
         facebook: '',
         instagram: '',
@@ -456,6 +458,18 @@ export const MarketingWebsiteSettings: React.FC = () => {
                 placeholder="Jl. Merdeka Raya No. 10, Jakarta Selatan"
                 rows={2}
                 className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all placeholder-gray-400 font-medium resize-none"
+              />
+            </div>
+
+            {/* FR-MKT01 — jam operasional */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-700">Jam Operasional</label>
+              <input
+                type="text"
+                value={formState.operatingHours || ''}
+                onChange={(e) => handleChange('operatingHours', e.target.value)}
+                placeholder="Senin–Jumat 09:00–17:00 WIB"
+                className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all placeholder-gray-400 font-medium"
               />
             </div>
 

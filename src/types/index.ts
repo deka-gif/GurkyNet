@@ -11,6 +11,10 @@ export interface User {
   isVerified: boolean;
   hasPin?: boolean;
   createdAt?: string;
+  kycStatus?: string;
+  phoneVerified?: boolean;
+  emailVerified?: boolean;
+  userType?: string;
   wallet?: {
     walletNo?: string;
     wallet_number?: string;
@@ -147,7 +151,7 @@ export interface Profile {
   pinUpdatedAt?: string | null;
   wallet?: User['wallet'];
   user?: User;
-  kycStatus?: 'unverified' | 'pending' | 'verified';
+  kycStatus?: 'unverified' | 'pending' | 'verified' | 'tier1' | 'rejected';
   whatsappLinked?: boolean;
   twoFactorEnabled?: boolean;
   createdAt?: string;

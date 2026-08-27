@@ -9,7 +9,10 @@ use Illuminate\Support\Facades\Log;
 
 class ProductProviderHealthService
 {
-    public function __construct(protected ProductProviderRegistry $registry) {}
+    public function __construct(
+        protected ProductProviderRegistry $registry,
+        protected ProviderCircuitBreaker $circuitBreaker,
+    ) {}
 
     /**
      * Run multi-indicator health check and persist metrics.
@@ -35,6 +38,20 @@ class ProductProviderHealthService
         $this->refreshStats($provider);
         $provider->refresh();
 
+        // Sprint 10 / SRS 15.4 — when OPEN→HALF_OPEN, only one worker may probe.
+        $circuitState = $this->circuitBreaker->state((string) $provider->code);
+        if ($circuitState === ProviderCircuitBreaker::STATE_HALF_OPEN
+            || $circuitState === ProviderCircuitBreaker::STATE_OPEN) {
+            if (! $this->circuitBreaker->tryAcquireHalfOpenProbe((string) $provider->code)) {
+                Log::info('HEALTH CHECK — half-open probe skipped (another worker holds probe)', [
+                    'provider' => $provider->code,
+                    'circuit' => $this->circuitBreaker->state((string) $provider->code),
+                ]);
+
+                return $provider->fresh() ?? $provider;
+            }
+        }
+
         if (! $this->registry->has($provider->code)) {
             $evaluated = ProviderHealthStatus::evaluate([
                 'configured' => false,
@@ -44,6 +61,8 @@ class ProductProviderHealthService
                 'sync' => 'unknown',
                 'partner_status' => $provider->partner_status,
             ]);
+
+            $this->circuitBreaker->recordFailure((string) $provider->code, 'no_adapter');
 
             return $this->persistEvaluation($provider, $evaluated, null, [
                 'reason' => 'no_adapter',
@@ -288,11 +307,26 @@ class ProductProviderHealthService
 
         $provider->forceFill($fill)->save();
 
+        // Sprint 10 / SRS 15.4 — health probe drives circuit breaker.
+        if ($ok && $status === ProviderHealthStatus::ONLINE) {
+            $this->circuitBreaker->recordSuccess((string) $provider->code);
+        } elseif (in_array($status, [
+            ProviderHealthStatus::OFFLINE,
+            ProviderHealthStatus::AUTH_FAILED,
+            ProviderHealthStatus::CONFIG_ERROR,
+            ProviderHealthStatus::NETWORK_CONFIGURATION,
+            'timeout',
+            'no_response',
+        ], true)) {
+            $this->circuitBreaker->recordFailure((string) $provider->code, 'health:'.$status);
+        }
+
         $this->log($provider, $ok, $latency, $evaluated['description'], array_merge($meta, [
             'health_color' => $color,
             'api_status' => $status,
             'label' => $evaluated['label'],
             'transaction_eligible' => $ok,
+            'circuit_state' => $this->circuitBreaker->state((string) $provider->code),
         ]));
 
         $fresh = $provider->fresh();
@@ -385,12 +419,20 @@ class ProductProviderHealthService
                 $updates['api_status'] = ProviderHealthStatus::PARTIAL;
                 $updates['health_color'] = 'yellow';
             }
+            $this->circuitBreaker->recordSuccess((string) $provider->code);
         } elseif (! $result->ok) {
             $updates['last_failure_at'] = now();
             $updates['last_error'] = $result->message ?? $result->reason;
             if (in_array($result->reason, ['timeout', 'http_5xx', 'provider_offline'], true)) {
                 $updates['api_status'] = ProviderHealthStatus::PARTIAL;
                 $updates['health_color'] = 'yellow';
+            }
+            // Sprint 10 — count infrastructure failures only (not customer validation).
+            if ($this->isInfrastructureFailure($result)) {
+                $this->circuitBreaker->recordFailure(
+                    (string) $provider->code,
+                    (string) ($result->reason ?? 'provider_failure')
+                );
             }
         }
 
@@ -401,6 +443,29 @@ class ProductProviderHealthService
         } catch (\Throwable $e) {
             Log::debug('refreshStats skipped', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Failures that reflect provider/network health — not customer business rejects.
+     */
+    protected function isInfrastructureFailure(ProviderFulfillmentResult $result): bool
+    {
+        $reason = strtolower((string) ($result->reason ?? ''));
+
+        return in_array($reason, [
+            'timeout',
+            'provider_offline',
+            'offline',
+            'provider_unavailable',
+            'http_5xx',
+            'provider_exception',
+            'connection_error',
+            'auth_failed',
+            'authentication_failure',
+            'provider_not_configured',
+            'rate_limited',
+            'invalid_response',
+        ], true);
     }
 
     protected function log(

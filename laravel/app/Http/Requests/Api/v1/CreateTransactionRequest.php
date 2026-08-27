@@ -21,8 +21,8 @@ class CreateTransactionRequest extends FormRequest
             'pin' => 'required|string|size:6|regex:/^\d{6}$/',
             // Digiflazz inq-pasca session ref — required for postpaid bill payment.
             'inquiry_ref_id' => 'nullable|string|max:64',
-            // SRS 14.1 — optional for backward compatibility with clients not yet upgraded.
-            'idempotency_key' => 'nullable|string|max:80',
+            // SRS 14.1 — required for balance-mutating purchase.
+            'idempotency_key' => 'required|string|max:80',
             // Intentionally omit status, admin_fee, amount, total_payment — server-calculated only.
         ];
     }

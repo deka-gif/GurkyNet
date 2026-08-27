@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GurkyNet Partner Portal</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --accent: #38bdf8; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem; }
+    h1 { font-size: 1.75rem; margin: 0 0 .5rem; }
+    p { opacity: .85; max-width: 40rem; }
+    a { color: var(--accent); }
+    .box { background: var(--card); padding: 1.25rem 1.5rem; border-radius: 8px; margin-top: 1.5rem; max-width: 40rem; }
+    code { font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>GurkyNet Partner Portal</h1>
+  <p>Minimal FR-API-09 surface. Use the authenticated Partner Portal API from your Mitra account; machine H2H calls use HMAC credentials.</p>
+  <div class="box">
+    <p><strong>OpenAPI</strong><br /><code>/api/v1/partner/openapi.json</code></p>
+    <p><strong>Portal API</strong><br /><code>/api/v1/partner-portal/*</code> (Sanctum)</p>
+    <p><strong>H2H API</strong><br /><code>/api/v1/partner/price|execute|status</code> (X-API-Key + X-Signature + X-Timestamp)</p>
+  </div>
+</body>
+</html>

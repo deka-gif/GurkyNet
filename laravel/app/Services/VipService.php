@@ -24,15 +24,26 @@ class VipService
     protected string $apiKey;
     protected string $signature;
 
-    public function __construct()
+    public function __construct(?\App\Services\ProductProviders\ProviderCredentialResolver $resolver = null)
     {
-        $this->baseUrl = rtrim((string) (config('services.vip.base_url') ?: ''), '/');
-        $this->apiId = (string) (config('services.vip.username') ?: config('services.vip.merchant_id') ?: '');
-        $this->apiKey = (string) (config('services.vip.api_key') ?: '');
-        $configuredSign = (string) (config('services.vip.signature') ?: '');
-        $this->signature = $configuredSign !== ''
-            ? $configuredSign
-            : ($this->apiId !== '' && $this->apiKey !== '' ? md5($this->apiId . $this->apiKey) : '');
+        $resolver ??= app(\App\Services\ProductProviders\ProviderCredentialResolver::class);
+        $this->applyCredentials($resolver->vip());
+    }
+
+    public function refreshCredentials(): void
+    {
+        $this->applyCredentials(app(\App\Services\ProductProviders\ProviderCredentialResolver::class)->vip());
+    }
+
+    /**
+     * @param  array{api_id:string,api_key:string,signature:string,base_url:string}  $creds
+     */
+    protected function applyCredentials(array $creds): void
+    {
+        $this->baseUrl = $creds['base_url'];
+        $this->apiId = $creds['api_id'];
+        $this->apiKey = $creds['api_key'];
+        $this->signature = $creds['signature'];
     }
 
     /**
@@ -315,6 +326,7 @@ class VipService
      */
     protected function request(string $path, array $params, string $logEvent): array
     {
+        $this->refreshCredentials();
         Log::info('EXEC TRACE — VipService::request() HTTP request starting', [
             'path' => $path,
             'event' => $logEvent,
@@ -357,14 +369,28 @@ class VipService
         Log::info('VIP REQUEST HEADERS', ['REQUEST_HEADERS' => $headers]);
 
         try {
-            // Catalog sync can exceed default probe timeout — do not abort mid-download.
+            // Catalog sync can exceed fulfillment window — do not abort mid-download.
             $isSync = in_array($logEvent, ['sync', 'catalog', 'price_list'], true);
-            $timeout = app()->environment('testing') ? 5 : ($isSync ? 90 : 30);
+            $isHealth = in_array($logEvent, ['profile', 'health', 'health_check'], true);
+            if (app()->environment('testing')) {
+                $timeout = 5;
+                $connectTimeout = 2;
+            } elseif ($isSync) {
+                $timeout = (int) config('ppob.provider_http.catalog_timeout_seconds', 90);
+                $connectTimeout = 10;
+            } elseif ($isHealth) {
+                $timeout = (int) config('ppob.provider_http.health_timeout_seconds', 10);
+                $connectTimeout = min(5, $timeout);
+            } else {
+                // Sprint 10 / SRS 19 — fulfillment/status inside 10–15s window.
+                $timeout = (int) config('ppob.provider_http.fulfillment_timeout_seconds', 12);
+                $connectTimeout = (int) config('ppob.provider_http.fulfillment_connect_timeout_seconds', 5);
+            }
             /** @var Response $response */
             $response = Http::asForm()
                 ->withHeaders(['Accept' => 'application/json'])
                 ->timeout($timeout)
-                ->connectTimeout(app()->environment('testing') ? 2 : 10)
+                ->connectTimeout($connectTimeout)
                 ->retry($isSync ? 2 : 0, 2000, function ($exception) {
                     return $exception instanceof \Illuminate\Http\Client\ConnectionException
                         || $exception instanceof \Illuminate\Http\Client\RequestException;

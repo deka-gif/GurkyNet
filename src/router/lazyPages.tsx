@@ -127,6 +127,22 @@ export const AccountWalletPage = lazyNamed(
   () => import('../pages/dashboard/account'),
   'AccountWalletPage'
 );
+export const AccountKycPage = lazyNamed(
+  () => import('../pages/dashboard/account'),
+  'AccountKycPage'
+);
+export const AccountLoyaltyPage = lazyNamed(
+  () => import('../pages/dashboard/account'),
+  'AccountLoyaltyPage'
+);
+export const AccountReferralPage = lazyNamed(
+  () => import('../pages/dashboard/account'),
+  'AccountReferralPage'
+);
+export const AccountSubscriptionsPage = lazyNamed(
+  () => import('../pages/dashboard/account'),
+  'AccountSubscriptionsPage'
+);
 export const AccountComplaintsPage = lazyNamed(
   () => import('../pages/dashboard/account'),
   'AccountComplaintsPage'
@@ -227,6 +243,14 @@ export const CustomerSupportKnowledgeBase = lazyNamed(
   () => import('../pages/dashboard/CustomerSupportKnowledgeBase'),
   'CustomerSupportKnowledgeBase'
 );
+export const KycReviewQueuePage = lazyNamed(
+  () => import('../pages/dashboard/KycReviewPages'),
+  'KycReviewQueuePage'
+);
+export const KycReviewDetailPage = lazyNamed(
+  () => import('../pages/dashboard/KycReviewPages'),
+  'KycReviewDetailPage'
+);
 export const CustomerSupportInbox = lazyNamed(
   () => import('../pages/dashboard/CustomerSupportInbox'),
   'CustomerSupportInbox'
@@ -284,9 +308,30 @@ export const FinanceAlertsPage = lazyNamed(
   () => import('../pages/dashboard/FinanceAlertsPage'),
   'FinanceAlertsPage'
 );
+
+export const FinanceReconciliationPage = lazyNamed(
+  () => import('../pages/dashboard/FinanceReconciliationPage'),
+  'FinanceReconciliationPage'
+);
 export const FinanceWalletMonitorPage = lazyNamed(
   () => import('../pages/dashboard/FinanceWalletMonitorPage'),
   'FinanceWalletMonitorPage'
+);
+export const FinanceLoyaltyPage = lazyNamed(
+  () => import('../pages/dashboard/FinanceLoyaltyPage'),
+  'FinanceLoyaltyPage'
+);
+export const FinanceReferralPage = lazyNamed(
+  () => import('../pages/dashboard/FinanceReferralPage'),
+  'FinanceReferralPage'
+);
+export const FinanceDepositPage = lazyNamed(
+  () => import('../pages/dashboard/FinanceDepositPage'),
+  'FinanceDepositPage'
+);
+export const FinanceWithdrawPage = lazyNamed(
+  () => import('../pages/dashboard/FinanceWithdrawPage'),
+  'FinanceWithdrawPage'
 );
 
 export const OperationsDashboard = lazyNamed(
@@ -317,6 +362,10 @@ export const OperationsPricingManagement = lazyNamed(
   () => import('../pages/dashboard/OperationsPricingManagement'),
   'OperationsPricingManagement'
 );
+export const OperationsAgentMarginPage = lazyNamed(
+  () => import('../pages/dashboard/OperationsAgentMarginPage'),
+  'OperationsAgentMarginPage'
+);
 export const OperationsProductProviderControl = lazyNamed(
   () => import('../pages/dashboard/OperationsProductProviderControl'),
   'OperationsProductProviderControl'
@@ -329,6 +378,10 @@ export const OperationsPaymentGatewayControl = lazyNamed(
 export const OwnerDashboard = lazyNamed(
   () => import('../pages/dashboard/OwnerDashboard'),
   'OwnerDashboard'
+);
+export const OwnerCashFlowProjectionPage = lazyNamed(
+  () => import('../pages/dashboard/OwnerCashFlowProjectionPage'),
+  'OwnerCashFlowProjectionPage'
 );
 export const OwnerExecutiveAlertsPage = lazyNamed(
   () => import('../pages/dashboard/OwnerExecutiveAlertsPage'),

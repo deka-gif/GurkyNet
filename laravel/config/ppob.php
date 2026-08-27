@@ -1,13 +1,10 @@
 <?php
 
+/**
+ * Sprint 10 / SRS 15 + 19 — provider HTTP + circuit breaker defaults.
+ * Threshold/cooldown follow SRS 15.4 suggestion (5 failures / 5 minutes).
+ */
 return [
-    /*
-    |--------------------------------------------------------------------------
-    | Product Providers (PPOB SKU catalog sources)
-    |--------------------------------------------------------------------------
-    | These suppliers own product catalogs. Product Management filters use this
-    | list only — never payment gateways.
-    */
     'product_providers' => [
         'digiflazz' => [
             'code' => 'digiflazz',
@@ -16,19 +13,11 @@ return [
         ],
         'vip' => [
             'code' => 'vip',
-            // Brand label is configurable via env / System Settings (ppob_vip_display_name).
             'name' => env('VIP_PRODUCT_PROVIDER_NAME', 'VIPAYMENT'),
             'is_active' => (bool) env('VIP_PRODUCT_PROVIDER_ENABLED', false),
         ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Payment Gateways (top-up / settlement rails)
-    |--------------------------------------------------------------------------
-    | Not part of the PPOB SKU catalog. Must not appear in Product Management
-    | provider filters.
-    */
     'payment_gateways' => [
         'midtrans' => [
             'code' => 'midtrans',
@@ -48,18 +37,6 @@ return [
         ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Transaction timeout & auto-refund
-    |--------------------------------------------------------------------------
-    | Pending/processing must resolve to SUCCESS or FAILED. Status is checked
-    | at each check_at_seconds mark; after max_seconds a final check runs and
-    | then an idempotent wallet refund is issued if still unresolved.
-    |
-    | Digiflazz Cek Status: do not re-call the same transaction/data with an
-    | interval under 60 seconds (race / duplication risk). Offsets are clamped
-    | to enforce that minimum gap.
-    */
     'timeout' => [
         'max_seconds' => (int) env('PPOB_TRANSACTION_TIMEOUT_SECONDS', 180),
         'min_check_interval_seconds' => (int) env('PPOB_TRANSACTION_MIN_CHECK_INTERVAL_SECONDS', 60),
@@ -71,15 +48,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Automatic Product Provider Catalog Synchronization
+    | Provider HTTP timeouts (Sprint 10 / SRS 19 — 10–15s failover window)
     |--------------------------------------------------------------------------
-    | Laravel Scheduler runs `ppob:catalog-auto-sync` daily. Digiflazz full
-    | pricelist is rate-limited (~1× / 5 min / RC83) so prepaid and pasca are
-    | sequenced with a cooldown before VIPayment.
-    |
-    | Override schedule without code changes via env (preferred) or Settings
-    | keys: ppob_catalog_auto_sync_enabled, ppob_catalog_auto_sync_at.
     */
+    'provider_http' => [
+        'fulfillment_timeout_seconds' => (int) env('PPOB_PROVIDER_TIMEOUT_SECONDS', 12),
+        'fulfillment_connect_timeout_seconds' => (int) env('PPOB_PROVIDER_CONNECT_TIMEOUT_SECONDS', 5),
+        // Keep retries low so total wall time stays inside the 10–15s NFR window.
+        'fulfillment_max_retries' => (int) env('PPOB_PROVIDER_HTTP_MAX_RETRIES', 1),
+        'health_timeout_seconds' => (int) env('PPOB_PROVIDER_HEALTH_TIMEOUT_SECONDS', 10),
+        'catalog_timeout_seconds' => (int) env('PPOB_PROVIDER_CATALOG_TIMEOUT_SECONDS', 90),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Circuit breaker (Sprint 10 / SRS 15.4)
+    | Suggested: 5 consecutive failures within 5 minutes → open for 5 minutes.
+    |--------------------------------------------------------------------------
+    */
+    'circuit_breaker' => [
+        'failure_threshold' => (int) env('PPOB_CB_FAILURE_THRESHOLD', 5),
+        'failure_window_seconds' => (int) env('PPOB_CB_FAILURE_WINDOW_SECONDS', 300),
+        'cooldown_seconds' => (int) env('PPOB_CB_COOLDOWN_SECONDS', 300),
+        'half_open_successes' => (int) env('PPOB_CB_HALF_OPEN_SUCCESSES', 1),
+    ],
+
     'catalog_auto_sync' => [
         'enabled' => (bool) env('PPOB_CATALOG_AUTO_SYNC_ENABLED', true),
         'timezone' => env('PPOB_CATALOG_AUTO_SYNC_TIMEZONE', 'Asia/Jakarta'),

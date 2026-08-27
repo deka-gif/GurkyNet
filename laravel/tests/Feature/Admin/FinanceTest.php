@@ -198,6 +198,7 @@ class FinanceTest extends TestCase
 
         $response = $this->postJson("/api/v1/admin/finance/refunds/{$transaction->id}/approve", [
             'notes' => 'Diproses pengembalian dana penuh',
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
         ]);
 
         $response->assertStatus(200)

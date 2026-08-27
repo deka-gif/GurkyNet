@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\v1\AccountContentController;
 use App\Http\Controllers\Api\v1\ComplaintController;
 use App\Http\Controllers\Api\v1\AccountSecurityController;
 use App\Http\Controllers\Api\v1\ProfileController;
+use App\Http\Controllers\Api\v1\KycController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
 use App\Http\Controllers\Api\v1\Public\PublicMediaController;
 use App\Http\Middleware\EnsureRole;
@@ -112,6 +113,21 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/catalog/pajak-regions/{category}', [CatalogController::class, 'pajakRegions']);
     });
 
+    // Sprint 8 — public feature gates (purchase/withdraw/auto-topup)
+    Route::get('/features', \App\Http\Controllers\Api\v1\FeatureFlagController::class)->middleware('throttle:60,1');
+
+    // SRS 30 / FR-API-10 — OpenAPI (public read)
+    Route::get('/partner/openapi.json', \App\Http\Controllers\Api\v1\Partner\PartnerOpenApiController::class)
+        ->middleware('throttle:60,1');
+
+    // SRS 30 — Partner H2H API (HMAC; PARTNER_API_ENABLED / sandbox gates)
+    Route::prefix('partner')->middleware(['partner.api', 'partner.api.rate'])->group(function () {
+        Route::get('/price', [\App\Http\Controllers\Api\v1\Partner\PartnerH2hController::class, 'price']);
+        Route::post('/execute', [\App\Http\Controllers\Api\v1\Partner\PartnerH2hController::class, 'execute']);
+        Route::get('/status', [\App\Http\Controllers\Api\v1\Partner\PartnerH2hController::class, 'status']);
+        Route::post('/status', [\App\Http\Controllers\Api\v1\Partner\PartnerH2hController::class, 'status']);
+    });
+
     // Digiflazz Webhook Callback
     Route::post('/webhooks/digiflazz', [TransactionController::class, 'digiflazzCallback'])->middleware('throttle:120,1');
 
@@ -122,7 +138,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     Route::post('/webhooks/midtrans', [TransactionController::class, 'midtransCallback'])->middleware('throttle:120,1');
 
     // Public Authentication Endpoints
-    Route::middleware('throttle:20,1')->group(function () {
+    // SRS Bagian 8.1 / 17 — named limiters (login / password-reset).
+    Route::middleware('throttle:login')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         Route::post('/auth/login', [AuthController::class, 'login']);
         Route::post('/auth/login/pin', [AuthController::class, 'pinLogin']);
@@ -131,13 +148,16 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::post('/auth/login/2fa/verify', [AuthController::class, 'verifyLogin2fa']);
         Route::post('/auth/register/finalize', [AuthController::class, 'finalizeRegistration']);
         Route::post('/auth/password/reset', [AuthController::class, 'resetPassword']);
+    });
+
+    Route::middleware('throttle:password-reset')->group(function () {
         Route::post('/auth/password/forgot/request', [AccountSecurityController::class, 'requestForgotPassword']);
         Route::post('/auth/password/forgot/confirm', [AccountSecurityController::class, 'confirmForgotPassword']);
         Route::post('/auth/pin/forgot/request', [AccountSecurityController::class, 'requestForgotPin']);
         Route::post('/auth/pin/forgot/confirm', [AccountSecurityController::class, 'confirmForgotPin']);
     });
 
-    Route::middleware('throttle:5,1')->group(function () {
+    Route::middleware('throttle:otp')->group(function () {
         Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
         Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
     });
@@ -223,22 +243,76 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
 
         // Wallet and Financial Modules
-        Route::middleware('throttle:30,1')->group(function () {
+        // SRS Bagian 8.1 / 17 — financial-sensitive throttle.
+        Route::middleware('throttle:financial')->group(function () {
             Route::get('/wallet', [WalletController::class, 'show']);
             Route::get('/wallet/history', [WalletController::class, 'history']);
+            Route::get('/wallet/payment-config', [WalletController::class, 'paymentConfig']);
             Route::post('/wallet/topup', [WalletController::class, 'topUp']);
+            Route::post('/wallet/deposit-manual', [WalletController::class, 'depositManual']); // FR-FIN-03
             Route::post('/wallet/transfer', [WalletController::class, 'transfer']);
             Route::post('/wallet/withdraw', [WalletController::class, 'withdraw']);
+
+            // FR-DIFF-01 / FR-DIFF-08 — Poin & Loyalitas (own data only)
+            Route::get('/loyalty', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'summary']);
+            Route::get('/loyalty/history', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'history']);
+            Route::post('/loyalty/redeem', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'redeem']);
+
+            // SRS 31 / FR-REF-07 — Referral (own data only)
+            Route::get('/referral', [\App\Http\Controllers\Api\v1\ReferralController::class, 'summary']);
+            Route::get('/referral/history', [\App\Http\Controllers\Api\v1\ReferralController::class, 'history']);
+            Route::put('/referral/code', [\App\Http\Controllers\Api\v1\ReferralController::class, 'setCode']);
+
+            // FR-DIFF-02 — Auto-Reorder subscriptions (own only)
+            Route::get('/subscriptions', [\App\Http\Controllers\Api\v1\SubscriptionController::class, 'index']);
+            Route::post('/subscriptions', [\App\Http\Controllers\Api\v1\SubscriptionController::class, 'store']);
+            Route::put('/subscriptions/{id}', [\App\Http\Controllers\Api\v1\SubscriptionController::class, 'update'])->whereNumber('id');
+            Route::post('/subscriptions/{id}/pause', [\App\Http\Controllers\Api\v1\SubscriptionController::class, 'pause'])->whereNumber('id');
+            Route::post('/subscriptions/{id}/resume', [\App\Http\Controllers\Api\v1\SubscriptionController::class, 'resume'])->whereNumber('id');
+            Route::post('/subscriptions/{id}/cancel', [\App\Http\Controllers\Api\v1\SubscriptionController::class, 'cancel'])->whereNumber('id');
+        });
+
+        // SRS 30 / FR-API-09 — Partner Portal (own data only)
+        Route::prefix('partner-portal')->group(function () {
+            Route::post('/apply', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'apply']);
+            Route::get('/me', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'me']);
+            Route::get('/credentials', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'credentials']);
+            Route::post('/credentials/{credentialId}/rotate', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'rotate'])->whereNumber('credentialId');
+            Route::post('/credentials/{credentialId}/revoke', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'revoke'])->whereNumber('credentialId');
+            Route::get('/logs', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'logs']);
+            Route::get('/transactions', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'transactions']);
+            Route::post('/deposits', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'requestDeposit']);
+            Route::get('/deposits', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'deposits']);
+            Route::get('/docs', [\App\Http\Controllers\Api\v1\Partner\PartnerPortalController::class, 'docs']);
+        });
+
+        // FR-KYC-01..05 / SRS Bagian 21 — KYC Tier 1/2 (user)
+        Route::prefix('kyc')->group(function () {
+            Route::get('/status', [KycController::class, 'status']);
+            Route::get('/withdraw-eligibility', [KycController::class, 'withdrawEligibility']);
+            Route::post('/tier1/phone/request', [KycController::class, 'requestPhoneVerification'])->middleware('throttle:otp');
+            Route::post('/tier1/phone/verify', [KycController::class, 'verifyPhone'])->middleware('throttle:otp');
+            Route::post('/tier1/email/request', [KycController::class, 'requestEmailVerification'])->middleware('throttle:otp');
+            Route::post('/tier1/email/verify', [KycController::class, 'verifyEmail'])->middleware('throttle:otp');
+            Route::post('/tier2/submit', [KycController::class, 'submit'])->middleware('throttle:kyc-upload');
+            Route::get('/verifications/{id}', [KycController::class, 'show'])->whereNumber('id');
+            Route::get('/verifications/{id}/documents/{type}', [KycController::class, 'document'])
+                ->whereNumber('id')
+                ->where('type', 'ktp|selfie');
         });
 
         // Transaction Engine Module
+        // SRS Bagian 24 #7 — purchase attempts must hit rate limiting within a 20/min attack window.
+        // Prior group limit (30/min) allowed all 20 attempts; POST store tightened to 15/min.
         Route::middleware('throttle:30,1')->group(function () {
             Route::get('/transactions', [TransactionController::class, 'index']);
-            Route::post('/transactions', [TransactionController::class, 'store']);
             Route::get('/transactions/{id_or_invoice}', [TransactionController::class, 'show']);
             Route::post('/transactions/{id_or_invoice}/cancel', [TransactionController::class, 'cancel']);
             Route::get('/transactions/{id_or_invoice}/receipt', [TransactionController::class, 'receipt']);
+            Route::get('/transactions/{id_or_invoice}/receipt.pdf', [TransactionController::class, 'receiptPdf']);
         });
+        Route::post('/transactions', [TransactionController::class, 'store'])
+            ->middleware('throttle:15,1');
 
         // Postpaid bill inquiry (Digiflazz inq-pasca) — no wallet debit
         Route::middleware('throttle:20,1')->group(function () {
@@ -271,10 +345,26 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/provider-deposits/refresh', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'refreshProviderDeposits']);
             Route::get('/payment-gateways', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'paymentGateways']);
             Route::get('/wallets/monitor', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'walletMonitor']);
+            // FR-FIN-01
+            Route::get('/wallets', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'wallets']);
+            Route::get('/wallets/{userId}/mutations', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'walletMutations'])->whereNumber('userId');
             Route::get('/ledger', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'ledgerIndex']);
             Route::get('/ledger/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'ledgerShow'])->whereNumber('id');
             Route::get('/reports', [FinanceController::class, 'reports']);
             Route::get('/reports/structured', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'structuredReports']);
+            Route::get('/reports/export', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'exportReport']); // FR-FIN-08
+            // FR-FIN-03 / FR-FIN-04
+            Route::get('/deposits/automatic', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'automaticDeposits']);
+            Route::get('/deposits', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'deposits']);
+            Route::get('/deposits/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'depositShow'])->whereNumber('id');
+            Route::post('/deposits/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'depositApprove'])->whereNumber('id');
+            Route::post('/deposits/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'depositReject'])->whereNumber('id');
+            // FR-FIN-05
+            Route::get('/withdrawals', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'withdrawals']);
+            Route::get('/withdrawals/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'withdrawalShow'])->whereNumber('id');
+            Route::post('/withdrawals/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'withdrawalApprove'])->whereNumber('id');
+            Route::post('/withdrawals/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'withdrawalReject'])->whereNumber('id');
+            Route::post('/withdrawals/{id}/hold', [\App\Http\Controllers\Api\v1\Admin\FinanceOpsController::class, 'withdrawalHold'])->whereNumber('id');
             Route::get('/refunds', [FinanceController::class, 'refunds']);
             Route::post('/refunds/{id}/approve', [FinanceController::class, 'approveRefund']);
             Route::post('/refunds/{id}/reject', [FinanceController::class, 'rejectRefund']);
@@ -286,7 +376,43 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/alerts/evaluate', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertsEvaluate']);
             Route::post('/alerts/{id}/ack', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertAck'])->whereNumber('id');
             Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\v1\Admin\FinanceCommandCenterController::class, 'alertResolve'])->whereNumber('id');
-            Route::post('/wallet/adjust', [FinanceController::class, 'adjustWallet']);
+            Route::post('/wallet/adjust', [FinanceController::class, 'adjustWallet']); // FR-FIN-02
+
+            // FR-DIFF-01 / 13.4 — Program Poin & Komisi (poin only this sprint)
+            Route::get('/loyalty/overview', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'overview']);
+            Route::get('/loyalty/ledger', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'ledger']);
+            Route::get('/loyalty/users/{userId}', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'userBalance'])->whereNumber('userId');
+            Route::get('/loyalty/users/{userId}/history', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'userHistory'])->whereNumber('userId');
+            Route::post('/loyalty/adjust', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'adjust']);
+
+            // SRS 31 — Referral commission (Finance)
+            Route::get('/referral/overview', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'overview']);
+            Route::get('/referral/rules', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'rules']);
+            Route::put('/referral/rules', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'updateRule']);
+            Route::get('/referral/ledger', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'ledger']);
+            Route::get('/referral/fraud-flags', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'fraudFlags']);
+            Route::post('/referral/fraud-flags/{id}/review', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'reviewFraud'])->whereNumber('id');
+            Route::post('/referral/ledger/{id}/finance-review', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'reviewFinanceCase'])->whereNumber('id');
+            Route::get('/referral/users/{userId}/caps', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'capUsage'])->whereNumber('userId');
+
+            // FR-KYC-05 — Finance KYC review queue
+            Route::get('/kyc', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'index']);
+            Route::get('/kyc/{id}', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'show'])->whereNumber('id');
+            Route::post('/kyc/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'approve'])->whereNumber('id');
+            Route::post('/kyc/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'reject'])->whereNumber('id');
+
+            // Sprint 7 / SRS 18 + FR-FIN-07 — zero-loss reconciliation
+            Route::get('/reconciliation/incidents', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'incidents']);
+            Route::post('/reconciliation/incidents/{id}/resolve', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'resolveIncident'])->whereNumber('id');
+            Route::get('/reconciliation/gateway', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'gatewayQueue']);
+            Route::post('/reconciliation/gateway/{id}/match', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'matchGateway'])->whereNumber('id');
+            Route::post('/reconciliation/gateway/{id}/discrepancy', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'discrepancyGateway'])->whereNumber('id');
+            Route::get('/reconciliation/bank-lines', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'bankLines']);
+            Route::post('/reconciliation/bank-import', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'importBank']);
+            Route::post('/reconciliation/bank-lines/{id}/match', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'matchBank'])->whereNumber('id');
+            Route::post('/reconciliation/bank-lines/{id}/discrepancy', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'discrepancyBank'])->whereNumber('id');
+            Route::get('/reconciliation/closings', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'closings']);
+            Route::post('/reconciliation/run', [\App\Http\Controllers\Api\v1\Admin\FinanceReconciliationController::class, 'runJob']);
         });
 
         // Cross-division finance widgets (read-only)
@@ -345,8 +471,30 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/pricing', [OperationsController::class, 'pricing']);
             Route::put('/pricing', [OperationsController::class, 'updatePricing']);
             Route::put('/pricing/{id}', [OperationsController::class, 'updatePricing']);
+            // FR-DIFF-03 — agent margin calculator (display-only)
+            Route::get('/agent-margin/{productId}', [\App\Http\Controllers\Api\v1\Admin\AgentMarginController::class, 'show'])->whereNumber('productId');
+            Route::put('/agent-margin/{productId}/prices', [\App\Http\Controllers\Api\v1\Admin\AgentMarginController::class, 'upsertPrice'])->whereNumber('productId');
+            // FR-DIFF-02 — Ops monitoring (read-only)
+            Route::get('/auto-reorder', \App\Http\Controllers\Api\v1\Admin\OpsSubscriptionMonitorController::class);
             Route::post('/sync', [OperationsController::class, 'syncCatalog']);
             Route::get('/sync-status', [OperationsController::class, 'syncStatus']);
+
+            // SRS 30 — Partner H2H admin (Ops approve/pricing/rate/credentials)
+            Route::get('/partners', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'index']);
+            Route::post('/partners/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'approve'])->whereNumber('id');
+            Route::post('/partners/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'reject'])->whereNumber('id');
+            Route::put('/partners/{id}/rate-limit', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'updateRateLimit'])->whereNumber('id');
+            Route::put('/partner-prices', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'upsertPrice']);
+            Route::post('/partner-credentials/{credentialId}/revoke', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'revokeCredential'])->whereNumber('credentialId');
+            Route::post('/partner-credentials/{credentialId}/rotate', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'rotateCredential'])->whereNumber('credentialId');
+            Route::get('/partner-abuse-flags', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'abuseFlags']);
+        });
+
+        // Finance — partner deposit approval (SRS 30 MVP manual)
+        Route::prefix('admin/finance')->middleware([EnsureRole::class . ':finance,owner', EnsureOwnerReadOnly::class])->group(function () {
+            Route::get('/partner-deposits', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'deposits']);
+            Route::post('/partner-deposits/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'approveDeposit'])->whereNumber('id');
+            Route::post('/partner-deposits/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'rejectDeposit'])->whereNumber('id');
         });
 
         // Marketing Administration Module
@@ -401,6 +549,14 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/customers', [CustomerSupportController::class, 'customers']);
             Route::get('/customers/{id}/transactions', [CustomerSupportController::class, 'customerTransactions']);
             Route::get('/customers/{id}', [CustomerSupportController::class, 'showCustomer']);
+            // FR-DIFF-01 — CS read-only poin/tier (no adjust)
+            Route::get('/loyalty/overview', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'overview']);
+            Route::get('/loyalty/users/{userId}', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'userBalance'])->whereNumber('userId');
+
+            // SRS 31 — CS read-only referral monitoring
+            Route::get('/referral/overview', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'overview']);
+            Route::get('/referral/fraud-flags', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'fraudFlags']);
+            Route::get('/loyalty/users/{userId}/history', [\App\Http\Controllers\Api\v1\Admin\FinanceLoyaltyController::class, 'userHistory'])->whereNumber('userId');
             Route::get('/investigation', [CustomerSupportController::class, 'investigationQuery']);
             Route::get('/investigations/{transaction}', [CustomerSupportController::class, 'investigation']);
             Route::get('/refunds', [CustomerSupportController::class, 'refunds']);
@@ -410,6 +566,11 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/refunds/{id}/escalate', [CustomerSupportController::class, 'escalateRefund']);
             Route::get('/knowledge-base', [CustomerSupportController::class, 'knowledgeBase']);
             Route::get('/knowledge-base/{id}', [CustomerSupportController::class, 'knowledgeBaseArticle']);
+            // FR-KYC-05 — CS KYC review queue
+            Route::get('/kyc', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'index']);
+            Route::get('/kyc/{id}', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'show'])->whereNumber('id');
+            Route::post('/kyc/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'approve'])->whereNumber('id');
+            Route::post('/kyc/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'reject'])->whereNumber('id');
         });
 
         // Division escalation queues + notifications (Sprint 8.0) — now Workflow-backed (8.2)
@@ -470,11 +631,17 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/goals', [OwnerController::class, 'goals']);
             Route::get('/profit', [OwnerController::class, 'profit']);
             Route::get('/treasury', [OwnerController::class, 'treasury']);
+            // FR-DIFF-10 — 30-day cash-flow projection (read-only)
+            Route::get('/cash-flow-projection', \App\Http\Controllers\Api\v1\Admin\OwnerCashFlowController::class);
             Route::get('/insights', [OwnerController::class, 'insights']);
             Route::get('/workflow-monitor', [OwnerController::class, 'workflowMonitor']);
             Route::get('/workflow-timeline', [OwnerController::class, 'workflowTimeline']);
             Route::get('/approvals', [OwnerController::class, 'approvals']);
             Route::post('/approvals/{workflowId}/decide', [OwnerController::class, 'decideApproval'])->whereNumber('workflowId');
+            // SRS 30 — Owner may approve/reject Mitra (separate from Ops read-only policy)
+            Route::get('/partners', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'index']);
+            Route::post('/partners/{id}/approve', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'approve'])->whereNumber('id');
+            Route::post('/partners/{id}/reject', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'reject'])->whereNumber('id');
             Route::get('/financial-overview', [OwnerController::class, 'financialOverview']);
             Route::get('/department-overview', [OwnerController::class, 'departmentOverview']);
             Route::get('/system-health', [OwnerController::class, 'systemHealth']);

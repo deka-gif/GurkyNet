@@ -67,7 +67,7 @@ class ProductProviderControlService
         $transactionEligible = ProviderHealthStatus::isTransactionEligible(
             $p->api_status,
             $p->partner_status
-        );
+        ) && app(ProviderCircuitBreaker::class)->allowsFulfillment((string) $p->code);
         $poweredOn = (bool) $p->is_active;
         $productCount = (int) (
             $p->product_count

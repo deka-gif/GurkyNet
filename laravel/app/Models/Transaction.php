@@ -37,12 +37,19 @@ class Transaction extends Model
         'completed_at',
         'idempotency_key',
         'provider_dispatch_started_at',
+        'channel',
+        'partner_id',
+        'partner_ref',
+        'tax_ppn_amount',
+        'tax_metadata',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'admin_fee' => 'decimal:2',
         'total_payment' => 'decimal:2',
+        'tax_ppn_amount' => 'decimal:2',
+        'tax_metadata' => 'array',
         'timeout_at' => 'datetime',
         'provider_checked_at' => 'datetime',
         'provider_response' => 'array',

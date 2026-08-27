@@ -109,7 +109,7 @@ class DigiflazzIntegrationTest extends TestCase
             '123456',
         );
 
-        $this->assertEquals('pending', $transaction->status);
+        $this->assertEquals(\App\Enums\TransactionStatus::LOCKED->value, $transaction->status);
 
         // 3. Execute the job manually
         $job = new ProcessDigiflazzTransaction($transaction->id);

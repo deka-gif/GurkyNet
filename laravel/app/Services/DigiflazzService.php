@@ -13,11 +13,22 @@ class DigiflazzService
     protected string $apiKey;
     protected string $baseUrl;
 
-    public function __construct()
+    public function __construct(?\App\Services\ProductProviders\ProviderCredentialResolver $resolver = null)
     {
-        $this->username = (string) (config('services.digiflazz.username') ?: env('DIGIFLAZZ_USERNAME', ''));
-        $this->apiKey = (string) (config('services.digiflazz.api_key') ?: env('DIGIFLAZZ_API_KEY', ''));
-        $this->baseUrl = rtrim((string) (config('services.digiflazz.base_url') ?: env('DIGIFLAZZ_BASE_URL', 'https://api.digiflazz.com/v1')), '/');
+        $resolver ??= app(\App\Services\ProductProviders\ProviderCredentialResolver::class);
+        $creds = $resolver->digiflazz();
+        $this->username = $creds['username'];
+        $this->apiKey = $creds['api_key'];
+        $this->baseUrl = $creds['base_url'];
+    }
+
+    /** Refresh credentials (settings may change without rebinding the container). */
+    public function refreshCredentials(): void
+    {
+        $creds = app(\App\Services\ProductProviders\ProviderCredentialResolver::class)->digiflazz();
+        $this->username = $creds['username'];
+        $this->apiKey = $creds['api_key'];
+        $this->baseUrl = $creds['base_url'];
     }
 
     /**
@@ -466,11 +477,17 @@ class DigiflazzService
      */
     protected function executeRequest(string $endpoint, array $payload, int $maxRetries = 3): array
     {
+        $this->refreshCredentials();
         $url = $this->baseUrl.$endpoint;
         $attempt = 0;
         $delay = 1000;
+        $isCatalog = $endpoint === '/price-list';
+        $isHealth = $endpoint === '/cek-saldo';
         if (app()->environment('testing')) {
             $maxRetries = min($maxRetries, 1);
+        } elseif (! $isCatalog) {
+            // Sprint 10 / SRS 19 — keep fulfill/status/health inside 10–15s window.
+            $maxRetries = min($maxRetries, max(1, (int) config('ppob.provider_http.fulfillment_max_retries', 1)));
         }
 
         $last = [
@@ -491,8 +508,19 @@ class DigiflazzService
                     'payload' => array_merge($payload, ['sign' => '***hidden***']),
                 ]);
 
-                $timeout = app()->environment('testing') ? 5 : 90;
-                $connectTimeout = app()->environment('testing') ? 2 : 15;
+                if (app()->environment('testing')) {
+                    $timeout = 5;
+                    $connectTimeout = 2;
+                } elseif ($isCatalog) {
+                    $timeout = (int) config('ppob.provider_http.catalog_timeout_seconds', 90);
+                    $connectTimeout = 15;
+                } elseif ($isHealth) {
+                    $timeout = (int) config('ppob.provider_http.health_timeout_seconds', 10);
+                    $connectTimeout = min(5, $timeout);
+                } else {
+                    $timeout = (int) config('ppob.provider_http.fulfillment_timeout_seconds', 12);
+                    $connectTimeout = (int) config('ppob.provider_http.fulfillment_connect_timeout_seconds', 5);
+                }
 
                 $response = Http::timeout($timeout)
                     ->connectTimeout($connectTimeout)

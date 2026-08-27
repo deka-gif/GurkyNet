@@ -33,8 +33,8 @@ class TicketAction
         return $this->customerSupportRepository->createTicket($data);
     }
 
-    public function updateStatus(string|int $id, string $status): SupportTicket
+    public function updateStatus(string|int $id, string $status, array $extra = []): SupportTicket
     {
-        return $this->customerSupportRepository->updateTicketStatus($id, $status);
+        return $this->customerSupportRepository->updateTicketStatus($id, $status, $extra);
     }
 }

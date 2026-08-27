@@ -54,6 +54,7 @@ class WebsiteSettingResource extends JsonResource
             'supportPhone' => $this->support_phone ?? null,
             'whatsapp' => $this->whatsapp ?? null,
             'officeAddress' => $this->office_address ?? null,
+            'operatingHours' => $this->operating_hours ?? null, // FR-MKT01
             'googleMapsUrl' => $this->google_maps_url ?? null,
             'facebook' => $this->facebook ?? null,
             'instagram' => $this->instagram ?? null,

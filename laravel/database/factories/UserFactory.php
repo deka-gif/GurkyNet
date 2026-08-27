@@ -22,6 +22,7 @@ class UserFactory extends Factory
             'name' => $name,
             'email' => $email,
             'email_verified_at' => now(),
+            'phone_verified_at' => now(),
             'password' => Hash::make('password123'),
             'phone_number' => $phone,
             'role' => \App\Enums\UserRole::USER,

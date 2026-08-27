@@ -166,6 +166,25 @@ class FinanceAlertService
     }
 
     /**
+     * Sprint 7 — raise recon alert without duplicate storm (reuses upsertOpen).
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  list<string>  $roles
+     */
+    public function raiseReconAlert(
+        string $type,
+        string $severity,
+        string $title,
+        string $body,
+        array $payload,
+        ?string $relatedType,
+        ?int $relatedId,
+        array $roles
+    ): ?FinanceAlert {
+        return $this->upsertOpen($type, $severity, $title, $body, $payload, $relatedType, $relatedId, $roles);
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @param  list<string>  $roles
      */

@@ -7,15 +7,6 @@ import { LoginPayload, RegisterPayload, ForgotPasswordPayload } from '../service
 /**
  * Normalizes role strings returned by the Laravel API (lowercase/snake_case)
  * to the Title Case format expected throughout the frontend.
- *
- * API → Frontend mapping:
- *   "owner"            → "Owner"
- *   "finance"          → "Finance"
- *   "operations"       → "Operations"
- *   "marketing"        → "Marketing"
- *   "customer_support" → "Customer Support"
- *   "super_admin"      → "Super Admin"
- *   "user"             → "User"
  */
 function normalizeRole(role: string | undefined | null): string {
   if (!role) return 'User';
@@ -53,12 +44,24 @@ function normalizeUserPayload(raw: any): User {
     phone: src.phone ?? src.phone_number ?? '',
     avatar: src.avatar ?? src.avatar_url ?? '',
     role: normalizeRole(src.role),
-    isVerified: !!(src.isVerified ?? src.is_verified),
+    isVerified: !!(src.isVerified ?? src.is_verified ?? src.emailVerified),
     hasPin: !!(src.hasPin ?? src.has_pin),
     createdAt: src.createdAt ?? src.created_at,
     wallet: src.wallet ?? null,
+    kycStatus: src.kycStatus ?? src.kyc_status,
+    phoneVerified: !!(src.phoneVerified ?? src.phone_verified),
+    emailVerified: !!(src.emailVerified ?? src.email_verified ?? src.email_verified_at),
+    userType: src.userType ?? src.user_type,
   };
 }
+
+export type TwoFactorChallenge = {
+  identifier: string;
+  expiresAt?: string | null;
+  resendAvailableAt?: string | null;
+  dummySentCode?: string | null;
+  remember: boolean;
+};
 
 interface AuthState {
   user: User | null;
@@ -66,13 +69,15 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   validationErrors: Record<string, string[]> | null;
-  login: (payload: LoginPayload, remember?: boolean) => Promise<boolean>;
-  pinLogin: (identity: string, pin: string, remember?: boolean) => Promise<boolean>;
+  twoFactorChallenge: TwoFactorChallenge | null;
+  login: (payload: LoginPayload, remember?: boolean) => Promise<'ok' | '2fa' | false>;
+  verifyLogin2fa: (code: string) => Promise<boolean>;
+  clearTwoFactorChallenge: () => void;
+  pinLogin: (identity: string, pin: string, remember?: boolean) => Promise<'ok' | '2fa' | false>;
   register: (payload: RegisterPayload) => Promise<boolean>;
   forgotPassword: (payload: ForgotPasswordPayload) => Promise<boolean>;
   logout: () => Promise<void>;
   fetchUser: () => Promise<void>;
-  /** Merge partial user fields into store + storage (avatar sync without reload). */
   patchUser: (partial: Partial<User>) => void;
 }
 
@@ -80,9 +85,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: (() => {
     const stored = storageService.getUser() as unknown as User | null;
     if (!stored) return null;
-    // Normalize stale lowercase role from localStorage on startup
     const normalized: User = { ...stored, role: normalizeRole(stored.role) };
-    // Write the normalized value back so storageService consumers are also fixed
     storageService.setUser(normalized as unknown as Record<string, unknown>);
     return normalized;
   })(),
@@ -90,13 +93,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   error: null,
   validationErrors: null,
+  twoFactorChallenge: null,
+
+  clearTwoFactorChallenge: () => set({ twoFactorChallenge: null }),
 
   login: async (payload, remember = true) => {
-    set({ loading: true, error: null, validationErrors: null });
+    set({ loading: true, error: null, validationErrors: null, twoFactorChallenge: null });
     try {
       const response = await authService.login(payload);
       if (response.success && response.data) {
-        const { token, user } = response.data;
+        const data = response.data as any;
+        if (data.requires_2fa) {
+          set({
+            loading: false,
+            twoFactorChallenge: {
+              identifier: data.identifier || payload.identity,
+              expiresAt: data.expires_at,
+              resendAvailableAt: data.resend_available_at,
+              dummySentCode: data.dummy_sent_code,
+              remember,
+            },
+          });
+          return '2fa';
+        }
+
+        const { token, user } = data;
+        if (!token) {
+          set({ error: response.message || 'Login gagal.', loading: false });
+          return false;
+        }
         const normalizedUser = normalizeUserPayload(user);
         storageService.setToken(token, remember);
         storageService.setUser(normalizedUser as unknown as Record<string, unknown>, remember);
@@ -106,37 +131,81 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           storageService.setRememberedIdentity('');
         }
         storageService.markTrustedIdentity(payload.identity);
-        set({ token, user: normalizedUser, loading: false });
-        return true;
-      } else {
-        set({ error: response.message, loading: false });
-        return false;
+        set({ token, user: normalizedUser, loading: false, twoFactorChallenge: null });
+        return 'ok';
       }
+      set({ error: response.message, loading: false });
+      return false;
     } catch (err: any) {
-
       set({
         error: err.message || 'Gagal login. Cek koneksi Anda.',
         validationErrors: err.errors || null,
         loading: false,
       });
+      return false;
+    }
+  },
 
+  verifyLogin2fa: async (code) => {
+    const challenge = get().twoFactorChallenge;
+    if (!challenge) {
+      set({ error: 'Sesi 2FA tidak ditemukan. Login ulang.' });
+      return false;
+    }
+    set({ loading: true, error: null, validationErrors: null });
+    try {
+      const response = await authService.verifyLogin2fa({
+        identity: challenge.identifier,
+        code,
+      });
+      if (response.success && response.data) {
+        const { token, user } = response.data as any;
+        const normalizedUser = normalizeUserPayload(user);
+        storageService.setToken(token, challenge.remember);
+        storageService.setUser(normalizedUser as unknown as Record<string, unknown>, challenge.remember);
+        storageService.markTrustedIdentity(challenge.identifier);
+        set({ token, user: normalizedUser, loading: false, twoFactorChallenge: null });
+        return true;
+      }
+      set({ error: response.message || 'Kode 2FA tidak valid.', loading: false });
+      return false;
+    } catch (err: any) {
+      set({
+        error: err.message || 'Gagal verifikasi 2FA.',
+        validationErrors: err.errors || null,
+        loading: false,
+      });
       return false;
     }
   },
 
   pinLogin: async (identity, pin, remember = true) => {
-    set({ loading: true, error: null, validationErrors: null });
+    set({ loading: true, error: null, validationErrors: null, twoFactorChallenge: null });
     try {
       const response = await authService.pinLogin({ identity, pin });
       if (response.success && response.data) {
-        const { token, user } = response.data;
+        const data = response.data as any;
+        if (data.requires_2fa) {
+          set({
+            loading: false,
+            twoFactorChallenge: {
+              identifier: data.identifier || identity,
+              expiresAt: data.expires_at,
+              resendAvailableAt: data.resend_available_at,
+              dummySentCode: data.dummy_sent_code,
+              remember,
+            },
+          });
+          return '2fa';
+        }
+        const { token, user } = data;
         const normalizedUser = normalizeUserPayload(user);
         storageService.setToken(token, remember);
         storageService.setUser(normalizedUser as unknown as Record<string, unknown>, remember);
         storageService.setRememberedIdentity(identity);
         storageService.markTrustedIdentity(identity);
         set({ token, user: normalizedUser, loading: false });
-        return true;
+        return 'ok';
       }
       set({ error: response.message, loading: false });
       return false;
@@ -157,10 +226,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (response.success) {
         set({ loading: false });
         return true;
-      } else {
-        set({ error: response.message, loading: false });
-        return false;
       }
+      set({ error: response.message, loading: false });
+      return false;
     } catch (err: any) {
       set({
         error: err.message || 'Gagal register. Cek koneksi Anda.',
@@ -178,10 +246,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (response.success) {
         set({ loading: false });
         return true;
-      } else {
-        set({ error: response.message, loading: false });
-        return false;
       }
+      set({ error: response.message, loading: false });
+      return false;
     } catch (err: any) {
       set({
         error: err.message || 'Gagal mengirim email pemulihan.',
@@ -199,51 +266,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await authService.logout();
       }
     } catch {
-      // Ignore API logout failure, clear local session anyway
+      // Ignore API logout failure
     } finally {
       storageService.clear();
-      set({ user: null, token: null, loading: false, error: null });
+      set({ user: null, token: null, loading: false, error: null, twoFactorChallenge: null });
     }
   },
 
   fetchUser: async () => {
     const token = storageService.getToken();
-
     if (!token) return;
-
     set({ loading: true });
-
     try {
       const response = await authService.me();
-
       if (response.success) {
-        // response.data is ApiResponse; me() returns { user: ProfileResource }
         const payload = (response.data as any).data ?? response.data;
         const normalizedUser = normalizeUserPayload(payload?.user ?? payload);
-
         storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
-
-        set({
-          user: normalizedUser,
-          loading: false,
-        });
+        set({ user: normalizedUser, loading: false });
       } else {
         storageService.clear();
-
-        set({
-          user: null,
-          token: null,
-          loading: false,
-        });
+        set({ user: null, token: null, loading: false });
       }
     } catch {
       storageService.clear();
-
-      set({
-        user: null,
-        token: null,
-        loading: false,
-      });
+      set({ user: null, token: null, loading: false });
     }
   },
 

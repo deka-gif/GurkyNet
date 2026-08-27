@@ -21,6 +21,8 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
     : '';
   const officeAddress = settings?.officeAddress || '';
   const mapsUrl = settings?.googleMapsUrl || '';
+  // FR-MKT01
+  const operatingHours = settings?.operatingHours || '';
 
   return (
     <section id="contact" className="py-20 md:py-32 bg-white">
@@ -116,8 +118,8 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 mb-4">
                 <Clock className="w-6 h-6" />
               </div>
-              <h4 className="font-bold text-gray-900 mb-1">Layanan Bantuan</h4>
-              <p className="text-gray-600">Online 24 Jam Nonstop setiap hari</p>
+              <h4 className="font-bold text-gray-900 mb-1">Jam Operasional</h4>
+              <p className="text-gray-600">{operatingHours || 'Belum diatur di CMS'}</p>
             </div>
           </motion.div>
 

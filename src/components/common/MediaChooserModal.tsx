@@ -221,7 +221,7 @@ export const MediaChooserModal = ({
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Pilih File</label>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.png,.jpg,.jpeg,.webp,.svg,.ico"
                     onChange={handleFileChange}
                     className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer"
                   />

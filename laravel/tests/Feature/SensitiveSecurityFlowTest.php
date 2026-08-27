@@ -64,6 +64,7 @@ class SensitiveSecurityFlowTest extends TestCase
             'onboarding_id' => $onboardingId,
             'pin' => '482951',
             'pin_confirmation' => '482951',
+            'accept_policies' => true,
         ], [
             'X-Device-UUID' => 'device-onboard-1',
             'X-Platform' => 'web',

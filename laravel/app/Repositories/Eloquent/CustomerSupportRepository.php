@@ -13,11 +13,14 @@ use App\Models\DigiflazzTransaction;
 use App\Models\MidtransTransaction;
 use App\Models\ActivityLog;
 use App\Models\Faq;
+use App\Models\Workflow;
 use App\Enums\TransactionStatus;
 use App\Enums\WalletHistoryType;
+use App\Support\Support\TicketStatus;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class CustomerSupportRepository implements CustomerSupportRepositoryInterface
 {
@@ -26,9 +29,21 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
      */
     public function getDashboardMetrics(): array
     {
-        $openTickets = SupportTicket::whereIn('status', ['Terbuka', 'Open'])->count();
-        $pendingTickets = SupportTicket::where('status', 'Pending')->count();
-        $resolvedToday = SupportTicket::whereIn('status', ['Selesai', 'Resolved', 'Closed', 'Tertutup'])
+        $openTickets = SupportTicket::whereIn('status', \App\Support\Support\TicketStatus::openWorkStatuses())->count();
+        $pendingTickets = SupportTicket::whereIn('status', [
+            \App\Support\Support\TicketStatus::ASSIGNED_CS,
+            \App\Support\Support\TicketStatus::ESCALATED_OPS,
+            \App\Support\Support\TicketStatus::ESCALATED_FINANCE,
+            'Pending',
+        ])->count();
+        $resolvedToday = SupportTicket::whereIn('status', [
+            \App\Support\Support\TicketStatus::RESOLVED,
+            \App\Support\Support\TicketStatus::CLOSED,
+            'Selesai',
+            'Resolved',
+            'Closed',
+            'Tertutup',
+        ])
             ->whereDate('updated_at', now()->toDateString())
             ->count();
 
@@ -119,18 +134,16 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
         }
 
         if (!empty($filters['status'])) {
-            $status = $filters['status'];
-            $statusMap = [
-                'open' => 'Terbuka',
-                'pending' => 'Pending',
-                'resolved' => 'Selesai',
-                'closed' => 'Tertutup',
-                'terbuka' => 'Terbuka',
-                'selesai' => 'Selesai',
-                'tertutup' => 'Tertutup'
-            ];
-            $mappedStatus = $statusMap[strtolower($status)] ?? $status;
-            $query->where('status', $mappedStatus);
+            $canonical = \App\Support\Support\TicketStatus::normalize($filters['status']);
+            // Include legacy Indonesian values that map to the same canonical status.
+            $legacyAliases = match ($canonical) {
+                \App\Support\Support\TicketStatus::OPEN => ['Terbuka', 'Open', 'open'],
+                \App\Support\Support\TicketStatus::ASSIGNED_CS => ['Pending', 'pending', 'assigned_cs', 'Processing'],
+                \App\Support\Support\TicketStatus::RESOLVED => ['Selesai', 'Resolved', 'resolved'],
+                \App\Support\Support\TicketStatus::CLOSED => ['Tertutup', 'Closed', 'closed', 'Ditolak'],
+                default => [$canonical],
+            };
+            $query->whereIn('status', array_values(array_unique(array_merge([$canonical], $legacyAliases))));
         }
 
         if (!empty($filters['priority'])) {
@@ -193,24 +206,26 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
         $priorityRaw = strtolower((string) ($data['priority'] ?? 'Sedang'));
         $priority = $priorityMap[$priorityRaw] ?? ($data['priority'] ?? 'Sedang');
 
-        $statusMap = [
-            'open' => 'Terbuka',
-            'pending' => 'Pending',
-            'resolved' => 'Selesai',
-            'closed' => 'Tertutup',
-            'terbuka' => 'Terbuka',
-        ];
-        $statusRaw = strtolower((string) ($data['status'] ?? 'Terbuka'));
-        $status = $statusMap[$statusRaw] ?? ($data['status'] ?? 'Terbuka');
+        $status = \App\Support\Support\TicketStatus::normalize(
+            (string) ($data['status'] ?? \App\Support\Support\TicketStatus::OPEN)
+        );
 
         $ticket = SupportTicket::create([
             'ticket_number' => 'TKT-' . now()->format('YmdHis') . '-' . mt_rand(100, 999),
             'user_id' => $user->id,
             'transaction_id' => $data['transaction_id'] ?? null,
             'category' => $data['category'] ?? 'Umum',
+            'subject' => $data['subject'] ?? null,
+            'description' => $data['description'] ?? $data['message'] ?? null,
             'priority' => $priority,
             'status' => $status,
+            'assigned_to' => $data['assigned_to'] ?? Auth::id(),
+            'source' => $data['source'] ?? 'cs_manual',
         ]);
+
+        if (! empty($ticket->assigned_to) && $status === \App\Support\Support\TicketStatus::OPEN) {
+            $ticket->update(['status' => \App\Support\Support\TicketStatus::ASSIGNED_CS]);
+        }
 
         $opening = trim((string) ($data['subject'] ?? $data['message'] ?? $data['description'] ?? ''));
         if ($opening !== '') {
@@ -247,8 +262,15 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
             'message' => $data['message'],
         ]);
 
-        // Automatically update the status to "Pending" or active when support replies, or keep current
-        // Let's log the activity
+        // FR-CS-02 — first CS reply moves Baru → Diproses (assigned_cs).
+        $canonical = \App\Support\Support\TicketStatus::normalize($ticket->status);
+        if ($canonical === \App\Support\Support\TicketStatus::OPEN) {
+            $ticket->update([
+                'status' => \App\Support\Support\TicketStatus::ASSIGNED_CS,
+                'assigned_to' => $ticket->assigned_to ?: Auth::id(),
+            ]);
+        }
+
         ActivityLog::create([
             'user_id' => \Illuminate\Support\Facades\Auth::id(),
             'activity' => 'CUSTOMER_SUPPORT_REPLY_TICKET',
@@ -263,24 +285,32 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
     }
 
     /**
-     * Update ticket status.
+     * Update ticket status (FR-CS-02 — SRS 7.8 vocabulary).
+     *
+     * @param  array<string, mixed>  $extra
      */
-    public function updateTicketStatus(string|int $id, string $status): SupportTicket
+    public function updateTicketStatus(string|int $id, string $status, array $extra = []): SupportTicket
     {
         $ticket = SupportTicket::where('id', $id)->orWhere('ticket_number', $id)->firstOrFail();
 
-        $statusMap = [
-            'open' => 'Terbuka',
-            'pending' => 'Pending',
-            'resolved' => 'Selesai',
-            'closed' => 'Tertutup',
-            'terbuka' => 'Terbuka',
-            'selesai' => 'Selesai',
-            'tertutup' => 'Tertutup'
-        ];
+        $mappedStatus = \App\Support\Support\TicketStatus::normalize($status);
+        $updates = ['status' => $mappedStatus];
 
-        $mappedStatus = $statusMap[strtolower($status)] ?? $status;
-        $ticket->update(['status' => $mappedStatus]);
+        if (array_key_exists('assigned_to', $extra) && $extra['assigned_to']) {
+            $updates['assigned_to'] = (int) $extra['assigned_to'];
+        } elseif ($mappedStatus === \App\Support\Support\TicketStatus::ASSIGNED_CS && ! $ticket->assigned_to) {
+            $updates['assigned_to'] = Auth::id();
+        }
+
+        if ($mappedStatus === \App\Support\Support\TicketStatus::RESOLVED) {
+            $updates['resolved_at'] = now();
+        }
+        if ($mappedStatus === \App\Support\Support\TicketStatus::CLOSED) {
+            $updates['closed_at'] = now();
+            $updates['resolved_at'] = $ticket->resolved_at ?: now();
+        }
+
+        $ticket->update($updates);
 
         ActivityLog::create([
             'user_id' => \Illuminate\Support\Facades\Auth::id(),
@@ -292,7 +322,7 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
             ],
         ]);
 
-        return $ticket;
+        return $ticket->fresh(['user', 'transaction', 'replies.user', 'assignee']);
     }
 
     /**
@@ -456,19 +486,20 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
     }
 
     /**
-     * Update refund status or notes.
+     * Update refund notes / non-mutating status labels only.
+     * FR-CS / SRS 4.4.5 — CS MUST NOT approve balance-mutating refunds.
      */
     public function updateRefund(string|int $id, array $data): Transaction
     {
         $status = strtolower((string) ($data['status'] ?? ''));
         $note = $data['note'] ?? $data['notes'] ?? $data['reason'] ?? null;
 
-        if (in_array($status, ['approved', 'approve', 'disetujui'], true)) {
-            return $this->approveRefund($id, $note);
-        }
-
-        if (in_array($status, ['rejected', 'reject', 'ditolak'], true)) {
-            return $this->rejectRefund($id, $note);
+        // Compliance: block CS wallet mutation (approve / reject-that-credits). Escalate to Finance instead.
+        if (in_array($status, ['approved', 'approve', 'disetujui', 'rejected', 'reject', 'ditolak'], true)) {
+            throw new \InvalidArgumentException(
+                'CS tidak berwenang menyetujui/menolak refund yang mengubah saldo. Eskalasikan ke Finance.',
+                403
+            );
         }
 
         $transaction = $this->getRefundById($id);
@@ -491,14 +522,43 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
     }
 
     /**
-     * Escalate a refund claim.
+     * Escalate a refund claim to Finance via Workflow SSOT (FR-CS-07).
+     * Must link SupportTicket so lifecycle becomes escalated_finance (SRS 7.8).
      */
     public function escalateRefund(string|int $id, array $data): Transaction
     {
         $transaction = $this->getRefundById($id);
-        $note = $data['note'] ?? $data['notes'] ?? $data['reason'] ?? 'Perlu review lanjutan';
+        $note = $data['note'] ?? $data['notes'] ?? $data['reason'] ?? 'Perlu review lanjutan Finance';
         $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Dieskalasi CS: ' . $note);
         $transaction->save();
+
+        $actor = Auth::user();
+        if ($actor) {
+            $ticket = $this->resolveTicketForRefundEscalation($transaction, (string) $note);
+
+            $existing = Workflow::query()
+                ->where('transaction_id', $transaction->id)
+                ->where('support_ticket_id', $ticket->id)
+                ->where('current_division', 'finance')
+                ->whereNotIn('status', ['resolved', 'rejected', 'cancelled', 'closed'])
+                ->first();
+
+            if ($existing) {
+                // Idempotent re-escalate: keep single open finance workflow + ticket status.
+                $ticket->update(['status' => TicketStatus::ESCALATED_FINANCE]);
+            } else {
+                app(\App\Services\Workflow\WorkflowEngineService::class)->createFromCs($actor, [
+                    'target_division' => 'finance',
+                    'type' => 'refund_request',
+                    'category' => 'refund_request',
+                    'title' => 'Refund eskalasi: '.$transaction->invoice_number,
+                    'description' => $note,
+                    'transaction_id' => $transaction->id,
+                    'support_ticket_id' => $ticket->id,
+                    'priority' => 'high',
+                ]);
+            }
+        }
 
         ActivityLog::create([
             'user_id' => Auth::id(),
@@ -513,50 +573,65 @@ class CustomerSupportRepository implements CustomerSupportRepositoryInterface
         return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
     }
 
-    protected function approveRefund(string|int $id, ?string $note = null): Transaction
+    /**
+     * FR-CS-07 — reuse ticket for transaction or create one; never leave escalate without ticket link.
+     */
+    protected function resolveTicketForRefundEscalation(Transaction $transaction, string $note): SupportTicket
     {
-        $transaction = $this->getRefundById($id);
-        $refundService = app(\App\Services\WalletRefundService::class);
+        $openStatuses = TicketStatus::openWorkStatuses();
 
-        $result = $refundService->refundOnce(
-            $transaction,
-            'Refund Customer Support: ' . $transaction->invoice_number,
-            'customer_support',
-            'Refund Disetujui CS: ' . ($note ?? 'Diproses oleh Customer Support'),
-            TransactionStatus::CANCELED->value
-        );
+        $ticket = SupportTicket::query()
+            ->where('transaction_id', $transaction->id)
+            ->whereIn('status', $openStatuses)
+            ->orderByDesc('id')
+            ->first();
 
-        $refundService->writeAudit(
-            Auth::id(),
-            $result['already_refunded'] ? 'CUSTOMER_SUPPORT_REFUND_ALREADY_PROCESSED' : 'CUSTOMER_SUPPORT_APPROVE_REFUND',
-            [
-                'transaction_id' => $transaction->id,
-                'invoice_number' => $transaction->invoice_number,
-                'note' => $note,
-                'credited' => $result['credited'],
-            ]
-        );
+        if (! $ticket) {
+            $ticket = SupportTicket::query()
+                ->where('transaction_id', $transaction->id)
+                ->orderByDesc('id')
+                ->first();
+        }
 
-        return $result['transaction'];
+        if ($ticket) {
+            return $ticket;
+        }
+
+        return SupportTicket::create([
+            'ticket_number' => 'TKT-'.now()->format('YmdHis').'-'.mt_rand(100, 999),
+            'user_id' => $transaction->user_id,
+            'transaction_id' => $transaction->id,
+            'category' => 'Refund',
+            'subject' => 'Refund eskalasi: '.$transaction->invoice_number,
+            'description' => $note,
+            'priority' => 'Tinggi',
+            'status' => TicketStatus::ASSIGNED_CS,
+            'assigned_to' => Auth::id(),
+            'source' => 'cs_refund_escalate',
+        ]);
     }
 
+    /**
+     * SRS 4.4.5 — CS must NEVER mutate wallet via refund approve.
+     * Dead-path hard block: method must not reach WalletRefundService.
+     */
+    protected function approveRefund(string|int $id, ?string $note = null): Transaction
+    {
+        throw new HttpException(
+            403,
+            'CS tidak berwenang menyetujui refund yang mengubah saldo. Eskalasikan ke Finance (FR-CS-07 / SRS 4.4.5).'
+        );
+    }
+
+    /**
+     * SRS 4.4.5 — CS must NEVER reject-via-mutator that historically touched refund state for wallet flows.
+     */
     protected function rejectRefund(string|int $id, ?string $note = null): Transaction
     {
-        $transaction = $this->getRefundById($id);
-        $transaction->notes = trim(($transaction->notes ? $transaction->notes . ' | ' : '') . 'Refund Ditolak CS: ' . ($note ?? 'Tidak memenuhi syarat'));
-        $transaction->save();
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'activity' => 'CUSTOMER_SUPPORT_REJECT_REFUND',
-            'payload' => [
-                'transaction_id' => $transaction->id,
-                'invoice_number' => $transaction->invoice_number,
-                'note' => $note,
-            ],
-        ]);
-
-        return $transaction->fresh(['user.wallet', 'items', 'paymentHistory']);
+        throw new HttpException(
+            403,
+            'CS tidak berwenang menolak refund melalui mutator saldo. Eskalasikan ke Finance (FR-CS-07 / SRS 4.4.5).'
+        );
     }
 
     /**

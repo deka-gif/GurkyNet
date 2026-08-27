@@ -24,16 +24,24 @@ class SupportTicket extends Model
         'priority',
         'status',
         'source',
+        'assigned_to', // FR-CS-02
         'closed_at',
+        'resolved_at', // FR-CS-02 / SRS 7.8
     ];
 
     protected $casts = [
         'closed_at' => 'datetime',
+        'resolved_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 
     public function transaction(): BelongsTo

@@ -21,6 +21,7 @@ use App\Services\ProductProviders\ProviderFulfillmentResult;
 use App\Services\ProductProviders\VipPulsaProductProviderAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class MultiProductProviderRuntimeTest extends TestCase
@@ -167,8 +168,10 @@ class MultiProductProviderRuntimeTest extends TestCase
         $this->assertSame('XL_5K_VIP', $offers->first()->provider_sku);
     }
 
-    public function test_digiflazz_timeout_failovers_to_vip(): void
+    public function test_digiflazz_timeout_uses_check_status_not_vip_failover(): void
     {
+        // Sprint 10 / SRS 15.3 — timeout after dispatch is ambiguous; checkStatus(A) only.
+        Queue::fake();
         $tx = $this->makePendingTransaction();
 
         $digiAdapter = Mockery::mock(DigiflazzProductProviderAdapter::class);
@@ -177,22 +180,24 @@ class MultiProductProviderRuntimeTest extends TestCase
         $digiAdapter->shouldReceive('fulfill')->once()->andReturn(
             ProviderFulfillmentResult::error(900, 'timeout', true, 'Connection timed out')
         );
+        $digiAdapter->shouldReceive('checkStatus')->once()->andReturn(
+            ProviderFulfillmentResult::pending(100, [], 'still processing')
+        );
 
         $vipAdapter = Mockery::mock(VipPulsaProductProviderAdapter::class);
         $vipAdapter->shouldReceive('code')->andReturn('vip');
         $vipAdapter->shouldReceive('isConfigured')->andReturn(true);
-        $vipAdapter->shouldReceive('fulfill')->once()->andReturn(
-            ProviderFulfillmentResult::success(500, 'SN-VIP', [])
-        );
+        $vipAdapter->shouldReceive('fulfill')->never();
 
         $this->bindMockedRegistry($digiAdapter, $vipAdapter);
 
         app(ProductProviderFulfillmentService::class)->fulfill($tx->fresh(['items']));
 
-        $this->assertSame(TransactionStatus::SUCCESS->value, $tx->fresh()->status);
+        $fresh = $tx->fresh();
+        $this->assertSame(TransactionStatus::PENDING_SUPPLIER->value, $fresh->status);
         $this->assertDatabaseHas('product_provider_logs', [
             'transaction_id' => $tx->id,
-            'event_type' => 'failover',
+            'event_type' => 'post_dispatch_check',
             'selected_provider_code' => 'digiflazz',
         ]);
     }
@@ -243,6 +248,79 @@ class MultiProductProviderRuntimeTest extends TestCase
         $this->assertSame(TransactionStatus::FAILED->value, $tx->fresh()->status);
     }
 
+    /**
+     * SRS Bagian 24 #5 — both Digiflazz and VIP unavailable → FAILED + auto refund (14.5).
+     */
+    public function test_both_providers_down_failed_and_auto_refund(): void
+    {
+        $user = User::factory()->create();
+        $wallet = \App\Models\Wallet::create([
+            'user_id' => $user->id,
+            'wallet_number' => '1042'.str_pad((string) $user->id, 8, '0', STR_PAD_LEFT),
+            'balance' => 94000.00, // already held 6000 for this purchase (LOCKED)
+            'status' => 'active',
+        ]);
+
+        $tx = Transaction::create([
+            'user_id' => $user->id,
+            'invoice_number' => 'GRK-BOTH-DOWN-'.uniqid(),
+            'service_name' => 'XL 5K',
+            'target_number' => '081234567890',
+            'amount' => 6000,
+            'admin_fee' => 0,
+            'total_payment' => 6000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::LOCKED->value,
+            'notes' => 'both providers down test',
+        ]);
+        TransactionItem::create([
+            'transaction_id' => $tx->id,
+            'product_code' => 'XL5K',
+            'product_name' => 'XL 5K',
+            'price' => 6000,
+            'quantity' => 1,
+        ]);
+
+        $digiAdapter = Mockery::mock(DigiflazzProductProviderAdapter::class);
+        $digiAdapter->shouldReceive('code')->andReturn('digiflazz');
+        $digiAdapter->shouldReceive('isConfigured')->andReturn(true);
+        // Confirmed pre-processed unavailability (not ambiguous timeout) — failover chain then refund.
+        $digiAdapter->shouldReceive('fulfill')->once()->andReturn(
+            ProviderFulfillmentResult::failed(900, 'provider_offline', true, 'Digiflazz unavailable', [])
+        );
+
+        $vipAdapter = Mockery::mock(VipPulsaProductProviderAdapter::class);
+        $vipAdapter->shouldReceive('code')->andReturn('vip');
+        $vipAdapter->shouldReceive('isConfigured')->andReturn(true);
+        $vipAdapter->shouldReceive('fulfill')->once()->andReturn(
+            ProviderFulfillmentResult::failed(900, 'provider_offline', true, 'VIP unavailable', [])
+        );
+
+        $this->bindMockedRegistry($digiAdapter, $vipAdapter);
+        app(ProductProviderFulfillmentService::class)->fulfill($tx->fresh(['items']));
+
+        $fresh = $tx->fresh();
+        $this->assertSame(TransactionStatus::FAILED->value, $fresh->status);
+        $this->assertNotNull($fresh->refunded_at);
+
+        $wallet->refresh();
+        $this->assertEquals(100000.00, (float) $wallet->balance);
+
+        $this->assertEquals(
+            1,
+            \App\Models\WalletMutation::where('wallet_id', $wallet->id)->where('type', 'refund')->count()
+        );
+
+        // Idempotent — second fulfill must not double-credit (already terminal FAILED).
+        app(ProductProviderFulfillmentService::class)->fulfill($tx->fresh(['items']));
+        $wallet->refresh();
+        $this->assertEquals(100000.00, (float) $wallet->balance);
+        $this->assertEquals(
+            1,
+            \App\Models\WalletMutation::where('wallet_id', $wallet->id)->where('type', 'refund')->count()
+        );
+    }
+
     public function test_disable_digiflazz_routes_only_vip(): void
     {
         $this->digi->update(['is_active' => false]);
@@ -291,8 +369,9 @@ class MultiProductProviderRuntimeTest extends TestCase
         $digiAdapter = Mockery::mock(DigiflazzProductProviderAdapter::class);
         $digiAdapter->shouldReceive('code')->andReturn('digiflazz');
         $digiAdapter->shouldReceive('isConfigured')->andReturn(true);
+        // Confirmed pre-processed provider failure — failover to sibling VIP SKU allowed.
         $digiAdapter->shouldReceive('fulfill')->once()->andReturn(
-            ProviderFulfillmentResult::error(900, 'timeout', true, 'Connection timed out')
+            ProviderFulfillmentResult::failed(400, 'provider_error', true, 'HTTP 503', [])
         );
 
         $vipAdapter = Mockery::mock(VipPulsaProductProviderAdapter::class);

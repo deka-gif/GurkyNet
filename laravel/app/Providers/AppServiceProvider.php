@@ -84,6 +84,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->configureRateLimiters();
+
         // Runtime audit: every UPDATE touching product_providers
         \Illuminate\Support\Facades\DB::listen(function ($query) {
             $sql = (string) ($query->sql ?? '');
@@ -172,6 +174,21 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\TransactionSuccess::class,
             \App\Listeners\AnalyticsCollector::class
         );
+        // FR-DIFF-01 — cashback/poin on SUCCESS product purchase
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            \App\Listeners\AwardLoyaltyPoints::class
+        );
+        // SRS 31 / FR-REF-04 — referral commission (independent of loyalty)
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            \App\Listeners\AwardReferralCommission::class
+        );
+        // SRS 30 / FR-API-07 — partner outbound webhook
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionSuccess::class,
+            [\App\Listeners\DispatchPartnerWebhook::class, 'handleSuccess']
+        );
 
         \Illuminate\Support\Facades\Event::listen(
             \App\Events\TransactionFailed::class,
@@ -189,7 +206,15 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\TransactionFailed::class,
             \App\Listeners\AnalyticsCollector::class
         );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\TransactionFailed::class,
+            [\App\Listeners\DispatchPartnerWebhook::class, 'handleFailed']
+        );
 
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletCredited::class,
+            \App\Listeners\PublishWalletBalanceUpdated::class
+        );
         \Illuminate\Support\Facades\Event::listen(
             \App\Events\WalletCredited::class,
             \App\Listeners\SendNotification::class
@@ -241,5 +266,41 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\PaymentSettled::class,
             \App\Listeners\AnalyticsCollector::class
         );
+    }
+
+    /**
+     * SRS Bagian 8.1 / 17 — named rate limiters (reuse existing numeric budgets).
+     */
+    protected function configureRateLimiters(): void
+    {
+        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by(
+                strtolower((string) ($request->input('phone_or_email') ?: $request->ip()))
+            );
+        });
+
+        \Illuminate\Support\Facades\RateLimiter::for('otp', function (\Illuminate\Http\Request $request) {
+            $id = (string) ($request->input('email') ?: $request->input('phone_number') ?: $request->ip());
+
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by(strtolower($id));
+        });
+
+        \Illuminate\Support\Facades\RateLimiter::for('password-reset', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by(
+                strtolower((string) ($request->input('email') ?: $request->ip()))
+            );
+        });
+
+        \Illuminate\Support\Facades\RateLimiter::for('financial', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by(
+                (string) ($request->user()?->id ?: $request->ip())
+            );
+        });
+
+        \Illuminate\Support\Facades\RateLimiter::for('kyc-upload', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by(
+                (string) ($request->user()?->id ?: $request->ip())
+            );
+        });
     }
 }

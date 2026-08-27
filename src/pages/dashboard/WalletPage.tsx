@@ -25,6 +25,12 @@ import { buildCreatePinUrl, PENDING_WALLET_ACTION_KEY } from '../../utils/pinGat
 import { caretFromDigitIndex, formatIDR, formatIDRInput, parseIDRDigits } from '../../utils/currency';
 import { PaymentPlaceholderModal, PaymentPlaceholderKind } from '../../components/wallet/PaymentPlaceholderModal';
 import { getOrCreateIdempotencyKey } from '../../utils/idempotency';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
+import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
+import { RefreshPolicy } from '../../lib/refreshPolicy';
+import { ensureMidtransSnap } from '../../utils/midtransSnap';
+import { walletService } from '../../services/wallet/wallet.service';
+import { useCallback } from 'react';
 
 declare global {
   interface Window {
@@ -33,15 +39,41 @@ declare global {
 }
 
 export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 'topup' | 'transfer' | 'withdraw' }) => {
-  const { wallet, summary, history, loading, fetchWallet, topUp, transfer, withdraw } = useWalletStore();
+  const { wallet, summary, history, loading, fetchWallet, applyRealtimeBalance, topUp, transfer, withdraw, depositManual } = useWalletStore();
   const { user, fetchUser } = useAuth();
   const navigate = useNavigate();
+  const { flags: featureFlags } = useFeatureFlags();
+  const withdrawEnabled = featureFlags.withdraw_enabled;
+  const autoTopupEnabled = featureFlags.auto_topup_enabled;
 
-  const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>(defaultTab);
+  const getToken = useCallback(() => localStorage.getItem('token'), []);
+  const walletChannel = user?.id ? [`wallet.${user.id}`] : [];
+
+  // Sprint 11 / SRS 16.3 — SSE primary balance_updated; RealtimeManager falls back to ~3s poll.
+  useRealtimeChannel(
+    Boolean(user?.id),
+    walletChannel,
+    (evt) => {
+      if (evt.event !== 'balance_updated') return;
+      const bal = Number(evt.payload?.balance);
+      if (Number.isFinite(bal)) {
+        applyRealtimeBalance(bal);
+      }
+      void fetchWallet({ force: true });
+    },
+    getToken,
+    RefreshPolicy.walletBalance
+  );
+
+  const [activeTab, setActiveTab] = useState<'index' | 'topup' | 'transfer' | 'withdraw'>(
+    defaultTab === 'withdraw' && !withdrawEnabled ? 'index' : defaultTab
+  );
   
   // States for Top Up — topupAmount stores pure digits (e.g. "250000")
   const [topupAmount, setTopupAmount] = useState<string>('');
-  const [topupMethod, setTopupMethod] = useState<string>('qris');
+  const [topupMethod, setTopupMethod] = useState<string>(autoTopupEnabled ? 'qris' : 'manual_transfer');
+  const [manualProof, setManualProof] = useState<File | null>(null);
+  const [manualNotes, setManualNotes] = useState('');
   const topupAmountInputRef = useRef<HTMLInputElement>(null);
   const topupCaretDigitsRef = useRef<number | null>(null);
   
@@ -131,6 +163,30 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       return;
     }
 
+    // FR-FIN-03 — transfer manual + bukti → antrean Finance
+    if (!autoTopupEnabled && topupMethod !== 'manual_transfer') {
+      setErrorMsg(featureFlags.messages.auto_topup);
+      return;
+    }
+
+    if (topupMethod === 'manual_transfer') {
+      if (!manualProof) {
+        setErrorMsg('Unggah bukti transfer terlebih dahulu.');
+        return;
+      }
+      const res = await depositManual(amount, manualProof, manualNotes || undefined);
+      if (!res) {
+        setErrorMsg('Gagal mengajukan deposit manual.');
+        return;
+      }
+      setSuccessMsg('Deposit manual diajukan. Menunggu verifikasi Finance.');
+      setTopupAmount('');
+      setManualProof(null);
+      setManualNotes('');
+      setActiveTab('index');
+      return;
+    }
+
     const idempotencyKey = getOrCreateIdempotencyKey(topupIdemRef);
     const res = await topUp(amount, topupMethod, idempotencyKey);
 
@@ -144,20 +200,24 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
     }
 
     if (res && res.snap_token) {
-      if (typeof window.snap?.pay !== 'function') {
+      const midtransCfg = res.midtrans || (await walletService.getPaymentConfig()).data;
+      const snapReady = midtransCfg
+        ? await ensureMidtransSnap(midtransCfg)
+        : typeof window.snap?.pay === 'function';
+      if (!snapReady || typeof window.snap?.pay !== 'function') {
         setErrorMsg('SDK pembayaran belum siap. Silakan muat ulang halaman.');
         return;
       }
       window.snap.pay(res.snap_token, {
         onSuccess: function () {
-          fetchWallet();
+          void fetchWallet({ force: true });
           setSuccessMsg(`Top Up berhasil! Saldo Anda otomatis ditambahkan sebesar ${formatIDR(amount)}.`);
           setTopupAmount('');
           setActiveTab('index');
           topupIdemRef.current = null;
         },
         onPending: function () {
-          fetchWallet();
+          void fetchWallet({ force: true });
           setSuccessMsg(`Top up sedang diproses. Silakan selesaikan pembayaran Anda.`);
           setTopupAmount('');
           setActiveTab('index');
@@ -240,6 +300,11 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
 
   const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!withdrawEnabled) {
+      setErrorMsg(featureFlags.messages.withdraw);
+      return;
+    }
+
     const amount = parseInt(withdrawAmount, 10);
     if (isNaN(amount) || amount < 10000) {
       setErrorMsg('Minimal penarikan adalah Rp 10.000');
@@ -412,11 +477,18 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
             </button>
 
             <button 
-              onClick={() => setActiveTab('withdraw')}
-              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${activeTab === 'withdraw' ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-50'}`}
+              onClick={() => withdrawEnabled && setActiveTab('withdraw')}
+              disabled={!withdrawEnabled}
+              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${
+                !withdrawEnabled
+                  ? 'text-gray-400 bg-gray-50 cursor-not-allowed'
+                  : activeTab === 'withdraw'
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-gray-600 hover:bg-gray-50'
+              }`}
             >
               <CreditCard className="w-5 h-5 text-amber-500 shrink-0" />
-              <span>Tarik Tunai / Withdraw</span>
+              <span>{withdrawEnabled ? 'Tarik Tunai / Withdraw' : 'Withdraw (Segera Hadir)'}</span>
             </button>
           </div>
 
@@ -568,6 +640,8 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold text-gray-700">Metode Pembayaran</label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {autoTopupEnabled && (
+                        <>
                       <div 
                         onClick={() => setTopupMethod('qris')}
                         className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${topupMethod === 'qris' ? 'border-primary-500 bg-primary-50/20' : 'border-gray-200 hover:border-gray-300'}`}
@@ -600,7 +674,41 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                           <p className="text-[10px] text-gray-500 mt-0.5">Biaya admin Rp 2.500</p>
                         </div>
                       </div>
+                        </>
+                      )}
+
+                      <div
+                        onClick={() => setTopupMethod('manual_transfer')}
+                        className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${topupMethod === 'manual_transfer' ? 'border-primary-500 bg-primary-50/20' : 'border-gray-200 hover:border-gray-300'}`}
+                      >
+                        <Building2 className="w-8 h-8 text-primary-600 shrink-0" />
+                        <div>
+                          <h6 className="font-extrabold text-gray-900 text-xs">Transfer Manual</h6>
+                          <p className="text-[10px] text-gray-500 mt-0.5">Unggah bukti · verifikasi Finance</p>
+                        </div>
+                      </div>
                     </div>
+                    {!autoTopupEnabled && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                        Segera Hadir — {featureFlags.messages.auto_topup}
+                      </p>
+                    )}
+                    {topupMethod === 'manual_transfer' && (
+                      <div className="space-y-2 pt-2">
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          onChange={(e) => setManualProof(e.target.files?.[0] || null)}
+                          className="w-full text-xs"
+                        />
+                        <input
+                          className="w-full px-3 py-2 rounded-xl border text-sm"
+                          placeholder="Catatan (opsional)"
+                          value={manualNotes}
+                          onChange={(e) => setManualNotes(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -751,6 +859,13 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                 exit={{ opacity: 0, x: -15 }}
                 className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6"
               >
+                {!withdrawEnabled ? (
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-6 text-sm text-amber-900">
+                    <p className="font-extrabold text-base mb-1">Segera Hadir</p>
+                    <p>{featureFlags.messages.withdraw}</p>
+                  </div>
+                ) : (
+                <>
                 <div>
                   <h4 className="font-extrabold text-gray-900 text-lg">Penarikan Dana / Withdraw</h4>
                   <p className="text-xs text-gray-500 mt-1">Cairkan saldo GurkyPay Anda langsung ke rekening bank lokal terverifikasi. Biaya penarikan tetap flat Rp 5.000 per transaksi.</p>
@@ -832,6 +947,8 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                     <span>Tarik Dana Sekarang</span>
                   </button>
                 </form>
+                </>
+                )}
               </motion.div>
             )}
 

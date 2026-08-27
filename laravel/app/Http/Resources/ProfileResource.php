@@ -14,6 +14,7 @@ class ProfileResource extends JsonResource
         $avatar = $this->avatarUrl();
         $role = $this->role instanceof \App\Enums\UserRole ? $this->role->value : $this->role;
         $hasPin = $this->hasPin();
+        $kycPayload = app(\App\Services\Kyc\KycService::class)->statusPayload($this->resource);
 
         return [
             'id' => $this->id,
@@ -53,9 +54,16 @@ class ProfileResource extends JsonResource
                 'hasPin' => $hasPin,
                 'createdAt' => $this->created_at?->toIso8601String(),
             ],
-            'kycStatus' => $this->kyc_status ?? 'unverified',
+            // FR-KYC-01/02 — derived from Tier 1 columns + latest Tier 2 record (no NIK/docs).
+            'kycStatus' => $kycPayload['kycStatus'],
+            'kyc' => $kycPayload,
+            'phoneVerified' => (bool) $this->phone_verified_at,
+            'emailVerified' => (bool) $this->email_verified_at,
+            'userType' => $this->user_type,
+            'agentLevel' => $this->agent_level,
             'whatsappLinked' => (bool) ($this->whatsapp_linked ?? false),
             'twoFactorEnabled' => (bool) ($this->two_factor_enabled ?? false),
         ];
     }
 }
+

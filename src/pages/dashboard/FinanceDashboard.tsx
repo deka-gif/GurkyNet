@@ -10,6 +10,7 @@ import {
   BookOpen,
   Bell,
   Share2,
+  Scale,
 } from 'lucide-react';
 import { financeService, formatIdr } from '../../services/finance.service';
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
@@ -155,8 +156,10 @@ export const FinanceDashboard: React.FC = () => {
           { to: '/dashboard/finance/treasury', icon: Building, label: 'Treasury' },
           { to: '/dashboard/finance/ledger', icon: BookOpen, label: 'Ledger' },
           { to: '/dashboard/finance/wallets', icon: Wallet, label: 'Wallets' },
+          { to: '/dashboard/finance/kyc', icon: ShieldCheck, label: 'KYC Review' },
           { to: '/dashboard/finance/refund-approval', icon: Receipt, label: 'Refund Approval' },
           { to: '/dashboard/finance/alerts', icon: Bell, label: 'Alerts' },
+          { to: '/dashboard/finance/reconciliation', icon: Scale, label: 'Reconciliation' },
           { to: '/dashboard/finance/financial-report', icon: Share2, label: 'Reports' },
         ].map((q) => (
           <Link

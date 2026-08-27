@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\DigiflazzService;
 use App\Services\NotificationService;
 use App\Services\WalletRefundService;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -36,10 +37,7 @@ class ProductProviderFulfillmentService
      */
     public function fulfill(Transaction $transaction): void
     {
-        if (!in_array($transaction->status, [
-            TransactionStatus::PENDING->value,
-            TransactionStatus::PROCESSING->value,
-        ], true)) {
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             Log::info('ProductProviderFulfillment skipped — not in-flight', [
                 'transaction_id' => $transaction->id,
                 'status' => $transaction->status,
@@ -52,10 +50,14 @@ class ProductProviderFulfillmentService
         // already claimed this transaction (retry after an ambiguous exception/timeout, or
         // ShouldBeUnique somehow overlapped), never blindly call the provider again — go
         // through the three-outcome retry guard instead (checkStatus first, never blind resend).
+        // SRS 14.3 — accept pending/processing/LOCKED; stamp SENT_TO_SUPPLIER on claim.
         $claimed = Transaction::where('id', $transaction->id)
-            ->whereIn('status', [TransactionStatus::PENDING->value, TransactionStatus::PROCESSING->value])
+            ->whereIn('status', TransactionStatusMapper::dispatchClaimStatuses())
             ->whereNull('provider_dispatch_started_at')
-            ->update(['provider_dispatch_started_at' => now()]);
+            ->update([
+                'provider_dispatch_started_at' => now(),
+                'status' => TransactionStatus::SENT_TO_SUPPLIER->value,
+            ]);
 
         if ($claimed === 0) {
             $this->handleDispatchRetry($transaction->fresh(['items']) ?? $transaction);
@@ -63,6 +65,7 @@ class ProductProviderFulfillmentService
             return;
         }
 
+        $transaction = $transaction->fresh(['items']) ?? $transaction;
         $transaction->loadMissing('items');
         $firstItem = $transaction->items->first();
         $internalSku = $firstItem?->product_code ?? '';
@@ -252,7 +255,42 @@ class ProductProviderFulfillmentService
                 return;
             }
 
-            // Failed — failover if allowed and more candidates remain
+            // Sprint 10 / SRS 15.3 — after HTTP dispatch may have reached the provider
+            // (timeout / ambiguous), NEVER fulfill on provider B. checkStatus(A) only.
+            if ($this->isAmbiguousPostDispatchFailure($result)) {
+                Log::warning('PRODUCT ROUTING — ambiguous post-dispatch; checkStatus only (no failover)', [
+                    'transaction_id' => $transaction->id,
+                    'provider_code' => $provider->code,
+                    'reason' => $result->reason,
+                ]);
+                ProductProviderLog::create([
+                    'product_provider_id' => $provider->id,
+                    'transaction_id' => $transaction->id,
+                    'event_type' => 'failover',
+                    'selected_provider_code' => $provider->code,
+                    'fallback_provider_code' => null,
+                    'reason' => 'ambiguous_post_dispatch_no_failover',
+                    'attempt' => $attempt,
+                    'success' => false,
+                    'error_message' => $result->message,
+                    'meta' => [
+                        'original_reason' => $result->reason,
+                        'failover_executed' => false,
+                        'check_status_required' => true,
+                    ],
+                ]);
+                $this->rememberFulfillmentContext($transaction, $provider, $offer, $result);
+                $this->resolveAmbiguousPostDispatch(
+                    $transaction->fresh(['items']) ?? $transaction,
+                    $provider,
+                    $fulfillSku,
+                    $providerRef
+                );
+
+                return;
+            }
+
+            // Failed — failover if allowed and more candidates remain (pre-processed only)
             if ($result->shouldFailover) {
                 Log::info('PRODUCT ROUTING — failover executed', [
                     'transaction_id' => $transaction->id,
@@ -365,9 +403,9 @@ class ProductProviderFulfillmentService
 
     protected function markPending(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
     {
-        // VIP waiting/processing → keep as PENDING so UI + timeout engine stay in-flight.
+        // SRS 14.3 — unclear / awaiting supplier → PENDING_SUPPLIER (saldo tetap ter-hold).
         $transaction->update([
-            'status' => TransactionStatus::PENDING->value,
+            'status' => TransactionStatus::PENDING_SUPPLIER->value,
             'notes' => 'Sedang diproses oleh operator.',
             'provider_last_status' => 'pending',
             'provider_checked_at' => now(),
@@ -472,6 +510,101 @@ class ProductProviderFulfillmentService
     }
 
     /**
+     * Sprint 10 / SRS 15.3 — timeout / connection after a dispatch attempt is ambiguous:
+     * the provider may already have the order. Never dual-dispatch; checkStatus only.
+     */
+    protected function isAmbiguousPostDispatchFailure(ProviderFulfillmentResult $result): bool
+    {
+        $reason = strtolower((string) ($result->reason ?? ''));
+        if (in_array($reason, ['timeout', 'connection_error'], true)) {
+            return true;
+        }
+
+        $message = strtolower((string) ($result->message ?? ''));
+
+        return $reason === 'provider_exception'
+            && (str_contains($message, 'timeout') || str_contains($message, 'timed out') || str_contains($message, 'cURL error 28'));
+    }
+
+    /**
+     * After ambiguous post-dispatch failure: checkStatus on the same provider/ref only.
+     */
+    protected function resolveAmbiguousPostDispatch(
+        Transaction $transaction,
+        ProductProvider $provider,
+        string $sku,
+        string $refId
+    ): void {
+        if (! $this->registry->has($provider->code)) {
+            if ($transaction->status !== TransactionStatus::PENDING_SUPPLIER->value) {
+                $transaction->update([
+                    'status' => TransactionStatus::PENDING_SUPPLIER->value,
+                    'notes' => 'Sedang diproses oleh operator.',
+                ]);
+            }
+
+            return;
+        }
+
+        $adapter = $this->registry->get($provider->code);
+        $result = $adapter->checkStatus(
+            $transaction,
+            $sku,
+            (string) $transaction->target_number,
+            $refId
+        );
+
+        ProductProviderLog::create([
+            'product_provider_id' => $provider->id,
+            'transaction_id' => $transaction->id,
+            'event_type' => 'post_dispatch_check',
+            'selected_provider_code' => $provider->code,
+            'reason' => $result->reason ?? $result->status,
+            'response_time_ms' => $result->responseTimeMs,
+            'success' => $result->ok,
+            'error_message' => $result->ok ? null : ($result->message ?? $result->reason),
+            'meta' => ['status' => $result->status, 'ref_id' => $refId],
+        ]);
+
+        if ($result->ok && $result->status === 'success') {
+            $this->markSuccess($transaction, $provider, $result);
+
+            return;
+        }
+
+        if ($result->ok && $result->status === 'pending') {
+            $this->markPending($transaction, $provider, $result);
+
+            return;
+        }
+
+        $ambiguousReasons = ['provider_not_configured', 'status_check_window_expired', 'timeout', 'connection_error'];
+        if (! $result->ok && $result->status === 'failed' && ! in_array($result->reason, $ambiguousReasons, true)) {
+            $this->failAndRefund(
+                $transaction,
+                'Transaksi gagal diproses. Saldo akan dikembalikan bila sudah dipotong.',
+                $result->reason ?? 'provider_rejected_on_post_dispatch_check'
+            );
+
+            return;
+        }
+
+        if ($transaction->status !== TransactionStatus::PENDING_SUPPLIER->value) {
+            $transaction->update([
+                'status' => TransactionStatus::PENDING_SUPPLIER->value,
+                'notes' => 'Sedang diproses oleh operator.',
+            ]);
+        }
+
+        Log::warning('PRODUCT ROUTING — post-dispatch check inconclusive, deferring to reconciliation', [
+            'transaction_id' => $transaction->id,
+            'provider_code' => $provider->code,
+            'status' => $result->status,
+            'reason' => $result->reason,
+        ]);
+    }
+
+    /**
      * Sprint 3 (SRS 15.3 / locked decision #2/#9) — three-outcome retry guard.
      * Invoked only when a prior dispatch attempt already claimed this transaction
      * (provider_dispatch_started_at set). Never calls fulfill()/buy() again; only
@@ -486,10 +619,7 @@ class ProductProviderFulfillmentService
      */
     protected function handleDispatchRetry(Transaction $transaction): void
     {
-        if (!in_array($transaction->status, [
-            TransactionStatus::PENDING->value,
-            TransactionStatus::PROCESSING->value,
-        ], true)) {
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             return;
         }
 
@@ -571,8 +701,15 @@ class ProductProviderFulfillmentService
         }
 
         // C. UNKNOWN / TIMEOUT / UNABLE TO DETERMINE — status='error', or a local/ambiguous
-        // guard reason. Never resend, never refund here; leave in-flight for the existing
-        // TransactionTimeoutService ladder / transactions:reconcile-pending to resolve.
+        // guard reason. Never resend, never refund here; leave in-flight as PENDING_SUPPLIER
+        // for the existing TransactionTimeoutService ladder / transactions:reconcile-pending.
+        if ($transaction->status !== TransactionStatus::PENDING_SUPPLIER->value) {
+            $transaction->update([
+                'status' => TransactionStatus::PENDING_SUPPLIER->value,
+                'notes' => 'Sedang diproses oleh operator.',
+            ]);
+        }
+
         Log::warning('PRODUCT ROUTING — dispatch retry inconclusive, deferring to reconciliation', [
             'transaction_id' => $transaction->id,
             'provider_code' => $code,
@@ -581,12 +718,12 @@ class ProductProviderFulfillmentService
         ]);
     }
 
+    /**
+     * FR-DIFF-09 / SRS 14.5 — confirmed provider failure → FAILED + auto wallet credit.
+     */
     protected function failAndRefund(Transaction $transaction, string $userMessage, string $reason): void
     {
-        if (!in_array($transaction->status, [
-            TransactionStatus::PENDING->value,
-            TransactionStatus::PROCESSING->value,
-        ], true)) {
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             return;
         }
 
@@ -622,10 +759,7 @@ class ProductProviderFulfillmentService
      */
     public function onJobExhausted(Transaction $transaction, ?\Throwable $exception): void
     {
-        if (!in_array($transaction->status, [
-            TransactionStatus::PENDING->value,
-            TransactionStatus::PROCESSING->value,
-        ], true)) {
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             return;
         }
 

@@ -129,6 +129,19 @@ class ProductRoutingService
                 continue;
             }
 
+            // Sprint 10 / SRS 15.4 — OPEN (and HALF_OPEN) must not receive fulfillment.
+            $circuit = app(ProviderCircuitBreaker::class);
+            if (! $circuit->allowsFulfillment((string) $pp->code)) {
+                $this->logSkipped(
+                    $transactionId,
+                    $product,
+                    $pp,
+                    'circuit_'.strtolower($circuit->state((string) $pp->code)),
+                    $offer
+                );
+                continue;
+            }
+
             $providerId = (int) $pp->id;
             $existing = $bestByProvider[$providerId] ?? null;
             if ($existing === null) {

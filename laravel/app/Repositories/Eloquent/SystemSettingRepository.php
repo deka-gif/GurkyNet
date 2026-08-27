@@ -53,6 +53,8 @@ class SystemSettingRepository implements SystemSettingRepositoryInterface
         'notification_fcm_enabled',
         'support_email',
         'support_phone',
+        // Sprint 7 / SRS 18.2 + 19 — recon threshold (Finance/Owner configurable).
+        'finance_recon_threshold_amount',
     ];
 
     public function getAll(): array

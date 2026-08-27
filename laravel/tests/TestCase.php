@@ -17,6 +17,28 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
         Cache::flush();
 
+        // Sprint 8 gates default OFF in production config; enable in tests so Sprint 3–7
+        // regression suites keep exercising real purchase/withdraw paths. Sprint8UserModuleTest
+        // explicitly disables gates for go-live safety assertions.
+        config([
+            'features.purchase_enabled' => true,
+            'features.withdraw_enabled' => true,
+            'features.auto_topup_enabled' => true,
+        ]);
+
+        // Sprint 12 / FR-KYC-01 — Tier 1 is enforced on transactions. Legacy tests that
+        // omit phone_verified_at / email_verified_at are auto-stamped verified in testing
+        // only when those attributes are absent. Explicit null keeps users unverified.
+        \App\Models\User::creating(function (\App\Models\User $user) {
+            $attrs = $user->getAttributes();
+            if (! array_key_exists('phone_verified_at', $attrs)) {
+                $user->phone_verified_at = now();
+            }
+            if (! array_key_exists('email_verified_at', $attrs)) {
+                $user->email_verified_at = now();
+            }
+        });
+
         // Prevent accidental live Digiflazz/Midtrans HTTP during sync-queue tests.
         // Individual tests may call Http::fake() again to override these defaults.
         Http::fake([
@@ -63,5 +85,35 @@ abstract class TestCase extends BaseTestCase
                 @unlink($path);
             }
         }
+    }
+
+    /**
+     * Sprint 12 — seed agent + approved KYC Tier 2 so legacy withdraw regression tests
+     * can exercise hold/idempotency paths under FR-USR07 / FR-KYC-02..04 eligibility.
+     */
+    protected function seedApprovedAgentKyc(\App\Models\User $user, ?string $legalName = null): void
+    {
+        $name = $legalName ?? $user->name;
+        $user->forceFill([
+            'user_type' => 'agent',
+            'agent_level' => $user->agent_level ?: 'basic',
+            'phone_verified_at' => $user->phone_verified_at ?? now(),
+            'email_verified_at' => $user->email_verified_at ?? now(),
+        ])->save();
+
+        \App\Models\KycVerification::query()->create([
+            'user_id' => $user->id,
+            'tier' => 2,
+            'ktp_full_name' => $name,
+            'ktp_number' => '3174'.str_pad((string) $user->id, 12, '0', STR_PAD_LEFT),
+            'ktp_photo_path' => 'kyc/'.$user->id.'/ktp.jpg',
+            'selfie_photo_path' => 'kyc/'.$user->id.'/selfie.jpg',
+            'bank_name' => 'BCA',
+            'bank_account_name' => $name,
+            'bank_account_number' => '1234567890',
+            'status' => \App\Models\KycVerification::STATUS_APPROVED,
+            'submitted_at' => now(),
+            'reviewed_at' => now(),
+        ]);
     }
 }

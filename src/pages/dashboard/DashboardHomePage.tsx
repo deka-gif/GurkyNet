@@ -12,6 +12,7 @@ import { useWalletStore } from '../../store/wallet.store';
 import { useBannerStore } from '../../store/banner.store';
 import { useTransactionStore } from '../../store/transaction.store';
 import { useNotificationStore } from '../../store/notification.store';
+import { websiteService } from '../../services/website.service';
 import { useState, useEffect, useMemo, useCallback, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -24,9 +25,12 @@ import {
   EyeOff,
   RotateCw,
   HelpCircle,
+  Megaphone,
+  X,
 } from 'lucide-react';
 import { runWhenIdle } from '../../utils/perf';
 import { preloadDashboardCore } from '../../router/lazyPages';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 
 export const DashboardHomePage = () => {
   const navigate = useNavigate();
@@ -47,11 +51,14 @@ export const DashboardHomePage = () => {
   const favorites = useFavoriteStore((s) => s.favorites);
   const hydrateFavorites = useFavoriteStore((s) => s.hydrate);
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
+  const { flags: featureFlags } = useFeatureFlags();
 
   const [showBalance, setShowBalance] = useState(true);
   const [isRefreshingWallet, setIsRefreshingWallet] = useState(false);
   const [copiedWalletNo, setCopiedWalletNo] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<DashboardServiceCategory | null>(null);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [popupAnnouncement, setPopupAnnouncement] = useState<any | null>(null);
 
   // Initialize store data on mount
   useEffect(() => {
@@ -60,6 +67,18 @@ export const DashboardHomePage = () => {
     fetchTransactions();
     fetchNotifications();
     hydrateFavorites();
+    // FR-USR06 — public Marketing announcements (Sprint 5 source)
+    websiteService
+      .getPublicAnnouncements({ per_page: 10 })
+      .then((res: any) => {
+        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res?.data?.data) ? res.data.data : [];
+        setAnnouncements(rows);
+        const popup = rows.find((a: any) => a?.type === 'broadcast' || a?.isPopup || a?.is_popup);
+        if (popup && !sessionStorage.getItem('gurky_announcement_dismissed')) {
+          setPopupAnnouncement(popup);
+        }
+      })
+      .catch(() => setAnnouncements([]));
   }, [fetchWallet, fetchBanners, fetchTransactions, fetchNotifications, hydrateFavorites]);
 
   // Idle preload of heavy dashboard chunks (riwayat / promo / chat)
@@ -111,6 +130,46 @@ export const DashboardHomePage = () => {
 
   return (
     <div className="space-y-4 pb-24 md:pb-8 max-w-7xl mx-auto">
+
+      {/* FR-USR06 — running text from public announcements */}
+      {announcements.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 flex items-center gap-2">
+          <Megaphone className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="overflow-hidden whitespace-nowrap text-xs font-semibold text-amber-900 truncate">
+            {announcements.map((a) => a.title || a.message || '').filter(Boolean).join('  •  ')}
+          </div>
+        </div>
+      )}
+
+      {!featureFlags.purchase_enabled && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
+          Segera Hadir — pembelian produk yang memotong saldo belum diaktifkan.
+        </div>
+      )}
+
+      {popupAnnouncement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-w-md w-full rounded-2xl bg-white p-5 shadow-xl border border-gray-100">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-primary-600">Pengumuman</p>
+                <h3 className="text-lg font-extrabold text-gray-900 mt-1">{popupAnnouncement.title}</h3>
+              </div>
+              <button
+                type="button"
+                className="p-1 rounded-lg hover:bg-gray-100"
+                onClick={() => {
+                  sessionStorage.setItem('gurky_announcement_dismissed', '1');
+                  setPopupAnnouncement(null);
+                }}
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mt-3 whitespace-pre-wrap">{popupAnnouncement.message || popupAnnouncement.body}</p>
+          </div>
+        </div>
+      )}
 
       {/* Sticky top notification banner removed — transactional notices use NotificationToast (queued, 15s). */}
 

@@ -5,11 +5,10 @@ namespace App\Actions\Transaction;
 use App\Models\User;
 use App\Models\Product;
 use App\Models\Transaction;
-use App\Models\TransactionItem;
 use App\Models\Wallet;
+use App\Models\WalletMutation;
 use App\Repositories\Contracts\TransactionRepositoryInterface;
 use App\Repositories\Contracts\TransactionItemRepositoryInterface;
-use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
 use App\Repositories\Contracts\ProductRepositoryInterface;
 use App\Services\PricingService;
 use App\Services\AvailabilityService;
@@ -17,8 +16,8 @@ use App\Services\Tagihan\TagihanInquiryService;
 use App\Services\Pln\PlnInquiryService;
 use App\Services\Game\GameInquiryService;
 use App\Services\Transactions\IdempotencyGuard;
+use App\Services\Wallet\WalletLedgerService;
 use App\Enums\TransactionStatus;
-use App\Enums\WalletHistoryType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +26,6 @@ class CreateTransactionAction
 {
     protected TransactionRepositoryInterface $transactionRepository;
     protected TransactionItemRepositoryInterface $itemRepository;
-    protected WalletHistoryRepositoryInterface $historyRepository;
     protected ProductRepositoryInterface $productRepository;
     protected PricingService $pricingService;
     protected AvailabilityService $availabilityService;
@@ -35,22 +33,22 @@ class CreateTransactionAction
     protected PlnInquiryService $plnInquiryService;
     protected GameInquiryService $gameInquiryService;
     protected IdempotencyGuard $idempotencyGuard;
+    protected WalletLedgerService $ledgerService;
 
     public function __construct(
         TransactionRepositoryInterface $transactionRepository,
         TransactionItemRepositoryInterface $itemRepository,
-        WalletHistoryRepositoryInterface $historyRepository,
         ProductRepositoryInterface $productRepository,
         PricingService $pricingService,
         AvailabilityService $availabilityService,
         TagihanInquiryService $tagihanInquiryService,
         PlnInquiryService $plnInquiryService,
         GameInquiryService $gameInquiryService,
-        IdempotencyGuard $idempotencyGuard
+        IdempotencyGuard $idempotencyGuard,
+        WalletLedgerService $ledgerService
     ) {
         $this->transactionRepository = $transactionRepository;
         $this->itemRepository = $itemRepository;
-        $this->historyRepository = $historyRepository;
         $this->productRepository = $productRepository;
         $this->pricingService = $pricingService;
         $this->availabilityService = $availabilityService;
@@ -58,12 +56,15 @@ class CreateTransactionAction
         $this->tagihanInquiryService = $tagihanInquiryService;
         $this->plnInquiryService = $plnInquiryService;
         $this->idempotencyGuard = $idempotencyGuard;
+        $this->ledgerService = $ledgerService;
     }
 
     /**
      * Execute the create transaction flow atomically.
      * Status and pricing are always server-controlled (never client-supplied).
      * Postpaid tagihan: pass inquiry_ref_id from Digiflazz inq-pasca session.
+     *
+     * SRS 14.1 / 14.2 / 14.3 — INITIATED → hold (mutation type=hold) → LOCKED.
      */
     public function execute(
         User $user,
@@ -71,17 +72,31 @@ class CreateTransactionAction
         string $targetNumber,
         string $pin,
         ?string $inquiryRefId = null,
-        ?string $idempotencyKey = null
+        ?string $idempotencyKey = null,
+        array $options = []
     ): Transaction {
+        // FR-KYC-01 / SRS Bagian 21 — Tier 1 before identity-gated transactions.
+        app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1($user);
+
+        // Sprint 8 / .cursorrules #8 — public purchase disabled until explicit go-live.
+        $gate = app(\App\Support\Features\TransactionFeatureGate::class);
+        if (! $gate->purchaseEnabled()) {
+            throw ValidationException::withMessages([
+                'sku_code' => [$gate->purchaseDisabledMessage()],
+            ]);
+        }
+
+        // FR-DIFF-02 — trusted auto-reorder path: PIN verified at subscription create/resume only.
+        $trustedSubscription = (bool) ($options['trusted_subscription'] ?? false);
+
         // SRS 14.1 — replay detection is reported back out of the DB transaction so the
         // caller can skip re-dispatching the provider job / re-arming the timeout below.
         $isReplay = false;
 
-        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $inquiryRefId, $idempotencyKey, &$isReplay) {
+        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $inquiryRefId, $idempotencyKey, $trustedSubscription, &$isReplay) {
 
-            // 1. Create Draft — this MUST be the first write in the transaction: if the
-            // idempotency claim collides (duplicate key), nothing else has happened yet,
-            // so it is always safe to short-circuit here without any wallet side effect.
+            // 1. Create INITIATED — first write; idempotency claim must precede any wallet side effect.
+            // (Conceptual draft→INITIATED: claim row starts as INITIATED per SRS 14.3.)
             $invoiceNumber = $this->generateUniqueInvoice();
 
             $claim = $this->idempotencyGuard->claim(
@@ -97,8 +112,8 @@ class CreateTransactionAction
                         'admin_fee' => 0.00,
                         'total_payment' => 0.00,
                         'payment_method' => 'wallet',
-                        'status' => TransactionStatus::DRAFT->value,
-                        'notes' => 'Transaksi draf baru',
+                        'status' => TransactionStatus::INITIATED->value,
+                        'notes' => 'Transaksi baru (INITIATED)',
                         'idempotency_key' => $idempotencyKey,
                     ]);
                 }
@@ -111,6 +126,14 @@ class CreateTransactionAction
             }
 
             $transaction = $claim['transaction'];
+
+            // SRS 18.2 — purchase restriction only when internal wallet incident affects this user.
+            $recon = app(\App\Services\Finance\Reconciliation\ReconciliationIncidentService::class);
+            if ($recon->isPurchaseRestricted($user->id)) {
+                throw ValidationException::withMessages([
+                    'product_code' => [$recon->purchaseRestrictMessage()],
+                ]);
+            }
 
             // 2. Validate Product (findBySku already applies Control Center visibility)
             $product = $this->productRepository->findBySku($skuCode);
@@ -197,36 +220,49 @@ class CreateTransactionAction
                 ]);
             }
 
-            // 5. Validate PIN
-            if ($user->transaction_pin === null) {
-                throw ValidationException::withMessages([
-                    'pin' => ['PIN transaksi belum diatur. Silakan atur PIN transaksi Anda terlebih dahulu.'],
-                ]);
+            // 5. Validate PIN (skipped only for FR-DIFF-02 trusted subscription runner).
+            if (! $trustedSubscription) {
+                if ($user->transaction_pin === null) {
+                    throw ValidationException::withMessages([
+                        'pin' => ['PIN transaksi belum diatur. Silakan atur PIN transaksi Anda terlebih dahulu.'],
+                    ]);
+                }
+
+                if (!Hash::check($pin, $user->transaction_pin)) {
+                    throw ValidationException::withMessages([
+                        'pin' => ['PIN transaksi salah.'],
+                    ]);
+                }
             }
 
-            if (!Hash::check($pin, $user->transaction_pin)) {
-                throw ValidationException::withMessages([
-                    'pin' => ['PIN transaksi salah.'],
-                ]);
-            }
-
-            // 6. Deduct Balance
+            // 6. Hold balance (SRS 14.2 / 14.3 LOCKED) — dual-write via WalletLedgerService
             $wallet->balance -= $totalPayment;
             $wallet->save();
 
-            // 7. Update Transaction from Draft to Final State (always pending for Digiflazz)
             $categoryName = $product->category->name ?? 'Produk PPOB';
             $providerName = $product->provider->name ?? '';
             $serviceName = trim($categoryName . ' ' . $providerName);
 
             $providerRef = $isPasca ? (string) $inquirySession['inquiry_ref_id'] : null;
 
+            $historyDesc = ($isPasca ? 'Pembayaran tagihan ' : 'Pembelian ') . $product->name . ' - ' . $targetNumber;
+
+            $this->ledgerService->record(
+                $wallet,
+                WalletMutation::TYPE_HOLD,
+                $totalPayment,
+                'debit',
+                $historyDesc,
+                $transaction->id
+            );
+
+            // 7. INITIATED → LOCKED after hold
             $transaction->update([
                 'service_name' => $serviceName,
                 'amount' => $sellPrice,
                 'admin_fee' => $adminFee,
                 'total_payment' => $totalPayment,
-                'status' => TransactionStatus::PENDING->value,
+                'status' => TransactionStatus::LOCKED->value,
                 'provider_ref' => $providerRef,
                 'notes' => $isPasca
                     ? (!empty($inquirySession['is_ewallet'])
@@ -325,17 +361,6 @@ class CreateTransactionAction
                 'custom_metadata' => $itemMeta,
             ]);
 
-            // 9. Create Wallet History
-            $historyDesc = ($isPasca ? 'Pembayaran tagihan ' : 'Pembelian ') . $product->name . ' - ' . $targetNumber;
-            $this->historyRepository->create([
-                'wallet_id' => $wallet->id,
-                'amount' => $totalPayment,
-                'type' => WalletHistoryType::DEBIT->value,
-                'description' => $historyDesc,
-                'reference_id' => $transaction->id,
-            ]);
-
-            // Dispatch WalletDebited
             event(new \App\Events\WalletDebited($wallet, $totalPayment, $historyDesc, $transaction->id));
 
             if ($isPasca && $inquirySession) {

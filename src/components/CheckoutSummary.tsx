@@ -27,6 +27,7 @@ import { isFailedStatus, isSuccessStatus } from '../utils/transactionStatus';
 import { formatIDR } from '../utils/currency';
 import { getOrCreateIdempotencyKey } from '../utils/idempotency';
 import { extractPlnToken, formatPlnTokenGrouped } from '../utils/plnToken';
+import { useFeatureFlags } from '../hooks/useFeatureFlags';
 
 // Dynamic transaction properties
 export interface CheckoutData {
@@ -56,8 +57,10 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const { createTransaction, fetchTransactions, upsertTransaction } = useTransactionStore();
   const { user, fetchUser } = useAuth();
   const { fetchNotifications } = useNotificationStore();
+  const { flags: featureFlags } = useFeatureFlags();
   const navigate = useNavigate();
   const location = useLocation();
+  const purchaseEnabled = featureFlags.purchase_enabled;
 
   const [step, setStep] = useState<CheckoutStep>(() => (initialStep === 'PIN' && !user?.hasPin ? 'CONFIRM' : initialStep));
   const [pin, setPin] = useState<string>('');
@@ -186,6 +189,15 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const finalizeTransaction = async (completedPin: string) => {
     setLoadingProgress(50);
     setLoadingStatus('Mengirim permintaan ke server...');
+
+    if (!purchaseEnabled) {
+      setFailureMessage(featureFlags.messages.purchase);
+      setFinalStatus('gagal');
+      setCreatedTrx({ invoice_number: 'TRX-SEGERA-HADIR', note: featureFlags.messages.purchase });
+      setStep('RESULT');
+      submittingRef.current = false;
+      return;
+    }
 
     if (!data.skuCode) {
       setFailureMessage('SKU produk wajib dipilih. Silakan pilih ulang produk.');
@@ -519,6 +531,13 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
               </div>
             </div>
 
+            {!purchaseEnabled && (
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-800 px-1 bg-amber-50 p-3 rounded-xl border border-amber-100">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Segera Hadir — {featureFlags.messages.purchase}</span>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 text-xs font-bold text-gray-500 px-1 bg-yellow-50 p-3 rounded-xl border border-yellow-100">
               <AlertCircle className="w-4 h-4 text-yellow-600 shrink-0" />
               <span>Harap pastikan nomor tujuan sudah benar. Transaksi yang berhasil tidak dapat dibatalkan.</span>
@@ -532,10 +551,15 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                 Batal
               </button>
               <button 
-                onClick={() => setStep('CONFIRM')}
-                className="flex-1 py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-primary-600/10 transition-all flex items-center justify-center gap-1.5"
+                disabled={!purchaseEnabled}
+                onClick={() => purchaseEnabled && setStep('CONFIRM')}
+                className={`flex-1 py-3 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  purchaseEnabled
+                    ? 'bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-600/10'
+                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
               >
-                <span>Lanjut</span>
+                <span>{purchaseEnabled ? 'Lanjut' : 'Segera Hadir'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -587,16 +611,16 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                 Kembali
               </button>
               <button 
-                disabled={wallet ? wallet.balance < totalPayment : true}
+                disabled={!purchaseEnabled || (wallet ? wallet.balance < totalPayment : true)}
                 onClick={goToPinStep}
                 className={`flex-1 py-3 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  wallet && wallet.balance >= totalPayment 
+                  purchaseEnabled && wallet && wallet.balance >= totalPayment 
                     ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-600/15' 
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Konfirmasi & Bayar</span>
+                <span>{purchaseEnabled ? 'Konfirmasi & Bayar' : 'Segera Hadir'}</span>
               </button>
             </div>
           </div>

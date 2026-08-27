@@ -3,46 +3,58 @@
 namespace App\Actions\Transaction;
 
 use App\Models\Transaction;
-use App\Models\Wallet;
 use App\Repositories\Contracts\TransactionRepositoryInterface;
-use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
 use App\Enums\TransactionStatus;
-use App\Enums\WalletHistoryType;
+use App\Services\WalletRefundService;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Safe user/system cancel before provider dispatch.
+ * FR-DIFF-09 / SRS 14.5 — held-fund release (unhold) uses WalletRefundService
+ * so ledger/audit/idempotency markers match the official refund path.
+ */
 class CancelTransactionAction
 {
     protected TransactionRepositoryInterface $transactionRepository;
-    protected WalletHistoryRepositoryInterface $historyRepository;
+    protected WalletRefundService $refundService;
 
     public function __construct(
         TransactionRepositoryInterface $transactionRepository,
-        WalletHistoryRepositoryInterface $historyRepository
+        WalletRefundService $refundService
     ) {
         $this->transactionRepository = $transactionRepository;
-        $this->historyRepository = $historyRepository;
+        $this->refundService = $refundService;
     }
 
+    /**
+     * SRS 14.3 / 15.3 — safe cancel only for INITIATED or LOCKED (no provider dispatch).
+     * Unsafe: SENT_TO_SUPPLIER, PENDING_SUPPLIER, PROCESSING, or provider_dispatch_started_at set.
+     * Legacy `pending` without dispatch still unholds (pre–Sprint 3 held rows).
+     */
     public function execute(Transaction $transaction, ?string $reason = null): Transaction
     {
         return DB::transaction(function () use ($transaction, $reason) {
-            // Lock transaction
             $lockedTransaction = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
 
-            if (in_array($lockedTransaction->status, [TransactionStatus::CANCELED->value, TransactionStatus::FAILED->value, TransactionStatus::SUCCESS->value])) {
+            $raw = (string) $lockedTransaction->status;
+            $srs = TransactionStatusMapper::toSrs($raw);
+
+            if (in_array($srs, ['SUCCESS', 'FAILED', 'REFUNDED'], true) || in_array($raw, [
+                TransactionStatus::CANCELED->value,
+                TransactionStatus::EXPIRED->value,
+            ], true)) {
                 throw ValidationException::withMessages([
                     'transaction' => ['Transaksi tidak dapat dibatalkan karena sudah selesai, gagal, atau telah dibatalkan sebelumnya.'],
                 ]);
             }
 
-            // Sprint 3 (SRS 15.3 / locked decision #3) — UNSAFE CANCEL guard.
-            // Once the transaction is `processing`, or a provider dispatch has already been
-            // claimed (provider_dispatch_started_at set — see ProductProviderFulfillmentService),
-            // the order may already be in flight at the supplier. Cancelling + refunding here
-            // would risk "user cancel + provider fulfillment = double loss". Reject instead and
-            // let the existing reconciliation/timeout/provider-status flow resolve the outcome.
-            $unsafeToCancel = $lockedTransaction->status === TransactionStatus::PROCESSING->value
+            $unsafeToCancel = in_array($raw, [
+                    TransactionStatus::SENT_TO_SUPPLIER->value,
+                    TransactionStatus::PENDING_SUPPLIER->value,
+                    TransactionStatus::PROCESSING->value,
+                ], true)
                 || $lockedTransaction->provider_dispatch_started_at !== null;
 
             if ($unsafeToCancel) {
@@ -51,26 +63,37 @@ class CancelTransactionAction
                 ]);
             }
 
-            // SAFE CANCEL: status PENDING and no provider dispatch claimed yet — wallet was
-            // debited but nothing has been sent to a supplier, so refund is always safe here.
-            // (PROCESSING is already rejected by the unsafe-cancel guard above.)
-            if ($lockedTransaction->status === TransactionStatus::PENDING->value) {
-                $wallet = Wallet::where('user_id', $lockedTransaction->user_id)->lockForUpdate()->first();
-                if ($wallet) {
-                    $wallet->balance += $lockedTransaction->total_payment;
-                    $wallet->save();
+            // SAFE CANCEL: INITIATED (no hold / total may be 0) or LOCKED without dispatch (unhold).
+            $canUnhold = in_array($raw, [
+                TransactionStatus::LOCKED->value,
+                TransactionStatus::PENDING->value,
+                TransactionStatus::DRAFT->value,
+            ], true);
 
-                    // Create history credit for refund
-                    $this->historyRepository->create([
-                        'wallet_id' => $wallet->id,
-                        'amount' => $lockedTransaction->total_payment,
-                        'type' => WalletHistoryType::CREDIT->value,
-                        'description' => 'Refund Pembatalan Transaksi: ' . $lockedTransaction->invoice_number,
-                        'reference_id' => $lockedTransaction->id,
-                    ]);
+            if ($canUnhold && (float) $lockedTransaction->total_payment > 0) {
+                // FR-DIFF-09 — do not credit wallet outside WalletRefundService.
+                $result = $this->refundService->refundOnce(
+                    $lockedTransaction,
+                    'Refund Pembatalan Transaksi: '.$lockedTransaction->invoice_number,
+                    'user_cancel',
+                    $reason ?? 'Transaksi dibatalkan oleh pengguna atau sistem',
+                    TransactionStatus::CANCELED->value
+                );
 
-                    event(new \App\Events\WalletCredited($wallet, $lockedTransaction->total_payment, 'Refund Pembatalan Transaksi: ' . $lockedTransaction->invoice_number, $lockedTransaction->id));
-                }
+                $this->refundService->writeAudit(
+                    auth()->id(),
+                    $result['already_refunded'] ? 'TRANSACTION_CANCEL_ALREADY_REFUNDED' : 'TRANSACTION_CANCEL_UNHOLD',
+                    [
+                        'transaction_id' => $lockedTransaction->id,
+                        'invoice_number' => $lockedTransaction->invoice_number,
+                        'credited' => $result['credited'],
+                        'final_status' => $result['transaction']->status ?? null,
+                    ]
+                );
+
+                event(new \App\Events\TransactionFailed($result['transaction']));
+
+                return $result['transaction'];
             }
 
             $lockedTransaction->status = TransactionStatus::CANCELED->value;

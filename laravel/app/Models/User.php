@@ -25,8 +25,12 @@ class User extends Authenticatable
         'address',
         'avatar_path',
         'role',
+        'user_type',
+        'agent_level',
         'transaction_pin',
         'pin_updated_at',
+        'email_verified_at',
+        'phone_verified_at',
     ];
 
     protected $hidden = [
@@ -37,6 +41,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'phone_verified_at' => 'datetime',
         'password' => 'hashed',
         'transaction_pin' => 'hashed',
         'pin_updated_at' => 'datetime',
@@ -139,6 +144,14 @@ class User extends Authenticatable
     public function wallet(): HasOne
     {
         return $this->hasOne(Wallet::class);
+    }
+
+    /**
+     * FR-KYC-02 / SRS Bagian 21 — KYC submissions (Tier 2 history retained).
+     */
+    public function kycVerifications(): HasMany
+    {
+        return $this->hasMany(KycVerification::class);
     }
 
     /**

@@ -27,6 +27,7 @@ class LegalDocument extends Model
         'canonical_url',
         'og_image',
         'status',
+        'legal_review_status',
         'estimated_reading_minutes',
         'version_number',
         'created_by',
@@ -34,12 +35,21 @@ class LegalDocument extends Model
         'published_at',
     ];
 
+    public const REVIEW_PENDING = 'pending_legal_review';
+
+    public const REVIEW_APPROVED_BINDING = 'approved_binding';
+
     protected $casts = [
         'is_dirty' => 'boolean',
         'published_at' => 'datetime',
         'estimated_reading_minutes' => 'integer',
         'version_number' => 'integer',
     ];
+
+    public function isLegallyBinding(): bool
+    {
+        return $this->legal_review_status === self::REVIEW_APPROVED_BINDING;
+    }
 
     public function versions(): HasMany
     {

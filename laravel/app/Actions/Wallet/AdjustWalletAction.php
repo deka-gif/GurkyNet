@@ -5,20 +5,22 @@ namespace App\Actions\Wallet;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\Transaction;
-use App\Repositories\Contracts\WalletHistoryRepositoryInterface;
-use App\Enums\WalletHistoryType;
+use App\Models\WalletMutation;
 use App\Enums\TransactionStatus;
+use App\Services\Wallet\WalletLedgerService;
+use App\Support\Finance\FinanceAudit;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class AdjustWalletAction
 {
     public function __construct(
-        protected WalletHistoryRepositoryInterface $historyRepository
+        protected WalletLedgerService $ledgerService
     ) {}
 
     /**
-     * Manual wallet adjustment (Finance/Owner). Updates wallet, history, and finance ledger.
+     * Manual wallet adjustment (Finance/Owner). Updates wallet, ledger (mutation+history), and finance ledger.
+     * SRS 14.2 — type=adjustment. Optional idempotency_key stored as transactions mirror only.
      *
      * @param  'credit'|'debit'  $direction
      */
@@ -27,7 +29,8 @@ class AdjustWalletAction
         float $amount,
         string $direction,
         string $reason,
-        ?User $actor = null
+        ?User $actor = null,
+        ?string $idempotencyKey = null
     ): Transaction {
         if ($amount <= 0) {
             throw ValidationException::withMessages([
@@ -42,7 +45,7 @@ class AdjustWalletAction
             ]);
         }
 
-        return DB::transaction(function () use ($targetUser, $amount, $direction, $reason, $actor) {
+        return DB::transaction(function () use ($targetUser, $amount, $direction, $reason, $actor, $idempotencyKey) {
             $wallet = Wallet::where('user_id', $targetUser->id)->lockForUpdate()->first();
             if (!$wallet) {
                 throw new \Exception('Wallet target tidak ditemukan.');
@@ -75,17 +78,19 @@ class AdjustWalletAction
                 'payment_method' => 'adjustment',
                 'status' => TransactionStatus::SUCCESS->value,
                 'notes' => "Adjustment ({$direction}) oleh {$actorLabel}: {$reason}",
+                'idempotency_key' => $idempotencyKey,
             ]);
 
-            $this->historyRepository->create([
-                'wallet_id' => $wallet->id,
-                'amount' => $amount,
-                'type' => $direction === 'credit'
-                    ? WalletHistoryType::CREDIT->value
-                    : WalletHistoryType::DEBIT->value,
-                'description' => "Adjustment ({$direction}): {$reason}",
-                'reference_id' => $transaction->id,
-            ]);
+            $desc = "Adjustment ({$direction}): {$reason}";
+            $this->ledgerService->record(
+                $wallet,
+                WalletMutation::TYPE_ADJUSTMENT,
+                $amount,
+                $direction,
+                $desc,
+                $transaction->id,
+                $actor?->id
+            );
 
             \App\Models\PaymentHistory::recordFor(
                 $transaction,
@@ -106,6 +111,16 @@ class AdjustWalletAction
 
             event(new \App\Events\TransactionCreated($transaction));
             event(new \App\Events\TransactionSuccess($transaction));
+
+            // FR-FIN-02 — audit trail via existing ActivityLog
+            FinanceAudit::log($actor, 'FINANCE_WALLET_ADJUST', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $targetUser->id,
+                'direction' => $direction,
+                'amount' => $amount,
+                'reason' => $reason,
+                'new_balance' => (float) $wallet->balance,
+            ]);
 
             return $transaction;
         });

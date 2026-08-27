@@ -42,6 +42,22 @@ export const transactionService = {
     return response.data;
   },
 
+  /** Sprint 8 / FR-USR04 — download owned transaction PDF receipt. */
+  downloadReceiptPdf: async (id: string): Promise<void> => {
+    const response = await apiClient.get(`/transactions/${id}/receipt.pdf`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `struk-${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   delete: async (id: string): Promise<ApiResponse<null>> => {
     const response = await apiClient.delete<ApiResponse<null>>(`/transactions/${id}`);
     return response.data;

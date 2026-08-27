@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\v1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Concerns\HandlesIdempotentRequests;
 use App\Traits\ApiResponseTrait;
 use App\Actions\Admin\Finance\FinanceDashboardAction;
 use App\Actions\Admin\Finance\FinanceReportAction;
@@ -20,6 +21,7 @@ use Illuminate\Http\Request;
 class FinanceController extends Controller
 {
     use ApiResponseTrait;
+    use HandlesIdempotentRequests;
 
     /**
      * Get Finance Dashboard Overview.
@@ -66,24 +68,37 @@ class FinanceController extends Controller
     /**
      * Approve Refund Claim.
      * POST /api/v1/admin/finance/refunds/{id}/approve
+     * SRS 14.1 — idempotency_key required; SUCCESS complaints → REFUNDED (14.3).
      */
     public function approveRefund(string|int $id, FinanceRefundActionRequest $request, FinanceRefundAction $action): JsonResponse
     {
         try {
-            $notes = $request->input('notes');
             $existing = $action->find($id);
             if (!$existing) {
                 return $this->errorResponse('Transaksi tidak ditemukan.', 404);
             }
 
-            $alreadyRefunded = app(\App\Services\WalletRefundService::class)->hasExistingRefund($existing);
-            $transaction = $action->approve($id, $notes);
+            return $this->withIdempotency(
+                $request,
+                'POST /api/v1/admin/finance/refunds/'.$id.'/approve',
+                array_merge(
+                    ['refund_transaction_id' => (string) $id],
+                    $request->only(['notes', 'reason'])
+                ),
+                function () use ($id, $request, $action, $existing) {
+                    $notes = $request->input('notes');
+                    $alreadyRefunded = app(\App\Services\WalletRefundService::class)->hasExistingRefund($existing);
+                    $transaction = $action->approve($id, $notes);
 
-            $message = $alreadyRefunded
-                ? 'Refund sudah pernah diproses. Saldo tidak dikreditkan ulang.'
-                : 'Pengajuan refund berhasil disetujui dan saldo telah dikembalikan.';
+                    $message = $alreadyRefunded
+                        ? 'Refund sudah pernah diproses. Saldo tidak dikreditkan ulang.'
+                        : 'Pengajuan refund berhasil disetujui dan saldo telah dikembalikan.';
 
-            return $this->successResponse($message, $transaction);
+                    return $this->idempotentJson($message, $transaction);
+                }
+            );
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
         } catch (\Exception $e) {
             $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 400;
             return $this->errorResponse($e->getMessage(), $code);
@@ -130,6 +145,7 @@ class FinanceController extends Controller
     /**
      * Manual wallet adjustment (credit/debit) for Finance/Owner.
      * POST /api/v1/admin/finance/wallet/adjust
+     * SRS 14.1 — idempotency_key required.
      */
     public function adjustWallet(Request $request, AdjustWalletAction $action): JsonResponse
     {
@@ -139,22 +155,30 @@ class FinanceController extends Controller
             'amount' => 'required|numeric|min:1',
             'direction' => 'required|in:credit,debit',
             'reason' => 'required|string|max:255',
+            'idempotency_key' => 'required|string|max:80',
         ]);
 
         try {
-            $target = !empty($data['user_id'])
-                ? User::findOrFail($data['user_id'])
-                : User::where('email', $data['email'])->firstOrFail();
+            return $this->withIdempotency(
+                $request,
+                'POST /api/v1/admin/finance/wallet/adjust',
+                $request->only(['user_id', 'email', 'amount', 'direction', 'reason']),
+                function () use ($data, $request, $action) {
+                    $target = !empty($data['user_id'])
+                        ? User::findOrFail($data['user_id'])
+                        : User::where('email', $data['email'])->firstOrFail();
 
-            $transaction = $action->execute(
-                $target,
-                (float) $data['amount'],
-                $data['direction'],
-                $data['reason'],
-                $request->user()
+                    $transaction = $action->execute(
+                        $target,
+                        (float) $data['amount'],
+                        $data['direction'],
+                        $data['reason'],
+                        $request->user()
+                    );
+
+                    return $this->idempotentJson('Penyesuaian saldo berhasil diproses.', $transaction);
+                }
             );
-
-            return $this->successResponse('Penyesuaian saldo berhasil diproses.', $transaction);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         } catch (\Exception $e) {

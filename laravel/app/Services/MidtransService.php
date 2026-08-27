@@ -13,15 +13,27 @@ class MidtransService
     protected string $snapBaseUrl;
     protected string $apiBaseUrl;
 
-    public function __construct()
+    public function __construct(?\App\Services\Payment\MidtransCredentialResolver $resolver = null)
     {
-        // Prefer config values (including empty string) so tests/runtime can override
-        // without falling back to phpunit/env placeholders via `?:`.
-        $this->serverKey = (string) (config('services.midtrans.server_key') ?? '');
-        $this->clientKey = (string) (config('services.midtrans.client_key') ?? '');
-        $this->isProduction = (bool) (config('services.midtrans.is_production') ?? false);
+        $resolver ??= app(\App\Services\Payment\MidtransCredentialResolver::class);
+        $this->applyCredentials($resolver->resolve());
+    }
 
-        $configuredBaseUrl = config('services.midtrans.base_url');
+    public function refreshCredentials(): void
+    {
+        $this->applyCredentials(app(\App\Services\Payment\MidtransCredentialResolver::class)->resolve());
+    }
+
+    /**
+     * @param  array{server_key:string,client_key:string,is_production:bool,base_url:?string}  $creds
+     */
+    protected function applyCredentials(array $creds): void
+    {
+        $this->serverKey = (string) ($creds['server_key'] ?? '');
+        $this->clientKey = (string) ($creds['client_key'] ?? '');
+        $this->isProduction = (bool) ($creds['is_production'] ?? false);
+
+        $configuredBaseUrl = $creds['base_url'] ?? null;
         if ($configuredBaseUrl) {
             $this->snapBaseUrl = rtrim((string) $configuredBaseUrl, '/');
             $this->apiBaseUrl = rtrim((string) $configuredBaseUrl, '/');
@@ -49,8 +61,19 @@ class MidtransService
         return $this->serverKey;
     }
 
+    public function getClientKey(): string
+    {
+        return $this->clientKey;
+    }
+
+    public function isProduction(): bool
+    {
+        return $this->isProduction;
+    }
+
     protected function assertConfigured(): void
     {
+        $this->refreshCredentials();
         if (!$this->isConfigured()) {
             throw new \App\Exceptions\Payment\PaymentGatewayNotConfiguredException();
         }
@@ -144,6 +167,7 @@ class MidtransService
      */
     protected function postRequest(string $url, array $payload, string $orderId = '', int $maxRetries = 3): array
     {
+        $this->refreshCredentials();
         $attempt = 0;
         $delay = 1000; // millisecond delay start
 
@@ -226,6 +250,7 @@ class MidtransService
      */
     protected function getRequest(string $url, string $orderId = '', int $maxRetries = 3): array
     {
+        $this->refreshCredentials();
         $attempt = 0;
         $delay = 1000;
 

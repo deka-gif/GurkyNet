@@ -27,6 +27,7 @@ class CreateWebsiteSettingRequest extends FormRequest
             'support_phone' => 'nullable|string|max:50',
             'whatsapp' => 'nullable|string|max:50',
             'office_address' => 'nullable|string',
+            'operating_hours' => 'nullable|string|max:255', // FR-MKT01
             'google_maps_url' => 'nullable|string|max:1000',
             'facebook' => 'nullable|string|max:255',
             'instagram' => 'nullable|string|max:255',

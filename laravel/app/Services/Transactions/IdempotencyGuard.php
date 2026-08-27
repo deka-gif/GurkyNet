@@ -9,12 +9,15 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 
 /**
- * SRS 14.1 — server-side idempotency for balance-mutating actions (purchase, top up,
- * transfer, withdraw). Reuses the existing `transactions` table (no parallel
- * `idempotency_requests` table) per Sprint 3 Final Execution Plan — Revised, §5.
+ * SRS 14.1 — server-side idempotency mirror for balance-mutating actions (purchase, top up,
+ * transfer, withdraw).
+ *
+ * Source of truth is `idempotency_requests` (IdempotencyRequestService). This guard only
+ * mirrors the key onto `transactions.idempotency_key` (+ UNIQUE(user_id, idempotency_key))
+ * as a secondary safety net for wallet-debit paths that still create a transaction row first.
  *
  * Design:
- *  - `idempotency_key` + UNIQUE(user_id, idempotency_key) on `transactions` is the safety net.
+ *  - `idempotency_key` + UNIQUE(user_id, idempotency_key) on `transactions` is the mirror net.
  *  - The 24h TTL is enforced in real time at lookup (findActive), not by a scheduler.
  *  - Because MySQL cannot express a "unique only while active" index, expired keys are
  *    freed by nulling the column (never deleting the transaction row) — either by the

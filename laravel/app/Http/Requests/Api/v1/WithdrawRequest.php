@@ -21,8 +21,8 @@ class WithdrawRequest extends FormRequest
             'bank_name' => 'required|string|max:50',
             'account_number' => 'required|string|max:50',
             'admin_fee' => 'nullable|numeric|min:0',
-            // SRS 14.1 — optional for backward compatibility with clients not yet upgraded.
-            'idempotency_key' => 'nullable|string|max:80',
+            // SRS 14.1 — required for balance-mutating withdraw.
+            'idempotency_key' => 'required|string|max:80',
         ];
     }
 

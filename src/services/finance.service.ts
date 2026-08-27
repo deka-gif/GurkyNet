@@ -126,9 +126,10 @@ export const financeService = {
     return res.data;
   },
 
-  async approveRefund(id: string, data?: { notes?: string; note?: string }) {
+  async approveRefund(id: string, data?: { notes?: string; note?: string; idempotency_key?: string }) {
     const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/refunds/${id}/approve`, {
       notes: data?.notes || data?.note,
+      idempotency_key: data?.idempotency_key,
     });
     return res.data;
   },
@@ -138,6 +139,88 @@ export const financeService = {
       reason: data?.reason || data?.note,
     });
     return res.data;
+  },
+
+  /**
+   * SRS 14.1 — manual wallet adjustment (balance mutation). Caller must supply idempotency_key.
+   */
+  async adjustWallet(payload: {
+    user_id?: number;
+    email?: string;
+    amount: number;
+    direction: 'credit' | 'debit';
+    reason: string;
+    idempotency_key: string;
+  }) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/finance/wallet/adjust', payload);
+    return res.data;
+  },
+
+  // FR-FIN-01
+  async listUserWallets(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/wallets', { params });
+    return res.data;
+  },
+
+  async getUserMutations(userId: number | string, params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/finance/wallets/${userId}/mutations`, { params });
+    return res.data;
+  },
+
+  // FR-FIN-03 / 04
+  async listManualDeposits(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/deposits', { params });
+    return res.data;
+  },
+
+  async getManualDeposit(id: number | string) {
+    const res = await apiClient.get<ApiResponse<any>>(`/admin/finance/deposits/${id}`);
+    return res.data;
+  },
+
+  async approveManualDeposit(id: number | string, idempotency_key: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/deposits/${id}/approve`, { idempotency_key });
+    return res.data;
+  },
+
+  async rejectManualDeposit(id: number | string, reason: string, idempotency_key?: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/deposits/${id}/reject`, { reason, idempotency_key });
+    return res.data;
+  },
+
+  async listAutomaticDeposits(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/deposits/automatic', { params });
+    return res.data;
+  },
+
+  // FR-FIN-05
+  async listWithdrawals(params?: Record<string, any>) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/withdrawals', { params });
+    return res.data;
+  },
+
+  async approveWithdrawal(id: number | string, idempotency_key: string, notes?: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/withdrawals/${id}/approve`, { idempotency_key, notes });
+    return res.data;
+  },
+
+  async rejectWithdrawal(id: number | string, reason: string, idempotency_key: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/withdrawals/${id}/reject`, { reason, idempotency_key });
+    return res.data;
+  },
+
+  async holdWithdrawal(id: number | string, idempotency_key: string, notes?: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/withdrawals/${id}/hold`, { idempotency_key, notes });
+    return res.data;
+  },
+
+  // FR-FIN-08
+  async exportReportBlob(params: { format: 'xlsx' | 'pdf'; period?: string; start_date?: string; end_date?: string }) {
+    const res = await apiClient.get('/admin/finance/reports/export', {
+      params,
+      responseType: 'blob',
+    });
+    return res;
   },
 
   async getReports(params?: Record<string, any>) {
@@ -172,6 +255,56 @@ export const financeService = {
     }
     const res = await apiClient.get<ApiResponse<any>>('/admin/finance/reports', { params: mapped });
     return res.data;
+  },
+
+  // Sprint 7 / SRS 18 + FR-FIN-07
+  async getReconIncidents(params: Record<string, unknown> = {}) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/reconciliation/incidents', { params });
+    return res.data?.data || res.data;
+  },
+  async resolveReconIncident(id: number | string, notes?: string) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/reconciliation/incidents/${id}/resolve`, { notes });
+    return res.data?.data || res.data;
+  },
+  async getGatewayRecon(params: Record<string, unknown> = {}) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/reconciliation/gateway', { params });
+    return res.data?.data || res.data;
+  },
+  async matchGatewayRecon(id: number | string, body: Record<string, unknown> = {}) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/reconciliation/gateway/${id}/match`, body);
+    return res.data?.data || res.data;
+  },
+  async discrepancyGatewayRecon(id: number | string, body: Record<string, unknown> = {}) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/reconciliation/gateway/${id}/discrepancy`, body);
+    return res.data?.data || res.data;
+  },
+  async getBankLines(params: Record<string, unknown> = {}) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/reconciliation/bank-lines', { params });
+    return res.data?.data || res.data;
+  },
+  async importBankCsv(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await apiClient.post<ApiResponse<any>>('/admin/finance/reconciliation/bank-import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data?.data || res.data;
+  },
+  async matchBankLine(id: number | string, body: Record<string, unknown> = {}) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/reconciliation/bank-lines/${id}/match`, body);
+    return res.data?.data || res.data;
+  },
+  async discrepancyBankLine(id: number | string, body: Record<string, unknown> = {}) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/reconciliation/bank-lines/${id}/discrepancy`, body);
+    return res.data?.data || res.data;
+  },
+  async getReconClosings() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/reconciliation/closings');
+    return res.data?.data || res.data;
+  },
+  async runReconJob(mode: string) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/finance/reconciliation/run', { mode });
+    return res.data?.data || res.data;
   },
 };
 

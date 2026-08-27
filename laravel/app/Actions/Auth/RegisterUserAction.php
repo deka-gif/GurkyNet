@@ -51,6 +51,25 @@ class RegisterUserAction
                 'status' => 'active',
             ]);
 
+            // FR-REF-01 — unique referral code at registration
+            app(\App\Services\Referral\ReferralCodeService::class)->ensureForUser($user);
+
+            // FR-REF-02 — optional referral code relation (immutable)
+            $referralCode = $data['referral_code'] ?? null;
+            if (is_string($referralCode) && trim($referralCode) !== '') {
+                app(\App\Services\Referral\ReferralRelationService::class)->attachAtRegistration(
+                    $user,
+                    $referralCode,
+                    is_array($data['referral_context'] ?? null) ? $data['referral_context'] : []
+                );
+            }
+
+            // Sprint 18 — persist policy acceptance when requested (server-side, versioned)
+            if (! empty($data['accept_policies'])) {
+                app(\App\Services\Website\LegalCenterService::class)->ensureDefaults();
+                app(\App\Services\Legal\PolicyAcceptanceService::class)->acceptCurrentPublished($user);
+            }
+
             return $user;
         });
     }

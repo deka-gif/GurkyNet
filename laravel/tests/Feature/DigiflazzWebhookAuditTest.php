@@ -377,7 +377,7 @@ class DigiflazzWebhookAuditTest extends TestCase
             'X-Digiflazz-Event' => 'update',
         ])->assertOk();
 
-        $this->assertSame('processing', $tx->fresh()->status);
+        $this->assertSame(\App\Enums\TransactionStatus::PENDING_SUPPLIER->value, $tx->fresh()->status);
         $this->assertSame('pending', $digi->fresh()->digiflazz_status);
     }
 }

@@ -31,10 +31,59 @@ Schedule::command('transactions:reconcile-pending')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Sprint 7 / SRS 18.1 — zero-loss reconciliation (Tahap 6).
+Schedule::command('finance:reconcile internal')
+    ->hourly()
+    ->withoutOverlapping(55)
+    ->runInBackground();
+
+Schedule::command('finance:reconcile provider')
+    ->dailyAt('01:15')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(120)
+    ->runInBackground();
+
+Schedule::command('finance:reconcile midtrans')
+    ->dailyAt('01:30')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(120)
+    ->runInBackground();
+
+Schedule::command('finance:reconcile midtrans-pending')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(14)
+    ->runInBackground();
+
+Schedule::command('finance:reconcile closing')
+    ->dailyAt('23:59')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(120)
+    ->runInBackground();
+
 // Sprint 3 (SRS 14.1) — housekeeping only; TTL correctness never depends on this running.
 Schedule::command('transactions:archive-expired-idempotency-keys')
     ->hourly()
     ->withoutOverlapping()
+    ->runInBackground();
+
+// FR-DIFF-01 — expire loyalty point batches (12 months)
+Schedule::command('loyalty:expire-points')
+    ->dailyAt('02:10')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(120)
+    ->runInBackground();
+
+// SRS 31.4 — release pending referral commissions after hold period
+Schedule::command('referral:release-commissions')
+    ->dailyAt('02:20')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(120)
+    ->runInBackground();
+
+// FR-DIFF-02 — auto-reorder due runner (skips purchase when PURCHASE_ENABLED=false)
+Schedule::command('subscriptions:process-auto-reorder')
+    ->everyMinute()
+    ->withoutOverlapping(5)
     ->runInBackground();
 
 // Operational hygiene

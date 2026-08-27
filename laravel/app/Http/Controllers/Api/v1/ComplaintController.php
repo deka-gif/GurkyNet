@@ -3,37 +3,21 @@
 namespace App\Http\Controllers\Api\v1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\SupportTicketResource;
 use App\Models\SupportTicket;
 use App\Models\TicketReply;
+use App\Support\Support\TicketStatus;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * User complaints (FR-USR05 / FR-CS-02) — create, list, show with status + reply history.
+ */
 class ComplaintController extends Controller
 {
     use ApiResponseTrait;
-
-    /**
-     * Map API status labels to DB values used by admin CS.
-     */
-    protected array $statusToDb = [
-        'Open' => 'Terbuka',
-        'Processing' => 'Pending',
-        'Resolved' => 'Selesai',
-        'Rejected' => 'Ditolak',
-        'Closed' => 'Tertutup',
-    ];
-
-    protected array $statusToApi = [
-        'Terbuka' => 'Open',
-        'Pending' => 'Processing',
-        'Selesai' => 'Resolved',
-        'Ditolak' => 'Rejected',
-        'Tertutup' => 'Closed',
-    ];
 
     public function index(Request $request): JsonResponse
     {
@@ -83,7 +67,8 @@ class ComplaintController extends Controller
                 'description' => $data['description'],
                 'attachment' => $attachmentPath,
                 'priority' => 'Sedang',
-                'status' => 'Terbuka',
+                'status' => TicketStatus::OPEN, // FR-CS-02 SRS 7.8
+                'source' => 'user_complaint',
             ]);
 
             TicketReply::create([
@@ -118,6 +103,8 @@ class ComplaintController extends Controller
             ->sortByDesc('id')
             ->first();
 
+        $canonical = TicketStatus::normalize($ticket->status);
+
         return [
             'id' => $ticket->id,
             'ticketNumber' => $ticket->ticket_number,
@@ -130,8 +117,9 @@ class ComplaintController extends Controller
             'attachment' => $ticket->attachment
                 ? Storage::disk('public')->url($ticket->attachment)
                 : null,
-            'status' => $this->statusToApi[$ticket->status] ?? $ticket->status,
-            'statusRaw' => $ticket->status,
+            'status' => TicketStatus::toUserApi($ticket->status),
+            'statusRaw' => $canonical,
+            'statusLabel' => TicketStatus::label($ticket->status),
             'adminReply' => $adminReply?->message,
             'admin_reply' => $adminReply?->message,
             'closedAt' => $ticket->closed_at?->toIso8601String(),

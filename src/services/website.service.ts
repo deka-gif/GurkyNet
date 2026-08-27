@@ -32,6 +32,7 @@ function settingToBackend(s: Partial<WebsiteSetting>): any {
   if (s.supportPhone !== undefined) backend.support_phone = s.supportPhone;
   if (s.whatsapp !== undefined) backend.whatsapp = s.whatsapp;
   if (s.officeAddress !== undefined) backend.office_address = s.officeAddress;
+  if (s.operatingHours !== undefined) backend.operating_hours = s.operatingHours; // FR-MKT01
   if (s.googleMapsUrl !== undefined) backend.google_maps_url = s.googleMapsUrl;
   if (s.facebook !== undefined) backend.facebook = s.facebook;
   if (s.instagram !== undefined) backend.instagram = s.instagram;
@@ -67,6 +68,7 @@ export function buildWebsiteSettingPatch(
     'supportPhone',
     'whatsapp',
     'officeAddress',
+    'operatingHours',
     'googleMapsUrl',
     'facebook',
     'instagram',

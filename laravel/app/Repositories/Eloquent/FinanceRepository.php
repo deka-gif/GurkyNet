@@ -11,6 +11,7 @@ use App\Models\PaymentHistory;
 use App\Models\MidtransTransaction;
 use App\Enums\TransactionStatus;
 use App\Enums\WalletHistoryType;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -435,14 +436,26 @@ class FinanceRepository implements FinanceRepositoryInterface
     public function approveRefund(Transaction $transaction, ?string $notes = null): Transaction
     {
         $refundService = app(\App\Services\WalletRefundService::class);
+        $note = 'Refund Disetujui: ' . ($notes ?? 'Diproses oleh Finance');
 
-        $result = $refundService->refundOnce(
-            $transaction,
-            'Refund Finance: ' . $transaction->invoice_number,
-            'finance',
-            'Refund Disetujui: ' . ($notes ?? 'Diproses oleh Finance'),
-            TransactionStatus::CANCELED->value
-        );
+        // FR-DIFF-09 / SRS 14.3 — SUCCESS complaint refunds must become REFUNDED (never FAILED).
+        if (TransactionStatusMapper::isSuccess($transaction->status)) {
+            $result = $refundService->refundSuccessToRefunded(
+                $transaction,
+                'Refund Finance: ' . $transaction->invoice_number,
+                'finance',
+                $note
+            );
+        } else {
+            $result = $refundService->refundOnce(
+                $transaction,
+                'Refund Finance: ' . $transaction->invoice_number,
+                'finance',
+                $note,
+                // Keep canceled for Finance queue compatibility (pre-Sprint 3); SUCCESS path uses REFUNDED.
+                TransactionStatus::CANCELED->value
+            );
+        }
 
         $refundService->writeAudit(
             auth()->id(),
@@ -452,6 +465,7 @@ class FinanceRepository implements FinanceRepositoryInterface
                 'invoice_number' => $transaction->invoice_number,
                 'notes' => $notes,
                 'credited' => $result['credited'],
+                'final_status' => $result['transaction']->status ?? null,
             ]
         );
 

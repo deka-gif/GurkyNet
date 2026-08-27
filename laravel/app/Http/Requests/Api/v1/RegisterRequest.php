@@ -20,6 +20,8 @@ class RegisterRequest extends FormRequest
             'email' => 'required|string|email|max:255|unique:users,email',
             'phone_number' => 'required|string|unique:users,phone_number|regex:/^08[0-9]{8,11}$/',
             'password' => 'required|string|min:8|confirmed',
+            // FR-REF-02 — optional referral code
+            'referral_code' => 'nullable|string|min:6|max:20|regex:/^[A-Za-z0-9]+$/',
         ];
     }
 

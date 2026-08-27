@@ -98,6 +98,7 @@ class AuthController extends Controller
                     'status' => 'pending_verification',
                     'meta' => [
                         'channel' => 'email',
+                        'referral_code' => $data['referral_code'] ?? null,
                     ],
                 ]
             );
@@ -395,6 +396,8 @@ class AuthController extends Controller
             'pin' => 'required|string|regex:/^\d{6}$/',
             'pin_confirmation' => 'required|same:pin',
             'remember_device' => 'nullable|boolean',
+            // Sprint 18 — server-side policy acceptance (Bagian 27/28)
+            'accept_policies' => 'accepted',
         ]);
 
         if ($this->isWeakPin($data['pin'])) {
@@ -412,6 +415,7 @@ class AuthController extends Controller
         }
 
         $result = DB::transaction(function () use ($attempt, $data, $request) {
+            $meta = is_array($attempt->meta) ? $attempt->meta : [];
             $user = $this->registerAction->execute([
                 'name' => $attempt->name,
                 'email' => $attempt->email,
@@ -419,6 +423,12 @@ class AuthController extends Controller
                 'password' => Crypt::decryptString($attempt->password),
                 'transaction_pin' => $data['pin'],
                 'email_verified_at' => now(),
+                'referral_code' => $meta['referral_code'] ?? null,
+                'referral_context' => [
+                    'ip' => $request->ip(),
+                    'device_fingerprint' => $request->header('X-Device-Id'),
+                ],
+                'accept_policies' => true,
             ]);
 
             $tokenName = $this->deviceTokenName($request);

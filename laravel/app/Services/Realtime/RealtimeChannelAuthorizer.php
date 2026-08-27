@@ -25,6 +25,19 @@ class RealtimeChannelAuthorizer
             return (int) $m[1] === (int) $user->id;
         }
 
+        // Sprint 11 / SRS 16.3 — wallet.{userId}: owner of wallet only (plus elevated roles).
+        if (preg_match('/^wallet\.(\d+)$/', $channel, $m)) {
+            if ((int) $m[1] === (int) $user->id) {
+                return true;
+            }
+
+            return in_array($role, [
+                UserRole::OWNER->value,
+                UserRole::SUPER_ADMIN->value,
+                UserRole::FINANCE->value,
+            ], true);
+        }
+
         if (preg_match('/^chat\.conversation\.(\d+)$/', $channel, $m)) {
             $conv = Conversation::query()->find((int) $m[1]);
             if (! $conv) {

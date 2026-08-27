@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowRight, Shield } from 'lucide-react';
 import { getRedirectPathForRole } from '../../constants/auth';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
@@ -21,10 +21,11 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, fetchUser } = useAuthStore();
+  const { login, verifyLogin2fa, twoFactorChallenge, clearTwoFactorChallenge, fetchUser } = useAuthStore();
 
   const {
     register,
@@ -50,26 +51,33 @@ export const LoginPage: React.FC = () => {
     }
   }, [setValue, location.state]);
 
+  const finishLogin = async () => {
+    setSuccessMsg('Login berhasil! Mengalihkan ke dashboard...');
+    await fetchUser();
+    const currentUser = useAuthStore.getState().user;
+    const role = currentUser?.role || 'User';
+    const targetPath = getRedirectPathForRole(role) || '/dashboard';
+    setTimeout(() => {
+      navigate(targetPath, { replace: true });
+    }, 400);
+  };
+
   const onSubmit = async (data: LoginFields) => {
     setIsLoading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
     try {
-      const success = await login(data, rememberMe);
+      const result = await login(data, rememberMe);
 
-      if (success) {
-        setSuccessMsg('Login berhasil! Mengalihkan ke dashboard...');
-
-        await fetchUser();
-
-        const currentUser = useAuthStore.getState().user;
-        const role = currentUser?.role || 'User';
-        const targetPath = getRedirectPathForRole(role) || '/dashboard';
-
-        setTimeout(() => {
-          navigate(targetPath, { replace: true });
-        }, 400);
+      if (result === 'ok') {
+        await finishLogin();
+      } else if (result === '2fa') {
+        setSuccessMsg('Kode verifikasi 2FA telah dikirim ke email Anda.');
+        const challenge = useAuthStore.getState().twoFactorChallenge;
+        if (challenge?.dummySentCode) {
+          setSuccessMsg(`Kode verifikasi 2FA dikirim. (dev: ${challenge.dummySentCode})`);
+        }
       } else {
         const storeError = useAuthStore.getState().error;
         const validationErrs = useAuthStore.getState().validationErrors;
@@ -86,6 +94,93 @@ export const LoginPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  const onVerify2fa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const ok = await verifyLogin2fa(otpCode.trim());
+      if (ok) {
+        await finishLogin();
+      } else {
+        setErrorMsg(useAuthStore.getState().error || 'Kode 2FA tidak valid.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal verifikasi 2FA.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (twoFactorChallenge) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
+            Verifikasi 2FA
+          </h3>
+          <p className="text-gray-500 text-sm">
+            Masukkan kode OTP yang dikirim ke email staf Finance/Owner.
+          </p>
+        </div>
+
+        {errorMsg && (
+          <div role="alert" className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-start gap-3 text-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+            <span className="font-medium">{errorMsg}</span>
+          </div>
+        )}
+        {successMsg && (
+          <div role="status" className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-start gap-3 text-sm">
+            <CheckCircle className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+            <span className="font-medium">{successMsg}</span>
+          </div>
+        )}
+
+        <form onSubmit={onVerify2fa} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5">Kode OTP 6 digit</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <Shield className="w-5 h-5" />
+              </div>
+              <input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoFocus
+                maxLength={6}
+                className="w-full pl-10 pr-4 py-3 bg-gray-50/70 border border-gray-200 rounded-2xl text-gray-900 text-sm tracking-widest"
+                placeholder="••••••"
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading || otpCode.length !== 6}
+            className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {isLoading ? 'Memverifikasi…' : 'Verifikasi & Masuk'}
+            <ArrowRight className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className="w-full text-xs font-bold text-gray-500"
+            onClick={() => {
+              clearTwoFactorChallenge();
+              setOtpCode('');
+              setErrorMsg(null);
+              setSuccessMsg(null);
+            }}
+          >
+            Kembali ke login
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -149,18 +244,9 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <div>
-          <div className="flex justify-between items-center mb-1.5">
-            <label htmlFor="login-password" className="block text-xs font-bold text-gray-700">
-              Password <span className="text-red-500">*</span>
-            </label>
-            <Link
-              to="/forgot-password"
-              tabIndex={3}
-              className="text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline transition-colors"
-            >
-              Lupa Password?
-            </Link>
-          </div>
+          <label htmlFor="login-password" className="block text-xs font-bold text-gray-700 mb-1.5">
+            Kata Sandi <span className="text-red-500">*</span>
+          </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
               <Lock className="w-5 h-5" />
@@ -169,19 +255,18 @@ export const LoginPage: React.FC = () => {
               id="login-password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
-              placeholder="Masukkan password Anda"
+              placeholder="••••••••"
               {...register('password')}
               disabled={isLoading}
-              className={`w-full pl-10 pr-12 py-3 bg-gray-50/70 border rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 focus:bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`w-full pl-10 pr-12 py-3 bg-gray-50/70 border rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 focus:bg-white transition-all disabled:opacity-60 ${
                 errors.password ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
               }`}
             />
             <button
               type="button"
+              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400"
+              onClick={() => setShowPassword((v) => !v)}
               tabIndex={-1}
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
-              aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
             >
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
@@ -194,46 +279,37 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center pt-1">
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <div className="flex items-center justify-between text-sm">
+          <label className="flex items-center gap-2 text-gray-600">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              disabled={isLoading}
-              className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500 focus:ring-offset-0 transition-colors"
+              className="rounded border-gray-300"
             />
-            <span className="text-xs font-medium text-gray-700">Ingat Saya di Perangkat Ini</span>
+            Ingat saya
           </label>
+          <Link to="/auth/forgot-password" className="font-bold text-primary-600 hover:underline">
+            Lupa kata sandi?
+          </Link>
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white py-3.5 rounded-full font-bold shadow-lg shadow-primary-500/25 transition-all duration-300 flex items-center justify-center gap-2 mt-4 disabled:opacity-50 disabled:cursor-not-allowed text-sm group"
+          className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl disabled:opacity-60 flex items-center justify-center gap-2"
         >
-          {isLoading ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Memproses Autentikasi...</span>
-            </>
-          ) : (
-            <>
-              <span>Masuk ke Dashboard</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </>
-          )}
+          {isLoading ? 'Memproses…' : 'Masuk'}
+          <ArrowRight className="w-4 h-4" />
         </button>
       </form>
 
-      <div className="pt-2 text-center border-t border-gray-100">
-        <p className="text-xs text-gray-500">
-          Belum memiliki akun GurkyNet?{' '}
-          <Link to="/register" className="font-bold text-primary-600 hover:text-primary-700 hover:underline">
-            Daftar Sekarang
-          </Link>
-        </p>
-      </div>
+      <p className="text-center text-sm text-gray-500">
+        Belum punya akun?{' '}
+        <Link to="/auth/register" className="font-bold text-primary-600 hover:underline">
+          Daftar
+        </Link>
+      </p>
     </div>
   );
 };

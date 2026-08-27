@@ -21,11 +21,25 @@ class SupportTicketResource extends JsonResource
             'transactionId' => $this->transaction_id,
             'transaction' => new TransactionResource($this->whenLoaded('transaction')),
             'category' => $this->category,
+            'subject' => $this->subject,
+            'description' => $this->description,
             'priority' => $this->priority,
-            'status' => $this->status,
+            'status' => \App\Support\Support\TicketStatus::normalize((string) $this->status),
+            'statusLabel' => \App\Support\Support\TicketStatus::label((string) $this->status),
+            'statusRaw' => $this->status,
+            'assignedTo' => $this->assigned_to,
+            'assignee' => $this->whenLoaded('assignee', fn () => [
+                'id' => $this->assignee?->id,
+                'name' => $this->assignee?->name,
+            ]),
+            'source' => $this->source,
             'replies' => TicketReplyResource::collection($this->whenLoaded('replies')),
             'createdAt' => $this->created_at?->toIso8601String(),
+            'resolvedAt' => $this->resolved_at?->toIso8601String(),
+            'closedAt' => $this->closed_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
+            // FR-CS-03 / SRS Bagian 23
+            'sla' => app(\App\Services\Sla\SlaEvaluationService::class)->forSupportTicket($this->resource),
         ];
     }
 }

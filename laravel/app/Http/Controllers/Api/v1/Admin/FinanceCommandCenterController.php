@@ -201,12 +201,14 @@ class FinanceCommandCenterController extends Controller
             'end_date' => 'nullable|date',
             'startDate' => 'nullable|date',
             'endDate' => 'nullable|date',
+            'period' => 'nullable|in:daily,weekly,monthly',
         ]);
 
-        $normalized = [
-            'start_date' => $filters['start_date'] ?? $filters['startDate'] ?? null,
-            'end_date' => $filters['end_date'] ?? $filters['endDate'] ?? null,
-        ];
+        $normalized = $this->reports->resolvePeriodFilters(
+            $filters['period'] ?? null,
+            $filters['start_date'] ?? $filters['startDate'] ?? null,
+            $filters['end_date'] ?? $filters['endDate'] ?? null
+        );
 
         return $this->successResponse('Structured financial report.', $this->reports->generate($normalized));
     }

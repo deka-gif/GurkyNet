@@ -2,12 +2,11 @@ import type { MutableRefObject } from 'react';
 
 /**
  * SRS 14.1 — one client-generated key identifies one logical balance-changing action
- * (purchase, top up, transfer, withdraw). Retries of the same logical action (double
- * click, network retry, resubmitting after a wrong PIN) must reuse the same key; only a
- * brand new logical action (a fresh form submission after success, or a freshly opened
- * checkout) gets a new one.
+ * (purchase, top up, transfer, withdraw, refund, manual adjustment). Retries of the same
+ * logical action (double click, network retry, resubmitting after a wrong PIN) must reuse
+ * the same key; only a brand new logical action gets a new one.
  */
-export function createIdempotencyKey(): string {
+export function createIdempotencyKey(_hint?: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -24,4 +23,25 @@ export function getOrCreateIdempotencyKey(ref: MutableRefObject<string | null>):
     ref.current = createIdempotencyKey();
   }
   return ref.current;
+}
+
+/** In-memory keys for store/service logical actions (no React ref available). */
+const logicalActionKeys = new Map<string, string>();
+
+/**
+ * SRS 14.1 — stable key for a logical action id (e.g. `finance-refund-approve:42`).
+ * Retries of the same logicalId reuse the same UUID until cleared after success.
+ */
+export function getOrCreateIdempotencyKeyForLogicalAction(logicalId: string): string {
+  const existing = logicalActionKeys.get(logicalId);
+  if (existing) {
+    return existing;
+  }
+  const created = createIdempotencyKey();
+  logicalActionKeys.set(logicalId, created);
+  return created;
+}
+
+export function clearIdempotencyKeyForLogicalAction(logicalId: string): void {
+  logicalActionKeys.delete(logicalId);
 }

@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTransactionStore } from '../../store/transaction.store';
+import { transactionService } from '../../services/transaction/transaction.service';
 import { formatIDR } from '../../utils/currency';
 import {
   isFailedStatus,
@@ -473,7 +474,14 @@ export const RiwayatPage = () => {
 
               <div className="flex gap-3 pt-3">
                 <button
-                  onClick={() => alert('Download PDF Struk sukses diunduh!')}
+                  onClick={async () => {
+                    try {
+                      const key = selectedTx.id || selectedTx.invoice_number || selectedTx.transactionCode;
+                      await transactionService.downloadReceiptPdf(String(key));
+                    } catch {
+                      alert('Gagal mengunduh struk PDF. Pastikan transaksi milik Anda.');
+                    }
+                  }}
                   className="flex-1 py-3 border border-gray-200 hover:border-gray-300 text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all"
                 >
                   <Download className="w-4 h-4 text-gray-400" />

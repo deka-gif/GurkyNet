@@ -191,6 +191,7 @@ class WalletModuleTest extends TestCase
     {
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/topup', [
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'amount' => 50000,
                 'admin_fee' => 0,
             ]);
@@ -230,6 +231,7 @@ class WalletModuleTest extends TestCase
 
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/topup', [
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'amount' => 50000,
                 'admin_fee' => 0,
             ]);
@@ -256,6 +258,7 @@ class WalletModuleTest extends TestCase
     {
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/transfer', [
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'recipient_wallet_number' => '104222222222',
                 'amount' => 30000,
                 'pin' => '123456',
@@ -310,6 +313,7 @@ class WalletModuleTest extends TestCase
     {
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/transfer', [
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'recipient_wallet_number' => '104222222222',
                 'amount' => 120000, // more than 100k balance
                 'pin' => '123456',
@@ -332,6 +336,7 @@ class WalletModuleTest extends TestCase
     {
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/transfer', [
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'recipient_wallet_number' => '104222222222',
                 'amount' => 10000,
                 'pin' => '999999', // incorrect PIN
@@ -354,6 +359,7 @@ class WalletModuleTest extends TestCase
     {
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/transfer', [
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'recipient_wallet_number' => '104211111111', // sender's own wallet
                 'amount' => 10000,
                 'pin' => '123456',

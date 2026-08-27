@@ -52,6 +52,13 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
             'website_settings_create'
         );
 
+        // FR-MKT01 / FR-MKT04 — reuse Marketing audit (no second audit system).
+        app(\App\Services\MarketingService::class)->logActivity('UPDATE_COMPANY_SETTINGS', [
+            'action' => 'create',
+            'setting_id' => $setting->id,
+            'fields' => array_keys($data),
+        ]);
+
         return $setting->load(self::WITH);
     }
 
@@ -68,6 +75,13 @@ class WebsiteSettingRepository implements WebsiteSettingRepositoryInterface
             \App\Services\Website\CmsSyncService::SCOPE_SETTINGS,
             'website_settings_update'
         );
+
+        // FR-MKT01 / FR-MKT04 — company identity + logo fields.
+        app(\App\Services\MarketingService::class)->logActivity('UPDATE_COMPANY_SETTINGS', [
+            'action' => 'update',
+            'setting_id' => $setting->id,
+            'fields' => array_keys($data),
+        ]);
 
         return $setting->load(self::WITH);
     }

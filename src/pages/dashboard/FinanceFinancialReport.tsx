@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { FinancialReportCharts } from '../../components/finance/FinancialReportCharts';
 import { useFinanceStore } from '../../store/finance.store';
+import { financeService } from '../../services/finance.service';
 import { DataTableCard, StatCard, EmptyState, StatusBadge } from '../../components/common';
 
 export const FinanceFinancialReport: React.FC = () => {
@@ -75,8 +76,40 @@ export const FinanceFinancialReport: React.FC = () => {
     }
   }, [dashboardData, fetchDashboard]);
 
-  // Export handler using real backend report data
-  const handleExportData = (format: 'CSV' | 'Excel') => {
+  // FR-FIN-08 — server Excel/PDF; CSV kept as compatibility export
+  const handleExportData = async (format: 'CSV' | 'Excel' | 'PDF') => {
+    if (format === 'Excel' || format === 'PDF') {
+      try {
+        const period =
+          dateRangeFilter.includes('Minggu') || dateRangeFilter.toLowerCase().includes('week')
+            ? 'weekly'
+            : dateRangeFilter.includes('Hari') || dateRangeFilter.toLowerCase().includes('day')
+              ? 'daily'
+              : 'monthly';
+        const res = await financeService.exportReportBlob({
+          format: format === 'PDF' ? 'pdf' : 'xlsx',
+          period,
+        });
+        const blob = new Blob([res.data], {
+          type: format === 'PDF'
+            ? 'application/pdf'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `laporan-keuangan.${format === 'PDF' ? 'pdf' : 'xlsx'}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        showNotification(`Laporan ${format} berhasil diunduh.`);
+      } catch (e: any) {
+        showNotification(e?.response?.data?.message || e?.message || `Gagal ekspor ${format}.`);
+      }
+      return;
+    }
+
     if (reports.length === 0) {
       showNotification('Tidak ada data laporan untuk diekspor.');
       return;
@@ -98,12 +131,12 @@ export const FinanceFinancialReport: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `financial_report_${new Date().toISOString().slice(0, 10)}.${format.toLowerCase()}`);
+    link.setAttribute('download', `financial_report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    showNotification(`Laporan berhasil diekspor (${format}).`);
+    showNotification('Laporan berhasil diekspor (CSV).');
   };
 
   const getStatusVariant = (status: string) => {
@@ -177,6 +210,14 @@ export const FinanceFinancialReport: React.FC = () => {
             >
               <Download className="w-4 h-4" />
               <span>Export Excel</span>
+            </button>
+
+            <button
+              onClick={() => handleExportData('PDF')}
+              className="px-3.5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Export PDF</span>
             </button>
           </div>
         </div>

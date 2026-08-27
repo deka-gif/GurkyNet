@@ -49,3 +49,4 @@ class MarketingBannerAction
 
         return $ok;
     }
+}

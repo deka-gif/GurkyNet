@@ -54,6 +54,7 @@ class UpdateWebsiteSettingRequest extends FormRequest
             'support_phone' => 'sometimes|nullable|string|max:50',
             'whatsapp' => 'sometimes|nullable|string|max:50',
             'office_address' => 'sometimes|nullable|string',
+            'operating_hours' => 'sometimes|nullable|string|max:255', // FR-MKT01
             'google_maps_url' => 'sometimes|nullable|string|max:1000',
             'facebook' => 'sometimes|nullable|string|max:255',
             'instagram' => 'sometimes|nullable|string|max:255',

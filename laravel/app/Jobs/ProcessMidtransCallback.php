@@ -5,10 +5,11 @@ namespace App\Jobs;
 use App\Models\Transaction;
 use App\Models\MidtransTransaction;
 use App\Models\Wallet;
-use App\Models\WalletHistory;
 use App\Models\PaymentHistory;
+use App\Models\WalletMutation;
 use App\Enums\TransactionStatus;
-use App\Enums\WalletHistoryType;
+use App\Services\Wallet\WalletLedgerService;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -40,10 +41,11 @@ class ProcessMidtransCallback implements ShouldQueue
 
     /**
      * Execute the job.
+     * SRS 14.2 / 16.5 — wallet credit dual-writes via WalletLedgerService (type=topup).
      */
-    public function handle(): void
+    public function handle(?WalletLedgerService $ledgerService = null): void
     {
-        $orderId = $this->payload['order_id'] ?? null;
+        $ledgerService ??= app(WalletLedgerService::class);        $orderId = $this->payload['order_id'] ?? null;
         $midtransStatus = $this->payload['transaction_status'] ?? null;
         $paymentType = $this->payload['payment_type'] ?? null;
         $grossAmount = $this->payload['gross_amount'] ?? 0.00;
@@ -96,7 +98,7 @@ class ProcessMidtransCallback implements ShouldQueue
 
         // REPLAY & IDEMPOTENCY PROTECTION
         // If transaction is already marked successful, skip processing to prevent duplicate wallet credits
-        if ($transaction->status === TransactionStatus::SUCCESS->value || $transaction->status === TransactionStatus::SUKSES->value) {
+        if (TransactionStatusMapper::isSuccess($transaction->status)) {
             Log::info("ProcessMidtransCallback: Transaction '{$orderId}' is already successful. Skipping.", [
                 'transaction_id' => $transaction->id,
             ]);
@@ -106,12 +108,12 @@ class ProcessMidtransCallback implements ShouldQueue
         // Map status
         $localStatus = $this->mapStatus($midtransStatus, $this->payload['fraud_status'] ?? null);
 
-        DB::transaction(function () use ($transaction, $midtransTx, $localStatus, $midtransStatus, $grossAmount) {
+        DB::transaction(function () use ($transaction, $midtransTx, $localStatus, $midtransStatus, $grossAmount, $ledgerService) {
             // Apply lock on the transaction to prevent concurrent updates
             $transaction = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
 
             // Double check inside lock
-            if ($transaction->status === TransactionStatus::SUCCESS->value || $transaction->status === TransactionStatus::SUKSES->value) {
+            if (TransactionStatusMapper::isSuccess($transaction->status)) {
                 return;
             }
 
@@ -157,21 +159,23 @@ class ProcessMidtransCallback implements ShouldQueue
                         $wallet->balance += $transaction->amount;
                         $wallet->save();
 
-                        // Add Wallet History
-                        WalletHistory::create([
-                            'wallet_id' => $wallet->id,
-                            'amount' => $transaction->amount,
-                            'type' => WalletHistoryType::CREDIT->value,
-                            'description' => 'Top Up Saldo - Invoice: ' . $transaction->invoice_number,
-                            'reference_id' => $transaction->id,
-                        ]);
+                        $desc = 'Top Up Saldo - Invoice: ' . $transaction->invoice_number;
+                        // SRS 14.2 — dual-write via ledger (type=topup)
+                        $ledgerService->record(
+                            $wallet,
+                            WalletMutation::TYPE_TOPUP,
+                            (float) $transaction->amount,
+                            'credit',
+                            $desc,
+                            $transaction->id
+                        );
 
                         Log::info("Wallet credited successfully from Midtrans Settlement", [
                             'user_id' => $transaction->user_id,
                             'amount' => $transaction->amount,
                         ]);
 
-                        event(new \App\Events\WalletCredited($wallet, $transaction->amount, 'Top Up Saldo - Invoice: ' . $transaction->invoice_number, $transaction->id));
+                        event(new \App\Events\WalletCredited($wallet, $transaction->amount, $desc, $transaction->id));
                     }
                 }
 
@@ -259,21 +263,33 @@ class ProcessMidtransCallback implements ShouldQueue
             case 'settlement':
                 return TransactionStatus::SUCCESS->value;
             case 'capture':
-                if (strtolower($fraudStatus) === 'accept') {
+                if (strtolower((string) $fraudStatus) === 'accept') {
                     return TransactionStatus::SUCCESS->value;
                 }
+                // challenge / deny on capture — never SUCCESS (Sprint 11 / SRS 16)
+                if (strtolower((string) $fraudStatus) === 'deny') {
+                    return TransactionStatus::FAILED->value;
+                }
+                if (strtolower((string) $fraudStatus) === 'challenge') {
+                    return TransactionStatus::PENDING->value;
+                }
+
                 return TransactionStatus::PENDING->value;
             case 'pending':
+                return TransactionStatus::PENDING->value;
+            case 'challenge':
+                // Explicit safe mapping: await fraud review, never credit.
                 return TransactionStatus::PENDING->value;
             case 'expire':
                 return TransactionStatus::EXPIRED->value;
             case 'cancel':
                 return TransactionStatus::CANCELED->value;
             case 'deny':
+            case 'failure':
+                // Explicit failure mapping — never SUCCESS.
                 return TransactionStatus::FAILED->value;
             case 'refund':
             case 'partial_refund':
-                // For direct tracking we can map refunds to failed/canceled/refunded state as needed
                 return TransactionStatus::FAILED->value;
             default:
                 return TransactionStatus::PENDING->value;

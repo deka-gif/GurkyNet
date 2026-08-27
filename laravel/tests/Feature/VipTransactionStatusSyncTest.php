@@ -160,7 +160,7 @@ class VipTransactionStatusSyncTest extends TestCase
         app(ProductProviderFulfillmentService::class)->fulfill($tx);
 
         $fresh = $tx->fresh();
-        $this->assertSame(TransactionStatus::PENDING->value, $fresh->status);
+        $this->assertSame(TransactionStatus::PENDING_SUPPLIER->value, $fresh->status);
         $this->assertSame('VIP-TRX-LIST-1', $fresh->provider_ref);
         $this->assertSame(ProductProvider::CODE_VIP, $fresh->fulfillment_provider_code);
         $this->assertNotNull($fresh->provider_response);

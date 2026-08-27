@@ -111,7 +111,8 @@ class TransactionModuleTest extends TestCase
         );
 
         $this->assertInstanceOf(Transaction::class, $transaction);
-        $this->assertEquals('pending', $transaction->status);
+        // SRS 14.3 — after hold, status is LOCKED (API still normalizes to pending).
+        $this->assertEquals(TransactionStatus::LOCKED->value, $transaction->status);
         $this->assertEquals(11500.00, $transaction->total_payment);
         $this->assertStringStartsWith('GRK-', $transaction->invoice_number);
 
@@ -119,17 +120,23 @@ class TransactionModuleTest extends TestCase
         $this->wallet->refresh();
         $this->assertEquals(38500.00, $this->wallet->balance);
 
-        // Verify WalletHistory was logged
+        // Verify WalletHistory was logged (dual-write via WalletLedgerService)
         $history = WalletHistory::where('wallet_id', $this->wallet->id)->first();
         $this->assertNotNull($history);
         $this->assertEquals(WalletHistoryType::DEBIT->value, $history->type);
         $this->assertEquals(11500.00, $history->amount);
         $this->assertEquals($transaction->id, $history->reference_id);
 
+        $this->assertDatabaseHas('wallet_mutations', [
+            'wallet_id' => $this->wallet->id,
+            'type' => 'hold',
+            'reference_id' => (string) $transaction->id,
+        ]);
+
         // Verify database state
         $this->assertDatabaseHas('transactions', [
             'id' => $transaction->id,
-            'status' => 'pending',
+            'status' => TransactionStatus::LOCKED->value,
             'total_payment' => 11500.00,
         ]);
 
@@ -150,6 +157,7 @@ class TransactionModuleTest extends TestCase
                 'sku_code' => 'TSEL10K',
                 'target_number' => '081234567890',
                 'pin' => '123456',
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
             ]);
 
         $response->assertStatus(201)
@@ -160,7 +168,8 @@ class TransactionModuleTest extends TestCase
                     'id', 'transactionCode', 'serviceName', 'targetNo', 'amount', 'adminFee', 'totalPayment', 'status', 'items'
                 ]
             ])
-            ->assertJsonPath('data.status', 'pending');
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.status_srs', 'LOCKED');
 
         // Check wallet balance
         $this->wallet->refresh();
@@ -174,6 +183,7 @@ class TransactionModuleTest extends TestCase
                 'sku_code' => 'TSEL10K',
                 'target_number' => '081234567890',
                 'pin' => '000000',
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
             ]);
 
         $response->assertStatus(422)
@@ -215,10 +225,12 @@ class TransactionModuleTest extends TestCase
                 'sku_code' => 'VIP-TSEL10K',
                 'target_number' => '081234567890',
                 'pin' => '123456',
+                'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
             ]);
 
         $response->assertStatus(201)
-            ->assertJsonPath('data.status', 'pending');
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.status_srs', 'LOCKED');
     }
 
     /**
@@ -399,7 +411,7 @@ class TransactionModuleTest extends TestCase
             '123456'
         );
 
-        $this->assertEquals('pending', $transaction->status);
+        $this->assertEquals(TransactionStatus::LOCKED->value, $transaction->status);
         $this->wallet->refresh();
         $this->assertEquals(38500.00, $this->wallet->balance);
 

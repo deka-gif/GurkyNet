@@ -349,6 +349,16 @@ export const useCustomerSupportStore = create<CustomerSupportState>((set, get) =
   updateRefund: async (id, data) => {
     set({ refundsLoading: true, refundsError: null });
     try {
+      const status = String(data.status ?? '').toLowerCase();
+      // Sprint 6 / SRS 4.4.5 — CS must not approve/reject balance-mutating refunds.
+      if (['approved', 'approve', 'disetujui', 'rejected', 'reject', 'ditolak'].includes(status)) {
+        set({ refundsLoading: false });
+        return {
+          success: false,
+          message: 'CS tidak berwenang menyetujui/menolak refund yang mengubah saldo. Gunakan Eskalasi ke Finance.',
+        };
+      }
+
       const response = await customerSupportService.updateRefund(id, data);
       set({ refundsLoading: false });
       if (response && response.success !== false) {

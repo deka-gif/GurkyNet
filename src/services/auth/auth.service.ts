@@ -32,6 +32,8 @@ export interface FinalizeRegistrationPayload {
   pin: string;
   pin_confirmation: string;
   remember_device?: boolean;
+  /** Sprint 18 — server-side policy acceptance */
+  accept_policies: boolean;
 }
 
 export interface ForgotPasswordPayload {
@@ -69,14 +71,23 @@ export const authService = {
   // Authentication Specific Methods
   login: async (
     payload: LoginPayload
-  ): Promise<ApiResponse<{ token: string; user: User }>> => {
-    const response = await apiClient.post<
-      ApiResponse<{ token: string; user: User }>
-    >('/auth/login', {
+  ): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>('/auth/login', {
       phone_or_email: payload.identity,
       password: payload.password,
     });
 
+    return response.data;
+  },
+
+  verifyLogin2fa: async (payload: {
+    identity: string;
+    code: string;
+  }): Promise<ApiResponse<{ token: string; user: User }>> => {
+    const response = await apiClient.post<ApiResponse<{ token: string; user: User }>>(
+      '/auth/login/2fa/verify',
+      payload
+    );
     return response.data;
   },
 
@@ -105,8 +116,8 @@ export const authService = {
     return response.data;
   },
 
-  pinLogin: async (payload: { identity: string; pin: string }): Promise<ApiResponse<{ token: string; user: User }>> => {
-    const response = await apiClient.post<ApiResponse<{ token: string; user: User }>>('/auth/login/pin', payload);
+  pinLogin: async (payload: { identity: string; pin: string }): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>('/auth/login/pin', payload);
     return response.data;
   },
 

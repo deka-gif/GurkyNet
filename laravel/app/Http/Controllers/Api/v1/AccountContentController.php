@@ -31,7 +31,7 @@ class AccountContentController extends Controller
             'telegram' => null,
             'email' => $settings?->support_email,
             'phone' => $settings?->support_phone,
-            'operatingHours' => null,
+            'operatingHours' => $settings?->operating_hours, // FR-MKT01
             'contact' => $settings?->office_address,
         ]);
     }

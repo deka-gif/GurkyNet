@@ -11,6 +11,7 @@ use App\Services\NotificationService;
 use App\Services\WalletRefundService;
 use App\Enums\TransactionStatus;
 use App\Enums\UserRole;
+use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -62,8 +63,8 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        if ($transaction->status !== TransactionStatus::PENDING->value
-            && $transaction->status !== TransactionStatus::PROCESSING->value) {
+        // SRS 14.3 — accept LOCKED (and legacy pending/processing) for first dispatch.
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             Log::info('ProcessDigiflazzTransaction: Transaction already processed or not in queueable state', [
                 'id' => $this->transactionId,
                 'status' => $transaction->status,
@@ -74,16 +75,22 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
         // Sprint 3 (SRS 15.3 / locked decision #2) — atomic local claim. If a prior attempt
         // already claimed this transaction (retry after an ambiguous exception/timeout),
         // never blindly call buy() again — go through the three-outcome retry guard instead.
+        // SRS 14.3 — stamp SENT_TO_SUPPLIER when starting provider send.
         $claimed = Transaction::where('id', $transaction->id)
-            ->whereIn('status', [TransactionStatus::PENDING->value, TransactionStatus::PROCESSING->value])
+            ->whereIn('status', TransactionStatusMapper::dispatchClaimStatuses())
             ->whereNull('provider_dispatch_started_at')
-            ->update(['provider_dispatch_started_at' => now()]);
+            ->update([
+                'provider_dispatch_started_at' => now(),
+                'status' => TransactionStatus::SENT_TO_SUPPLIER->value,
+            ]);
 
         if ($claimed === 0) {
             $this->handleDispatchRetry($transaction->fresh(['items']) ?? $transaction, $digiflazzService, $refundService);
 
             return;
         }
+
+        $transaction = $transaction->fresh(['items']) ?? $transaction;
 
         $firstItem = $transaction->items->first();
         $sku = $firstItem ? $firstItem->product_code : '';
@@ -165,8 +172,9 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
 
                 event(new \App\Events\TransactionFailed($result['transaction']));
             } else {
+                // SRS 14.3 — unclear supplier outcome → PENDING_SUPPLIER
                 $transaction->update([
-                    'status' => TransactionStatus::PROCESSING->value,
+                    'status' => TransactionStatus::PENDING_SUPPLIER->value,
                     'notes' => 'Sedang diproses oleh operator.',
                 ]);
             }
@@ -195,8 +203,7 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
         DigiflazzService $digiflazzService,
         WalletRefundService $refundService
     ): void {
-        if ($transaction->status !== TransactionStatus::PENDING->value
-            && $transaction->status !== TransactionStatus::PROCESSING->value) {
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             return;
         }
 
@@ -282,8 +289,13 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        // Outcome C — still pending / unresolved. Leave in-flight; existing reconciliation
-        // (TransactionTimeoutService / transactions:reconcile-pending) will settle it.
+        // Outcome C — still pending / unresolved. Leave in-flight as PENDING_SUPPLIER;
+        // existing reconciliation (TransactionTimeoutService / transactions:reconcile-pending) will settle it.
+        $transaction->update([
+            'status' => TransactionStatus::PENDING_SUPPLIER->value,
+            'notes' => 'Sedang diproses oleh operator.',
+        ]);
+
         Log::info('ProcessDigiflazzTransaction: dispatch retry still pending/unknown, deferring to reconciliation', [
             'transaction_id' => $transaction->id,
             'status' => $status,
@@ -304,10 +316,7 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
         }
 
         // Only refund if still in-flight (not already success/canceled/failed+refunded).
-        if (!in_array($transaction->status, [
-            TransactionStatus::PENDING->value,
-            TransactionStatus::PROCESSING->value,
-        ], true)) {
+        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             Log::info('ProcessDigiflazzTransaction::failed skipped — transaction not in-flight', [
                 'transaction_id' => $this->transactionId,
                 'status' => $transaction->status,

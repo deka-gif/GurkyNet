@@ -3,27 +3,31 @@
 namespace App\Console\Commands;
 
 use App\Services\Transactions\IdempotencyGuard;
+use App\Services\Transactions\IdempotencyRequestService;
 use Illuminate\Console\Command;
 use App\Models\Transaction;
 
 /**
  * SRS 14.1 — housekeeping sweep for expired idempotency keys.
  *
+ * Archives both:
+ *  - transactions.idempotency_key (legacy / claim safety net)
+ *  - idempotency_requests rows (source of truth)
+ *
  * This command is a housekeeping convenience only: correctness of the 24h TTL does NOT
- * depend on it running on schedule — IdempotencyGuard::claim() already self-heals inline
- * if an expired key is encountered before this sweep reaches it. This command exists to
- * keep the active-key population (and the unique index) small over time.
+ * depend on it running on schedule — claim paths already self-heal inline if an expired
+ * key is encountered before this sweep reaches it.
  *
  * Never deletes a transaction or any financial field — only nulls the idempotency_key
- * column, after writing one audit-log entry per row via IdempotencyGuard::archiveKey().
+ * column / marks idempotency_requests archived.
  */
 class ArchiveExpiredIdempotencyKeysCommand extends Command
 {
     protected $signature = 'transactions:archive-expired-idempotency-keys {--limit=500}';
 
-    protected $description = 'Archive (null out) idempotency_key on transactions older than the 24h TTL window';
+    protected $description = 'Archive expired transaction idempotency_key and idempotency_requests (24h TTL)';
 
-    public function handle(IdempotencyGuard $guard): int
+    public function handle(IdempotencyGuard $guard, IdempotencyRequestService $requestService): int
     {
         $limit = (int) $this->option('limit');
         $cutoff = now()->subHours(IdempotencyGuard::TTL_HOURS);
@@ -40,7 +44,11 @@ class ArchiveExpiredIdempotencyKeysCommand extends Command
                 $archived++;
             });
 
+        // SRS 14.1 SoT — archive expired idempotency_requests (not hard delete).
+        $archivedRequests = $requestService->archiveExpired();
+
         $this->info("Archived idempotency_key on {$archived} expired transaction(s).");
+        $this->info("Archived {$archivedRequests} expired idempotency_requests row(s).");
 
         return self::SUCCESS;
     }

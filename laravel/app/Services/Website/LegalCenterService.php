@@ -84,7 +84,7 @@ class LegalCenterService
 
             $static = StaticPage::query()->where('slug', $item['slug'])->first();
             $content = $static?->content
-                ?? $this->defaultHtml($item['type'], $item['title']);
+                ?? \App\Services\Legal\SrsLegalContent::html($item['type']);
 
             $doc = LegalDocument::create([
                 'type' => $item['type'],
@@ -97,6 +97,7 @@ class LegalCenterService
                 'seo_description' => $static?->seo_description ?? ('Dokumen '.$item['title'].' GurkyNet.'),
                 'seo_keywords' => 'gurkynet, legal, '.$item['slug'],
                 'status' => 'published',
+                'legal_review_status' => LegalDocument::REVIEW_PENDING,
                 'estimated_reading_minutes' => $this->estimateReadingMinutes($content),
                 'version_number' => 1,
                 'published_at' => now(),
@@ -475,14 +476,66 @@ class LegalCenterService
         return max(1, (int) ceil($words / 200));
     }
 
+    /**
+     * Sprint 18 — refresh content from SRS templates; never sets approved_binding.
+     */
+    public function alignWithSrsContent(bool $publish = true): void
+    {
+        $this->ensureDefaults();
+        foreach (LegalDocument::catalog() as $item) {
+            $html = \App\Services\Legal\SrsLegalContent::html($item['type']);
+            $doc = LegalDocument::query()->where('type', $item['type'])->firstOrFail();
+            $doc->forceFill([
+                'draft_content' => $html,
+                'is_dirty' => true,
+                'legal_review_status' => LegalDocument::REVIEW_PENDING,
+            ])->save();
+
+            if ($publish) {
+                $next = (int) $doc->version_number + 1;
+                $doc->forceFill([
+                    'content' => $html,
+                    'draft_content' => $html,
+                    'is_dirty' => false,
+                    'status' => 'published',
+                    'version_number' => max(1, $next),
+                    'published_at' => now(),
+                    'estimated_reading_minutes' => $this->estimateReadingMinutes($html),
+                    'legal_review_status' => LegalDocument::REVIEW_PENDING,
+                ])->save();
+
+                \App\Models\LegalDocumentVersion::create([
+                    'legal_document_id' => $doc->id,
+                    'version_number' => $doc->version_number,
+                    'label' => 'SRS alignment',
+                    'title' => $doc->title,
+                    'content' => $html,
+                    'seo_title' => $doc->seo_title,
+                    'seo_description' => $doc->seo_description,
+                    'seo_keywords' => $doc->seo_keywords,
+                    'source' => 'publish',
+                    'published_at' => now(),
+                ]);
+
+                StaticPage::updateOrCreate(
+                    ['slug' => $doc->slug],
+                    [
+                        'title' => $doc->title,
+                        'content' => $html,
+                        'status' => 'published',
+                        'seo_title' => $doc->seo_title,
+                        'seo_description' => $doc->seo_description,
+                    ]
+                );
+            }
+        }
+        app(PublicLegalCache::class);
+        PublicLegalCache::forgetCachesOnly();
+    }
+
     protected function defaultHtml(string $type, string $title): string
     {
-        return '<h2>'.$title.'</h2>'
-            .'<p>Dokumen legal resmi GurkyNet. Silakan perbarui konten ini melalui Marketing → Legal Center.</p>'
-            .'<h3>1. Pendahuluan</h3>'
-            .'<p>GurkyNet berkomitmen menjaga transparansi dan kepatuhan terhadap peraturan yang berlaku.</p>'
-            .'<h3>2. Kontak</h3>'
-            .'<p>Untuk pertanyaan terkait dokumen ini, hubungi support@gurkynet.com.</p>';
+        return \App\Services\Legal\SrsLegalContent::html($type);
     }
 
     /**
