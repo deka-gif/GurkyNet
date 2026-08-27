@@ -16,6 +16,8 @@ export function useRealtimeChannel(
 ) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const channelsKey = channels.join('|');
 
   useEffect(() => {
@@ -26,8 +28,8 @@ export function useRealtimeChannel(
       (evt) => handlerRef.current(evt),
       {
         pollIntervalMs: Math.max(RefreshPolicy.realtimeFloor, intervalMs),
-        getToken,
+        getToken: () => getTokenRef.current(),
       }
     );
-  }, [enabled, channelsKey, getToken, intervalMs]);
+  }, [enabled, channelsKey, intervalMs]);
 }
