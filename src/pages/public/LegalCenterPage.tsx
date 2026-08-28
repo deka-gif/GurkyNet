@@ -246,7 +246,7 @@ export const LegalCenterPage = () => {
               Legal Center
             </p>
             <h1 className="text-xl md:text-2xl font-extrabold text-gray-900 tracking-tight">
-              {doc?.title || 'Dokumen Hukum GurkyNet'}
+              Pusat Dokumen Hukum
             </h1>
           </div>
           <button
@@ -321,7 +321,7 @@ export const LegalCenterPage = () => {
                   </div>
                 </header>
 
-                {toc.length > 0 && (
+                {toc.length > 1 && (
                   <div className="px-6 md:px-10 py-5 bg-slate-50/80 border-b border-gray-100">
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">
                       Daftar Isi

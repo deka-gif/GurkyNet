@@ -42,6 +42,12 @@
 .legal-prose h3 {
   @apply text-lg font-bold text-gray-900 mt-8 mb-2 scroll-mt-28;
 }
+.legal-prose h4 {
+  @apply text-base md:text-lg font-bold text-gray-900 mt-6 mb-2 scroll-mt-28;
+}
+.legal-prose > :first-child {
+  @apply mt-0;
+}
 .legal-prose p {
   @apply mb-4;
 }
