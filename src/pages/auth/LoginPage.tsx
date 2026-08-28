@@ -7,6 +7,7 @@ import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowRight, Shield }
 import { getRedirectPathForRole } from '../../constants/auth';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
+import { Button } from '../../components/ui/Button';
 
 const loginSchema = z.object({
   identity: z.string().min(1, 'Email atau Nomor HP wajib diisi'),
@@ -157,14 +158,15 @@ export const LoginPage: React.FC = () => {
               />
             </div>
           </div>
-          <button
+          <Button
             type="submit"
+            variant="primary"
             disabled={isLoading || otpCode.length !== 6}
-            className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full disabled:opacity-60"
           >
             {isLoading ? 'Memverifikasi…' : 'Verifikasi & Masuk'}
             <ArrowRight className="w-4 h-4" />
-          </button>
+          </Button>
           <button
             type="button"
             className="w-full text-xs font-bold text-gray-500"
@@ -289,24 +291,25 @@ export const LoginPage: React.FC = () => {
             />
             Ingat saya
           </label>
-          <Link to="/auth/forgot-password" className="font-bold text-primary-600 hover:underline">
+          <Link to="/forgot-password" className="font-bold text-primary-600 hover:underline">
             Lupa kata sandi?
           </Link>
         </div>
 
-        <button
+        <Button
           type="submit"
+          variant="primary"
           disabled={isLoading}
-          className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl disabled:opacity-60 flex items-center justify-center gap-2"
+          className="w-full disabled:opacity-60"
         >
           {isLoading ? 'Memproses…' : 'Masuk'}
           <ArrowRight className="w-4 h-4" />
-        </button>
+        </Button>
       </form>
 
       <p className="text-center text-sm text-gray-500">
         Belum punya akun?{' '}
-        <Link to="/auth/register" className="font-bold text-primary-600 hover:underline">
+        <Link to="/register" className="font-bold text-primary-600 hover:underline">
           Daftar
         </Link>
       </p>

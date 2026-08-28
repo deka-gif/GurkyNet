@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
+import { Button } from '../../components/ui/Button';
 
 const step1Schema = z.object({
   email: z.string().min(1, 'Email wajib diisi').email('Format email tidak valid'),
@@ -158,9 +159,9 @@ export const ForgotPasswordPage: React.FC = () => {
             </div>
             {errorsStep1.email && <p className="mt-1.5 text-xs font-semibold text-red-600">{errorsStep1.email.message}</p>}
           </div>
-          <button type="submit" disabled={isLoading} className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-full font-bold flex items-center justify-center gap-2">
+          <Button type="submit" variant="primary" disabled={isLoading} className="w-full">
             {isLoading ? 'Mengirim OTP...' : <>Kirim Kode OTP <ArrowRight className="w-4 h-4" /></>}
-          </button>
+          </Button>
         </form>
       )}
 
@@ -195,7 +196,7 @@ export const ForgotPasswordPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <button type="button" onClick={handleResendOtp} disabled={countdown > 0 || isLoading} className="text-xs font-semibold text-primary-600 disabled:text-gray-400">{countdown > 0 ? `Kirim ulang dalam ${countdown}s` : 'Kirim ulang OTP'}</button>
           </div>
-          <button type="submit" disabled={isLoading} className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-full font-bold">{isLoading ? 'Menyimpan password...' : 'Simpan Password Baru'}</button>
+          <Button type="submit" variant="primary" disabled={isLoading} className="w-full">{isLoading ? 'Menyimpan password...' : 'Simpan Password Baru'}</Button>
         </form>
       )}
     </div>

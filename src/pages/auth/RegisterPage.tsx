@@ -3,11 +3,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowRight, KeyRound } from 'lucide-react';
+import { User, Phone, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, KeyRound } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
 import { getRedirectPathForRole } from '../../constants/auth';
+import { Button } from '../../components/ui/Button';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Nama lengkap minimal 3 karakter').max(255, 'Nama lengkap maksimal 255 karakter'),
@@ -39,6 +40,7 @@ export const RegisterPage: React.FC = () => {
   const [pinConfirmation, setPinConfirmation] = useState('');
   const [onboardingId, setOnboardingId] = useState<number | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(true);
 
   const { register, handleSubmit, formState: { errors }, setError } = useForm<RegisterFields>({
     resolver: zodResolver(registerSchema),
@@ -62,7 +64,7 @@ export const RegisterPage: React.FC = () => {
         setOnboardingId(response.data.onboarding_id);
         setRegisteredEmail(response.data.email);
         setStep('verify');
-        setSuccessMsg('OTP verifikasi telah dikirim ke email Anda. Status akun saat ini: Pending Verification.');
+        setSuccessMsg('OTP verifikasi telah dikirim ke email Anda. Status akun saat ini: Menunggu Verifikasi.');
       } else {
         setErrorMsg(response.message || 'Gagal memulai registrasi.');
       }
@@ -113,7 +115,7 @@ export const RegisterPage: React.FC = () => {
         onboarding_id: onboardingId,
         pin,
         pin_confirmation: pinConfirmation,
-        remember_device: true,
+        remember_device: rememberDevice,
         accept_policies: true,
       });
       if (response.success) {
@@ -203,20 +205,34 @@ export const RegisterPage: React.FC = () => {
             <span className="text-xs text-gray-600 leading-relaxed">Saya menyetujui <Link to="/legal/terms-conditions" className="font-bold text-primary-600 hover:underline">Syarat & Ketentuan</Link> dan <Link to="/legal/privacy-policy" className="font-bold text-primary-600 hover:underline">Kebijakan Privasi</Link>.</span>
           </label>
           {errors.agreeTerms && <p className="text-xs font-semibold text-red-600">{errors.agreeTerms.message}</p>}
-          <button type="submit" disabled={busy} className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-full font-bold flex items-center justify-center gap-2">{busy ? 'Memproses...' : <>Lanjut Verifikasi <ArrowRight className="w-4 h-4" /></>}</button>
+          <Button type="submit" variant="primary" disabled={busy} className="w-full">{busy ? 'Memproses...' : <>Lanjut Verifikasi <ArrowRight className="w-4 h-4" /></>}</Button>
         </form>
       )}
 
       {step === 'verify' && (
         <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => { setStep('register'); setErrorMsg(null); setSuccessMsg(null); setOtpCode(''); }}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline"
+          >
+            <ArrowLeft className="w-4 h-4" /> Ubah Data Akun
+          </button>
           <div className="rounded-2xl border border-primary-100 bg-primary-50 px-4 py-3 text-sm text-primary-900">Kode OTP dikirim ke <strong>{registeredEmail}</strong>. Masukkan 6 digit OTP untuk melanjutkan.</div>
           <input inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-center text-lg font-black tracking-[0.4em]" placeholder="000000" />
-          <button type="button" disabled={busy || otpCode.length !== 6} onClick={submitOtp} className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-full font-bold">Verifikasi OTP</button>
+          <Button type="button" variant="primary" disabled={busy || otpCode.length !== 6} onClick={submitOtp} className="w-full">Verifikasi OTP</Button>
         </div>
       )}
 
       {step === 'pin' && (
         <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => { setStep('verify'); setErrorMsg(null); setSuccessMsg(null); setPin(''); setPinConfirmation(''); }}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline"
+          >
+            <ArrowLeft className="w-4 h-4" /> Kembali ke Verifikasi OTP
+          </button>
           <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">Buat PIN transaksi 6 digit. Hindari PIN umum seperti <code>123456</code>, <code>111111</code>, atau pola berulang lain.</div>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><KeyRound className="w-4 h-4" /></div>
@@ -226,7 +242,16 @@ export const RegisterPage: React.FC = () => {
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><KeyRound className="w-4 h-4" /></div>
             <input inputMode="numeric" maxLength={6} value={pinConfirmation} onChange={(e) => setPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-gray-200 pl-10 pr-4 py-3 text-sm font-black tracking-[0.35em]" placeholder="Konfirmasi PIN" />
           </div>
-          <button type="button" disabled={busy || pin.length !== 6 || pinConfirmation.length !== 6} onClick={submitPin} className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-full font-bold">Aktifkan Akun & Masuk</button>
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={rememberDevice}
+              onChange={(e) => setRememberDevice(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Ingat perangkat ini
+          </label>
+          <Button type="button" variant="primary" disabled={busy || pin.length !== 6 || pinConfirmation.length !== 6} onClick={submitPin} className="w-full">Aktifkan Akun & Masuk</Button>
         </div>
       )}
 
