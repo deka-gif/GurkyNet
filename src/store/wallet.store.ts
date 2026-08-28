@@ -15,7 +15,7 @@ interface WalletState {
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
   /** Apply balance from SSE balance_updated (notification only; then force-sync). */
   applyRealtimeBalance: (balance: number) => void;
-  topUp: (amount: number, paymentMethod: string, idempotencyKey?: string) => Promise<any | null>;
+  topUp: (amount: number, paymentMethod: string, idempotencyKey?: string, channel?: string | null) => Promise<any | null>;
   lastTopUpError: { code?: string; message: string } | null;
   transfer: (
     recipient_wallet_number: string,
@@ -188,10 +188,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  topUp: async (amount, paymentMethod, idempotencyKey) => {
+  topUp: async (amount, paymentMethod, idempotencyKey, channel) => {
     set({ loading: true, error: null, lastTopUpError: null });
     try {
-      const response = await walletService.topUp(amount, paymentMethod, idempotencyKey);
+      const response = await walletService.topUp(amount, paymentMethod, idempotencyKey, channel);
       if (response.success && response.data) {
         set({ loading: false });
         return response.data;

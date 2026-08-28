@@ -116,10 +116,15 @@ class WalletController extends Controller
     public function paymentConfig(): JsonResponse
     {
         $config = app(\App\Services\Payment\MidtransCredentialResolver::class)->publicConfig();
+        $catalog = app(\App\Services\Payment\MidtransTopUpChannelCatalog::class)->publicCatalog();
 
-        return $this->successResponse('Payment config.', $config);
+        return $this->successResponse('Payment config.', array_merge($config, $catalog));
     }
 
+    /**
+     * User-initiated wallet top-up (FR-USR03). Not AUTO_TOPUP.
+     * AUTO_TOPUP_ENABLED remains a scheduler/recurring gate and stays false.
+     */
     public function topUp(TopUpRequest $request): JsonResponse
     {
         $user = $request->user();
@@ -127,36 +132,47 @@ class WalletController extends Controller
             return $this->errorResponse('Sesi Anda tidak valid.', 401);
         }
 
-        // Sprint 8 — automatic Midtrans top-up behind feature gate (manual deposit remains).
-        $gate = app(\App\Support\Features\TransactionFeatureGate::class);
-        if (! $gate->autoTopupEnabled()) {
-            return $this->errorResponse($gate->autoTopupDisabledMessage(), 422, [
-                'amount' => [$gate->autoTopupDisabledMessage()],
-            ]);
-        }
-
         try {
             return $this->withIdempotency(
                 $request,
                 'POST /api/v1/wallet/topup',
-                $request->only(['amount', 'admin_fee']),
+                $request->only(['amount', 'admin_fee', 'payment_method', 'channel']),
                 function () use ($request, $user) {
                     $amount = (float) $request->amount;
                     $adminFee = (float) $request->input('admin_fee', 0.00);
+                    $paymentMethodInput = (string) $request->input('payment_method', 'qris');
+                    $channelInput = $request->input('channel');
+                    $channelInput = is_string($channelInput) ? $channelInput : null;
+
                     // Always pending — never accept client-controlled settlement status.
+                    // Ownership is always the authenticated user (ignore client user_id).
                     $transaction = $this->topUpWalletAction->execute(
                         $user,
                         $amount,
                         $adminFee,
                         'pending',
                         'midtrans',
-                        $request->input('idempotency_key')
+                        $request->input('idempotency_key'),
+                        $paymentMethodInput,
+                        $channelInput
                     );
 
                     return $this->idempotentJson('Top up berhasil diajukan.', [
                         'transaction' => $transaction,
                         'snap_token' => $transaction->snap_token ?? null,
                         'redirect_url' => $transaction->redirect_url ?? null,
+                        'payment' => [
+                            'status' => 'pending',
+                            'method' => $transaction->topup_method ?? $paymentMethodInput,
+                            'channel' => $transaction->topup_channel ?? $channelInput,
+                            'channel_label' => $transaction->topup_channel_label ?? null,
+                            'order_id' => $transaction->invoice_number,
+                            'amount' => (int) $transaction->amount,
+                            'va_number' => $transaction->va_number ?? null,
+                            'payment_code' => $transaction->payment_code ?? null,
+                            'store' => $transaction->store ?? null,
+                            'expiry_time' => $transaction->expiry_time ?? null,
+                        ],
                         // Sprint 11 — public Snap bootstrap (never server_key).
                         'midtrans' => app(\App\Services\Payment\MidtransCredentialResolver::class)->publicConfig(),
                     ], 201);
@@ -171,11 +187,54 @@ class WalletController extends Controller
                 'meta' => null,
                 'errors' => null,
             ], 503);
+        } catch (\App\Exceptions\Payment\TopUpPaymentException $e) {
+            return response()->json([
+                'success' => false,
+                'code' => $e->errorCode(),
+                'message' => $e->getMessage(),
+                'data' => null,
+                'meta' => null,
+                'errors' => null,
+            ], $e->httpStatus());
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse($e->getMessage(), 422, $e->errors());
-        } catch (\Exception $e) {
+            $message = $e->getMessage();
+            $errors = $e->errors();
+            $code = 'TOPUP_VALIDATION_FAILED';
+            if (isset($errors['channel']) || isset($errors['payment_method'])) {
+                $code = 'TOPUP_CHANNEL_UNAVAILABLE';
+                $message = collect($errors)->flatten()->first() ?: $message;
+            } elseif (isset($errors['amount'])) {
+                $code = 'TOPUP_AMOUNT_TOO_SMALL';
+                $message = collect($errors['amount'])->first() ?: $message;
+            } elseif (isset($errors['idempotency_key'])) {
+                $code = 'TOPUP_IDEMPOTENCY_CONFLICT';
+                $message = collect($errors['idempotency_key'])->first() ?: $message;
+            }
+
+            return response()->json([
+                'success' => false,
+                'code' => $code,
+                'message' => $message,
+                'data' => null,
+                'meta' => null,
+                'errors' => $errors,
+            ], 422);
+        } catch (\Throwable $e) {
+            $conflict = $this->idempotencyConflictResponse($e);
+            if ($conflict) {
+                return $conflict;
+            }
+
             Log::error('Wallet topup failed: ' . $e->getMessage());
-            return $this->errorResponse('Terjadi kesalahan saat memproses permintaan top up.', 500);
+
+            return response()->json([
+                'success' => false,
+                'code' => 'TOPUP_PAYMENT_FAILED',
+                'message' => 'Gagal memproses permintaan top up. Silakan coba lagi.',
+                'data' => null,
+                'meta' => null,
+                'errors' => null,
+            ], 500);
         }
     }
 

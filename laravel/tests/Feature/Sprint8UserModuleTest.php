@@ -139,11 +139,19 @@ class Sprint8UserModuleTest extends TestCase
 
     public function test_auto_topup_gate_rejects_midtrans_path(): void
     {
+        $this->assertFalse((bool) config('features.auto_topup_enabled'));
+
         Sanctum::actingAs($this->userA);
-        $this->postJson('/api/v1/wallet/topup', [
+        $res = $this->postJson('/api/v1/wallet/topup', [
             'amount' => 50000,
+            'payment_method' => 'qris',
             'idempotency_key' => (string) Str::uuid(),
-        ])->assertStatus(422);
+        ]);
+
+        // User-initiated top-up is not AUTO_TOPUP; AUTO_TOPUP_ENABLED stays false.
+        $res->assertStatus(201);
+        $this->assertFalse((bool) config('features.auto_topup_enabled'));
+        $this->assertSame('pending', $res->json('data.transaction.status'));
     }
 
     public function test_history_ownership_isolation(): void

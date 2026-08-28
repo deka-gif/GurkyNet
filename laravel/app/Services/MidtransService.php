@@ -81,10 +81,17 @@ class MidtransService
 
     /**
      * Create Snap Transaction.
+     *
+     * @param  array{enabled_payments?:list<string>,expiry?:array}  $options
      */
-    public function createSnapTransaction(string $orderId, float $grossAmount, array $customerDetails = [], array $itemDetails = []): array
+    public function createSnapTransaction(string $orderId, float $grossAmount, array $customerDetails = [], array $itemDetails = [], array $options = []): array
     {
         $this->assertConfigured();
+
+        $enabledPayments = [];
+        if (isset($options['enabled_payments']) && is_array($options['enabled_payments'])) {
+            $enabledPayments = array_values(array_filter($options['enabled_payments'], 'is_string'));
+        }
 
         $payload = [
             'transaction_details' => [
@@ -93,10 +100,20 @@ class MidtransService
             ],
             'customer_details' => $customerDetails ?: null,
             'item_details' => $itemDetails ?: null,
-            'credit_card' => [
-                'secure' => true,
-            ]
         ];
+
+        // Only request credit card when it is in the Snap filter (or no filter — legacy callers).
+        if ($enabledPayments === [] || in_array('credit_card', $enabledPayments, true)) {
+            $payload['credit_card'] = ['secure' => true];
+        }
+
+        if ($enabledPayments !== []) {
+            $payload['enabled_payments'] = $enabledPayments;
+        }
+
+        if (! empty($options['expiry']) && is_array($options['expiry'])) {
+            $payload['expiry'] = $options['expiry'];
+        }
 
         // Clean out nulls
         $payload = array_filter($payload);

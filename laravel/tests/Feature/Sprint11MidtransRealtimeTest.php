@@ -441,11 +441,21 @@ class Sprint11MidtransRealtimeTest extends TestCase
     public function test_auto_topup_remains_off(): void
     {
         $this->assertFalse((bool) config('features.auto_topup_enabled'));
+        Http::fake([
+            'https://app.sandbox.midtrans.com/*' => Http::response([
+                'token' => 's11-snap-token',
+                'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/s11',
+            ], 200),
+        ]);
         Sanctum::actingAs($this->user);
-        $this->postJson('/api/v1/wallet/topup', [
+        $res = $this->postJson('/api/v1/wallet/topup', [
             'amount' => 25000,
+            'payment_method' => 'qris',
             'idempotency_key' => 's11-gate-'.uniqid(),
-        ])->assertStatus(422);
+        ]);
+        $res->assertStatus(201);
+        $this->assertFalse((bool) config('features.auto_topup_enabled'));
+        $this->assertSame('pending', $res->json('data.transaction.status'));
     }
 
     public function test_payment_config_never_exposes_server_key(): void

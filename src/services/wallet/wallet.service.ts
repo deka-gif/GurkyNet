@@ -42,12 +42,21 @@ export const walletService = {
     return response.data;
   },
 
-  topUp: async (amount: number, paymentMethod: string, idempotencyKey?: string): Promise<ApiResponse<any>> => {
-    const response = await apiClient.post<ApiResponse<any>>('/wallet/topup', {
+  topUp: async (
+    amount: number,
+    paymentMethod: string,
+    idempotencyKey?: string,
+    channel?: string | null
+  ): Promise<ApiResponse<any>> => {
+    const body: Record<string, unknown> = {
       amount,
-      paymentMethod,
+      payment_method: paymentMethod,
       idempotency_key: idempotencyKey,
-    });
+    };
+    if (channel) {
+      body.channel = channel;
+    }
+    const response = await apiClient.post<ApiResponse<any>>('/wallet/topup', body);
     return response.data;
   },
 
@@ -97,6 +106,15 @@ export const walletService = {
     is_production: boolean;
     snap_js_url: string;
     configured: boolean;
+    min_amount?: number;
+    quick_amounts?: number[];
+    methods?: Array<{
+      id: string;
+      label: string;
+      enabled: boolean;
+      banks?: Array<{ code: string; label: string; enabled: boolean }>;
+      outlets?: Array<{ code: string; label: string; enabled: boolean }>;
+    }>;
   }>> => {
     const response = await apiClient.get('/wallet/payment-config');
     return response.data;

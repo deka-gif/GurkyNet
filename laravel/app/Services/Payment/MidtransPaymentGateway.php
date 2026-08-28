@@ -35,12 +35,20 @@ class MidtransPaymentGateway implements PaymentGatewayInterface
             throw new PaymentGatewayNotConfiguredException();
         }
 
-        // TODO: When keys are present, this path is production Midtrans Snap.
+        $options = [];
+        if (! empty($payload['enabled_payments']) && is_array($payload['enabled_payments'])) {
+            $options['enabled_payments'] = $payload['enabled_payments'];
+        }
+        if (! empty($payload['expiry']) && is_array($payload['expiry'])) {
+            $options['expiry'] = $payload['expiry'];
+        }
+
         $response = $this->midtrans->createSnapTransaction(
             (string) $payload['order_id'],
             (float) $payload['gross_amount'],
             $payload['customer'] ?? [],
-            $payload['items'] ?? []
+            $payload['items'] ?? [],
+            $options
         );
 
         return [

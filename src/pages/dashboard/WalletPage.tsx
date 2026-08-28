@@ -31,6 +31,21 @@ import { RefreshPolicy } from '../../lib/refreshPolicy';
 import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import { walletService } from '../../services/wallet/wallet.service';
 import { useCallback } from 'react';
+import {
+  MIN_TOPUP_AMOUNT,
+  TOPUP_QUICK_AMOUNTS,
+  enabledBanks,
+  enabledOutlets,
+  extractMidtransPaymentDetails,
+  isMethodEnabled,
+  isTopUpAmountValid,
+  mapTopUpError,
+  methodRequiresBank,
+  methodRequiresRetailOutlet,
+  type MidtransPaymentDetails,
+  type TopUpMethodId,
+  type TopUpPaymentConfig,
+} from '../../utils/topupPaymentFlow';
 
 declare global {
   interface Window {
@@ -44,7 +59,6 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   const navigate = useNavigate();
   const { flags: featureFlags } = useFeatureFlags();
   const withdrawEnabled = featureFlags.withdraw_enabled;
-  const autoTopupEnabled = featureFlags.auto_topup_enabled;
 
   const getToken = useCallback(() => localStorage.getItem('token'), []);
   const walletChannel = user?.id ? [`wallet.${user.id}`] : [];
@@ -71,7 +85,12 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   
   // States for Top Up — topupAmount stores pure digits (e.g. "250000")
   const [topupAmount, setTopupAmount] = useState<string>('');
-  const [topupMethod, setTopupMethod] = useState<string>(autoTopupEnabled ? 'qris' : 'manual_transfer');
+  const [topupMethod, setTopupMethod] = useState<TopUpMethodId>('qris');
+  const [topupBank, setTopupBank] = useState<string>('');
+  const [topupRetail, setTopupRetail] = useState<string>('');
+  const [topupSubmitting, setTopupSubmitting] = useState(false);
+  const [paymentConfig, setPaymentConfig] = useState<TopUpPaymentConfig | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<MidtransPaymentDetails | null>(null);
   const [manualProof, setManualProof] = useState<File | null>(null);
   const [manualNotes, setManualNotes] = useState('');
   const topupAmountInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +128,11 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   useEffect(() => {
     fetchWallet();
     fetchUser();
+    void walletService.getPaymentConfig().then((res) => {
+      if (res?.data) setPaymentConfig(res.data as TopUpPaymentConfig);
+    }).catch(() => {
+      /* payment-config is optional bootstrap; form still validates on submit */
+    });
     try {
       const raw = sessionStorage.getItem(PENDING_WALLET_ACTION_KEY);
       if (raw) {
@@ -155,17 +179,42 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
     setTopupAmount(digits);
   };
 
+  const qrisEnabled = paymentConfig ? isMethodEnabled(paymentConfig, 'qris') : true;
+  const vaEnabled = paymentConfig ? isMethodEnabled(paymentConfig, 'va') : true;
+  const retailEnabled = paymentConfig ? isMethodEnabled(paymentConfig, 'retail') : true;
+  const vaBanks = paymentConfig
+    ? enabledBanks(paymentConfig)
+    : [
+        { code: 'bca_va', label: 'BCA', enabled: true },
+        { code: 'bni_va', label: 'BNI', enabled: true },
+        { code: 'bri_va', label: 'BRI', enabled: true },
+        { code: 'echannel', label: 'Mandiri', enabled: true },
+      ];
+  const retailOutlets = paymentConfig
+    ? enabledOutlets(paymentConfig)
+    : [
+        { code: 'alfamart', label: 'Alfamart', enabled: true },
+        { code: 'indomaret', label: 'Indomaret', enabled: true },
+      ];
+  const minTopup = Number(paymentConfig?.min_amount || MIN_TOPUP_AMOUNT);
+  const quickAmounts = (paymentConfig?.quick_amounts || [...TOPUP_QUICK_AMOUNTS]).filter(
+    (n) => Number(n) >= minTopup
+  );
+
+  const selectTopupMethod = (method: TopUpMethodId) => {
+    if (method !== 'manual_transfer' && paymentConfig && !isMethodEnabled(paymentConfig, method)) return;
+    setTopupMethod(method);
+    setPendingPayment(null);
+    topupIdemRef.current = null;
+    if (method !== 'va') setTopupBank('');
+    if (method !== 'retail') setTopupRetail('');
+  };
+
   const handleTopupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(topupAmount);
-    if (!topupAmount || !Number.isFinite(amount) || amount < 10000) {
+    if (!topupAmount || !isTopUpAmountValid(amount)) {
       setErrorMsg('Minimal top up adalah Rp10.000');
-      return;
-    }
-
-    // FR-FIN-03 — transfer manual + bukti → antrean Finance
-    if (!autoTopupEnabled && topupMethod !== 'manual_transfer') {
-      setErrorMsg(featureFlags.messages.auto_topup);
       return;
     }
 
@@ -174,7 +223,9 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         setErrorMsg('Unggah bukti transfer terlebih dahulu.');
         return;
       }
+      setTopupSubmitting(true);
       const res = await depositManual(amount, manualProof, manualNotes || undefined);
+      setTopupSubmitting(false);
       if (!res) {
         setErrorMsg('Gagal mengajukan deposit manual.');
         return;
@@ -187,17 +238,50 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
       return;
     }
 
+    if (paymentConfig && !isMethodEnabled(paymentConfig, topupMethod)) {
+      setErrorMsg('Metode pembayaran tersebut sedang tidak tersedia.');
+      return;
+    }
+
+    if (methodRequiresBank(topupMethod) && !topupBank) {
+      setErrorMsg('Pilih bank Virtual Account terlebih dahulu.');
+      return;
+    }
+
+    if (methodRequiresRetailOutlet(topupMethod) && !topupRetail) {
+      setErrorMsg('Pilih gerai Alfamart atau Indomaret terlebih dahulu.');
+      return;
+    }
+
+    const channel = topupMethod === 'va' ? topupBank : topupMethod === 'retail' ? topupRetail : undefined;
     const idempotencyKey = getOrCreateIdempotencyKey(topupIdemRef);
-    const res = await topUp(amount, topupMethod, idempotencyKey);
+    setTopupSubmitting(true);
+    setErrorMsg(null);
+    const res = await topUp(amount, topupMethod, idempotencyKey, channel);
+    setTopupSubmitting(false);
 
     if (res?.__error) {
-      const msg = res.message || 'Gagal melakukan top up. Silakan coba lagi.';
+      const msg = mapTopUpError({ code: res.code, message: res.message });
       setErrorMsg(msg);
       if (res.code === 'MIDTRANS_NOT_CONFIGURED') {
         openPaymentPlaceholder(topupMethod, amount);
       }
       return;
     }
+
+    const payment = (res?.payment || {}) as MidtransPaymentDetails;
+    setPendingPayment({
+      status: 'pending',
+      method: topupMethod,
+      channel: channel || payment.channel || topupMethod,
+      channel_label: payment.channel_label,
+      order_id: payment.order_id || res?.transaction?.invoice_number,
+      amount,
+      va_number: payment.va_number ?? null,
+      payment_code: payment.payment_code ?? null,
+      store: payment.store ?? null,
+      expiry_time: payment.expiry_time ?? null,
+    });
 
     if (res && res.snap_token) {
       const midtransCfg = res.midtrans || (await walletService.getPaymentConfig()).data;
@@ -209,32 +293,30 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         return;
       }
       window.snap.pay(res.snap_token, {
-        onSuccess: function () {
+        onSuccess: function (result: unknown) {
+          const extra = extractMidtransPaymentDetails(result);
+          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'success' }));
           void fetchWallet({ force: true });
-          setSuccessMsg(`Top Up berhasil! Saldo Anda otomatis ditambahkan sebesar ${formatIDR(amount)}.`);
+          setSuccessMsg(`Pembayaran diterima. Saldo akan bertambah setelah konfirmasi Midtrans sebesar ${formatIDR(amount)}.`);
           setTopupAmount('');
-          setActiveTab('index');
           topupIdemRef.current = null;
         },
-        onPending: function () {
+        onPending: function (result: unknown) {
+          const extra = extractMidtransPaymentDetails(result);
+          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending' }));
           void fetchWallet({ force: true });
-          setSuccessMsg(`Top up sedang diproses. Silakan selesaikan pembayaran Anda.`);
-          setTopupAmount('');
-          setActiveTab('index');
-          topupIdemRef.current = null;
+          setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi Midtrans.');
         },
         onError: function () {
-          setErrorMsg('Pembayaran gagal atau dibatalkan.');
+          setPendingPayment((prev) => (prev ? { ...prev, status: 'failed' } : prev));
+          setErrorMsg('Pembayaran gagal. Saldo tidak ditambahkan.');
         },
         onClose: function () {
-          setErrorMsg('Anda menutup pop-up pembayaran sebelum menyelesaikan transaksi.');
+          setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran dari instruksi yang tampil, atau buka ulang jika belum bayar.');
         }
       });
     } else if (res) {
-       setSuccessMsg(`Top Up diajukan. Saldo Anda akan bertambah jika sukses.`);
-       setTopupAmount('');
-       setActiveTab('index');
-       topupIdemRef.current = null;
+      setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi.');
     } else {
       setErrorMsg('Gagal melakukan top up. Silakan coba lagi.');
     }
@@ -598,22 +680,66 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
               >
                 <div>
                   <h4 className="font-extrabold text-gray-900 text-lg">Top Up Saldo GurkyPay</h4>
-                  <p className="text-xs text-gray-500 mt-1">Tambahkan saldo dompet instan Anda. Pembayaran instan via QRIS akan langsung mengkredit saldo Anda secara otomatis.</p>
+                  <p className="text-xs text-gray-500 mt-1">Pilih nominal, lalu metode pembayaran. Saldo bertambah setelah Midtrans mengonfirmasi pembayaran.</p>
                 </div>
+
+                {pendingPayment && (
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-extrabold text-amber-900 text-sm">
+                        {pendingPayment.status === 'success' ? 'Pembayaran Diterima' : pendingPayment.status === 'failed' ? 'Pembayaran Gagal' : 'Menunggu Pembayaran'}
+                      </h5>
+                      <button
+                        type="button"
+                        onClick={() => setPendingPayment(null)}
+                        className="text-[10px] font-bold text-amber-700 hover:text-amber-900"
+                      >
+                        Tutup
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {pendingPayment.amount != null && (
+                        <p className="text-gray-700">Nominal: <span className="font-bold">{formatIDR(pendingPayment.amount)}</span></p>
+                      )}
+                      <p className="text-gray-700">Metode: <span className="font-bold">{pendingPayment.channel_label || pendingPayment.channel || pendingPayment.method || '-'}</span></p>
+                      {pendingPayment.order_id && (
+                        <p className="text-gray-700">Referensi: <span className="font-bold">{pendingPayment.order_id}</span></p>
+                      )}
+                      {pendingPayment.expiry_time && (
+                        <p className="text-gray-700">Berlaku hingga: <span className="font-bold">{pendingPayment.expiry_time}</span></p>
+                      )}
+                    </div>
+                    {pendingPayment.va_number && (
+                      <div className="rounded-xl bg-white border border-amber-100 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase text-gray-500">Nomor Virtual Account</p>
+                        <p className="text-sm font-black tracking-widest">{pendingPayment.va_number}</p>
+                      </div>
+                    )}
+                    {pendingPayment.payment_code && (
+                      <div className="rounded-xl bg-white border border-amber-100 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase text-gray-500">Kode Pembayaran {pendingPayment.store ? `(${pendingPayment.store})` : ''}</p>
+                        <p className="text-sm font-black tracking-widest">{pendingPayment.payment_code}</p>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-amber-800">
+                      Selesaikan pembayaran di jendela Midtrans. Saldo hanya bertambah setelah webhook settlement.
+                    </p>
+                  </div>
+                )}
 
                 <form onSubmit={handleTopupSubmit} className="space-y-6">
                   {/* Select Preset Amount */}
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold text-gray-700">Pilih Nominal Cepat</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {['50000', '100000', '250000', '500000'].map((amt) => (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      {quickAmounts.map((amt) => (
                         <button
                           type="button"
                           key={amt}
-                          onClick={() => setTopupAmount(amt)}
-                          className={`py-3 px-4 rounded-xl border font-bold text-xs transition-all ${topupAmount === amt ? 'bg-primary-600 border-primary-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-primary-400'}`}
+                          onClick={() => { setTopupAmount(String(amt)); topupIdemRef.current = null; }}
+                          className={`py-3 px-4 rounded-xl border font-bold text-xs transition-all ${topupAmount === String(amt) ? 'bg-primary-600 border-primary-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-primary-400'}`}
                         >
-                          {formatIDR(parseInt(amt))}
+                          {formatIDR(amt)}
                         </button>
                       ))}
                     </div>
@@ -630,7 +756,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                         autoComplete="off"
                         placeholder="Minimal Rp10.000"
                         value={formatIDRInput(topupAmount)}
-                        onChange={handleTopupAmountChange}
+                        onChange={(e) => { handleTopupAmountChange(e); topupIdemRef.current = null; }}
                         className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
                       />
                     </div>
@@ -640,45 +766,47 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold text-gray-700">Metode Pembayaran</label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {autoTopupEnabled && (
-                        <>
+                      {qrisEnabled && (
                       <div 
-                        onClick={() => setTopupMethod('qris')}
+                        onClick={() => selectTopupMethod('qris')}
                         className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${topupMethod === 'qris' ? 'border-primary-500 bg-primary-50/20' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <QrCode className="w-8 h-8 text-primary-600 shrink-0" />
                         <div>
-                          <h6 className="font-extrabold text-gray-900 text-xs">QRIS Instan</h6>
-                          <p className="text-[10px] text-gray-500 mt-0.5">Bebas biaya admin</p>
+                          <h6 className="font-extrabold text-gray-900 text-xs">QRIS</h6>
+                          <p className="text-[10px] text-gray-500 mt-0.5">Langsung tampil QR Midtrans</p>
                         </div>
                       </div>
+                      )}
 
+                      {vaEnabled && (
                       <div 
-                        onClick={() => setTopupMethod('va')}
+                        onClick={() => selectTopupMethod('va')}
                         className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${topupMethod === 'va' ? 'border-primary-500 bg-primary-50/20' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <Building2 className="w-8 h-8 text-primary-600 shrink-0" />
                         <div>
                           <h6 className="font-extrabold text-gray-900 text-xs">Virtual Account</h6>
-                          <p className="text-[10px] text-gray-500 mt-0.5">BCA, Mandiri, BRI (+1.5k)</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">Pilih bank, lalu nomor VA</p>
                         </div>
                       </div>
+                      )}
 
+                      {retailEnabled && (
                       <div 
-                        onClick={() => setTopupMethod('retail')}
+                        onClick={() => selectTopupMethod('retail')}
                         className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${topupMethod === 'retail' ? 'border-primary-500 bg-primary-50/20' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <Smartphone className="w-8 h-8 text-primary-600 shrink-0" />
                         <div>
                           <h6 className="font-extrabold text-gray-900 text-xs">Alfa / Indomaret</h6>
-                          <p className="text-[10px] text-gray-500 mt-0.5">Biaya admin Rp 2.500</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">Kode bayar dari Midtrans</p>
                         </div>
                       </div>
-                        </>
                       )}
 
                       <div
-                        onClick={() => setTopupMethod('manual_transfer')}
+                        onClick={() => selectTopupMethod('manual_transfer')}
                         className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${topupMethod === 'manual_transfer' ? 'border-primary-500 bg-primary-50/20' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <Building2 className="w-8 h-8 text-primary-600 shrink-0" />
@@ -688,11 +816,46 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                         </div>
                       </div>
                     </div>
-                    {!autoTopupEnabled && (
-                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                        Segera Hadir — {featureFlags.messages.auto_topup}
-                      </p>
+
+                    {topupMethod === 'va' && vaEnabled && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs font-bold text-gray-700">Pilih Bank</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {vaBanks.map((bank) => (
+                            <button
+                              type="button"
+                              key={bank.code}
+                              onClick={() => { setTopupBank(bank.code); topupIdemRef.current = null; setPendingPayment(null); }}
+                              className={`py-3 px-3 rounded-xl border text-xs font-extrabold transition-all ${topupBank === bank.code ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 bg-gray-50 text-gray-800 hover:border-primary-400'}`}
+                            >
+                              {bank.label}
+                            </button>
+                          ))}
+                        </div>
+                        {!topupBank && (
+                          <p className="text-[11px] text-gray-500">Nomor VA hanya tampil setelah bank dipilih dan pembayaran dibuat.</p>
+                        )}
+                      </div>
                     )}
+
+                    {topupMethod === 'retail' && retailEnabled && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs font-bold text-gray-700">Pilih Gerai</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {retailOutlets.map((outlet) => (
+                            <button
+                              type="button"
+                              key={outlet.code}
+                              onClick={() => { setTopupRetail(outlet.code); topupIdemRef.current = null; setPendingPayment(null); }}
+                              className={`py-3 px-3 rounded-xl border text-xs font-extrabold transition-all ${topupRetail === outlet.code ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 bg-gray-50 text-gray-800 hover:border-primary-400'}`}
+                            >
+                              {outlet.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {topupMethod === 'manual_transfer' && (
                       <div className="space-y-2 pt-2">
                         <input
@@ -713,10 +876,11 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
 
                   <button
                     type="submit"
-                    className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
+                    disabled={topupSubmitting || loading}
+                    className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
                   >
                     <Wallet className="w-4 h-4" />
-                    <span>Konfirmasi & Bayar Sekarang</span>
+                    <span>{topupSubmitting ? 'Memproses...' : 'Konfirmasi & Bayar Sekarang'}</span>
                   </button>
                 </form>
               </motion.div>

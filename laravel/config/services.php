@@ -27,6 +27,9 @@ return [
         'client_key' => env('MIDTRANS_CLIENT_KEY'),
         'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
         'base_url' => env('MIDTRANS_BASE_URL'),
+        // User-initiated Snap channels (comma-separated). Empty = all catalog channels.
+        // Catalog: qris,bca_va,bni_va,bri_va,echannel,alfamart,indomaret
+        'enabled_channels' => env('MIDTRANS_ENABLED_CHANNELS'),
     ],
 
     'payment' => [

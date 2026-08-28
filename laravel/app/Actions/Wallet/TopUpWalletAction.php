@@ -3,12 +3,14 @@
 namespace App\Actions\Wallet;
 
 use App\Exceptions\Payment\PaymentGatewayNotConfiguredException;
+use App\Exceptions\Payment\TopUpPaymentException;
 use App\Models\MidtransTransaction;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WalletMutation;
 use App\Repositories\Contracts\WalletRepositoryInterface;
+use App\Services\Payment\MidtransTopUpChannelCatalog;
 use App\Services\Payment\PaymentGatewayFactory;
 use App\Services\Transactions\IdempotencyGuard;
 use App\Services\Wallet\WalletLedgerService;
@@ -30,9 +32,13 @@ class TopUpWalletAction
         float $adminFee = 0.00,
         string $status = 'pending',
         string $paymentMethod = 'midtrans',
-        ?string $idempotencyKey = null
+        ?string $idempotencyKey = null,
+        ?string $topupMethod = 'qris',
+        ?string $topupChannel = null
     ): Transaction {
         $gateway = $this->paymentGatewayFactory->default();
+        $catalog = app(MidtransTopUpChannelCatalog::class);
+        $resolved = $catalog->resolve((string) ($topupMethod ?: 'qris'), $topupChannel);
 
         // Direct-credit bypass is only allowed outside production (testing/local).
         $allowDirectCredit = app()->environment('local', 'testing');
@@ -43,6 +49,8 @@ class TopUpWalletAction
         // SRS 14.1 — replay check before any DB write (no side effect to unwind on a hit).
         $existing = $idempotencyKey ? $this->idempotencyGuard->findActive($user->id, $idempotencyKey) : null;
         if ($existing) {
+            $this->hydrateSnapAttributes($existing, $resolved);
+
             return $existing;
         }
 
@@ -51,7 +59,7 @@ class TopUpWalletAction
             throw new PaymentGatewayNotConfiguredException();
         }
 
-        return DB::transaction(function () use ($user, $amount, $adminFee, $paymentMethod, $gateway, $idempotencyKey) {
+        return DB::transaction(function () use ($user, $amount, $adminFee, $paymentMethod, $gateway, $idempotencyKey, $resolved) {
             $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
 
             if (!$wallet) {
@@ -59,6 +67,7 @@ class TopUpWalletAction
             }
 
             $invoiceNumber = 'TRX-TOPUP-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
+            $channelNote = 'Top up saldo via Midtrans ('.$resolved['method'].'/'.$resolved['channel'].')';
 
             // Idempotency claim — top up never debits the wallet here (credit happens
             // only later, on Midtrans settlement), so this insert is safe as the sole
@@ -66,7 +75,7 @@ class TopUpWalletAction
             $claim = $this->idempotencyGuard->claim(
                 $user->id,
                 $idempotencyKey,
-                function () use ($user, $invoiceNumber, $wallet, $amount, $adminFee, $paymentMethod, $idempotencyKey) {
+                function () use ($user, $invoiceNumber, $wallet, $amount, $adminFee, $paymentMethod, $idempotencyKey, $channelNote) {
                     return Transaction::create([
                         'user_id' => $user->id,
                         'invoice_number' => $invoiceNumber,
@@ -77,13 +86,16 @@ class TopUpWalletAction
                         'total_payment' => $amount + $adminFee,
                         'payment_method' => $paymentMethod,
                         'status' => 'pending',
-                        'notes' => 'Top up saldo via Midtrans',
+                        'notes' => $channelNote,
                         'idempotency_key' => $idempotencyKey,
+                        'channel' => 'app',
                     ]);
                 }
             );
 
             if (!$claim['is_new']) {
+                $this->hydrateSnapAttributes($claim['transaction'], $resolved);
+
                 return $claim['transaction'];
             }
 
@@ -98,6 +110,7 @@ class TopUpWalletAction
                         'email' => $user->email,
                         'phone' => $user->phone_number,
                     ],
+                    'enabled_payments' => $resolved['enabled_payments'],
                 ]);
 
                 $snapToken = $checkout['token'] ?? null;
@@ -109,13 +122,15 @@ class TopUpWalletAction
                     'snap_token' => $snapToken,
                     'gross_amount' => $amount + $adminFee,
                     'transaction_status' => 'pending',
+                    'payment_type' => $resolved['channel'],
                 ]);
 
-                $transaction->snap_token = $snapToken;
-                $transaction->redirect_url = $redirectUrl;
+                $this->attachPaymentAttributes($transaction, $resolved, $snapToken, $redirectUrl);
             } catch (PaymentGatewayNotConfiguredException $e) {
                 throw $e;
-            } catch (\Exception $e) {
+            } catch (TopUpPaymentException $e) {
+                throw $e;
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
                 Log::error('Failed to generate Midtrans Snap transaction: ' . $e->getMessage());
 
                 // Testing fallback when keys exist but Snap HTTP is unavailable.
@@ -129,13 +144,16 @@ class TopUpWalletAction
                         'snap_token' => $snapToken,
                         'gross_amount' => $amount + $adminFee,
                         'transaction_status' => 'pending',
+                        'payment_type' => $resolved['channel'],
                     ]);
 
-                    $transaction->snap_token = $snapToken;
-                    $transaction->redirect_url = $redirectUrl;
+                    $this->attachPaymentAttributes($transaction, $resolved, $snapToken, $redirectUrl);
                 } else {
-                    throw $e;
+                    throw $this->mapSnapException($e);
                 }
+            } catch (\Exception $e) {
+                Log::error('Failed to generate Midtrans Snap transaction: ' . $e->getMessage());
+                throw $this->mapSnapException($e);
             }
 
             event(new \App\Events\TransactionCreated($transaction));
@@ -143,6 +161,59 @@ class TopUpWalletAction
 
             return $transaction;
         });
+    }
+
+    /**
+     * @param  array{method:string,channel:string,label:string,enabled_payments:list<string>}  $resolved
+     */
+    protected function hydrateSnapAttributes(Transaction $transaction, array $resolved): void
+    {
+        $mt = MidtransTransaction::where('transaction_id', $transaction->id)->first();
+        $this->attachPaymentAttributes(
+            $transaction,
+            $resolved,
+            $mt?->snap_token,
+            $transaction->redirect_url ?? null
+        );
+    }
+
+    /**
+     * @param  array{method:string,channel:string,label:string,enabled_payments:list<string>}  $resolved
+     */
+    protected function attachPaymentAttributes(
+        Transaction $transaction,
+        array $resolved,
+        ?string $snapToken,
+        ?string $redirectUrl
+    ): void {
+        $transaction->snap_token = $snapToken;
+        $transaction->redirect_url = $redirectUrl;
+        $transaction->topup_method = $resolved['method'];
+        $transaction->topup_channel = $resolved['channel'];
+        $transaction->topup_channel_label = $resolved['label'];
+    }
+
+    protected function mapSnapException(\Throwable $e): TopUpPaymentException
+    {
+        $raw = strtolower($e->getMessage());
+        $channelHint = str_contains($raw, 'enabled_payments')
+            || str_contains($raw, 'payment type')
+            || str_contains($raw, 'not available')
+            || str_contains($raw, 'not activated');
+
+        if ($channelHint) {
+            return new TopUpPaymentException(
+                'Metode pembayaran tersebut sedang tidak tersedia. Silakan pilih metode lain.',
+                TopUpPaymentException::CHANNEL_UNAVAILABLE,
+                422
+            );
+        }
+
+        return new TopUpPaymentException(
+            'Gagal membuat pembayaran top up. Silakan coba beberapa saat lagi.',
+            TopUpPaymentException::PAYMENT_FAILED,
+            502
+        );
     }
 
     protected function executeDirectCredit(User $user, float $amount, float $adminFee, ?string $idempotencyKey = null): Transaction
