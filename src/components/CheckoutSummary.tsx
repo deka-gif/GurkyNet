@@ -379,6 +379,16 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
       : undefined);
   const activationUrl = receiptData?.transaction_details?.activation_url as string | undefined;
   const activationCopyValue = activationCode || activationUrl || '';
+  const isVoucherInternetReceipt =
+    !!receiptData?.transaction_details?.is_voucher_internet ||
+    data.serviceName.toLowerCase() === 'voucher internet';
+  const voucherInternetCode =
+    (receiptData?.transaction_details?.voucher_internet_code as string | undefined) ||
+    (isVoucherInternetReceipt
+      ? (receiptData?.transaction_details?.serial_number as string | undefined)
+      : undefined);
+  const voucherInternetUrl = receiptData?.transaction_details?.voucher_internet_url as string | undefined;
+  const voucherInternetCopyValue = voucherInternetCode || voucherInternetUrl || '';
   const pajakTaxDetails = (receiptData?.transaction_details?.tax_details || {}) as Record<string, string>;
   const pajakOwner =
     (receiptData?.transaction_details?.customer_name as string | undefined) ||
@@ -420,6 +430,14 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     if (!activationCopyValue) return;
     void navigator.clipboard.writeText(activationCopyValue).then(() => {
       setCopiedText('Kode aktivasi disalin ke clipboard!');
+      setTimeout(() => setCopiedText(null), 3000);
+    });
+  };
+
+  const handleCopyVoucherInternetCode = () => {
+    if (!voucherInternetCopyValue) return;
+    void navigator.clipboard.writeText(voucherInternetCopyValue).then(() => {
+      setCopiedText('Kode voucher internet disalin ke clipboard!');
       setTimeout(() => setCopiedText(null), 3000);
     });
   };
@@ -911,7 +929,8 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                     !isPajakReceipt &&
                     !isPlnTokenReceipt &&
                     !isVoucherReceipt &&
-                    !isLanggananReceipt && (
+                    !isLanggananReceipt &&
+                    !isVoucherInternetReceipt && (
                     <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-2.5 mb-2">
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
@@ -956,7 +975,11 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                     </div>
                   )}
 
-                  {isLanggananReceipt && !isPajakReceipt && !isPlnTokenReceipt && !isVoucherReceipt && (
+                  {isLanggananReceipt &&
+                    !isPajakReceipt &&
+                    !isPlnTokenReceipt &&
+                    !isVoucherReceipt &&
+                    !isVoucherInternetReceipt && (
                     <div className="rounded-2xl border border-teal-100 bg-teal-50/40 p-4 space-y-3 mb-2">
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
@@ -1026,7 +1049,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                     </div>
                   )}
 
-                  {isVoucherReceipt && !isPajakReceipt && !isPlnTokenReceipt && (
+                  {isVoucherReceipt && !isPajakReceipt && !isPlnTokenReceipt && !isVoucherInternetReceipt && (
                     <div className="rounded-2xl border border-rose-100 bg-rose-50/40 p-4 space-y-3 mb-2">
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
@@ -1099,6 +1122,67 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                           SALIN KODE VOUCHER
                         </button>
                       ) : null}
+                    </div>
+                  )}
+
+                  {isVoucherInternetReceipt && !isPajakReceipt && !isPlnTokenReceipt && voucherInternetCopyValue && (
+                    <div className="rounded-2xl border border-sky-100 bg-sky-50/40 p-4 space-y-3 mb-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
+                        <span className="font-black text-emerald-700 uppercase">Transaksi Berhasil</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-3 text-xs">
+                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Produk</span>
+                        <span className="font-black text-gray-900 text-right">
+                          {receiptData.items?.[0]?.name || data.productName}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-start gap-3 text-xs">
+                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Tanggal</span>
+                        <span className="font-black text-gray-900 text-right">
+                          {receiptData.transaction_details?.date
+                            ? new Date(receiptData.transaction_details.date).toLocaleString('id-ID', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'Asia/Jakarta',
+                              }) + ' WIB'
+                            : '-'}
+                        </span>
+                      </div>
+                      {voucherInternetCode ? (
+                        <div className="pt-2 border-t border-dashed border-sky-200 space-y-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-sky-800">Kode Voucher</p>
+                          <p className="text-lg sm:text-xl font-black text-gray-950 tracking-wide text-center break-all">
+                            {voucherInternetCode}
+                          </p>
+                        </div>
+                      ) : null}
+                      {voucherInternetUrl ? (
+                        <div className="flex justify-between items-start gap-3 text-xs">
+                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
+                            URL Voucher
+                          </span>
+                          <a
+                            href={voucherInternetUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-black text-primary-700 text-right break-all underline"
+                          >
+                            {voucherInternetUrl}
+                          </a>
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={handleCopyVoucherInternetCode}
+                        className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 no-print"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        SALIN KODE VOUCHER
+                      </button>
                     </div>
                   )}
 

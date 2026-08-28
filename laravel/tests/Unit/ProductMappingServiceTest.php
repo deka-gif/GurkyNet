@@ -64,4 +64,26 @@ class ProductMappingServiceTest extends TestCase
         $this->assertContains('ewallet', $slugs);
         $this->assertContains('topup-digital', $slugs);
     }
+
+    /**
+     * Regression guard: a product's real provider category must win over a
+     * name-keyword coincidence. "Pulsa" is Digiflazz-authoritative here even though
+     * the product name contains "voucher" and "data", which would otherwise trip the
+     * voucher-internet name_keywords fallback if it ran before the provider category.
+     */
+    public function test_provider_category_outranks_name_keyword_coincidence(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pulsa', 'Telkomsel', 'Bonus Voucher Data Telkomsel 5000');
+        $this->assertSame('pulsa', $m['slug']);
+        $this->assertSame('provider_category', $m['source']);
+    }
+
+    public function test_name_keyword_still_used_as_fallback_when_provider_category_unmapped(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Unrecognized Provider Category', '', 'Voucher Kuota XL 5GB');
+        $this->assertSame('voucher-internet', $m['slug']);
+        $this->assertSame('name_keyword', $m['source']);
+    }
 }

@@ -302,5 +302,17 @@ class AppServiceProvider extends ServiceProvider
                 (string) ($request->user()?->id ?: $request->ip())
             );
         });
+
+        // Voucher Fisik bulk activation — job-level limiter (not an HTTP route throttle).
+        // ProcessVoucherPhysicalBatchItem carries its own per-minute budget (resolved from
+        // config('ppob.physical_batch.rate_limit_per_minute') per provider) and this limiter
+        // just applies it, keyed by provider so Digiflazz/VIP never share one budget.
+        \Illuminate\Support\Facades\RateLimiter::for(
+            'voucher_physical_activation',
+            function (\App\Jobs\ProcessVoucherPhysicalBatchItem $job) {
+                return \Illuminate\Cache\RateLimiting\Limit::perMinute($job->rateLimitPerMinute)
+                    ->by($job->providerCode);
+            }
+        );
     }
 }

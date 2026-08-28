@@ -23,6 +23,11 @@ class ProductMappingService
         $slug = null;
         $source = 'fallback';
 
+        // Priority order matters: brand_overrides (deliberate, curated) first, then the
+        // provider's own authoritative category field, and only THEN a name-keyword
+        // fallback. A crude substring match on the product name must never outrank the
+        // real category Digiflazz/VIP reports — that's how a product named "Voucher Data
+        // XYZ" from an unrelated category could get misfiled ahead of its true category.
         $brandHit = $this->matchBrandOverride($brand, $productName);
         if ($brandHit !== null) {
             $slug = $brandHit;
@@ -30,11 +35,8 @@ class ProductMappingService
         }
 
         if ($slug === null) {
-            $kw = $this->matchNameKeywords($productName.' '.$brand);
-            if ($kw !== null) {
-                $slug = $kw;
-                $source = 'name_keyword';
-            }
+            $slug = $this->matchProviderCategory($provider, $providerCategory);
+            $source = $slug !== null ? 'provider_category' : 'fallback';
         }
 
         if ($slug === null && $isGameHint) {
@@ -43,8 +45,11 @@ class ProductMappingService
         }
 
         if ($slug === null) {
-            $slug = $this->matchProviderCategory($provider, $providerCategory);
-            $source = $slug !== null ? 'provider_category' : 'fallback';
+            $kw = $this->matchNameKeywords($productName.' '.$brand);
+            if ($kw !== null) {
+                $slug = $kw;
+                $source = 'name_keyword';
+            }
         }
 
         if ($slug === null) {

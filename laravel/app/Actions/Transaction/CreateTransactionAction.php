@@ -17,6 +17,7 @@ use App\Services\Pln\PlnInquiryService;
 use App\Services\Game\GameInquiryService;
 use App\Services\Transactions\IdempotencyGuard;
 use App\Services\Wallet\WalletLedgerService;
+use App\Support\Transactions\InvoiceNumberGenerator;
 use App\Enums\TransactionStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -97,7 +98,7 @@ class CreateTransactionAction
 
             // 1. Create INITIATED — first write; idempotency claim must precede any wallet side effect.
             // (Conceptual draft→INITIATED: claim row starts as INITIATED per SRS 14.3.)
-            $invoiceNumber = $this->generateUniqueInvoice();
+            $invoiceNumber = InvoiceNumberGenerator::generate();
 
             $claim = $this->idempotencyGuard->claim(
                 $user->id,
@@ -347,6 +348,11 @@ class CreateTransactionAction
                 $itemMeta['voucher_brand'] = $product->provider->name ?? null;
             }
 
+            if (!$isPasca && $this->isVoucherInternetProduct($product)) {
+                $itemMeta['is_voucher_internet'] = true;
+                $itemMeta['voucher_brand'] = $product->provider->name ?? null;
+            }
+
             if (!$isPasca && $this->isLanggananDigitalProduct($product)) {
                 $itemMeta['is_langganan'] = true;
                 $itemMeta['langganan_brand'] = $product->provider->name ?? null;
@@ -399,28 +405,6 @@ class CreateTransactionAction
         return $transaction;
     }
 
-    /**
-     * Generate unique Invoice number with format: GRK-YYYYMMDD-XXXXXX
-     */
-    protected function generateUniqueInvoice(): string
-    {
-        $date = now()->format('Ymd');
-        
-        // Find the last invoice created today
-        $lastTransaction = Transaction::where('invoice_number', 'like', "GRK-{$date}-%")
-            ->orderBy('id', 'desc')
-            ->first();
-
-        $nextNumber = 1;
-        if ($lastTransaction) {
-            $parts = explode('-', $lastTransaction->invoice_number);
-            $lastNum = (int) end($parts);
-            $nextNumber = $lastNum + 1;
-        }
-
-        return 'GRK-' . $date . '-' . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
-    }
-
     protected function isPlnTokenProduct(Product $product): bool
     {
         $slug = strtolower((string) ($product->category?->slug ?? ''));
@@ -445,6 +429,13 @@ class CreateTransactionAction
         $slug = strtolower((string) ($product->category?->slug ?? ''));
 
         return in_array($slug, ['voucher-digital', 'voucher', 'gift-card', 'egift', 'e-gift'], true);
+    }
+
+    protected function isVoucherInternetProduct(Product $product): bool
+    {
+        $slug = strtolower((string) ($product->category?->slug ?? ''));
+
+        return $slug === 'voucher-internet';
     }
 
     protected function isLanggananDigitalProduct(Product $product): bool

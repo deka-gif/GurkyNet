@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\v1\WalletController;
 use App\Http\Controllers\Api\v1\ProductController;
 use App\Http\Controllers\Api\v1\CatalogController;
 use App\Http\Controllers\Api\v1\TransactionController;
+use App\Http\Controllers\Api\v1\VoucherPhysicalBatchController;
 use App\Http\Controllers\Api\v1\HealthCheckController;
 use App\Http\Controllers\Api\v1\Admin\FinanceController;
 use App\Http\Controllers\Api\v1\Admin\OperationsController;
@@ -313,6 +314,18 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         });
         Route::post('/transactions', [TransactionController::class, 'store'])
             ->middleware('throttle:15,1');
+
+        // Voucher Fisik bulk activation — batch header is a Transaction row (see above),
+        // but scan/validate/retry state lives on its own resource.
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::get('/voucher-internet/physical-batches/{id}', [VoucherPhysicalBatchController::class, 'show'])
+                ->whereNumber('id');
+            Route::post('/voucher-internet/physical-batches/{id}/items/{item}/retry', [VoucherPhysicalBatchController::class, 'retryItem'])
+                ->whereNumber('id')
+                ->whereNumber('item');
+        });
+        Route::post('/voucher-internet/physical-batches', [VoucherPhysicalBatchController::class, 'store'])
+            ->middleware('throttle:10,1');
 
         // Postpaid bill inquiry (Digiflazz inq-pasca) — no wallet debit
         Route::middleware('throttle:20,1')->group(function () {

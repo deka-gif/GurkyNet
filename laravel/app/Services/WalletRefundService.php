@@ -201,6 +201,67 @@ class WalletRefundService
         });
     }
 
+    /**
+     * Partial refund for ONE line item of a multi-item transaction (Voucher Fisik
+     * bulk batches: one Transaction = one wallet hold for the whole batch, but each
+     * serial can independently fail and must give back only its own price).
+     *
+     * Unlike refundOnce(), this never touches transaction.status / refunded_at — those
+     * still mean "the whole transaction was refunded" and stay reserved for the
+     * single-item refund path above. Per-item refund state lives entirely on the
+     * caller's own row (voucher_physical_batch_items.refund_amount/refunded_at).
+     * Callers MUST guard against re-calling this for an item already refunded.
+     *
+     * @return array{credited: bool, amount: float}
+     */
+    public function refundPartialAmount(
+        Transaction $transaction,
+        float $amount,
+        string $description,
+        string $source
+    ): array {
+        if ($amount <= 0) {
+            return ['credited' => false, 'amount' => 0.0];
+        }
+
+        return DB::transaction(function () use ($transaction, $amount, $description, $source) {
+            $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
+
+            if (!$wallet) {
+                return ['credited' => false, 'amount' => 0.0];
+            }
+
+            $wallet->balance += $amount;
+            $wallet->save();
+
+            $this->ledgerService->record(
+                $wallet,
+                WalletMutation::TYPE_REFUND,
+                $amount,
+                'credit',
+                $description,
+                $transaction->id
+            );
+
+            event(new \App\Events\WalletCredited($wallet, $amount, $description, $transaction->id));
+
+            PaymentHistory::recordFor($transaction, 'wallet_refund', 'refund', [
+                'source' => $source,
+                'description' => $description,
+                'amount' => $amount,
+                'partial' => true,
+            ]);
+
+            Log::info('WalletRefundService — partial refund executed', [
+                'transaction_id' => $transaction->id,
+                'source' => $source,
+                'amount' => $amount,
+            ]);
+
+            return ['credited' => true, 'amount' => $amount];
+        });
+    }
+
     public function hasExistingRefund(Transaction $transaction): bool
     {
         if ($transaction->refunded_at) {

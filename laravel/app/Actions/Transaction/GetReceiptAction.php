@@ -36,13 +36,15 @@ class GetReceiptAction
 
         $isVoucher = !empty($meta['is_voucher']);
         $isLangganan = !empty($meta['is_langganan']);
-        $tokenCode = ($isVoucher || $isLangganan) ? null : PlnTokenParser::extract($serialNumber);
+        $isVoucherInternet = !empty($meta['is_voucher_internet']);
+        $tokenCode = ($isVoucher || $isLangganan || $isVoucherInternet) ? null : PlnTokenParser::extract($serialNumber);
         $tokenGrouped = $tokenCode ? PlnTokenParser::formatGrouped($tokenCode) : null;
-        $deliverableParts = ($isVoucher || $isLangganan)
+        $deliverableParts = ($isVoucher || $isLangganan || $isVoucherInternet)
             ? VoucherCodeParser::parse($serialNumber)
             : ['voucher_code' => null, 'voucher_url' => null, 'voucher_barcode' => null];
         $voucherParts = $isVoucher ? $deliverableParts : ['voucher_code' => null, 'voucher_url' => null, 'voucher_barcode' => null];
         $langgananParts = $isLangganan ? $deliverableParts : ['voucher_code' => null, 'voucher_url' => null, 'voucher_barcode' => null];
+        $voucherInternetParts = $isVoucherInternet ? $deliverableParts : ['voucher_code' => null, 'voucher_url' => null, 'voucher_barcode' => null];
 
         // Company identity comes from the CMS-managed website settings
         $settings = WebsiteSetting::first();
@@ -74,11 +76,14 @@ class GetReceiptAction
                 'is_game' => !empty($meta['is_game']),
                 'is_voucher' => $isVoucher,
                 'is_langganan' => $isLangganan,
+                'is_voucher_internet' => $isVoucherInternet,
                 'voucher_code' => $isVoucher ? ($voucherParts['voucher_code'] ?? null) : null,
                 'voucher_url' => $isVoucher ? ($voucherParts['voucher_url'] ?? null) : null,
                 'voucher_barcode' => $isVoucher ? ($voucherParts['voucher_barcode'] ?? null) : null,
                 'activation_code' => $isLangganan ? ($langgananParts['voucher_code'] ?? null) : null,
                 'activation_url' => $isLangganan ? ($langgananParts['voucher_url'] ?? null) : null,
+                'voucher_internet_code' => $isVoucherInternet ? ($voucherInternetParts['voucher_code'] ?? null) : null,
+                'voucher_internet_url' => $isVoucherInternet ? ($voucherInternetParts['voucher_url'] ?? null) : null,
                 'nickname' => $meta['nickname'] ?? ($meta['customer_name'] ?? null),
                 'game_brand' => $meta['game_brand'] ?? ($meta['game_label'] ?? null),
                 'game_user_id' => $meta['user_id'] ?? null,

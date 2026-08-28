@@ -73,6 +73,19 @@ return [
         'half_open_successes' => (int) env('PPOB_CB_HALF_OPEN_SUCCESSES', 1),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Voucher Fisik bulk activation (Sprint 19 — Voucher Internet Metode 3)
+    |--------------------------------------------------------------------------
+    */
+    'physical_batch' => [
+        'max_items' => (int) env('VOUCHER_PHYSICAL_BATCH_MAX_ITEMS', 200),
+        'rate_limit_per_minute' => [
+            'digiflazz' => (int) env('DIGIFLAZZ_PHYSICAL_BATCH_RPM', 60),
+            'vip' => (int) env('VIP_PHYSICAL_BATCH_RPM', 60),
+        ],
+    ],
+
     'catalog_auto_sync' => [
         'enabled' => (bool) env('PPOB_CATALOG_AUTO_SYNC_ENABLED', true),
         'timezone' => env('PPOB_CATALOG_AUTO_SYNC_TIMEZONE', 'Asia/Jakarta'),

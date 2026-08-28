@@ -96,6 +96,52 @@ class ProductModuleTest extends TestCase
     }
 
     /**
+     * Voucher Internet must be strictly Kuota/Internet — a product legitimately
+     * classified as a different category (e.g. pulsa) must never leak into this
+     * filter, even if that product's name happens to contain "data"/"voucher".
+     */
+    public function test_filter_by_category_excludes_other_categories_from_voucher_internet(): void
+    {
+        $voucherInternetCategory = ProductCategory::create([
+            'name' => 'Voucher Internet',
+            'slug' => 'voucher-internet',
+            'icon' => 'wifi',
+        ]);
+
+        Product::create([
+            'product_category_id' => $voucherInternetCategory->id,
+            'provider_id' => $this->provider->id,
+            'sku_code' => 'XLVI3GB',
+            'name' => 'Voucher Internet XL 3GB',
+            'base_price' => 15000.00,
+            'sell_price' => 15500.00,
+            'admin_fee' => 0.00,
+            'status' => true,
+        ]);
+
+        // Same-category (pulsa-seluler) product whose name coincidentally contains
+        // "data"/"voucher" wording — must stay out of the voucher-internet filter.
+        Product::create([
+            'product_category_id' => $this->category->id,
+            'provider_id' => $this->provider->id,
+            'sku_code' => 'TSEL20K-BONUS',
+            'name' => 'Telkomsel 20K Bonus Voucher Data',
+            'base_price' => 20000.00,
+            'sell_price' => 21000.00,
+            'admin_fee' => 0.00,
+            'status' => true,
+        ]);
+
+        $response = $this->getJson('/api/v1/products?category=voucher-internet');
+        $response->assertStatus(200);
+
+        $data = collect($response->json('data'));
+        $this->assertCount(1, $data);
+        $this->assertSame('XLVI3GB', $data->first()['code'] ?? null);
+        $this->assertTrue($data->every(fn ($p) => ($p['category'] ?? null) === 'voucher-internet'));
+    }
+
+    /**
      * Test Provider Filter.
      */
     public function test_filter_by_provider(): void
