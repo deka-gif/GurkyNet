@@ -51,6 +51,8 @@ class ProductFilterRequest extends FormRequest
             // Legacy Product Management UI sent `provider=Midtrans` etc.
             'provider' => 'nullable|string|max:100',
             'status' => 'nullable|string|max:32',
+            // Phase 20 — products whose category came from the unmapped-fallback default.
+            'unmapped' => 'nullable|boolean',
             'page' => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|min:1|max:100',
             'sort' => 'nullable|string|in:newest,oldest,name_asc,name_desc,price_asc,price_desc',

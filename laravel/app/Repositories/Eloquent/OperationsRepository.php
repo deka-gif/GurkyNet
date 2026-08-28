@@ -250,6 +250,12 @@ class OperationsRepository implements OperationsRepositoryInterface
             $this->applyProductStatusFilter($query, $filters['status']);
         }
 
+        // Phase 20 — surface products ProductMappingService couldn't confidently classify
+        // (no brand override / provider category / name-keyword match, silently defaulted).
+        if (!empty($filters['unmapped'])) {
+            $query->where('category_mapping_source', 'unmapped_fallback');
+        }
+
         $this->applyProductSort($query, (string) ($filters['sort'] ?? 'newest'));
 
         return $query->paginate($perPage);

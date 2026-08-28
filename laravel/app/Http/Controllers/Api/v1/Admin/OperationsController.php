@@ -285,4 +285,39 @@ return $this->paginatedResponse(
             $repository->getDigiflazzSyncStatus()
         );
     }
+
+    /**
+     * Phase 15 — recent catalog sync-run history (Digiflazz + VIP), newest first.
+     * Never includes credentials; only run-level counts and a short error summary.
+     */
+    public function syncRuns(Request $request): JsonResponse
+    {
+        $limit = (int) $request->input('limit', 20);
+        $limit = max(1, min($limit, 100));
+
+        $query = \App\Models\ProductSyncRun::query()->orderByDesc('started_at');
+
+        $providerCode = $request->input('provider_code');
+        if (is_string($providerCode) && $providerCode !== '') {
+            $query->where('provider_code', $providerCode);
+        }
+
+        $runs = $query->limit($limit)->get()->map(fn ($run) => [
+            'id' => $run->id,
+            'providerCode' => $run->provider_code,
+            'listType' => $run->list_type,
+            'triggeredBy' => $run->triggered_by,
+            'startedAt' => $run->started_at?->toIso8601String(),
+            'completedAt' => $run->completed_at?->toIso8601String(),
+            'status' => $run->status,
+            'fetchedCount' => $run->fetched_count,
+            'createdCount' => $run->created_count,
+            'updatedCount' => $run->updated_count,
+            'deactivatedCount' => $run->deactivated_count,
+            'errorCount' => $run->error_count,
+            'errorSummary' => $run->error_summary,
+        ]);
+
+        return $this->successResponse('Riwayat sinkronisasi katalog berhasil dimuat.', $runs);
+    }
 }

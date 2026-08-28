@@ -33,6 +33,7 @@ class RunAutomaticCatalogSyncAction
         $cfg = $this->autoSync->resolvedConfig();
         $source = (string) ($options['source'] ?? 'scheduler');
         $force = (bool) ($options['force'] ?? false);
+        $triggeredBy = $source === 'scheduler' ? 'scheduled' : $source;
 
         if (! $cfg['enabled'] && ! $force) {
             return [
@@ -90,6 +91,7 @@ class RunAutomaticCatalogSyncAction
                         'cmd' => ['prepaid'],
                         'inline_all_cmds' => true,
                         'source' => 'auto_sync',
+                        'triggered_by' => $triggeredBy,
                     ]),
                     retryable: true
                 );
@@ -117,6 +119,7 @@ class RunAutomaticCatalogSyncAction
                             'cmd' => ['pasca'],
                             'inline_all_cmds' => true,
                             'source' => 'auto_sync',
+                            'triggered_by' => $triggeredBy,
                         ]),
                         retryable: true
                     );
@@ -163,7 +166,11 @@ class RunAutomaticCatalogSyncAction
                     label: 'VIPayment',
                     step: 'Synchronizing VIPayment...',
                     steps: $steps,
-                    fn: fn () => $this->syncVip->execute(['include_game' => true, 'source' => 'auto_sync']),
+                    fn: fn () => $this->syncVip->execute([
+                        'include_game' => true,
+                        'source' => 'auto_sync',
+                        'triggered_by' => $triggeredBy,
+                    ]),
                     retryable: true
                 );
                 $steps = $vip['steps'];

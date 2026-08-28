@@ -402,7 +402,7 @@ class ProductProviderControlService
                         'inserted' => $result['imported'] ?? 0,
                         'updated' => $result['updated'] ?? 0,
                         'skipped' => $result['skipped'] ?? 0,
-                        'disabled' => 0,
+                        'disabled' => $result['disabled'] ?? 0,
                         'durationSec' => isset($result['api_latency_ms'])
                             ? round(((int) $result['api_latency_ms']) / 1000, 1)
                             : null,

@@ -491,6 +491,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/auto-reorder', \App\Http\Controllers\Api\v1\Admin\OpsSubscriptionMonitorController::class);
             Route::post('/sync', [OperationsController::class, 'syncCatalog']);
             Route::get('/sync-status', [OperationsController::class, 'syncStatus']);
+            // Phase 15 — dedicated sync-run history (started/completed, counts, errors).
+            Route::get('/sync-runs', [OperationsController::class, 'syncRuns']);
 
             // SRS 30 — Partner H2H admin (Ops approve/pricing/rate/credentials)
             Route::get('/partners', [\App\Http\Controllers\Api\v1\Admin\PartnerApiAdminController::class, 'index']);

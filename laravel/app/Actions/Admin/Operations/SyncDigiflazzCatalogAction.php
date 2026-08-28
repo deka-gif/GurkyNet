@@ -9,6 +9,7 @@ use App\Models\DigiflazzProduct;
 use App\Models\Product;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderSku;
+use App\Models\ProductSyncRun;
 use App\Models\Provider;
 use App\Models\Setting;
 use App\Repositories\Contracts\ProviderRepositoryInterface;
@@ -20,6 +21,10 @@ use Illuminate\Support\Facades\Log;
 
 class SyncDigiflazzCatalogAction
 {
+    protected ?\Carbon\Carbon $runStartedAt = null;
+
+    protected string $triggeredBy = 'manual';
+
     public function __construct(
         protected DigiflazzService $digiflazzService,
         protected ProviderRepositoryInterface $providerRepository
@@ -32,11 +37,13 @@ class SyncDigiflazzCatalogAction
      * Calling prepaid + pasca back-to-back often rate-limits the second cmd — we fetch
      * sequentially, keep prior DB for failed cmds, and never treat RC as empty success.
      *
-     * @param  array{cmd?: string|string[], async?: bool}  $options
+     * @param  array{cmd?: string|string[], async?: bool, triggered_by?: string}  $options
      */
     public function execute(array $options = []): array
     {
         $startedAt = microtime(true);
+        $this->runStartedAt = now();
+        $this->triggeredBy = (string) ($options['triggered_by'] ?? 'manual');
 
         if (!$this->digiflazzService->isConfigured()) {
             $result = $this->persistSyncMeta([
@@ -506,6 +513,45 @@ class SyncDigiflazzCatalogAction
             $payload['failed_sync_total'] = (int) (Setting::where('key', 'digiflazz_failed_sync_total')->value('value') ?? 0);
         }
 
+        $this->recordSyncRun($payload);
+
         return $payload;
+    }
+
+    /**
+     * Phase 15 — dedicated, queryable sync-run history (started/completed, counts,
+     * error summary). Additive alongside the existing Setting/ActivityLog mirrors above,
+     * which stay untouched for backward compatibility with the Control Center UI.
+     */
+    protected function recordSyncRun(array $payload): void
+    {
+        $listType = null;
+        $cmds = $payload['pipeline']['cmds_fetched'] ?? $payload['pipeline']['cmds_requested'] ?? null;
+        if (is_array($cmds) && count($cmds) === 1) {
+            $listType = (string) reset($cmds);
+        }
+
+        $status = match ((string) ($payload['status'] ?? 'unknown')) {
+            'success' => ProductSyncRun::STATUS_SUCCESS,
+            'partial' => ProductSyncRun::STATUS_PARTIAL,
+            'failed' => ProductSyncRun::STATUS_FAILED,
+            default => ProductSyncRun::STATUS_PARTIAL,
+        };
+
+        ProductSyncRun::create([
+            'provider_code' => ProductProvider::CODE_DIGIFLAZZ,
+            'list_type' => $listType,
+            'triggered_by' => $this->triggeredBy,
+            'user_id' => Auth::id(),
+            'started_at' => $this->runStartedAt ?? now(),
+            'completed_at' => now(),
+            'status' => $status,
+            'fetched_count' => (int) ($payload['provider_sku_raw_total'] ?? $payload['synced_count'] ?? 0),
+            'created_count' => (int) ($payload['inserted'] ?? 0),
+            'updated_count' => (int) ($payload['updated'] ?? 0),
+            'deactivated_count' => (int) ($payload['disabled'] ?? 0),
+            'error_count' => (int) ($payload['failed_count'] ?? 0),
+            'error_summary' => is_string($payload['message'] ?? null) ? mb_substr((string) $payload['message'], 0, 2000) : null,
+        ]);
     }
 }

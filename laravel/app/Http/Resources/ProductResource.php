@@ -69,6 +69,10 @@ class ProductResource extends JsonResource
             'isCatalogVisible' => $catalogVisible,
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
+            // How this product's category was resolved by ProductMappingService — lets
+            // Operations spot products that fell through to the unmapped fallback instead
+            // of a confident provider-category/brand-override match (Phase 20).
+            'categoryMappingSource' => $this->category_mapping_source,
 'operatorName' => $this->provider?->name ?? 'System',
             // Operator brand (Telkomsel, PLN, …) — kept as `provider` for existing UI.
             'provider' => $this->provider?->name ?? 'System',
@@ -78,6 +82,9 @@ class ProductResource extends JsonResource
             'productProviderCode' => $this->productProvider?->code,
             'productProviderId' => $this->product_provider_id,
             'productProviderDetails' => $this->whenLoaded('productProvider', fn () => new ProductProviderResource($this->productProvider)),
+            // Provider-level last catalog sync (per-product sync metadata doesn't exist —
+            // every product sharing a provider shares that provider's last successful run).
+            'lastSyncedAt' => $this->productProvider?->last_sync_at?->toIso8601String(),
             'createdAt' => $this->created_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
         ];

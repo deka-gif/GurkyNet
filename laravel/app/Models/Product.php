@@ -14,6 +14,7 @@ class Product extends Model
 
     protected $fillable = [
         'product_category_id',
+        'category_mapping_source',
         'provider_id',
         'product_provider_id',
         'sku_code',

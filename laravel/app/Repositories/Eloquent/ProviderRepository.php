@@ -148,6 +148,7 @@ class ProviderRepository implements ProviderRepositoryInterface
 
                 $existing->fill([
                     'product_category_id' => $category->id,
+                    'category_mapping_source' => $mapped['source'],
                     'provider_id' => $provider->id,
                     'product_provider_id' => $digiflazzProvider->id,
                     'name' => $dp['product_name'],
@@ -172,6 +173,7 @@ class ProviderRepository implements ProviderRepositoryInterface
 
                 Product::create([
                     'product_category_id' => $category->id,
+                    'category_mapping_source' => $mapped['source'],
                     'provider_id' => $provider->id,
                     'product_provider_id' => $digiflazzProvider->id,
                     'sku_code' => $sku,

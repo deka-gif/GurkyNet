@@ -7,6 +7,7 @@ use App\Models\ProductCategory;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderLog;
 use App\Models\ProductProviderSku;
+use App\Models\ProductSyncRun;
 use App\Models\Provider;
 use App\Models\Setting;
 use App\Services\VipService;
@@ -25,7 +26,7 @@ class SyncVipCatalogAction
     public function __construct(protected VipService $vipService) {}
 
     /**
-     * @param  array{include_game?:bool}  $options
+     * @param  array{include_game?:bool, triggered_by?:string}  $options
      * @return array{
      *   success:bool,
      *   message:string,
@@ -33,14 +34,20 @@ class SyncVipCatalogAction
      *   updated:int,
      *   skipped:int,
      *   failed:int,
+     *   disabled:int,
      *   api_latency_ms:int,
      *   api_response_status:?int,
      *   product_count:int,
      *   first_sku_id:?int
      * }
      */
+    protected \Carbon\Carbon $runStartedAt;
+
     public function execute(array $options = []): array
     {
+        $this->runStartedAt = now();
+        $triggeredBy = (string) ($options['triggered_by'] ?? 'manual');
+
         $vipProvider = ProductProvider::vip();
         if (!$vipProvider) {
             throw new RuntimeException('VIPAYMENT product provider row is missing from product_providers.');
@@ -57,6 +64,7 @@ class SyncVipCatalogAction
                 'error_message' => $cred['message'],
                 'meta' => ['missing' => $cred['missing']],
             ]);
+            $this->recordSyncRun($triggeredBy, ProductSyncRun::STATUS_FAILED, message: $cred['message'] ?? 'VIP credentials missing');
 
             throw new RuntimeException($cred['message'] ?? 'VIP credentials missing');
         }
@@ -68,6 +76,9 @@ class SyncVipCatalogAction
         $firstSkuId = null;
         $latencies = [];
         $httpStatuses = [];
+        /** @var list<string> $seenProviderSkus SKUs actually observed this run — deactivation never runs against an incomplete fetch. */
+        $seenProviderSkus = [];
+        $gameFetchFailed = false;
 
         // —— Prepaid catalog ——
         $prepaid = $this->vipService->prepaidServices();
@@ -96,6 +107,8 @@ class SyncVipCatalogAction
                 'last_failure_at' => now(),
             ])->save();
 
+            $this->recordSyncRun($triggeredBy, ProductSyncRun::STATUS_FAILED, message: $prepaid['message'] ?? 'VIP catalog sync failed');
+
             throw new RuntimeException($prepaid['message'] ?? 'VIP catalog sync failed');
         }
 
@@ -119,12 +132,14 @@ class SyncVipCatalogAction
                         $rows[] = $gRow;
                     }
                 } else {
+                    $gameFetchFailed = true;
                     Log::info('VIP SYNC TRACE — Stage 4 Skipped catalog source', [
                         'reason' => 'game_catalog_api_failed',
                         'message' => $game['message'] ?? null,
                     ]);
                 }
             } catch (Throwable $e) {
+                $gameFetchFailed = true;
                 Log::info('VIP SYNC TRACE — Stage 4 Skipped catalog source', [
                     'reason' => 'game_catalog_exception',
                     'message' => $e->getMessage(),
@@ -211,6 +226,8 @@ class SyncVipCatalogAction
                 continue;
             }
 
+            $seenProviderSkus[] = $providerSku;
+
             if ($providerName === '') {
                 $providerName = $providerSku;
             }
@@ -239,7 +256,9 @@ class SyncVipCatalogAction
                     continue;
                 }
 
-                $category = $this->upsertCategory($categoryName);
+                $categoryResult = $this->upsertCategory($categoryName);
+                $category = $categoryResult['category'];
+                $categoryMappingSource = $categoryResult['source'];
                 $operator = $this->upsertOperator($brand);
 
                 // Prefer attaching VIP offer onto an existing Digiflazz/master product (same brand+name).
@@ -286,6 +305,7 @@ class SyncVipCatalogAction
 
                         $updatePayload = [
                             'product_category_id' => $category->id,
+                            'category_mapping_source' => $categoryMappingSource,
                             'provider_id' => $operator->id,
                             'product_provider_id' => $vipProvider->id,
                             'name' => $providerName,
@@ -310,6 +330,7 @@ class SyncVipCatalogAction
                     } else {
                         $createPayload = [
                             'product_category_id' => $category->id,
+                            'category_mapping_source' => $categoryMappingSource,
                             'provider_id' => $operator->id,
                             'product_provider_id' => $vipProvider->id,
                             'sku_code' => $internalSku,
@@ -389,6 +410,18 @@ class SyncVipCatalogAction
             'first_sku_id' => $firstSkuId,
         ]);
 
+        // Retirement pass — mirrors ProviderRepository::deactivateMissingDigiflazzSkus for Digiflazz.
+        // Only runs when every requested catalog source (prepaid, and game if requested) fetched
+        // successfully this run; a partial fetch must never be read as "the rest went missing".
+        $disabled = 0;
+        if (!$gameFetchFailed) {
+            $disabled = $this->deactivateMissingVipSkus($seenProviderSkus, $vipProvider);
+        } else {
+            Log::info('VIP SYNC — retirement pass skipped: game catalog fetch failed this run, cannot trust seen-set', [
+                'seen_count' => count($seenProviderSkus),
+            ]);
+        }
+
         $count = ProductProviderSku::where('product_provider_id', $vipProvider->id)->where('is_active', true)->count();
         $totalLatency = (int) array_sum($latencies);
         $lastHttp = null;
@@ -422,6 +455,7 @@ class SyncVipCatalogAction
             'updated' => $updated,
             'skipped' => $skipped,
             'failed' => $failed,
+            'disabled' => $disabled,
             'api_latency_ms' => $totalLatency,
             'api_response_status' => $lastHttp,
             'product_count' => $count,
@@ -442,7 +476,91 @@ class SyncVipCatalogAction
         // Invalidate User Dashboard catalog caches immediately after VIP sync.
         \App\Services\ProductProviders\ProductCatalogCache::bump();
 
+        $this->recordSyncRun(
+            $triggeredBy,
+            $failed > 0 ? ProductSyncRun::STATUS_PARTIAL : ProductSyncRun::STATUS_SUCCESS,
+            fetched: count($rows),
+            created: $imported,
+            updated: $updated,
+            deactivated: $disabled,
+            errors: $failed,
+            message: $failed > 0 ? "{$failed} row(s) failed during VIP sync." : null,
+        );
+
         return $result;
+    }
+
+    /**
+     * Phase 15 — dedicated, queryable sync-run history, mirroring the Digiflazz recorder.
+     */
+    protected function recordSyncRun(
+        string $triggeredBy,
+        string $status,
+        int $fetched = 0,
+        int $created = 0,
+        int $updated = 0,
+        int $deactivated = 0,
+        int $errors = 0,
+        ?string $message = null,
+    ): void {
+        ProductSyncRun::create([
+            'provider_code' => ProductProvider::CODE_VIP,
+            'list_type' => null,
+            'triggered_by' => $triggeredBy,
+            'user_id' => \Illuminate\Support\Facades\Auth::id(),
+            'started_at' => $this->runStartedAt,
+            'completed_at' => now(),
+            'status' => $status,
+            'fetched_count' => $fetched,
+            'created_count' => $created,
+            'updated_count' => $updated,
+            'deactivated_count' => $deactivated,
+            'error_count' => $errors,
+            'error_summary' => $message !== null ? mb_substr($message, 0, 2000) : null,
+        ]);
+    }
+
+    /**
+     * Soft-deactivate VIP SKUs missing from a successful sync run. Mirrors
+     * ProviderRepository::deactivateMissingDigiflazzSkus() — never deletes rows so
+     * transaction history stays intact. Only flips a Product's own `status` when VIP
+     * is that product's owning provider (sku_code LIKE 'VIP-%'); a VIP offer attached
+     * onto a Digiflazz-owned master (via findMatchingMasterProduct) only loses its
+     * ProductProviderSku row, since Digiflazz may still be able to sell it.
+     *
+     * @param  list<string>  $seenProviderSkus
+     */
+    protected function deactivateMissingVipSkus(array $seenProviderSkus, ProductProvider $vipProvider): int
+    {
+        $seen = array_values(array_unique(array_map('strval', $seenProviderSkus)));
+
+        $staleSkus = ProductProviderSku::query()
+            ->where('product_provider_id', $vipProvider->id)
+            ->where('is_active', true)
+            ->when($seen !== [], fn ($q) => $q->whereNotIn('provider_sku', $seen))
+            ->pluck('provider_sku')
+            ->all();
+
+        if ($staleSkus === []) {
+            return 0;
+        }
+
+        $disabledCount = ProductProviderSku::where('product_provider_id', $vipProvider->id)
+            ->whereIn('provider_sku', $staleSkus)
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
+
+        Product::where('product_provider_id', $vipProvider->id)
+            ->where('sku_code', 'like', 'VIP-%')
+            ->whereIn('sku_code', array_map(fn ($sku) => 'VIP-' . $sku, $staleSkus))
+            ->update(['status' => false]);
+
+        Log::info('VIP SYNC — retirement pass', [
+            'stale_provider_skus' => count($staleSkus),
+            'sku_offers_disabled' => $disabledCount,
+        ]);
+
+        return (int) $disabledCount;
     }
 
     /**
@@ -637,7 +755,10 @@ class SyncVipCatalogAction
         return $mapped['name'];
     }
 
-    protected function upsertCategory(string $categoryName): ProductCategory
+    /**
+     * @return array{category: ProductCategory, source: string}
+     */
+    protected function upsertCategory(string $categoryName): array
     {
         $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
             'vip',
@@ -658,7 +779,7 @@ class SyncVipCatalogAction
         ]);
         $category->save();
 
-        return $category;
+        return ['category' => $category, 'source' => (string) $mapped['source']];
     }
 
     /**
