@@ -8,7 +8,6 @@ import {
   TrendingUp, 
   DollarSign, 
   AlertCircle, 
-  CheckCircle2, 
   Building2, 
   QrCode, 
   Smartphone, 
@@ -32,6 +31,7 @@ import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import { walletService } from '../../services/wallet/wallet.service';
 import { useCallback } from 'react';
 import { Button } from '../../components/ui/Button';
+import { InlineAlertBanner } from '../../components/notifications/InlineAlertBanner';
 import {
   MIN_TOPUP_AMOUNT,
   TOPUP_QUICK_AMOUNTS,
@@ -460,38 +460,24 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         </button>
       </div>
 
-      {/* Success and Error Banners */}
+      {/* Success and Error Banners — auto-dismiss with pause-on-hover */}
       <AnimatePresence>
         {successMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-emerald-900 text-sm">Aksi Berhasil!</h5>
-              <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
-            </div>
-            <button onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500 hover:text-emerald-800">Tutup</button>
-          </motion.div>
+          <InlineAlertBanner
+            variant="success"
+            title="Aksi Berhasil!"
+            message={successMsg}
+            onDismiss={() => setSuccessMsg(null)}
+          />
         )}
 
         {errorMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-red-900 text-sm">Terjadi Kesalahan</h5>
-              <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
-            </div>
-            <button onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500 hover:text-red-800">Tutup</button>
-          </motion.div>
+          <InlineAlertBanner
+            variant="error"
+            title="Terjadi Kesalahan"
+            message={errorMsg}
+            onDismiss={() => setErrorMsg(null)}
+          />
         )}
       </AnimatePresence>
 

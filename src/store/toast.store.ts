@@ -7,7 +7,7 @@ export interface ToastItem {
   type: ToastType;
   title: string;
   description?: string;
-  /** Total visible duration in ms (default 15000). */
+  /** Total visible duration in ms (default by type: success/info 5s, warning/error 6s). */
   durationMs: number;
   /** Opaque source id (e.g. backend notification id) for dedupe. */
   sourceId?: string;
@@ -28,6 +28,49 @@ interface ToastState {
 }
 
 const SESSION_KEY = 'gurkynet_toast_shown_ids';
+const DEDUPE_WINDOW_MS = 3_000;
+
+/** Recent title+description fingerprints within the dedupe window. */
+const recentFingerprints: { fp: string; at: number }[] = [];
+
+export function defaultToastDurationMs(type: ToastType): number {
+  switch (type) {
+    case 'success':
+    case 'info':
+      return 5_000;
+    case 'warning':
+    case 'error':
+      return 6_000;
+    default:
+      return 5_000;
+  }
+}
+
+export function toastFingerprint(title: string, description?: string): string {
+  return `${title}::${description ?? ''}`;
+}
+
+function pruneRecentFingerprints(now: number) {
+  while (recentFingerprints.length > 0 && now - recentFingerprints[0].at > DEDUPE_WINDOW_MS) {
+    recentFingerprints.shift();
+  }
+}
+
+function isDuplicateToast(fp: string, current: ToastItem | null, queue: ToastItem[]): boolean {
+  const now = Date.now();
+  pruneRecentFingerprints(now);
+
+  if (current && toastFingerprint(current.title, current.description) === fp) {
+    return true;
+  }
+  if (queue.some((item) => toastFingerprint(item.title, item.description) === fp)) {
+    return true;
+  }
+  if (recentFingerprints.some((entry) => entry.fp === fp)) {
+    return true;
+  }
+  return false;
+}
 
 function loadShownIds(): Set<string> {
   try {
@@ -79,16 +122,23 @@ export const useToastStore = create<ToastState>((set, get) => ({
       get().markSourceShown(sourceId);
     }
 
+    const fp = toastFingerprint(input.title, input.description);
+    const { current, queue } = get();
+    if (isDuplicateToast(fp, current, queue)) {
+      return;
+    }
+
     const item: ToastItem = {
       id: input.id || nextId(),
       type: input.type,
       title: input.title,
       description: input.description,
-      durationMs: input.durationMs ?? 15_000,
+      durationMs: input.durationMs ?? defaultToastDurationMs(input.type),
       sourceId,
     };
 
-    const { current, queue } = get();
+    recentFingerprints.push({ fp, at: Date.now() });
+
     if (!current) {
       set({ current: item });
       return;

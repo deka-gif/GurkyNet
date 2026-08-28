@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertTriangle,
@@ -8,38 +7,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useToastStore, type ToastItem, type ToastType } from '../../store/toast.store';
-
-const TICK_MS = 50;
-
-const typeStyles: Record<
-  ToastType,
-  { iconBg: string; iconColor: string; progress: string; border: string }
-> = {
-  success: {
-    iconBg: 'bg-emerald-50',
-    iconColor: 'text-emerald-600',
-    progress: 'bg-emerald-500',
-    border: 'border-emerald-100',
-  },
-  error: {
-    iconBg: 'bg-rose-50',
-    iconColor: 'text-rose-600',
-    progress: 'bg-rose-500',
-    border: 'border-rose-100',
-  },
-  warning: {
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-600',
-    progress: 'bg-amber-500',
-    border: 'border-amber-100',
-  },
-  info: {
-    iconBg: 'bg-sky-50',
-    iconColor: 'text-sky-600',
-    progress: 'bg-sky-500',
-    border: 'border-sky-100',
-  },
-};
+import { AutoDismissProgressBar, toastTypeStyles, useAlertAutoDismiss } from './autoDismissUtils';
 
 function ToastIcon({ type }: { type: ToastType }) {
   const cls = 'w-5 h-5';
@@ -62,51 +30,17 @@ function SingleToast({
   item: ToastItem;
   onRequestDismiss: () => void;
 }) {
-  const [remainingMs, setRemainingMs] = useState(item.durationMs);
-  const pausedRef = useRef(false);
-  const remainingRef = useRef(item.durationMs);
-  const style = typeStyles[item.type];
-
-  useEffect(() => {
-    remainingRef.current = item.durationMs;
-    setRemainingMs(item.durationMs);
-  }, [item.id, item.durationMs]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (pausedRef.current) return;
-      const next = Math.max(0, remainingRef.current - TICK_MS);
-      remainingRef.current = next;
-      setRemainingMs(next);
-      if (next <= 0) {
-        window.clearInterval(timer);
-        onRequestDismiss();
-      }
-    }, TICK_MS);
-
-    return () => window.clearInterval(timer);
-  }, [item.id, onRequestDismiss]);
-
-  const progress = Math.max(0, Math.min(100, (remainingMs / item.durationMs) * 100));
+  const style = toastTypeStyles[item.type];
+  const { progress, pauseHandlers } = useAlertAutoDismiss(item.id, item.durationMs, onRequestDismiss);
 
   return (
     <div
       role="status"
       aria-live="polite"
-      onMouseEnter={() => {
-        pausedRef.current = true;
-      }}
-      onMouseLeave={() => {
-        pausedRef.current = false;
-      }}
+      {...pauseHandlers}
       className={`pointer-events-auto relative w-[min(92vw,380px)] overflow-hidden rounded-2xl border bg-white shadow-[0_12px_40px_-12px_rgba(15,23,42,0.25)] ${style.border}`}
     >
-      <div className="absolute inset-x-0 top-0 h-1 bg-slate-100/80">
-        <div
-          className={`h-full ${style.progress} transition-[width] duration-75 ease-linear`}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      <AutoDismissProgressBar progress={progress} progressClassName={style.progress} />
 
       <div className="flex items-start gap-3 px-4 pb-4 pt-5">
         <div

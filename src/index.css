@@ -143,6 +143,16 @@
     @apply relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 text-white
       shadow-xl shadow-primary-900/20 border border-primary-500/20 p-6 md:p-7;
   }
+  /* Home hero — lighter gradient, tighter padding, reduced glow weight */
+  .dashboard-balance-card-home {
+    @apply px-4 py-3.5 md:px-6 md:py-5 rounded-2xl md:rounded-3xl
+      bg-gradient-to-br from-primary-600/88 via-primary-700/92 to-primary-900/95
+      shadow-lg shadow-primary-900/12 border-primary-500/15;
+  }
+  .dashboard-balance-card-home .brand-glow-accent,
+  .dashboard-balance-card-home .brand-glow-primary {
+    @apply opacity-[0.12] blur-2xl;
+  }
 }
 
 /* Sprint 7.3 — Legal Center prose */

@@ -172,21 +172,22 @@ export const DashboardHomePage = () => {
       )}
 
       {/* Single hero balance card — greeting + saldo + aksi (no duplicate body cards) */}
-      <div className="dashboard-balance-card">
-        <div className="brand-glow-accent -right-16 -top-16 w-56 h-56 opacity-30 pointer-events-none absolute" />
-        <div className="brand-glow-primary -left-12 bottom-0 w-48 h-48 opacity-25 pointer-events-none absolute" />
+      <div className="dashboard-balance-card dashboard-balance-card-home">
+        <div className="brand-glow-accent -right-12 -top-12 w-40 h-40 pointer-events-none absolute" />
+        <div className="brand-glow-primary -left-8 bottom-0 w-36 h-36 pointer-events-none absolute" />
 
-        <div className="relative z-10 flex flex-col gap-5 md:gap-6">
-          <div className="flex items-start justify-between gap-4">
+        <div className="relative z-10 flex flex-col gap-2.5 md:gap-4">
+          {/* Row 1: greeting + compact avatar */}
+          <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-primary-100/95">
+              <p className="text-xs font-medium text-primary-100/90 md:text-sm">
                 {dynamicGreeting} <span aria-hidden="true">👋</span>
               </p>
-              <h1 className="mt-0.5 truncate text-xl font-bold tracking-tight md:text-2xl">
+              <h1 className="mt-0.5 truncate text-base font-bold tracking-tight md:text-xl">
                 {(user?.name || 'Pelanggan GurkyNet').toUpperCase()}
               </h1>
             </div>
-            <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/25 bg-white/15 shadow-inner shrink-0 md:h-14 md:w-14">
+            <div className="h-10 w-10 overflow-hidden rounded-xl border border-white/20 bg-white/10 shadow-inner shrink-0 md:h-11 md:w-11 md:rounded-2xl">
               {user?.avatar ? (
                 <img
                   src={resolveMediaUrl(user.avatar)}
@@ -194,7 +195,7 @@ export const DashboardHomePage = () => {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white md:text-base">
+                <div className="flex h-full w-full items-center justify-center text-xs font-bold text-white md:text-sm">
                   {(user?.name || 'G')
                     .split(' ')
                     .map((n) => n[0])
@@ -206,78 +207,81 @@ export const DashboardHomePage = () => {
             </div>
           </div>
 
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary-200/90">
-                Saldo GurkyNet
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowBalance(!showBalance)}
-                className="rounded-lg p-1 text-primary-200 hover:bg-white/10 transition-colors"
-                title={showBalance ? 'Sembunyikan Saldo' : 'Tampilkan Saldo'}
-                aria-label="Toggle Tampilan Saldo"
-              >
-                {showBalance ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyWalletNo}
-                className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[10px] font-bold text-primary-50 hover:bg-white/15 transition-colors"
-                title="Salin nomor dompet"
-              >
-                <span className="max-w-[8rem] truncate">{wallet?.walletNo || 'GK-XXXXXXXX'}</span>
-                {copiedWalletNo ? <Check className="h-3 w-3 text-accent-400" /> : <Copy className="h-3 w-3" />}
-              </button>
+          {/* Row 2: saldo + CTA side-by-side (all breakpoints) for compact mobile height */}
+          <div className="flex items-end justify-between gap-2 sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary-200/85">
+                  Saldo GurkyNet
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowBalance(!showBalance)}
+                  className="rounded-md p-0.5 text-primary-200 hover:bg-white/10 transition-colors"
+                  title={showBalance ? 'Sembunyikan Saldo' : 'Tampilkan Saldo'}
+                  aria-label="Toggle Tampilan Saldo"
+                >
+                  {showBalance ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyWalletNo}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-bold text-primary-50 hover:bg-white/15 transition-colors"
+                  title="Salin nomor dompet"
+                >
+                  <span className="max-w-[7rem] truncate sm:max-w-[8rem]">{wallet?.walletNo || 'GK-XXXXXXXX'}</span>
+                  {copiedWalletNo ? <Check className="h-2.5 w-2.5 text-accent-400" /> : <Copy className="h-2.5 w-2.5" />}
+                </button>
+              </div>
+
+              {walletLoading && !wallet ? (
+                <div className="h-8 w-40 animate-pulse rounded-lg bg-white/15 md:h-9" />
+              ) : (
+                <div className="flex flex-wrap items-end gap-2">
+                  <h2 className="text-2xl font-black tracking-tight tabular-nums leading-none md:text-3xl">
+                    {showBalance ? formatIDR(wallet?.balance ?? 0) : 'Rp ••••••••'}
+                  </h2>
+                  <div className="flex items-center gap-1 pb-0.5">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary-100/75">
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-accent-400" />
+                      {wallet?.lastUpdated
+                        ? new Date(wallet.lastUpdated).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                        : 'Realtime'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRefreshBalance}
+                      disabled={isRefreshingWallet}
+                      className={`rounded-md p-0.5 text-primary-100 hover:bg-white/10 ${isRefreshingWallet ? 'animate-spin' : ''}`}
+                      title="Perbarui Saldo"
+                      aria-label="Perbarui Saldo"
+                    >
+                      <RotateCw className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {walletLoading && !wallet ? (
-              <div className="h-10 w-48 animate-pulse rounded-xl bg-white/20" />
-            ) : (
-              <div className="flex flex-wrap items-end gap-3">
-                <h2 className="text-3xl font-black tracking-tight tabular-nums md:text-4xl">
-                  {showBalance ? formatIDR(wallet?.balance ?? 0) : 'Rp ••••••••'}
-                </h2>
-                <div className="flex items-center gap-1.5 pb-1">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary-100/80">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-400" />
-                    {wallet?.lastUpdated
-                      ? new Date(wallet.lastUpdated).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                      : 'Realtime'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleRefreshBalance}
-                    disabled={isRefreshingWallet}
-                    className={`rounded-lg p-1 text-primary-100 hover:bg-white/10 ${isRefreshingWallet ? 'animate-spin' : ''}`}
-                    title="Perbarui Saldo"
-                    aria-label="Perbarui Saldo"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2.5 pt-1">
-            <Button
-              type="button"
-              variant="secondary"
-              className="!px-4 !py-2.5 text-xs font-bold"
-              onClick={() => navigate('/dashboard/topup')}
-            >
-              <PlusCircle className="h-4 w-4" />
-              Top Up Saldo
-            </Button>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/riwayat')}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/10 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-sm hover:bg-white/20 transition-all"
-            >
-              <History className="h-4 w-4" />
-              Riwayat
-            </button>
+            <div className="flex flex-col gap-1.5 shrink-0 sm:flex-row sm:gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="!px-3 !py-1.5 text-[10px] font-bold sm:!px-3.5 sm:!py-2 sm:text-[11px] md:!px-4 md:!py-2.5 md:text-xs"
+                onClick={() => navigate('/dashboard/topup')}
+              >
+                <PlusCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
+                Top Up<span className="hidden sm:inline"> Saldo</span>
+              </Button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/riwayat')}
+                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[10px] font-bold text-white backdrop-blur-sm hover:bg-white/15 transition-all sm:px-3.5 sm:py-2 sm:text-[11px] md:px-4 md:py-2.5 md:text-xs"
+              >
+                <History className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
+                Riwayat
+              </button>
+            </div>
           </div>
         </div>
       </div>
