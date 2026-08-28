@@ -136,7 +136,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="inline-flex items-center gap-2 bg-primary-50 text-primary-700 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider mb-4 border border-primary-100"
+            className="section-badge mb-4"
           >
             <Sparkles className="w-3.5 h-3.5 text-primary-600" />
             Layanan Digital Realtime
@@ -145,7 +145,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4 tracking-tight"
+            className="section-title mb-4"
           >
             Katalog Layanan <span className="text-primary-600">Terlengkap</span>
           </motion.h2>
@@ -154,7 +154,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-base md:text-lg text-gray-600 leading-relaxed"
+            className="section-subtitle"
           >
             Apapun kebutuhan transaksi PPOB dan pembayaran digital Anda, semuanya tersedia dengan harga kompetitif dan proses otomatis 24 jam.
           </motion.p>
@@ -210,7 +210,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                   transition={{ duration: 0.4, delay: index * 0.05 }}
                   whileHover={{ y: -4, scale: 1.02 }}
                   onClick={() => handleCategoryClick(cat)}
-                  className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-xl hover:shadow-primary-500/5 transition-all duration-300 group cursor-pointer flex flex-col justify-between"
+                  className="public-card p-6 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between"
                 >
                   <div>
                     <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center text-gray-600 group-hover:text-primary-600 group-hover:bg-primary-50 transition-colors mb-4">

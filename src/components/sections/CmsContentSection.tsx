@@ -29,15 +29,15 @@ export const CmsContentSection: React.FC<Props> = ({ section }) => {
 
   return (
     <CmsSectionShell section={section}>
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-16 md:py-24 public-section-alt">
         <div className="container mx-auto px-4 md:px-8 max-w-7xl">
           <div className="text-center max-w-3xl mx-auto mb-12">
             {section.subtitle && (
-              <p className="text-sm font-bold uppercase tracking-widest text-primary-600 mb-3">{section.subtitle}</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-accent-600 mb-3">{section.subtitle}</p>
             )}
-            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4">{section.title}</h2>
+            <h2 className="section-title mb-4">{section.title}</h2>
             {section.description && (
-              <p className="text-lg text-gray-600 leading-relaxed">{section.description}</p>
+              <p className="section-subtitle">{section.description}</p>
             )}
           </div>
 
@@ -56,8 +56,8 @@ export const CmsContentSection: React.FC<Props> = ({ section }) => {
                   key={`${item.title || 'item'}-${idx}`}
                   className={
                     isPartners
-                      ? 'px-5 py-3 rounded-xl border border-gray-100 bg-gray-50 text-sm font-bold text-gray-700'
-                      : 'rounded-2xl border border-gray-100 bg-gray-50 p-6 text-center md:text-left'
+                      ? 'px-5 py-3 rounded-full border border-primary-100 bg-primary-50/60 text-sm font-bold text-primary-800'
+                      : 'public-card p-6 text-center md:text-left'
                   }
                 >
                   {item.value && (

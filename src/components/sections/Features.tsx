@@ -49,14 +49,17 @@ export const Features = (props: { section?: import('../../types').HomepageSectio
     : features;
 
   return (
-    <section id="features" className="py-20 md:py-32 bg-gray-50">
+    <section id="features" className="py-20 md:py-32 public-section-alt">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="text-center max-w-2xl mx-auto mb-16">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="section-badge mb-4">
+            Keunggulan Platform
+          </motion.div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-bold text-gray-900 mb-4"
+            className="section-title mb-4"
           >
             {featuresSection?.title ? (
               featuresSection.title
@@ -69,7 +72,7 @@ export const Features = (props: { section?: import('../../types').HomepageSectio
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-lg text-gray-600"
+            className="section-subtitle"
           >
             {featuresSection?.description || 'Kami hadir dengan berbagai keunggulan untuk memastikan pengalaman transaksi terbaik untuk Anda.'}
           </motion.p>
@@ -84,9 +87,9 @@ export const Features = (props: { section?: import('../../types').HomepageSectio
               viewport={{ once: true, margin: "-50px" }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
               whileHover={{ y: -5 }}
-              className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl hover:shadow-primary-500/10 border border-gray-100 transition-all duration-300"
+              className="public-card p-8 hover:-translate-y-1"
             >
-              <div className="w-14 h-14 bg-primary-50 rounded-2xl flex items-center justify-center text-primary-600 mb-6">
+              <div className="w-14 h-14 bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl flex items-center justify-center text-primary-700 mb-6 ring-1 ring-primary-100">
                 <feature.icon className="w-7 h-7" />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>

@@ -35,20 +35,25 @@ export const HowItWorks = (_props: { section?: import('../../types').HomepageSec
 
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
         <div className="text-center max-w-2xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-2 text-accent-400 text-xs font-bold uppercase tracking-widest mb-4">
+            <span className="w-8 h-px bg-accent-500/50" />
+            Alur Pengguna
+            <span className="w-8 h-px bg-accent-500/50" />
+          </div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-bold mb-4"
+            className="section-title text-white mb-4"
           >
-            Cara <span className="text-primary-400">Kerja</span>
+            Cara <span className="text-primary-300">Kerja</span>
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-lg text-primary-100"
+            className="section-subtitle text-primary-100/90"
           >
             Mulai bertransaksi dengan 4 langkah mudah.
           </motion.p>

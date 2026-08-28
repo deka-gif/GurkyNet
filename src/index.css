@@ -29,6 +29,94 @@
   }
 }
 
+/* ── Public website & auth visual system ── */
+@layer components {
+  .brand-glow-primary {
+    @apply absolute rounded-full bg-primary-400/25 blur-3xl pointer-events-none;
+  }
+  .brand-glow-accent {
+    @apply absolute rounded-full bg-accent-500/20 blur-3xl pointer-events-none;
+  }
+  .section-badge {
+    @apply inline-flex items-center gap-2 bg-primary-50 text-primary-700 border border-primary-100 px-4 py-1.5 rounded-full text-sm font-semibold;
+  }
+  .section-badge-accent {
+    @apply inline-flex items-center gap-2 bg-accent-300/30 text-primary-800 border border-accent-400/40 px-4 py-1.5 rounded-full text-sm font-semibold;
+  }
+  .section-title {
+    @apply text-3xl md:text-4xl lg:text-[2.75rem] font-extrabold text-gray-900 tracking-tight leading-tight;
+  }
+  .section-subtitle {
+    @apply text-lg text-gray-600 leading-relaxed;
+  }
+  .public-card {
+    @apply bg-white rounded-3xl border border-gray-100/80 shadow-sm hover:shadow-xl hover:shadow-primary-900/5 transition-all duration-300;
+  }
+  .public-section-alt {
+    @apply bg-gradient-to-b from-gray-50 to-white;
+  }
+
+  /* Auth form kit — shared across Login / Register / Forgot Password */
+  .auth-heading {
+    @apply text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight;
+  }
+  .auth-subheading {
+    @apply text-gray-500 text-sm leading-relaxed;
+  }
+  .auth-label {
+    @apply block text-xs font-bold text-gray-700 mb-1.5;
+  }
+  .auth-input {
+    @apply w-full bg-gray-50/80 border border-gray-200 rounded-2xl text-gray-900 text-sm
+      focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 focus:bg-white
+      transition-all disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+  .auth-input-error {
+    @apply border-red-300 bg-red-50/40;
+  }
+  .auth-input-icon-wrap {
+    @apply relative;
+  }
+  .auth-input-icon {
+    @apply absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400;
+  }
+  .auth-alert-error {
+    @apply p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-start gap-3 text-sm;
+  }
+  .auth-alert-success {
+    @apply p-4 bg-primary-50 border border-primary-200 text-primary-900 rounded-2xl flex items-start gap-3 text-sm;
+  }
+  .auth-info-box {
+    @apply rounded-2xl border border-primary-100 bg-primary-50/60 px-4 py-3 text-sm text-primary-900;
+  }
+  .auth-step-track {
+    @apply flex items-center gap-0;
+  }
+  .auth-step-dot {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+      bg-gray-100 text-gray-400 border-2 border-gray-100 transition-all duration-300;
+  }
+  .auth-step-dot-active {
+    @apply bg-gradient-to-br from-primary-600 to-primary-900 text-white border-primary-700 shadow-md shadow-primary-900/25;
+  }
+  .auth-step-dot-done {
+    @apply bg-primary-100 text-primary-700 border-primary-200;
+  }
+  .auth-step-line {
+    @apply flex-1 h-0.5 bg-gray-200 mx-1;
+  }
+  .auth-step-line-active {
+    @apply bg-gradient-to-r from-primary-600 to-primary-400;
+  }
+  .auth-link {
+    @apply font-bold text-primary-600 hover:text-primary-700 hover:underline transition-colors;
+  }
+  .auth-otp-input {
+    @apply w-full rounded-2xl border border-gray-200 px-4 py-3 text-center text-lg font-black tracking-[0.4em]
+      focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white;
+  }
+}
+
 /* Sprint 7.3 — Legal Center prose */
 .legal-prose {
   @apply text-gray-800 text-[15px] md:text-base leading-[1.8];

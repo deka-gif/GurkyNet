@@ -13,23 +13,24 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
   const activeBanners = banners.filter((b) => b.isActive);
 
   const fallbackPreviews = [
-    { title: "Dashboard", color: "bg-blue-50" },
-    { title: "Transaksi", color: "bg-green-50" },
-    { title: "Riwayat", color: "bg-purple-50" },
-    { title: "Profil", color: "bg-orange-50" },
+    { title: "Dashboard", color: "bg-primary-50" },
+    { title: "Transaksi", color: "bg-primary-100/50" },
+    { title: "Riwayat", color: "bg-accent-300/20" },
+    { title: "Profil", color: "bg-primary-50" },
   ];
 
   const getImageUrl = (image: any): string => resolveMediaSrc(image);
 
   return (
-    <section className="py-20 md:py-32 bg-gray-50 overflow-hidden">
+    <section className="py-20 md:py-32 public-section-alt overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="text-center max-w-2xl mx-auto mb-16">
+          <div className="section-badge mb-4">Pratinjau Aplikasi</div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-bold text-gray-900 mb-4"
+            className="section-title mb-4"
           >
             {bannerSection?.title ? (
               bannerSection.title
@@ -42,7 +43,7 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-lg text-gray-600"
+            className="section-subtitle"
           >
             {bannerSection?.description || 'Antarmuka yang bersih, modern, dan dirancang khusus untuk kenyamanan Anda.'}
           </motion.p>

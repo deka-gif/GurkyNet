@@ -28,11 +28,12 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
     <section id="contact" className="py-20 md:py-32 bg-white">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="text-center max-w-2xl mx-auto mb-16">
+          <div className="section-badge mb-4">Hubungi Kami</div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-bold text-gray-900 mb-4"
+            className="section-title mb-4"
           >
             {contactSection?.title ? (
               contactSection.title
@@ -45,7 +46,7 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-lg text-gray-600"
+            className="section-subtitle"
           >
             {contactSection?.description || 'Tim support kami siap membantu Anda menyelesaikan berbagai kendala transaksi.'}
           </motion.p>
@@ -61,8 +62,8 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
             transition={{ duration: 0.6 }}
             className="grid grid-cols-1 sm:grid-cols-2 gap-6"
           >
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center text-green-600 mb-4">
+            <div className="public-card p-6 hover:-translate-y-0.5">
+              <div className="w-12 h-12 bg-primary-100 rounded-2xl flex items-center justify-center text-primary-700 mb-4 ring-1 ring-primary-100">
                 <MessageCircle className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">WhatsApp</h4>
@@ -79,8 +80,8 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
               ) : null}
             </div>
 
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 mb-4">
+            <div className="public-card p-6 hover:-translate-y-0.5">
+              <div className="w-12 h-12 bg-primary-50 rounded-2xl flex items-center justify-center text-primary-600 mb-4 ring-1 ring-primary-100">
                 <Mail className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">Email</h4>
@@ -95,8 +96,8 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
               ) : null}
             </div>
             
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">
-              <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center text-pink-600 mb-4">
+            <div className="public-card p-6 hover:-translate-y-0.5">
+              <div className="w-12 h-12 bg-accent-300/30 rounded-2xl flex items-center justify-center text-primary-800 mb-4 ring-1 ring-accent-400/30">
                 <Instagram className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">Sosial Media</h4>
@@ -114,8 +115,8 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
               ) : null}
             </div>
 
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 hover:border-primary-200 hover:bg-white hover:shadow-lg hover:shadow-primary-500/5 transition-all duration-300">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 mb-4">
+            <div className="public-card p-6 hover:-translate-y-0.5">
+              <div className="w-12 h-12 bg-primary-100 rounded-2xl flex items-center justify-center text-primary-800 mb-4 ring-1 ring-primary-200">
                 <Clock className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-900 mb-1">Jam Operasional</h4>
@@ -129,11 +130,10 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="bg-primary-900 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden flex flex-col justify-center"
+            className="bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden flex flex-col justify-center ring-1 ring-white/10"
           >
-            {/* Decors */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary-600/30 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-accent-500/20 rounded-full blur-3xl"></div>
+            <div className="brand-glow-primary top-0 right-0 w-64 h-64 opacity-40" />
+            <div className="brand-glow-accent bottom-0 left-0 w-64 h-64 opacity-30" />
             
             <div className="relative z-10">
               <h3 className="text-2xl md:text-3xl font-bold mb-4">Kantor Pusat</h3>

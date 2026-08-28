@@ -30,15 +30,15 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex items-center gap-2 bg-yellow-100 text-yellow-700 px-4 py-1.5 rounded-full text-sm font-semibold mb-6">
+            <div className="section-badge-accent mb-6">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-500"></span>
               </span>
               Belum tersedia di Google Play Store
             </div>
 
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+            <h2 className="section-title mb-6">
               {bannerSection?.title ? (
                 bannerSection.title
               ) : (

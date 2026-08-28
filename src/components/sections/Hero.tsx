@@ -22,18 +22,17 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
   const isHash = ctaTarget.startsWith('#');
 
   return (
-    <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-gray-50 min-h-screen flex items-center">
+    <section className="relative pt-28 pb-20 md:pt-44 md:pb-32 overflow-hidden min-h-screen flex items-center bg-gradient-to-b from-primary-50/50 via-white to-gray-50">
       {desktopBg && (
         <picture className="absolute inset-0 z-0">
           {mobileBg ? <source media="(max-width: 767px)" srcSet={mobileBg} /> : null}
           <img src={desktopBg} alt={heroSection?.title || settings?.websiteName || 'GurkyNet'} className="w-full h-full object-cover" />
         </picture>
       )}
-      <div className="absolute inset-0 bg-white/78 z-0" />
-      {/* Background Decorations */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-accent-500/20 rounded-full blur-3xl" />
+      <div className="absolute inset-0 bg-white/82 z-0" />
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+        <div className="brand-glow-primary top-[-10%] left-[-10%] w-[40%] h-[40%]" />
+        <div className="brand-glow-accent bottom-[-10%] right-[-10%] w-[50%] h-[50%]" />
       </div>
 
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
@@ -50,12 +49,13 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2, duration: 0.5 }}
-              className="inline-block bg-primary-100 text-primary-700 px-4 py-1.5 rounded-full text-sm font-semibold mb-6"
+              className="section-badge-accent mb-6"
             >
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse" />
               {heroSection?.subtitle || heroSection?.description || 'Beta Version 1.0 Tersedia'}
             </motion.div>
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
+            <h1 className="text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold text-gray-900 leading-[1.1] mb-6 tracking-tight">
               {heroSection?.title ? (
                 heroSection.title
               ) : (
@@ -106,19 +106,15 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
               </a>
             </div>
 
-            <div className="mt-10 flex items-center justify-center lg:justify-start gap-6 text-gray-500 text-sm font-medium">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+            <div className="mt-10 flex flex-wrap items-center justify-center lg:justify-start gap-4 sm:gap-6 text-gray-600 text-sm font-semibold">
+              {['Transaksi Cepat', 'Keamanan Terjamin'].map((label) => (
+                <div key={label} className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-primary-100 shadow-sm">
+                  <div className="w-5 h-5 rounded-full bg-primary-100 flex items-center justify-center text-primary-700">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  {label}
                 </div>
-                Transaksi Cepat
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                </div>
-                Keamanan Terjamin
-              </div>
+              ))}
             </div>
           </motion.div>
 
@@ -191,9 +187,9 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
             <motion.div
               animate={{ y: [0, -10, 0] }}
               transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-              className="absolute -right-8 top-1/4 bg-white p-4 rounded-2xl shadow-xl border border-gray-100 items-center gap-4 hidden md:flex z-20"
+              className="absolute -right-4 md:-right-8 top-1/4 bg-white p-4 rounded-2xl shadow-xl shadow-primary-900/10 border border-primary-100 items-center gap-4 hidden md:flex z-20"
             >
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-xl font-bold">✓</div>
+              <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-xl font-bold">✓</div>
               <div>
                 <div className="text-sm font-bold text-gray-900">Top Up Berhasil</div>
                 <div className="text-xs text-gray-500">Rp 500.000</div>
@@ -203,9 +199,9 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
             <motion.div
               animate={{ y: [0, 10, 0] }}
               transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut", delay: 1 }}
-              className="absolute -left-12 bottom-1/4 bg-white p-4 rounded-2xl shadow-xl border border-gray-100 items-center gap-4 hidden md:flex z-20"
+              className="absolute -left-4 md:-left-12 bottom-1/4 bg-white p-4 rounded-2xl shadow-xl shadow-primary-900/10 border border-primary-100 items-center gap-4 hidden md:flex z-20"
             >
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xl font-bold">⚡</div>
+              <div className="w-12 h-12 bg-accent-300/40 rounded-full flex items-center justify-center text-primary-800 text-xl font-bold">⚡</div>
               <div>
                 <div className="text-sm font-bold text-gray-900">Token PLN Aktif</div>
                 <div className="text-xs text-gray-500">20 Menit lalu</div>

@@ -128,34 +128,43 @@ export const ForgotPasswordPage: React.FC = () => {
         <Link to="/login" className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline mb-3 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Kembali ke Halaman Login
         </Link>
-        <h3 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">{step === 1 ? 'Lupa Password' : 'Buat Password Baru'}</h3>
-        <p className="text-gray-500 text-sm">{step === 1 ? 'Masukkan email terdaftar untuk menerima OTP pemulihan.' : `Masukkan kode OTP yang dikirim ke ${email}.`}</p>
+        <h3 className="auth-heading mb-2">{step === 1 ? 'Lupa Password' : 'Buat Password Baru'}</h3>
+        <p className="auth-subheading">{step === 1 ? 'Masukkan email terdaftar untuk menerima OTP pemulihan.' : `Masukkan kode OTP yang dikirim ke ${email}.`}</p>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className={`flex-1 h-1.5 rounded-full ${step >= 1 ? 'bg-primary-600' : 'bg-gray-200'}`} />
-        <div className={`flex-1 h-1.5 rounded-full ${step >= 2 ? 'bg-primary-600' : 'bg-gray-200'}`} />
+      <div className="flex items-center gap-3">
+        <div className={`auth-step-dot ${step >= 1 ? 'auth-step-dot-active' : ''}`}>1</div>
+        <div className={`auth-step-line flex-1 ${step >= 2 ? 'auth-step-line-active' : ''}`} />
+        <div className={`auth-step-dot ${step >= 2 ? 'auth-step-dot-active' : ''}`}>2</div>
       </div>
 
       {sandboxOtpCode && step === 2 && (
-        <div className="p-3.5 bg-blue-50 border border-blue-200 text-blue-900 rounded-2xl flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
-            <span><strong>Reviewer Sandbox OTP:</strong> <span className="font-mono font-bold tracking-widest text-primary-700 bg-white px-2 py-0.5 rounded border border-blue-200">{sandboxOtpCode}</span></span>
-          </div>
+        <div className="p-3.5 bg-accent-300/20 border border-accent-400/40 text-primary-900 rounded-2xl flex items-center gap-2 text-xs">
+          <Sparkles className="w-4 h-4 text-accent-600 shrink-0" />
+          <span><strong>Reviewer Sandbox OTP:</strong> <span className="font-mono font-bold tracking-widest text-primary-800 bg-white/80 px-2 py-0.5 rounded border border-accent-400/30">{sandboxOtpCode}</span></span>
         </div>
       )}
 
-      {errorMsg && <div role="alert" className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-start gap-3 text-sm"><AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" /><span className="font-medium">{errorMsg}</span></div>}
-      {successMsg && <div role="status" className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-start gap-3 text-sm"><CheckCircle className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" /><span className="font-medium">{successMsg}</span></div>}
+      {errorMsg && (
+        <div role="alert" className="auth-alert-error">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+          <span className="font-medium">{errorMsg}</span>
+        </div>
+      )}
+      {successMsg && (
+        <div role="status" className="auth-alert-success">
+          <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
+          <span className="font-medium">{successMsg}</span>
+        </div>
+      )}
 
       {step === 1 && (
         <form onSubmit={handleSubmitStep1(onStep1Submit)} className="space-y-4" noValidate>
           <div>
-            <label htmlFor="fp-email" className="block text-xs font-bold text-gray-700 mb-1.5">Email Terdaftar</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Mail className="w-5 h-5" /></div>
-              <input id="fp-email" type="email" autoComplete="email" autoFocus placeholder="Contoh: user@gurkynet.com" {...registerStep1('email')} disabled={isLoading} className={`w-full pl-10 pr-4 py-3 bg-gray-50/70 border rounded-2xl text-sm ${errorsStep1.email ? 'border-red-300' : 'border-gray-200'}`} />
+            <label htmlFor="fp-email" className="auth-label">Email Terdaftar</label>
+            <div className="auth-input-icon-wrap">
+              <div className="auth-input-icon"><Mail className="w-5 h-5" /></div>
+              <input id="fp-email" type="email" autoComplete="email" autoFocus placeholder="Contoh: user@gurkynet.com" {...registerStep1('email')} disabled={isLoading} className={`auth-input pl-10 py-3 ${errorsStep1.email ? 'auth-input-error' : ''}`} />
             </div>
             {errorsStep1.email && <p className="mt-1.5 text-xs font-semibold text-red-600">{errorsStep1.email.message}</p>}
           </div>
@@ -169,32 +178,32 @@ export const ForgotPasswordPage: React.FC = () => {
         <form onSubmit={handleSubmitStep2(onStep2Submit)} className="space-y-4" noValidate>
           <div>
             <div className="flex justify-between items-center mb-1.5">
-              <label htmlFor="fp-otp" className="block text-xs font-bold text-gray-700">Kode OTP</label>
+              <label htmlFor="fp-otp" className="auth-label mb-0">Kode OTP</label>
               <button type="button" onClick={() => { setStep(1); setSandboxOtpCode(null); setErrorMsg(null); setSuccessMsg(null); }} className="text-xs font-semibold text-gray-500 hover:text-primary-600 hover:underline">Ganti Email</button>
             </div>
-            <input id="fp-otp" inputMode="numeric" maxLength={6} placeholder="6 digit OTP" {...registerStep2('otpCode')} disabled={isLoading} className={`w-full rounded-2xl border px-4 py-3 text-center text-lg font-black tracking-[0.35em] ${errorsStep2.otpCode ? 'border-red-300' : 'border-gray-200'}`} />
+            <input id="fp-otp" inputMode="numeric" maxLength={6} placeholder="6 digit OTP" {...registerStep2('otpCode')} disabled={isLoading} className={`auth-otp-input ${errorsStep2.otpCode ? 'auth-input-error' : ''}`} />
             {errorsStep2.otpCode && <p className="mt-1.5 text-xs font-semibold text-red-600">{errorsStep2.otpCode.message}</p>}
           </div>
           <div>
-            <label htmlFor="fp-password" className="block text-xs font-bold text-gray-700 mb-1.5">Password Baru</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Lock className="w-5 h-5" /></div>
-              <input id="fp-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" {...registerStep2('password')} disabled={isLoading} className={`w-full pl-10 pr-10 py-3 bg-gray-50/70 border rounded-2xl text-sm ${errorsStep2.password ? 'border-red-300' : 'border-gray-200'}`} />
+            <label htmlFor="fp-password" className="auth-label">Password Baru</label>
+            <div className="auth-input-icon-wrap">
+              <div className="auth-input-icon"><Lock className="w-5 h-5" /></div>
+              <input id="fp-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" {...registerStep2('password')} disabled={isLoading} className={`auth-input pl-10 pr-10 py-3 ${errorsStep2.password ? 'auth-input-error' : ''}`} />
               <button type="button" tabIndex={-1} onClick={() => setShowPassword((prev) => !prev)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
             </div>
             {errorsStep2.password && <p className="mt-1.5 text-xs font-semibold text-red-600">{errorsStep2.password.message}</p>}
           </div>
           <div>
-            <label htmlFor="fp-confirm-password" className="block text-xs font-bold text-gray-700 mb-1.5">Konfirmasi Password Baru</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400"><Lock className="w-5 h-5" /></div>
-              <input id="fp-confirm-password" type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" {...registerStep2('passwordConfirmation')} disabled={isLoading} className={`w-full pl-10 pr-10 py-3 bg-gray-50/70 border rounded-2xl text-sm ${errorsStep2.passwordConfirmation ? 'border-red-300' : 'border-gray-200'}`} />
+            <label htmlFor="fp-confirm-password" className="auth-label">Konfirmasi Password Baru</label>
+            <div className="auth-input-icon-wrap">
+              <div className="auth-input-icon"><Lock className="w-5 h-5" /></div>
+              <input id="fp-confirm-password" type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" {...registerStep2('passwordConfirmation')} disabled={isLoading} className={`auth-input pl-10 pr-10 py-3 ${errorsStep2.passwordConfirmation ? 'auth-input-error' : ''}`} />
               <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400">{showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
             </div>
             {errorsStep2.passwordConfirmation && <p className="mt-1.5 text-xs font-semibold text-red-600">{errorsStep2.passwordConfirmation.message}</p>}
           </div>
           <div className="flex items-center justify-between">
-            <button type="button" onClick={handleResendOtp} disabled={countdown > 0 || isLoading} className="text-xs font-semibold text-primary-600 disabled:text-gray-400">{countdown > 0 ? `Kirim ulang dalam ${countdown}s` : 'Kirim ulang OTP'}</button>
+            <button type="button" onClick={handleResendOtp} disabled={countdown > 0 || isLoading} className="text-xs font-semibold text-primary-600 disabled:text-gray-400 hover:underline">{countdown > 0 ? `Kirim ulang dalam ${countdown}s` : 'Kirim ulang OTP'}</button>
           </div>
           <Button type="submit" variant="primary" disabled={isLoading} className="w-full">{isLoading ? 'Menyimpan password...' : 'Simpan Password Baru'}</Button>
         </form>

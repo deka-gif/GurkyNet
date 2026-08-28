@@ -15,14 +15,14 @@ export const FeaturedProducts = (_props: { section?: import('../../types').Homep
     <section id="featured-products" className="py-20 md:py-28 bg-white">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="text-center max-w-2xl mx-auto mb-14">
-          <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-700 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider mb-4 border border-amber-100">
-            <Star className="w-3.5 h-3.5" />
+          <div className="section-badge-accent mb-4">
+            <Star className="w-3.5 h-3.5 text-accent-600" />
             Produk Unggulan
           </div>
-          <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">
+          <h2 className="section-title mb-4">
             Pilihan Terbaik dari <span className="text-primary-600">Marketing</span>
           </h2>
-          <p className="text-base md:text-lg text-gray-600 leading-relaxed">
+          <p className="section-subtitle">
             Produk yang paling sering dipilih pelanggan dan diprioritaskan untuk tampil di homepage.
           </p>
         </div>

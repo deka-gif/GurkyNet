@@ -48,11 +48,12 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
     <section id="faq" className="py-20 md:py-32 bg-gray-50">
       <div className="container mx-auto px-4 md:px-8 max-w-3xl">
         <div className="text-center mb-16">
+          <div className="section-badge mb-4">FAQ</div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-bold text-gray-900 mb-4"
+            className="section-title mb-4"
           >
             Pertanyaan yang Sering <span className="text-primary-600">Diajukan</span>
           </motion.h2>
@@ -61,7 +62,7 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-lg text-gray-600"
+            className="section-subtitle"
           >
             Temukan jawaban atas pertanyaan umum seputar layanan GurkyNet.
           </motion.p>
@@ -78,9 +79,7 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.4, delay: index * 0.05 }}
-                className={`bg-white rounded-2xl border transition-colors duration-300 overflow-hidden ${
-                  isOpen ? 'border-primary-200 shadow-md shadow-primary-500/5' : 'border-gray-100 hover:border-gray-200 shadow-sm'
-                }`}
+                className={`public-card overflow-hidden ${isOpen ? 'ring-1 ring-primary-200 shadow-md shadow-primary-900/5' : ''}`}
               >
                 <button
                   onClick={() => setOpenIndex(isOpen ? null : index)}

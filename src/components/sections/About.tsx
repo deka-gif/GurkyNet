@@ -7,8 +7,9 @@ export const About = (_props: { section?: import('../../types').HomepageSection 
   const aboutSection = _props.section || sections.find((s) => s.componentType === 'news');
 
   return (
-    <section id="about" className="py-20 md:py-32 bg-white">
-      <div className="container mx-auto px-4 md:px-8 max-w-7xl">
+    <section id="about" className="py-20 md:py-32 bg-white relative overflow-hidden">
+      <div className="brand-glow-accent top-0 right-0 w-72 h-72 opacity-20 pointer-events-none absolute" />
+      <div className="container mx-auto px-4 md:px-8 max-w-7xl relative">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           
           {/* Content */}
@@ -18,14 +19,15 @@ export const About = (_props: { section?: import('../../types').HomepageSection 
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+            <div className="section-badge mb-4">Tentang Kami</div>
+            <h2 className="section-title mb-6">
               {aboutSection?.title ? (
                 aboutSection.title
               ) : (
                 <>Tentang <span className="text-primary-600">{settings?.websiteName || 'GurkyNet'}</span></>
               )}
             </h2>
-            <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+            <p className="section-subtitle mb-8">
               {aboutSection?.description || (
                 `${settings?.websiteName || 'GurkyNet'} adalah platform PPOB modern yang dirancang untuk memberikan pengalaman transaksi digital yang cepat, aman, dan mudah. Melalui satu akun, pengguna dapat mengakses berbagai layanan pembayaran dan pembelian digital dengan antarmuka yang sederhana namun profesional.`
               )}
@@ -33,7 +35,7 @@ export const About = (_props: { section?: import('../../types').HomepageSection 
             
             <div className="flex flex-col gap-6">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center text-primary-600 shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-primary-50 ring-1 ring-primary-100 flex items-center justify-center text-primary-700 shrink-0">
                   <Shield className="w-6 h-6" />
                 </div>
                 <div>
@@ -42,7 +44,7 @@ export const About = (_props: { section?: import('../../types').HomepageSection 
                 </div>
               </div>
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center text-primary-600 shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-primary-50 ring-1 ring-primary-100 flex items-center justify-center text-primary-700 shrink-0">
                   <Smartphone className="w-6 h-6" />
                 </div>
                 <div>

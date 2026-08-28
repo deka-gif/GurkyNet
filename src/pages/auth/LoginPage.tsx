@@ -35,21 +35,13 @@ export const LoginPage: React.FC = () => {
     formState: { errors },
   } = useForm<LoginFields>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      identity: '',
-      password: '',
-    },
+    defaultValues: { identity: '', password: '' },
   });
 
   useEffect(() => {
     const remembered = storageService.getRememberedIdentity();
-    if (remembered) {
-      setValue('identity', remembered);
-    }
-
-    if (location.state?.message) {
-      setSuccessMsg(location.state.message);
-    }
+    if (remembered) setValue('identity', remembered);
+    if (location.state?.message) setSuccessMsg(location.state.message);
   }, [setValue, location.state]);
 
   const finishLogin = async () => {
@@ -58,19 +50,15 @@ export const LoginPage: React.FC = () => {
     const currentUser = useAuthStore.getState().user;
     const role = currentUser?.role || 'User';
     const targetPath = getRedirectPathForRole(role) || '/dashboard';
-    setTimeout(() => {
-      navigate(targetPath, { replace: true });
-    }, 400);
+    setTimeout(() => navigate(targetPath, { replace: true }), 400);
   };
 
   const onSubmit = async (data: LoginFields) => {
     setIsLoading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
-
     try {
       const result = await login(data, rememberMe);
-
       if (result === 'ok') {
         await finishLogin();
       } else if (result === '2fa') {
@@ -82,7 +70,6 @@ export const LoginPage: React.FC = () => {
       } else {
         const storeError = useAuthStore.getState().error;
         const validationErrs = useAuthStore.getState().validationErrors;
-
         if (validationErrs?.credentials?.[0]) {
           setErrorMsg(validationErrs.credentials[0]);
         } else {
@@ -118,58 +105,47 @@ export const LoginPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h3 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
-            Verifikasi 2FA
-          </h3>
-          <p className="text-gray-500 text-sm">
-            Masukkan kode OTP yang dikirim ke email staf Finance/Owner.
-          </p>
+          <h3 className="auth-heading mb-2">Verifikasi 2FA</h3>
+          <p className="auth-subheading">Masukkan kode OTP yang dikirim ke email staf Finance/Owner.</p>
         </div>
 
         {errorMsg && (
-          <div role="alert" className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-start gap-3 text-sm">
+          <div role="alert" className="auth-alert-error">
             <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
             <span className="font-medium">{errorMsg}</span>
           </div>
         )}
         {successMsg && (
-          <div role="status" className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-start gap-3 text-sm">
-            <CheckCircle className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+          <div role="status" className="auth-alert-success">
+            <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
             <span className="font-medium">{successMsg}</span>
           </div>
         )}
 
         <form onSubmit={onVerify2fa} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Kode OTP 6 digit</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <Shield className="w-5 h-5" />
-              </div>
+            <label className="auth-label">Kode OTP 6 digit</label>
+            <div className="auth-input-icon-wrap">
+              <div className="auth-input-icon"><Shield className="w-5 h-5" /></div>
               <input
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 inputMode="numeric"
                 autoFocus
                 maxLength={6}
-                className="w-full pl-10 pr-4 py-3 bg-gray-50/70 border border-gray-200 rounded-2xl text-gray-900 text-sm tracking-widest"
+                className="auth-input pl-10 tracking-widest text-center"
                 placeholder="••••••"
                 disabled={isLoading}
               />
             </div>
           </div>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={isLoading || otpCode.length !== 6}
-            className="w-full disabled:opacity-60"
-          >
+          <Button type="submit" variant="primary" disabled={isLoading || otpCode.length !== 6} className="w-full disabled:opacity-60">
             {isLoading ? 'Memverifikasi…' : 'Verifikasi & Masuk'}
             <ArrowRight className="w-4 h-4" />
           </Button>
           <button
             type="button"
-            className="w-full text-xs font-bold text-gray-500"
+            className="w-full text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
             onClick={() => {
               clearTwoFactorChallenge();
               setOtpCode('');
@@ -187,43 +163,31 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
-          Masuk ke Akun
-        </h3>
-        <p className="text-gray-500 text-sm">
-          Akses transaksi PPOB dan manajemen akun GurkyNet Anda.
-        </p>
+        <h3 className="auth-heading mb-2">Masuk ke Akun</h3>
+        <p className="auth-subheading">Akses transaksi PPOB dan manajemen akun GurkyNet Anda.</p>
       </div>
 
       {errorMsg && (
-        <div
-          role="alert"
-          className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-start gap-3 text-sm animate-shake"
-        >
+        <div role="alert" className="auth-alert-error">
           <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
           <span className="font-medium">{errorMsg}</span>
         </div>
       )}
 
       {successMsg && (
-        <div
-          role="status"
-          className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-start gap-3 text-sm"
-        >
-          <CheckCircle className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+        <div role="status" className="auth-alert-success">
+          <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
           <span className="font-medium">{successMsg}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div>
-          <label htmlFor="login-identity" className="block text-xs font-bold text-gray-700 mb-1.5">
+          <label htmlFor="login-identity" className="auth-label">
             Email atau Nomor Handphone <span className="text-red-500">*</span>
           </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-              <Mail className="w-5 h-5" />
-            </div>
+          <div className="auth-input-icon-wrap">
+            <div className="auth-input-icon"><Mail className="w-5 h-5" /></div>
             <input
               id="login-identity"
               type="text"
@@ -232,9 +196,7 @@ export const LoginPage: React.FC = () => {
               placeholder="contoh: user@gurkynet.my.id atau 08123456789"
               {...register('identity')}
               disabled={isLoading}
-              className={`w-full pl-10 pr-4 py-3 bg-gray-50/70 border rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 focus:bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
-                errors.identity ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
-              }`}
+              className={`auth-input pl-10 pr-4 py-3 ${errors.identity ? 'auth-input-error' : ''}`}
             />
           </div>
           {errors.identity && (
@@ -246,13 +208,11 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <div>
-          <label htmlFor="login-password" className="block text-xs font-bold text-gray-700 mb-1.5">
+          <label htmlFor="login-password" className="auth-label">
             Kata Sandi <span className="text-red-500">*</span>
           </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-              <Lock className="w-5 h-5" />
-            </div>
+          <div className="auth-input-icon-wrap">
+            <div className="auth-input-icon"><Lock className="w-5 h-5" /></div>
             <input
               id="login-password"
               type={showPassword ? 'text' : 'password'}
@@ -260,13 +220,11 @@ export const LoginPage: React.FC = () => {
               placeholder="••••••••"
               {...register('password')}
               disabled={isLoading}
-              className={`w-full pl-10 pr-12 py-3 bg-gray-50/70 border rounded-2xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 focus:bg-white transition-all disabled:opacity-60 ${
-                errors.password ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
-              }`}
+              className={`auth-input pl-10 pr-12 py-3 ${errors.password ? 'auth-input-error' : ''}`}
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400"
+              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600"
               onClick={() => setShowPassword((v) => !v)}
               tabIndex={-1}
             >
@@ -282,36 +240,29 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <div className="flex items-center justify-between text-sm">
-          <label className="flex items-center gap-2 text-gray-600">
+          <label className="flex items-center gap-2 text-gray-600 cursor-pointer">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-gray-300"
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             Ingat saya
           </label>
-          <Link to="/forgot-password" className="font-bold text-primary-600 hover:underline">
+          <Link to="/forgot-password" className="auth-link text-sm">
             Lupa kata sandi?
           </Link>
         </div>
 
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={isLoading}
-          className="w-full disabled:opacity-60"
-        >
+        <Button type="submit" variant="primary" disabled={isLoading} className="w-full disabled:opacity-60">
           {isLoading ? 'Memproses…' : 'Masuk'}
           <ArrowRight className="w-4 h-4" />
         </Button>
       </form>
 
-      <p className="text-center text-sm text-gray-500">
+      <p className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100">
         Belum punya akun?{' '}
-        <Link to="/register" className="font-bold text-primary-600 hover:underline">
-          Daftar
-        </Link>
+        <Link to="/register" className="auth-link">Daftar</Link>
       </p>
     </div>
   );
