@@ -31,6 +31,7 @@ import { RefreshPolicy } from '../../lib/refreshPolicy';
 import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import { walletService } from '../../services/wallet/wallet.service';
 import { useCallback } from 'react';
+import { Button } from '../../components/ui/Button';
 import {
   MIN_TOPUP_AMOUNT,
   TOPUP_QUICK_AMOUNTS,
@@ -494,99 +495,92 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         )}
       </AnimatePresence>
 
-      {/* Main Grid containing Wallet Card & Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left Side: Wallet details & quick menu tabs */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Active Balance Card */}
-          <div className="bg-gradient-to-br from-primary-600 to-indigo-800 rounded-3xl p-6 text-white shadow-xl shadow-primary-500/10 border border-primary-500/20 relative overflow-hidden">
-            <div className="absolute -right-8 -bottom-8 w-44 h-44 rounded-full bg-white/5 blur-xl pointer-events-none" />
-            <div className="absolute right-6 top-6 opacity-15">
-              <Wallet className="w-20 h-20" />
-            </div>
+      {/* Active Balance Card */}
+      <div className="dashboard-balance-card">
+        <div className="brand-glow-accent -right-8 -bottom-8 w-44 h-44 opacity-30 pointer-events-none absolute" />
+        <div className="absolute right-6 top-6 opacity-15">
+          <Wallet className="w-20 h-20" />
+        </div>
 
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold text-primary-200 tracking-wide uppercase">Saldo Aktif GurkyPay</p>
-                <h3 className="text-3xl font-black tracking-tight mt-1.5">
-                  {wallet ? formatIDR(wallet.balance) : 'Rp 0'}
-                </h3>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-white/10 flex justify-between text-xs text-primary-100 font-bold">
-              <div>
-                <p className="text-[10px] text-primary-300 uppercase">Nomor Wallet ID</p>
-                <p className="mt-0.5 tracking-wider">{wallet?.walletNo || 'GK-XXXXXXXX'}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-primary-300 uppercase">Poin Reward</p>
-                <p className="mt-0.5 flex items-center gap-1 justify-end text-yellow-300">
-                  <Coins className="w-3.5 h-3.5" />
-                  <span>{wallet?.points || 0} Poin</span>
-                </p>
-              </div>
-            </div>
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold text-primary-200 tracking-wide uppercase">Saldo Aktif GurkyPay</p>
+            <h3 className="text-3xl md:text-4xl font-black tracking-tight mt-1.5 tabular-nums">
+              {wallet ? formatIDR(wallet.balance) : 'Rp 0'}
+            </h3>
           </div>
-
-          {/* Quick Tabs Container */}
-          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-1">
-            <h5 className="font-extrabold text-gray-900 text-xs px-3 mb-3 tracking-wider uppercase text-gray-400">Pilih Layanan</h5>
-            
-            <button 
-              onClick={() => setActiveTab('index')}
-              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${activeTab === 'index' ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-              <Wallet className="w-5 h-5 shrink-0" />
-              <span>Beranda Wallet</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('topup')}
-              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${activeTab === 'topup' ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-              <ArrowDownLeft className="w-5 h-5 text-emerald-500 shrink-0" />
-              <span>Isi Saldo / Top Up</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('transfer')}
-              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${activeTab === 'transfer' ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-              <ArrowUpRight className="w-5 h-5 text-indigo-500 shrink-0" />
-              <span>Kirim Uang / Transfer</span>
-            </button>
-
-            <button 
-              onClick={() => withdrawEnabled && setActiveTab('withdraw')}
-              disabled={!withdrawEnabled}
-              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${
-                !withdrawEnabled
-                  ? 'text-gray-400 bg-gray-50 cursor-not-allowed'
-                  : activeTab === 'withdraw'
-                    ? 'bg-primary-50 text-primary-600'
-                    : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <CreditCard className="w-5 h-5 text-amber-500 shrink-0" />
-              <span>{withdrawEnabled ? 'Tarik Tunai / Withdraw' : 'Withdraw (Segera Hadir)'}</span>
-            </button>
-          </div>
-
-          {/* Secure Badging */}
-          <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200/60 flex items-center gap-3">
-            <ShieldCheck className="w-8 h-8 text-primary-600 shrink-0" />
+          <div className="flex gap-6 text-xs text-primary-100 font-bold">
             <div>
-              <h6 className="font-extrabold text-gray-900 text-xs">GurkyPay Secure Protection</h6>
-              <p className="text-[10px] text-gray-500">Seluruh lalu lintas transaksi dikawal enkripsi SSL 256-bit berstandar Bank Indonesia.</p>
+              <p className="text-[10px] text-primary-300 uppercase">Nomor Wallet ID</p>
+              <p className="mt-0.5 tracking-wider">{wallet?.walletNo || 'GK-XXXXXXXX'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-primary-300 uppercase">Poin Reward</p>
+              <p className="mt-0.5 flex items-center gap-1 justify-end text-accent-300">
+                <Coins className="w-3.5 h-3.5" />
+                <span>{wallet?.points || 0} Poin</span>
+              </p>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Right Side: Active Workspace Action Form */}
-        <div className="lg:col-span-8">
-          <AnimatePresence mode="wait">
+      {/* Segmented tabs — horizontal, distinct from sidebar nav */}
+      <div className="dashboard-segment-tabs" role="tablist" aria-label="Layanan dompet">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'index'}
+          onClick={() => setActiveTab('index')}
+          className={`dashboard-segment-tab ${activeTab === 'index' ? 'dashboard-segment-tab-active' : ''}`}
+        >
+          <Wallet className="w-4 h-4 shrink-0" />
+          <span>Ringkasan</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'topup'}
+          onClick={() => setActiveTab('topup')}
+          className={`dashboard-segment-tab ${activeTab === 'topup' ? 'dashboard-segment-tab-active' : ''}`}
+        >
+          <ArrowDownLeft className="w-4 h-4 shrink-0" />
+          <span>Isi Saldo</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'transfer'}
+          onClick={() => setActiveTab('transfer')}
+          className={`dashboard-segment-tab ${activeTab === 'transfer' ? 'dashboard-segment-tab-active' : ''}`}
+        >
+          <ArrowUpRight className="w-4 h-4 shrink-0" />
+          <span>Transfer</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'withdraw'}
+          onClick={() => withdrawEnabled && setActiveTab('withdraw')}
+          disabled={!withdrawEnabled}
+          className={`dashboard-segment-tab ${activeTab === 'withdraw' ? 'dashboard-segment-tab-active' : ''}`}
+        >
+          <CreditCard className="w-4 h-4 shrink-0" />
+          <span>{withdrawEnabled ? 'Tarik Dana' : 'Withdraw'}</span>
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 rounded-2xl border border-primary-100 bg-primary-50/40 px-4 py-3">
+        <ShieldCheck className="w-7 h-7 text-primary-600 shrink-0" />
+        <p className="text-[11px] text-gray-600 leading-snug">
+          <span className="font-extrabold text-gray-900">GurkyPay Secure Protection</span>
+          {' — '}
+          Seluruh lalu lintas transaksi dikawal enkripsi SSL 256-bit berstandar Bank Indonesia.
+        </p>
+      </div>
+
+      {/* Tab workspace — full width */}
+      <AnimatePresence mode="wait">
             
             {/* TABS 1: Beranda Wallet Index */}
             {activeTab === 'index' && (
@@ -595,26 +589,40 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                 initial={{ opacity: 0, x: 15 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -15 }}
-                className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6"
+                className="dashboard-panel space-y-6"
               >
                 <div>
                   <h4 className="font-extrabold text-gray-900 text-lg">Informasi & Aktivitas</h4>
-                  <p className="text-xs text-gray-500 mt-1">Gunakan tab sebelah kiri untuk melakukan transaksi seperti pengisian saldo, transfer bank, atau penarikan dana.</p>
+                  <p className="text-xs text-gray-500 mt-1">Ringkasan mutasi saldo dan statistik bulan berjalan.</p>
                 </div>
 
-                {/* Dashboard stats mini widget */}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100/50">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Pemasukan Bulan Ini</span>
-                    <h5 className="text-lg font-black text-emerald-900 mt-1">{formatIDR(monthIn)}</h5>
+                  <div className="dashboard-stat-tile">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                        <TrendingUp className="w-4 h-4" />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pemasukan Bulan Ini</span>
+                    </div>
+                    <h5 className="text-lg font-black text-gray-900 tabular-nums">{formatIDR(monthIn)}</h5>
                   </div>
-                  <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100/50">
-                    <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wide">Pengeluaran Bulan Ini</span>
-                    <h5 className="text-lg font-black text-indigo-900 mt-1">{formatIDR(monthOut)}</h5>
+                  <div className="dashboard-stat-tile">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-700 flex items-center justify-center">
+                        <DollarSign className="w-4 h-4" />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Pengeluaran Bulan Ini</span>
+                    </div>
+                    <h5 className="text-lg font-black text-gray-900 tabular-nums">{formatIDR(monthOut)}</h5>
                   </div>
-                  <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100/50 col-span-2 md:col-span-1">
-                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Mutasi Tercatat</span>
-                    <h5 className="text-lg font-black text-amber-900 mt-1">{mutationCount} transaksi</h5>
+                  <div className="dashboard-stat-tile col-span-2 md:col-span-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-accent-300/40 text-primary-800 flex items-center justify-center">
+                        <History className="w-4 h-4" />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Mutasi Tercatat</span>
+                    </div>
+                    <h5 className="text-lg font-black text-gray-900">{mutationCount} transaksi</h5>
                   </div>
                 </div>
 
@@ -643,7 +651,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                           <div key={row.id} className="p-4 rounded-2xl border border-gray-100 hover:border-gray-200 flex items-center justify-between transition-all">
                             <div className="flex items-center gap-3.5">
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                                isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'
+                                isCredit ? 'bg-primary-50 text-primary-600' : 'bg-gray-100 text-primary-800'
                               }`}>
                                 {isCredit ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
                               </div>
@@ -657,7 +665,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                                 </p>
                               </div>
                             </div>
-                            <p className={`text-sm font-black ${isCredit ? 'text-emerald-600' : 'text-indigo-700'}`}>
+                            <p className={`text-sm font-black tabular-nums ${isCredit ? 'text-primary-600' : 'text-gray-800'}`}>
                               {isCredit ? '+' : '-'}{formatIDR(Number(row.amount || 0))}
                             </p>
                           </div>
@@ -676,7 +684,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                 initial={{ opacity: 0, x: 15 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -15 }}
-                className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6"
+                className="dashboard-panel space-y-6"
               >
                 <div>
                   <h4 className="font-extrabold text-gray-900 text-lg">Top Up Saldo GurkyPay</h4>
@@ -747,19 +755,17 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
 
                   {/* Manual input */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-700">Atau Masukkan Nominal Manual</label>
-                    <div className="relative">
-                      <input 
-                        ref={topupAmountInputRef}
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        placeholder="Minimal Rp10.000"
-                        value={formatIDRInput(topupAmount)}
-                        onChange={(e) => { handleTopupAmountChange(e); topupIdemRef.current = null; }}
-                        className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
-                      />
-                    </div>
+                    <label className="auth-label">Atau Masukkan Nominal Manual</label>
+                    <input 
+                      ref={topupAmountInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="Minimal Rp10.000"
+                      value={formatIDRInput(topupAmount)}
+                      onChange={(e) => { handleTopupAmountChange(e); topupIdemRef.current = null; }}
+                      className="auth-input px-4 py-3 font-bold"
+                    />
                   </div>
 
                   {/* Payment Method Option */}
@@ -874,14 +880,15 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                     )}
                   </div>
 
-                  <button
+                  <Button
                     type="submit"
+                    variant="primary"
                     disabled={topupSubmitting || loading}
-                    className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
+                    className="w-full disabled:opacity-60"
                   >
                     <Wallet className="w-4 h-4" />
                     <span>{topupSubmitting ? 'Memproses...' : 'Konfirmasi & Bayar Sekarang'}</span>
-                  </button>
+                  </Button>
                 </form>
               </motion.div>
             )}
@@ -893,99 +900,100 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                 initial={{ opacity: 0, x: 15 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -15 }}
-                className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6"
+                className="dashboard-panel space-y-6"
               >
                 <div>
                   <h4 className="font-extrabold text-gray-900 text-lg">Transfer Uang</h4>
                   <p className="text-xs text-gray-500 mt-1">Kirim uang langsung ke rekening bank se-Indonesia atau ke sesama pengguna GurkyNet secara instan.</p>
                 </div>
 
-                {/* Transfer Type Selectors */}
-                <div className="flex bg-gray-50 p-1 rounded-2xl border border-gray-200/60">
+                <div className="dashboard-segment-tabs">
                   <button
                     type="button"
                     onClick={() => setTransferType('p2p')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${transferType === 'p2p' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    className={`dashboard-segment-tab ${transferType === 'p2p' ? 'dashboard-segment-tab-active' : ''}`}
                   >
                     Transfer Sesama GurkyPay
                   </button>
                   <button
                     type="button"
                     onClick={() => setTransferType('bank')}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${transferType === 'bank' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    className={`dashboard-segment-tab ${transferType === 'bank' ? 'dashboard-segment-tab-active' : ''}`}
                   >
                     Kirim ke Rekening Bank
                   </button>
                 </div>
 
                 {transferType === 'bank' && (
-                  <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-[11px] text-amber-800 font-medium">
+                  <div className="auth-info-box text-[11px]">
                     Transfer bank langsung belum tersedia. Gunakan <strong>Tarik Dana</strong> untuk penarikan ke rekening, atau pilih Transfer Sesama GurkyPay.
                   </div>
                 )}
 
                 <form onSubmit={handleTransferSubmit} className="space-y-4">
-                  {/* Bank Select (if bank) */}
                   {transferType === 'bank' && (
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-700">Pilih Bank Tujuan</label>
-                      <select 
-                        value={selectedBank}
-                        onChange={(e) => setSelectedBank(e.target.value)}
-                        className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
-                      >
-                        <option value="BCA">Bank Central Asia (BCA)</option>
-                        <option value="MANDIRI">Bank Mandiri</option>
-                        <option value="BRI">Bank Rakyat Indonesia (BRI)</option>
-                        <option value="BNI">Bank Negara Indonesia (BNI)</option>
-                        <option value="CIMB">CIMB Niaga</option>
-                      </select>
+                      <label className="auth-label">Pilih Bank Tujuan</label>
+                      <div className="auth-input-icon-wrap">
+                        <div className="auth-input-icon"><Building2 className="w-5 h-5" /></div>
+                        <select 
+                          value={selectedBank}
+                          onChange={(e) => setSelectedBank(e.target.value)}
+                          className="auth-input pl-10 py-3 font-bold appearance-none"
+                        >
+                          <option value="BCA">Bank Central Asia (BCA)</option>
+                          <option value="MANDIRI">Bank Mandiri</option>
+                          <option value="BRI">Bank Rakyat Indonesia (BRI)</option>
+                          <option value="BNI">Bank Negara Indonesia (BNI)</option>
+                          <option value="CIMB">CIMB Niaga</option>
+                        </select>
+                      </div>
                     </div>
                   )}
 
-                  {/* Target Account Input */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-700">
+                    <label className="auth-label">
                       {transferType === 'bank' ? 'Nomor Rekening Tujuan' : 'Nomor Handphone / ID Wallet Tujuan'}
                     </label>
-                    <input 
-                      type="text"
-                      placeholder={transferType === 'bank' ? 'Contoh: 84019234812' : 'Contoh: GK-081234567890'}
-                      value={targetAccount}
-                      onChange={(e) => setTargetAccount(e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
-                    />
+                    <div className="auth-input-icon-wrap">
+                      <div className="auth-input-icon"><Smartphone className="w-5 h-5" /></div>
+                      <input 
+                        type="text"
+                        placeholder={transferType === 'bank' ? 'Contoh: 84019234812' : 'Contoh: GK-081234567890'}
+                        value={targetAccount}
+                        onChange={(e) => setTargetAccount(e.target.value)}
+                        className="auth-input pl-10 py-3 font-bold"
+                      />
+                    </div>
                   </div>
 
-                  {/* Amount Input */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-700">Nominal Transfer</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-extrabold text-gray-400">Rp</span>
+                    <label className="auth-label">Nominal Transfer</label>
+                    <div className="auth-input-icon-wrap">
+                      <div className="auth-input-icon"><DollarSign className="w-5 h-5" /></div>
                       <input 
                         type="number"
                         placeholder="Minimal Rp 10.000"
                         value={transferAmount}
                         onChange={(e) => setTransferAmount(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+                        className="auth-input pl-10 py-3 font-bold"
                       />
                     </div>
                   </div>
 
-                  {/* Note Input */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-700">Catatan Transfer (Opsional)</label>
+                    <label className="auth-label">Catatan Transfer (Opsional)</label>
                     <input 
                       type="text"
                       placeholder="Contoh: Bayar Uang Makan, Arisan, dll."
                       value={transferNote}
                       onChange={(e) => setTransferNote(e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+                      className="auth-input px-4 py-3 font-bold"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-700">PIN Transaksi</label>
+                    <label className="auth-label">PIN Transaksi</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -993,23 +1001,20 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                       placeholder="6 digit PIN"
                       value={transferPin}
                       onChange={(e) => setTransferPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+                      className="auth-input px-4 py-3 font-bold tracking-widest"
                     />
                   </div>
 
-                  {/* Warning balance */}
-                  <div className="p-3 bg-indigo-50 border border-indigo-100/50 rounded-xl flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <p className="text-[10px] text-indigo-700 leading-tight">Pastikan nomor wallet dan nominal transfer Anda sudah benar sebelum menekan tombol kirim.</p>
+                  <div className="rounded-2xl border border-primary-100 bg-primary-50/40 p-4 space-y-3">
+                    <div className="flex items-start gap-2 text-[11px] text-primary-900">
+                      <AlertCircle className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
+                      <p className="leading-snug">Pastikan nomor wallet dan nominal transfer Anda sudah benar sebelum menekan tombol kirim.</p>
+                    </div>
+                    <Button type="submit" variant="primary" className="w-full">
+                      <Send className="w-4 h-4" />
+                      <span>Kirim Transfer Sekarang</span>
+                    </Button>
                   </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>Kirim Transfer Sekarang</span>
-                  </button>
                 </form>
               </motion.div>
             )}
@@ -1021,10 +1026,10 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                 initial={{ opacity: 0, x: 15 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -15 }}
-                className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6"
+                className="dashboard-panel space-y-6"
               >
                 {!withdrawEnabled ? (
-                  <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-6 text-sm text-amber-900">
+                  <div className="rounded-2xl border border-accent-400/40 bg-accent-300/20 px-4 py-6 text-sm text-primary-900">
                     <p className="font-extrabold text-base mb-1">Segera Hadir</p>
                     <p>{featureFlags.messages.withdraw}</p>
                   </div>
@@ -1103,13 +1108,10 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                     </ul>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-amber-500/10 transition-all flex items-center justify-center gap-2"
-                  >
+                  <Button type="submit" variant="primary" className="w-full">
                     <CreditCard className="w-4 h-4" />
                     <span>Tarik Dana Sekarang</span>
-                  </button>
+                  </Button>
                 </form>
                 </>
                 )}
@@ -1117,9 +1119,6 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
             )}
 
           </AnimatePresence>
-        </div>
-
-      </div>
 
       <PaymentPlaceholderModal
         open={paymentModalOpen}
