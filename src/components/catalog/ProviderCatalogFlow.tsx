@@ -23,6 +23,7 @@ import {
   GameInquiryResult,
 } from '../../services/game/game.service';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
 export type CatalogTargetMode = 'phone' | 'game' | 'customer' | 'none';
 
@@ -133,7 +134,7 @@ export function ProviderCatalogFlow({
   }, [isGameInquiry, selectedProvider, step]);
 
   const providers = useMemo(() => {
-    const map = new Map<string, { name: string; count: number; sample?: Product }>();
+    const map = new Map<string, { name: string; count: number; sample?: Product; logo?: string | null }>();
     for (const p of products) {
       if (!isCatalogListed(p)) continue;
       const name = (p.operatorName || 'Lainnya').trim();
@@ -142,7 +143,13 @@ export function ProviderCatalogFlow({
       if (prev) {
         prev.count += 1;
       } else {
-        map.set(key, { name, count: 1, sample: p });
+        const ext = p as Product & { providerDetails?: { logo?: string | null } };
+        map.set(key, {
+          name,
+          count: 1,
+          sample: p,
+          logo: providerLogoFromProduct(ext),
+        });
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'id'));
@@ -520,7 +527,7 @@ export function ProviderCatalogFlow({
       </AnimatePresence>
 
       {step === 'provider' && (
-        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
+        <div className="dashboard-panel space-y-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h4 className="font-extrabold text-gray-900 text-base">
@@ -585,9 +592,12 @@ export function ProviderCatalogFlow({
                   key={p.name}
                   type="button"
                   onClick={() => selectProvider(p.name)}
-                  className="text-left p-4 rounded-2xl border border-gray-100 bg-gray-50 hover:border-primary-400 hover:bg-primary-50/30 transition-all"
+                  className="group text-left p-3.5 rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-primary-50/30 hover:border-primary-300 hover:shadow-md hover:shadow-primary-900/5 transition-all duration-200"
                 >
-                  <div className="font-extrabold text-gray-900 text-sm truncate">{p.name}</div>
+                  <BrandAvatar name={p.name} logoUrl={p.logo} size="md" className="mb-2.5" />
+                  <div className="font-extrabold text-gray-900 text-sm truncate group-hover:text-primary-700 transition-colors">
+                    {p.name}
+                  </div>
                   <div className="text-[10px] text-gray-500 mt-1 font-semibold">{p.count} produk</div>
                 </button>
               ))}

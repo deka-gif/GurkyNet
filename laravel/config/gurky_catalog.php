@@ -213,6 +213,18 @@ return [
     |--------------------------------------------------------------------------
     */
     'brand_overrides' => [
+        // Telekomunikasi — must outrank generic e-wallet substring hits (e.g. "dana" inside "perdana")
+        'aktivasi perdana' => 'aktivasi-perdana',
+        'perdana' => 'aktivasi-perdana',
+        'voucher telkomsel' => 'voucher-internet',
+        'voucher axis' => 'voucher-internet',
+        'voucher xl' => 'voucher-internet',
+        'voucher indosat' => 'voucher-internet',
+        'voucher tri' => 'voucher-internet',
+        'voucher smartfren' => 'voucher-internet',
+        'voucher by.u' => 'voucher-internet',
+        'voucher byu' => 'voucher-internet',
+
         // Top Up Digital (e-wallet)
         'gopay' => 'topup-digital',
         'gojek' => 'topup-digital',

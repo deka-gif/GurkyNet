@@ -86,4 +86,39 @@ class ProductMappingServiceTest extends TestCase
         $this->assertSame('voucher-internet', $m['slug']);
         $this->assertSame('name_keyword', $m['source']);
     }
+
+    /** Regression: "perdana" must not false-positive brand_override "dana" → topup-digital. */
+    public function test_axis_aktivasi_perdana_maps_to_aktivasi_perdana_not_ewallet(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Aktivasi Perdana',
+            'AXIS',
+            'Aktivasi Perdana Axis 3 GB 60 Hari (SP5K SP7K)'
+        );
+        $this->assertSame('aktivasi-perdana', $m['slug']);
+        $this->assertSame('brand_override', $m['source']);
+    }
+
+    /** Regression: Telkomsel kuota vouchers belong in voucher-internet, not gift-card voucher-digital. */
+    public function test_telkomsel_voucher_category_maps_to_voucher_internet(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Voucher',
+            'TELKOMSEL',
+            'Voucher Telkomsel 2.5 GB 5 Hari'
+        );
+        $this->assertSame('voucher-internet', $m['slug']);
+        $this->assertSame('brand_override', $m['source']);
+    }
+
+    public function test_dana_ewallet_still_maps_to_topup_digital(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'E-Money', 'DANA', 'DANA 50.000');
+        $this->assertSame('topup-digital', $m['slug']);
+    }
 }
