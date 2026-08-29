@@ -31,7 +31,7 @@ import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import { walletService } from '../../services/wallet/wallet.service';
 import { useCallback } from 'react';
 import { Button } from '../../components/ui/Button';
-import { InlineAlertBanner } from '../../components/notifications/InlineAlertBanner';
+import { useToastStore } from '../../store/toast.store';
 import {
   MIN_TOPUP_AMOUNT,
   TOPUP_QUICK_AMOUNTS,
@@ -125,6 +125,18 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   const topupIdemRef = useRef<string | null>(null);
   const transferIdemRef = useRef<string | null>(null);
   const withdrawIdemRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (errorMsg) {
+      useToastStore.getState().push({ type: 'error', title: 'Terjadi Kesalahan', description: errorMsg });
+    }
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) {
+      useToastStore.getState().push({ type: 'success', title: 'Aksi Berhasil!', description: successMsg });
+    }
+  }, [successMsg]);
 
   useEffect(() => {
     fetchWallet();
@@ -459,27 +471,6 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
           <span>Segarkan Data</span>
         </button>
       </div>
-
-      {/* Success and Error Banners — auto-dismiss with pause-on-hover */}
-      <AnimatePresence>
-        {successMsg && (
-          <InlineAlertBanner
-            variant="success"
-            title="Aksi Berhasil!"
-            message={successMsg}
-            onDismiss={() => setSuccessMsg(null)}
-          />
-        )}
-
-        {errorMsg && (
-          <InlineAlertBanner
-            variant="error"
-            title="Terjadi Kesalahan"
-            message={errorMsg}
-            onDismiss={() => setErrorMsg(null)}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Active Balance Card */}
       <div className="dashboard-balance-card">
