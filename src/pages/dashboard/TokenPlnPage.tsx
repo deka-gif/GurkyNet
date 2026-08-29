@@ -23,6 +23,8 @@ export const TokenPlnPage = () => {
 
   const [customerId, setCustomerId] = useState('');
   const [inquiry, setInquiry] = useState<PlnInquiryResult | null>(null);
+  /** Nomor yang terakhir sukses di-inquiry — jangan bandingkan dengan inquiry.customer_no (ID pelanggan Digiflazz, bisa beda dari nomor meter). */
+  const [inquiredFor, setInquiredFor] = useState<string | null>(null);
   const [inquiring, setInquiring] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
@@ -33,7 +35,7 @@ export const TokenPlnPage = () => {
   const isValidCustomerId = customerId.length >= 11 && customerId.length <= 12;
   const inquiryReady =
     !!inquiry &&
-    inquiry.customer_no === customerId &&
+    inquiredFor === customerId &&
     !!inquiry.customer_name;
 
   useEffect(() => {
@@ -58,8 +60,9 @@ export const TokenPlnPage = () => {
     const next = value.replace(/\D/g, '').slice(0, 12);
     setCustomerId(next);
     setSelectedProduct(null);
-    if (inquiry && inquiry.customer_no !== next) {
+    if (inquiredFor && inquiredFor !== next) {
       setInquiry(null);
+      setInquiredFor(null);
     }
     setErrorMsg(null);
   };
@@ -77,12 +80,15 @@ export const TokenPlnPage = () => {
       const res = await plnService.inquire(customerId);
       if (!res.success || !res.data) {
         setInquiry(null);
+        setInquiredFor(null);
         setErrorMsg(res.message || 'Gagal cek meteran. Silakan coba lagi.');
         return;
       }
       setInquiry(res.data);
+      setInquiredFor(customerId);
     } catch (err: any) {
       setInquiry(null);
+      setInquiredFor(null);
       const msg =
         err?.response?.data?.message ||
         err?.response?.data?.errors?.inquiry?.[0] ||
@@ -359,6 +365,7 @@ export const TokenPlnPage = () => {
             setSuccessMsg('Pembelian token selesai. Kode token dari provider tersedia pada struk transaksi.');
             setCustomerId('');
             setInquiry(null);
+            setInquiredFor(null);
             setSelectedProduct(null);
             setCheckoutData(null);
             setResumePin(false);

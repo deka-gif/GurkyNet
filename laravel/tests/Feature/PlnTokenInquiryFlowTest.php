@@ -124,6 +124,48 @@ class PlnTokenInquiryFlowTest extends TestCase
         });
     }
 
+    /**
+     * Digiflazz often returns subscriber customer_no distinct from meter_no.
+     * Frontend must not gate display on inquiry.customer_no === user input (see TokenPlnPage inquiredFor).
+     */
+    public function test_inquiry_pln_succeeds_when_digiflazz_customer_no_differs_from_meter_no(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/inquiry-pln' => Http::response([
+                'data' => [
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'customer_no' => '541103519607',
+                    'meter_no' => '56804464370',
+                    'subscriber_id' => '541103519607',
+                    'name' => 'MASNUNAH',
+                    'segment_power' => 'R1M  /900',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/pln/inquiry', [
+            'customer_no' => '56804464370',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.customer_name', 'MASNUNAH')
+            ->assertJsonPath('data.customer_no', '541103519607')
+            ->assertJsonPath('data.meter_no', '56804464370')
+            ->assertJsonPath('data.segment_power', 'R1M  /900');
+
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return str_contains($request->url(), '/inquiry-pln')
+                && ($body['customer_no'] ?? null) === '56804464370';
+        });
+    }
+
     public function test_inquiry_does_not_debit_wallet(): void
     {
         Http::fake([
