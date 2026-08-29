@@ -87,6 +87,7 @@ export const TagihanSubPage = ({
   if (category === 'pbb' || category === 'samsat') {
     return (
       <PajakNegaraFlow
+        key={category}
         category={category}
         title={title}
         subtitle={subtitle}
@@ -97,6 +98,7 @@ export const TagihanSubPage = ({
 
   return (
     <BillPaymentFlow
+      key={category}
       category={category}
       title={title}
       subtitle={subtitle}
