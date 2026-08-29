@@ -232,6 +232,8 @@ export const OperationsProductProviderControl: React.FC = () => {
     stepIndex: number;
   } | null>(null);
   const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
+  /** Digiflazz manual sync: include pascabayar pricelist after prepaid (deferred ~5m, RC83 window). */
+  const [includePascabayar, setIncludePascabayar] = useState(false);
 
   const mountedRef = useRef(true);
   const progressTimerRef = useRef<number | null>(null);
@@ -379,7 +381,11 @@ export const OperationsProductProviderControl: React.FC = () => {
     setBusyId(card.id);
     startProgress(card.name);
     try {
-      const res = await operationsService.syncProductProvider(card.id);
+      const syncPayload =
+        card.code === 'digiflazz' && includePascabayar
+          ? { cmd: ['prepaid', 'pasca'] as string[] }
+          : undefined;
+      const res = await operationsService.syncProductProvider(card.id, syncPayload);
       if (!mountedRef.current) return;
 
       if (res && res.success === false) {
@@ -830,6 +836,25 @@ export const OperationsProductProviderControl: React.FC = () => {
                         'API Provider sedang tidak dapat dihubungi. Produk tetap tersedia dari hasil sinkronisasi terakhir.'}
                     </span>
                   </div>
+                )}
+
+                {card.code === 'digiflazz' && !isOwnerReadOnly && (
+                  <label className="mb-3 flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-slate-300"
+                      checked={includePascabayar}
+                      onChange={(e) => setIncludePascabayar(e.target.checked)}
+                      disabled={busy}
+                    />
+                    <span>
+                      <span className="font-extrabold text-slate-900">Sertakan Pascabayar</span>
+                      <span className="block text-slate-500 mt-0.5 font-semibold leading-relaxed">
+                        Sync prepaid dulu, lalu pascabayar (E-Money Bebas Nominal, tagihan, dll.) dijadwalkan
+                        ~5 menit kemudian untuk menghindari limit Digiflazz RC83.
+                      </span>
+                    </span>
+                  </label>
                 )}
 
                 <div className="flex flex-wrap gap-2">
