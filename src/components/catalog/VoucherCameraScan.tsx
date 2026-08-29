@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserCodeReader, BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
 import { DecodeHintType } from '@zxing/library';
 
+type DetectionOutcome = 'added' | 'duplicate' | 'ignored';
+
 type Props = {
-  onDetected: (text: string) => void;
+  onDetected: (text: string) => DetectionOutcome;
   active?: boolean;
   scanCount?: number;
 };
 
 const DECODE_EMIT_DEBOUNCE_MS = 800;
 
-function playBeep() {
+function playTone(frequency: number, durationSec: number, onEnd?: () => void) {
   try {
     const AudioCtx =
       window.AudioContext ??
@@ -22,33 +24,53 @@ function playBeep() {
     const gain = ctx.createGain();
     oscillator.connect(gain);
     gain.connect(ctx.destination);
-    oscillator.frequency.value = 880;
+    oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.15, ctx.currentTime);
     oscillator.start();
-    oscillator.stop(ctx.currentTime + 0.12);
-    oscillator.onended = () => void ctx.close();
+    oscillator.stop(ctx.currentTime + durationSec);
+    oscillator.onended = () => {
+      void ctx.close();
+      onEnd?.();
+    };
   } catch {
     // Web Audio unsupported/blocked — scan continues without sound.
+    onEnd?.();
   }
 }
 
-function buildVideoConstraints(deviceId?: string): MediaStreamConstraints {
+function playBeep() {
+  playTone(880, 0.12);
+}
+
+function playDuplicateBeep() {
+  playTone(440, 0.08, () => {
+    window.setTimeout(() => playTone(440, 0.08), 80);
+  });
+}
+
+function buildVideoConstraints(deviceId?: string, useFacingMode = true): MediaStreamConstraints {
   const advanced = [{ focusMode: 'continuous' }] as MediaTrackConstraintSet[];
-  return {
-    video: deviceId
-      ? {
-          deviceId: { exact: deviceId },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          advanced,
-        }
-      : {
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          advanced,
-        },
-  };
+  if (deviceId) {
+    return {
+      video: {
+        deviceId: { exact: deviceId },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced,
+      },
+    };
+  }
+  if (useFacingMode) {
+    return {
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced,
+      },
+    };
+  }
+  return { video: true };
 }
 
 function pickDefaultDeviceIndex(devices: MediaDeviceInfo[]): number {
@@ -124,8 +146,12 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
       }
 
       lastDecodeEmitRef.current = { text, at: now };
-      playBeep();
-      onDetectedRef.current(text);
+      const outcome = onDetectedRef.current(text);
+      if (outcome === 'added') {
+        playBeep();
+      } else if (outcome === 'duplicate') {
+        playDuplicateBeep();
+      }
     };
 
     const start = async () => {
@@ -151,12 +177,25 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
         const videoEl = videoRef.current;
         if (!videoEl) return;
 
-        const constraints = buildVideoConstraints(deviceId);
-        const controls = await reader.decodeFromConstraints(constraints, videoEl, (result) => {
-          if (result) {
-            emitDetection(result.getText());
+        const tryDecode = async (useFacingMode: boolean) => {
+          const constraints = buildVideoConstraints(deviceId, useFacingMode);
+          return reader.decodeFromConstraints(constraints, videoEl, (result) => {
+            if (result) {
+              emitDetection(result.getText());
+            }
+          });
+        };
+
+        let controls: IScannerControls;
+        try {
+          controls = await tryDecode(!deviceId);
+        } catch (firstErr) {
+          if (!deviceId) {
+            controls = await tryDecode(false);
+          } else {
+            throw firstErr;
           }
-        });
+        }
 
         if (cancelled) {
           controls.stop();

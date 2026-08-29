@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ShieldCheck, Upload } from 'lucide-react';
+import { ShieldCheck, Upload } from 'lucide-react';
 import { kycService, KycStatusPayload } from '../../../services/kyc/kyc.service';
 import { AccountCard } from './AccountShell';
+import { toastError, toastSuccess } from '../../../hooks/useToast';
 
 export const AccountKycPage: React.FC = () => {
   const [status, setStatus] = useState<KycStatusPayload | null>(null);
@@ -18,6 +19,14 @@ export const AccountKycPage: React.FC = () => {
   const [ktpFile, setKtpFile] = useState<File | null>(null);
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (error) toastError('Terjadi Kesalahan', error);
+  }, [error]);
+
+  useEffect(() => {
+    if (info) toastSuccess('Berhasil', info);
+  }, [info]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,19 +95,6 @@ export const AccountKycPage: React.FC = () => {
         <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Verifikasi KYC</h1>
         <p className="text-sm text-gray-500 mt-1">Tier 1 (HP + email) wajib sebelum transaksi. Tier 2 wajib sebelum withdraw agen.</p>
       </div>
-
-      {error && (
-        <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm flex gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{error}</span>
-        </div>
-      )}
-      {info && (
-        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm flex gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{info}</span>
-        </div>
-      )}
 
       <AccountCard>
         <div className="flex items-center gap-2 mb-3">

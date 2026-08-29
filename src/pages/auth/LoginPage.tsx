@@ -3,11 +3,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowRight, Shield } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight, Shield } from 'lucide-react';
 import { getRedirectPathForRole } from '../../constants/auth';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
 import { Button } from '../../components/ui/Button';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 const loginSchema = z.object({
   identity: z.string().min(1, 'Email atau Nomor HP wajib diisi'),
@@ -23,6 +24,14 @@ export const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState('');
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -109,19 +118,6 @@ export const LoginPage: React.FC = () => {
           <p className="auth-subheading">Masukkan kode OTP yang dikirim ke email staf Finance/Owner.</p>
         </div>
 
-        {errorMsg && (
-          <div role="alert" className="auth-alert-error">
-            <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
-            <span className="font-medium">{errorMsg}</span>
-          </div>
-        )}
-        {successMsg && (
-          <div role="status" className="auth-alert-success">
-            <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
-            <span className="font-medium">{successMsg}</span>
-          </div>
-        )}
-
         <form onSubmit={onVerify2fa} className="space-y-4">
           <div>
             <label className="auth-label">Kode OTP 6 digit</label>
@@ -166,20 +162,6 @@ export const LoginPage: React.FC = () => {
         <h3 className="auth-heading mb-2">Masuk ke Akun</h3>
         <p className="auth-subheading">Akses transaksi PPOB dan manajemen akun GurkyNet Anda.</p>
       </div>
-
-      {errorMsg && (
-        <div role="alert" className="auth-alert-error">
-          <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
-          <span className="font-medium">{errorMsg}</span>
-        </div>
-      )}
-
-      {successMsg && (
-        <div role="status" className="auth-alert-success">
-          <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
-          <span className="font-medium">{successMsg}</span>
-        </div>
-      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div>

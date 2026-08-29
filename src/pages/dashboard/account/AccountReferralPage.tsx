@@ -3,6 +3,7 @@ import { Users } from 'lucide-react';
 import { AccountShell, AccountCard } from './AccountShell';
 import { referralService } from '../../../services/referral/referral.service';
 import { formatIDR as formatIdr } from '../../../utils/currency';
+import { toastError, toastSuccess } from '../../../hooks/useToast';
 
 /** SRS 13.7 / FR-REF-07 — Referral (own data only) */
 export const AccountReferralPage: React.FC = () => {
@@ -12,6 +13,14 @@ export const AccountReferralPage: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) toastError('Terjadi Kesalahan', error);
+  }, [error]);
+
+  useEffect(() => {
+    if (message) toastSuccess('Berhasil', message);
+  }, [message]);
 
   const load = async () => {
     try {
@@ -46,9 +55,6 @@ export const AccountReferralPage: React.FC = () => {
 
   return (
     <AccountShell title="Referral" subtitle="Kode & komisi ajak teman" icon={<Users className="h-5 w-5" />}>
-      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
-      {message && <p className="text-sm text-emerald-700 mb-3">{message}</p>}
-
       <AccountCard title="Kode Saya">
         <p className="text-2xl font-semibold tracking-wide mb-2">{summary?.code || '—'}</p>
         <div className="flex gap-2 flex-wrap items-center">

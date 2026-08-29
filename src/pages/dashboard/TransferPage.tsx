@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, 
   ArrowRight, 
-  CheckCircle2, 
-  AlertCircle, 
   Wallet,
   RefreshCw,
   Building2
@@ -15,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { buildCreatePinUrl, PENDING_TRANSFER_KEY } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { getOrCreateIdempotencyKey } from '../../utils/idempotency';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 /**
  * Transfer page — P2P wallet transfer only.
@@ -35,6 +33,14 @@ export const TransferPage = () => {
   // SRS 14.1 — one idempotency key per logical transfer; reused across retries, reset
   // only once the transfer reaches a terminal (successful) outcome.
   const transferIdemRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   useEffect(() => {
     fetchWallet();
@@ -123,40 +129,6 @@ export const TransferPage = () => {
           </span>
         </div>
       </div>
-
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-emerald-900 text-sm">Dana Terkirim</h5>
-              <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
-            </div>
-            <button type="button" onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500">Tutup</button>
-          </motion.div>
-        )}
-
-        {errorMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-red-900 text-sm">Tidak Dapat Diproses</h5>
-              <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
-            </div>
-            <button type="button" onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500">Tutup</button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40">
         <form onSubmit={handleSubmit} className="space-y-6">

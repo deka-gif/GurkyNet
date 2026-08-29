@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AccountShell, AccountCard } from './AccountShell';
 import { subscriptionService } from '../../../services/sprint15/differentiator.service';
+import { toastError, toastSuccess } from '../../../hooks/useToast';
 
 /** FR-DIFF-02 — User Auto-Reorder subscriptions. */
 export const AccountSubscriptionsPage: React.FC = () => {
@@ -11,6 +12,14 @@ export const AccountSubscriptionsPage: React.FC = () => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) toastError('Terjadi Kesalahan', error);
+  }, [error]);
+
+  useEffect(() => {
+    if (message) toastSuccess('Berhasil', message);
+  }, [message]);
 
   const load = async () => {
     try {
@@ -43,9 +52,6 @@ export const AccountSubscriptionsPage: React.FC = () => {
 
   return (
     <AccountShell title="Langganan Otomatis" subtitle="Auto-reorder per tanggal kalender (FR-DIFF-02).">
-      {error && <p className="text-sm text-rose-600 mb-3">{error}</p>}
-      {message && <p className="text-sm text-emerald-700 mb-3">{message}</p>}
-
       <AccountCard>
         <h3 className="text-sm font-extrabold mb-2">Buat Subscription</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

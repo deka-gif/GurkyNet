@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   Gift, 
   Tag, 
@@ -8,8 +7,6 @@ import {
   ShoppingBag, 
   Coffee, 
   Fuel, 
-  CheckCircle2, 
-  AlertCircle, 
   CreditCard, 
   Wallet,
   X,
@@ -26,6 +23,7 @@ import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 export const VoucherPage = () => {
   const { wallet, fetchWallet, deductBalance } = useWalletStore();
@@ -44,6 +42,14 @@ export const VoucherPage = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   useEffect(() => {
     fetchWallet();
@@ -101,41 +107,6 @@ export const VoucherPage = () => {
           </span>
         </div>
       </div>
-
-      {/* Alerts */}
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-emerald-900 text-sm">Pembelian Voucher Sukses!</h5>
-              <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
-            </div>
-            <button onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500 hover:text-emerald-800">Tutup</button>
-          </motion.div>
-        )}
-
-        {errorMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-red-900 text-sm">Masalah Pembayaran</h5>
-              <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
-            </div>
-            <button onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500 hover:text-red-800">Tutup</button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Main Sub-tabs: Digital vs Fisik */}
       <div className="flex border-b border-gray-100 gap-6">

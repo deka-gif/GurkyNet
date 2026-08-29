@@ -123,6 +123,18 @@ class ProductProviderControlController extends Controller
         return $this->successResponse('Product provider dijadikan primary.', $service->toCard($fresh));
     }
 
+    public function setLogo(int $id, Request $request, ProductProviderControlService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'logo' => 'required|string|max:500',
+        ]);
+
+        $provider = ProductProvider::findOrFail($id);
+        $fresh = $service->setLogo($provider, (string) $data['logo']);
+
+        return $this->successResponse('Logo product provider diperbarui.', $service->toCard($fresh));
+    }
+
     public function setPriority(int $id, Request $request, ProductProviderControlService $service): JsonResponse
     {
         $data = $request->validate([

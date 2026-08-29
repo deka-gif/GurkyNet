@@ -3,6 +3,7 @@ import { Gift } from 'lucide-react';
 import { AccountShell, AccountCard } from './AccountShell';
 import { loyaltyService } from '../../../services/loyalty/loyalty.service';
 import { formatIDR as formatIdr } from '../../../utils/currency';
+import { toastError, toastSuccess } from '../../../hooks/useToast';
 
 /** FR-DIFF-01 / FR-DIFF-08 — Poin & Loyalitas (SRS 13.7) */
 export const AccountLoyaltyPage: React.FC = () => {
@@ -12,6 +13,14 @@ export const AccountLoyaltyPage: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) toastError('Terjadi Kesalahan', error);
+  }, [error]);
+
+  useEffect(() => {
+    if (message) toastSuccess('Berhasil', message);
+  }, [message]);
 
   const load = async () => {
     try {
@@ -54,9 +63,6 @@ export const AccountLoyaltyPage: React.FC = () => {
 
   return (
     <AccountShell title="Poin & Loyalitas" subtitle="Saldo poin, tier, dan penukaran ke wallet.">
-      {error && <p className="text-sm text-rose-600 mb-3">{error}</p>}
-      {message && <p className="text-sm text-emerald-700 mb-3">{message}</p>}
-
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <AccountCard>
           <p className="text-[10px] font-bold uppercase text-slate-400">Saldo Poin</p>

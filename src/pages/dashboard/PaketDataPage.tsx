@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
   Wifi,
   Smartphone,
-  CheckCircle2,
-  AlertCircle,
   CreditCard,
   Wallet,
   RefreshCw,
@@ -28,6 +25,7 @@ import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 const XL_REGIONS = ['Sumatera', 'West', 'Central', 'East', 'East Kalsul'];
 const TELKOMSEL_REGIONS = ['Area 1', 'Area 2', 'Area 3'];
@@ -73,6 +71,14 @@ export const PaketDataPage = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   const isTelkomsel = provider === 'Telkomsel';
   const isXl = provider === 'XL Axiata';
@@ -227,43 +233,6 @@ export const PaketDataPage = () => {
           </span>
         </div>
       </div>
-
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-emerald-900 text-sm">Paket Internet Aktif!</h5>
-              <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
-            </div>
-            <button onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500">
-              Tutup
-            </button>
-          </motion.div>
-        )}
-        {errorMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-red-900 text-sm">Perhatian</h5>
-              <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
-            </div>
-            <button onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500">
-              Tutup
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className={`grid grid-cols-1 gap-6 ${showSidePanel ? 'lg:grid-cols-12' : ''}`}>
         <div

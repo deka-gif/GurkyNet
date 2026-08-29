@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, KeyRound } from 'lucide-react';
+import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, KeyRound } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
 import { getRedirectPathForRole } from '../../constants/auth';
 import { Button } from '../../components/ui/Button';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Nama lengkap minimal 3 karakter').max(255, 'Nama lengkap maksimal 255 karakter'),
@@ -72,6 +73,14 @@ export const RegisterPage: React.FC = () => {
   const [onboardingId, setOnboardingId] = useState<number | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [rememberDevice, setRememberDevice] = useState(true);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   const { register, handleSubmit, formState: { errors }, setError } = useForm<RegisterFields>({
     resolver: zodResolver(registerSchema),
@@ -167,19 +176,6 @@ export const RegisterPage: React.FC = () => {
       </div>
 
       <RegisterStepper step={step} />
-
-      {errorMsg && (
-        <div role="alert" className="auth-alert-error">
-          <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
-          <span className="font-medium">{errorMsg}</span>
-        </div>
-      )}
-      {successMsg && (
-        <div role="status" className="auth-alert-success">
-          <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
-          <span className="font-medium">{successMsg}</span>
-        </div>
-      )}
 
       {step === 'register' && (
         <form onSubmit={handleSubmit(submitRegister)} className="space-y-4" noValidate>

@@ -463,6 +463,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/product-provider-control/{id}/disable', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'disable']);
             Route::post('/product-provider-control/{id}/maintenance', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'maintenance']);
             Route::post('/product-provider-control/{id}/set-primary', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'setPrimary']);
+            Route::put('/product-provider-control/{id}/logo', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'setLogo']);
             Route::put('/product-provider-control/{id}/priority', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'setPriority']);
             Route::post('/product-provider-control/{id}/health-check', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'healthCheck']);
             Route::post('/product-provider-control/{id}/sync', [\App\Http\Controllers\Api\v1\Admin\ProductProviderControlController::class, 'sync']);

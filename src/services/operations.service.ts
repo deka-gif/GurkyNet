@@ -125,6 +125,25 @@ export const operationsService = {
     return res.data;
   },
 
+  async uploadProviderLogoFile(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'product-providers');
+    formData.append('alt_text', file.name.split('.')[0] || 'provider-logo');
+
+    const res = await apiClient.post<ApiResponse<{ path?: string }>>('/admin/media', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
+  async setProductProviderLogo(id: number | string, logo: string) {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/logo`, {
+      logo,
+    });
+    return res.data;
+  },
+
   async setProductProviderPriority(id: number | string, priority: number) {
     const res = await apiClient.put<ApiResponse<any>>(`/admin/operations/product-provider-control/${id}/priority`, { priority });
     return res.data;

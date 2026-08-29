@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, 
   Mail, 
@@ -7,8 +6,6 @@ import {
   ShieldCheck, 
   Lock, 
   Camera, 
-  CheckCircle2, 
-  AlertCircle, 
   Moon, 
   Sun, 
   Globe, 
@@ -23,6 +20,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { storageService } from '../../services/storage.service';
 import { profileService } from '../../services/profile/profile.service';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 export const ProfilPage = () => {
   const { user, fetchUser } = useAuth();
@@ -45,6 +43,14 @@ export const ProfilPage = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   useEffect(() => {
     if (user) {
@@ -132,31 +138,6 @@ export const ProfilPage = () => {
           <p className="text-sm font-medium text-gray-500 mt-1">Kelola data diri dan keamanan akun Anda</p>
         </div>
       </div>
-
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-2xl flex items-center gap-3 text-sm font-bold"
-          >
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
-            {successMsg}
-          </motion.div>
-        )}
-        {errorMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center gap-3 text-sm font-bold"
-          >
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            {errorMsg}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">

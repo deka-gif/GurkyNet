@@ -312,6 +312,18 @@ class ProductProviderControlService
         return $provider->fresh();
     }
 
+    public function setLogo(ProductProvider $provider, string $logo): ProductProvider
+    {
+        $provider->logo = $logo;
+        $provider->save();
+
+        $this->audit($provider, 'set_logo', true, 'Provider logo updated', ['logo' => $logo]);
+
+        $this->flushProductCatalogCache();
+
+        return $provider->fresh();
+    }
+
     /**
      * Make this provider primary (priority = 1) and shift previous primary down.
      */

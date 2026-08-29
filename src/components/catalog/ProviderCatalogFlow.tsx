@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import {
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
   Search,
+  ShieldCheck,
+  User,
   Wallet,
-  X,
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
 import { useProductStore } from '../../store/product.store';
@@ -22,7 +23,11 @@ import {
   GameAccountField,
   GameInquiryResult,
 } from '../../services/game/game.service';
-import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import {
+  catalogStatusLabel,
+  isCatalogListed,
+  isProductPurchasable,
+} from '../../utils/catalogAvailability';
 import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
 export type CatalogTargetMode = 'phone' | 'game' | 'customer' | 'none';
@@ -131,7 +136,6 @@ export function ProviderCatalogFlow({
   const [gameFields, setGameFields] = useState<GameAccountField[]>([]);
   const [gameAccount, setGameAccount] = useState<Record<string, string>>({});
   const [schemaLoading, setSchemaLoading] = useState(false);
-  const [catalogSummaryOpen, setCatalogSummaryOpen] = useState(false);
 
   useEffect(() => {
     fetchWallet();
@@ -235,7 +239,6 @@ export function ProviderCatalogFlow({
     setSelectedProduct(null);
     setEwalletInquiry(null);
     setGameInquiry(null);
-    setCatalogSummaryOpen(false);
     setTargetNo('');
     setSecondaryValue('');
     setGameAccount({});
@@ -249,7 +252,6 @@ export function ProviderCatalogFlow({
     setSelectedProduct(null);
     setEwalletInquiry(null);
     setGameInquiry(null);
-    setCatalogSummaryOpen(false);
     setGameFields([]);
     setGameAccount({});
   };
@@ -456,7 +458,6 @@ export function ProviderCatalogFlow({
       );
       return;
     }
-    setCatalogSummaryOpen(true);
   };
 
   const handleSummaryLanjutBayar = () => {
@@ -467,7 +468,6 @@ export function ProviderCatalogFlow({
           ? 'Saldo GurkyPay Anda tidak mencukupi untuk pembelian langganan ini.'
           : 'Saldo GurkyPay Anda tidak mencukupi untuk pembelian voucher ini.'
       );
-      setCatalogSummaryOpen(false);
       return;
     }
 
@@ -497,18 +497,213 @@ export function ProviderCatalogFlow({
             Varian: selectedProduct.name,
           },
     });
-    setCatalogSummaryOpen(false);
   };
 
-  const nextDisabled =
+  const handleSummaryProceedToPin = () => {
+    if (!selectedProduct || !selectedProvider) {
+      showFlowError(
+        isLanggananMode
+          ? 'Pilih aplikasi dan paket terlebih dahulu.'
+          : 'Pilih brand dan nominal voucher terlebih dahulu.'
+      );
+      return;
+    }
+    if (!wallet || wallet.balance < selectedProduct.price) {
+      showFlowError(
+        isLanggananMode
+          ? 'Saldo GurkyPay Anda tidak mencukupi untuk pembelian langganan ini.'
+          : 'Saldo GurkyPay Anda tidak mencukupi untuk pembelian voucher ini.'
+      );
+      return;
+    }
+    handleSummaryLanjutBayar();
+  };
+
+  const inquiryNextDisabled =
     !selectedProduct ||
     !isProductPurchasable(selectedProduct) ||
     inquiring ||
     (isEwalletInquiry && !phoneReady) ||
     (isGameInquiry && !gameAccountReady);
 
+  const renderSummaryPanel = () => {
+    if (!selectedProduct) {
+      return (
+        <SummaryPanelShell>
+          <div className="py-10 text-center space-y-2">
+            <ShieldCheck className="w-8 h-8 mx-auto text-white/30" />
+            <p className="text-sm font-semibold text-white/60">Pilih produk untuk melihat ringkasan</p>
+          </div>
+        </SummaryPanelShell>
+      );
+    }
+
+    if (isSummaryCheckoutMode) {
+      return (
+        <SummaryPanelShell>
+          <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
+            {isLanggananMode ? 'Ringkasan Langganan' : 'Ringkasan Voucher'}
+          </p>
+          <SummaryRow
+            label="Kategori"
+            value={isLanggananMode ? 'LANGGANAN DIGITAL' : 'VOUCHER DIGITAL'}
+          />
+          <SummaryRow label={isLanggananMode ? 'Aplikasi' : 'Brand'} value={selectedProvider || '-'} />
+          <SummaryRow label="Varian" value={selectedProduct.name} />
+          <SummaryRow label="Harga" value={formatIDR(selectedProduct.price)} large />
+          <PanelActions>
+            <button
+              type="button"
+              onClick={handleSummaryProceedToPin}
+              disabled={!isProductPurchasable(selectedProduct)}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Lanjutkan ke PIN
+            </button>
+          </PanelActions>
+        </SummaryPanelShell>
+      );
+    }
+
+    if (isEwalletInquiry && ewalletInquiry) {
+      const nominal = ewalletInquiry.nominal_amount ?? ewalletInquiry.bill_amount;
+      const adminFee =
+        Math.abs(ewalletInquiry.selling_price - nominal - ewalletInquiry.admin_fee) < 0.009
+          ? ewalletInquiry.admin_fee
+          : Math.max(0, ewalletInquiry.selling_price - nominal);
+
+      return (
+        <SummaryPanelShell>
+          <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
+            Konfirmasi E-Wallet
+          </p>
+          <SummaryRow label="E-Wallet" value={selectedProvider || ewalletInquiry.provider_name || '-'} />
+          <SummaryRow label="Nomor HP" value={ewalletInquiry.customer_no} />
+          <SummaryRow label="Nama Akun" value={ewalletInquiry.customer_name} emphasize />
+          <SummaryRow label="Nominal" value={formatIDR(nominal)} />
+          {adminFee > 0 && <SummaryRow label="Biaya Admin" value={formatIDR(adminFee)} />}
+          <SummaryRow label="Total" value={formatIDR(ewalletInquiry.selling_price)} large />
+          <PanelActions>
+            <button
+              type="button"
+              onClick={handleCancelEwalletInquiry}
+              className="w-full py-2.5 rounded-2xl border border-white/20 text-white/80 font-bold text-xs hover:bg-white/10 transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleEwalletLanjutBayar}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 transition-colors"
+            >
+              Lanjut Bayar (PIN)
+            </button>
+          </PanelActions>
+        </SummaryPanelShell>
+      );
+    }
+
+    if (isGameInquiry && gameInquiry) {
+      return (
+        <SummaryPanelShell>
+          <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
+            Validasi Game
+          </p>
+          <div className="rounded-2xl bg-white/10 border border-white/10 p-3.5 flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+              <User className="w-5 h-5 text-white/90" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold text-white truncate">{gameInquiry.nickname}</p>
+              <p className="text-[10px] font-bold text-emerald-300 flex items-center gap-1 mt-0.5">
+                <CheckCircle2 className="w-3 h-3" /> Nickname terverifikasi
+              </p>
+            </div>
+          </div>
+          <SummaryRow label="Game" value={gameInquiry.game || selectedProvider || '-'} />
+          <SummaryRow label="Item" value={gameInquiry.item || selectedProduct.name} />
+          <SummaryRow label="Harga" value={formatIDR(gameInquiry.price)} large />
+          <PanelActions>
+            <button
+              type="button"
+              onClick={handleCancelGameInquiry}
+              className="w-full py-2.5 rounded-2xl border border-white/20 text-white/80 font-bold text-xs hover:bg-white/10 transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleGameLanjutBayar}
+              disabled={!gameInquiry.nickname}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Lanjut Bayar (PIN)
+            </button>
+          </PanelActions>
+        </SummaryPanelShell>
+      );
+    }
+
+    const previewPrice = selectedProduct.price;
+
+    return (
+      <SummaryPanelShell>
+        <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
+          Ringkasan
+        </p>
+        <SummaryRow label="Provider" value={selectedProvider || '-'} />
+        <SummaryRow label="Produk" value={selectedProduct.name} />
+        <SummaryRow label="Harga" value={formatIDR(previewPrice)} large />
+        <PanelActions>
+          {isEwalletInquiry ? (
+            <button
+              type="button"
+              onClick={() => void handleEwalletNext()}
+              disabled={inquiryNextDisabled}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-2"
+            >
+              {inquiring ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Memeriksa akun...
+                </>
+              ) : (
+                'Lanjutkan'
+              )}
+            </button>
+          ) : isGameInquiry ? (
+            <button
+              type="button"
+              onClick={() => void handleGameNext()}
+              disabled={inquiryNextDisabled}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-2"
+            >
+              {inquiring ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Memvalidasi akun...
+                </>
+              ) : (
+                'Lanjutkan'
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCheckout}
+              disabled={!isProductPurchasable(selectedProduct)}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Lanjut ke Konfirmasi
+            </button>
+          )}
+        </PanelActions>
+      </SummaryPanelShell>
+    );
+  };
+
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
+    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-6xl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">{title}</h2>
@@ -582,19 +777,18 @@ export function ProviderCatalogFlow({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {filteredProviders.map((p) => (
                 <button
                   key={p.name}
                   type="button"
                   onClick={() => selectProvider(p.name, p.providerId)}
-                  className="group text-left p-3.5 rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-primary-50/30 hover:border-primary-300 hover:shadow-md hover:shadow-primary-900/5 transition-all duration-200"
+                  className="group text-left p-4 rounded-3xl border border-gray-100 bg-white hover:border-primary-300 hover:shadow-lg hover:shadow-primary-900/8 hover:-translate-y-0.5 transition-all duration-200"
                 >
-                  <BrandAvatar name={p.name} logoUrl={p.logo} size="md" className="mb-2.5" />
+                  <BrandAvatar name={p.name} logoUrl={p.logo} size="md" className="mb-3" />
                   <div className="font-extrabold text-gray-900 text-sm truncate group-hover:text-primary-700 transition-colors">
                     {p.name}
                   </div>
-                  <div className="text-[10px] text-gray-500 mt-1 font-semibold">{p.count} produk</div>
                 </button>
               ))}
             </div>
@@ -619,375 +813,170 @@ export function ProviderCatalogFlow({
                   : 'Ganti provider'}
           </button>
 
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
-            <div>
-              <h4 className="font-extrabold text-gray-900 text-base">{selectedProvider}</h4>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {isGameInquiry
-                  ? 'Isi data akun, pilih produk dari katalog, lalu tekan NEXT.'
-                  : isEwalletInquiry
-                    ? 'Masukkan nomor HP, pilih nominal dari katalog, lalu tekan NEXT.'
-                    : isLanggananMode
-                      ? 'Pilih paket langganan dari katalog, lalu tekan NEXT.'
-                      : isVoucherMode
-                        ? 'Pilih nominal voucher dari katalog, lalu tekan NEXT.'
-                        : 'Pilih produk, lengkapi data tujuan, lalu lanjut ke konfirmasi.'}
-              </p>
-            </div>
-
-            {isSummaryCheckoutMode ? null : isGameInquiry ? (
-              <div className="space-y-3">
-                {schemaLoading ? (
-                  <div className="py-6 text-center">
-                    <RefreshCw className="w-5 h-5 mx-auto text-gray-300 animate-spin" />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {gameFields.map((field) => (
-                      <div key={field.key} className="space-y-1.5">
-                        <label className="text-xs font-bold text-gray-700">
-                          {field.label}
-                          {field.required ? '' : ' (opsional)'}
-                        </label>
-                        <input
-                          type="text"
-                          value={gameAccount[field.key] || ''}
-                          onChange={(e) => {
-                            setGameAccount((prev) => ({ ...prev, [field.key]: e.target.value }));
-                            setSelectedProduct(null);
-                            setGameInquiry(null);
-                          }}
-                          placeholder={field.label}
-                          className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-5 items-start">
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
+              <div>
+                <h4 className="font-extrabold text-gray-900 text-base">{selectedProvider}</h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {isGameInquiry
+                    ? 'Isi data akun, lalu pilih produk dari katalog.'
+                    : isEwalletInquiry
+                      ? 'Masukkan nomor HP, lalu pilih nominal dari katalog.'
+                      : isLanggananMode
+                        ? 'Pilih paket langganan dari katalog.'
+                        : isVoucherMode
+                          ? 'Pilih nominal voucher dari katalog.'
+                          : 'Pilih produk, lengkapi data tujuan, lalu lanjut ke konfirmasi.'}
+                </p>
               </div>
-            ) : targetMode !== 'none' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700">{resolvedTargetLabel}</label>
-                  <input
-                    type="text"
-                    value={targetNo}
-                    onChange={(e) => {
-                      setTargetNo(
-                        targetMode === 'phone' ? e.target.value.replace(/\D/g, '') : e.target.value
-                      );
-                      if (isEwalletInquiry) {
-                        setSelectedProduct(null);
-                        setEwalletInquiry(null);
-                      }
-                    }}
-                    placeholder={resolvedTargetPlaceholder}
-                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+
+              {isSummaryCheckoutMode ? null : isGameInquiry ? (
+                <div className="space-y-3">
+                  {schemaLoading ? (
+                    <div className="py-6 text-center">
+                      <RefreshCw className="w-5 h-5 mx-auto text-gray-300 animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {gameFields.map((field) => (
+                        <div key={field.key} className="space-y-1.5">
+                          <label className="text-xs font-bold text-gray-700">
+                            {field.label}
+                            {field.required ? '' : ' (opsional)'}
+                          </label>
+                          <input
+                            type="text"
+                            value={gameAccount[field.key] || ''}
+                            onChange={(e) => {
+                              setGameAccount((prev) => ({ ...prev, [field.key]: e.target.value }));
+                              setSelectedProduct(null);
+                              setGameInquiry(null);
+                            }}
+                            placeholder={field.label}
+                            className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {targetMode === 'game' && (
+              ) : targetMode !== 'none' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-700">{secondaryLabel}</label>
+                    <label className="text-xs font-bold text-gray-700">{resolvedTargetLabel}</label>
                     <input
                       type="text"
-                      value={secondaryValue}
-                      onChange={(e) => setSecondaryValue(e.target.value)}
-                      placeholder={secondaryPlaceholder}
+                      value={targetNo}
+                      onChange={(e) => {
+                        setTargetNo(
+                          targetMode === 'phone' ? e.target.value.replace(/\D/g, '') : e.target.value
+                        );
+                        if (isEwalletInquiry) {
+                          setSelectedProduct(null);
+                          setEwalletInquiry(null);
+                        }
+                      }}
+                      placeholder={resolvedTargetPlaceholder}
                       className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
-                )}
-              </div>
-            ) : null}
+                  {targetMode === 'game' && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-gray-700">{secondaryLabel}</label>
+                      <input
+                        type="text"
+                        value={secondaryValue}
+                        onChange={(e) => setSecondaryValue(e.target.value)}
+                        placeholder={secondaryPlaceholder}
+                        className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
-            {showProducts ? (
-              <div className="space-y-2.5">
-                <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-                  {isEwalletInquiry || isVoucherMode
-                    ? 'Pilih Nominal'
-                    : isLanggananMode
-                      ? 'Pilih Paket'
-                      : isGameInquiry
-                        ? 'Pilih Produk'
-                        : 'Daftar Produk'}
-                </h5>
-                {productsLoading && providerProducts.length === 0 ? (
-                  <div className="py-16 text-center space-y-2">
-                    <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
-                    <p className="text-xs text-gray-400 font-bold">Memuat produk...</p>
-                  </div>
-                ) : providerProducts.length === 0 ? (
-                  <div className="py-10 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
-                    Tidak ada produk aktif untuk provider ini.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[420px] overflow-y-auto pr-1">
-                    {providerProducts.map((product) => {
-                      const active = selectedProduct?.id === product.id;
-                      const purchasable = isProductPurchasable(product);
-                      return (
-                        <button
-                          key={product.id}
-                          type="button"
-                          onClick={() => setSelectedProduct(product)}
-                          className={`text-left p-4 rounded-2xl border transition-all ${
-                            active
-                              ? 'border-primary-500 bg-primary-50/40 shadow-sm'
-                              : 'border-gray-100 bg-gray-50 hover:border-gray-300'
-                          } ${!purchasable ? 'opacity-70' : ''}`}
-                        >
-                          <div className="font-extrabold text-gray-900 text-sm leading-snug">{product.name}</div>
-                          {!purchasable && (
-                            <div className="mt-1 text-[10px] font-bold text-amber-700">Sedang maintenance</div>
-                          )}
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="text-sm font-black text-primary-600">{formatIDR(product.price)}</span>
-                            {active && <ChevronRight className="w-4 h-4 text-primary-600" />}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl">
-                <p className="text-xs text-gray-500 font-semibold">
-                  {isGameInquiry
-                    ? 'Lengkapi data akun terlebih dahulu untuk menampilkan daftar produk.'
-                    : 'Masukkan nomor HP terlebih dahulu untuk menampilkan daftar nominal.'}
-                </p>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                if (isEwalletInquiry) void handleEwalletNext();
-                else if (isGameInquiry) void handleGameNext();
-                else if (isSummaryCheckoutMode) handleSummaryNext();
-                else handleCheckout();
-              }}
-              disabled={nextDisabled}
-              className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm shadow-lg shadow-primary-500/10 transition-all inline-flex items-center justify-center gap-2"
-            >
-              {isEwalletInquiry || isGameInquiry || isSummaryCheckoutMode ? (
-                inquiring ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    {isGameInquiry ? 'Memvalidasi akun...' : 'Memeriksa akun...'}
-                  </>
-                ) : (
-                  'NEXT'
-                )
+              {showProducts ? (
+                <div className="space-y-2.5">
+                  <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                    {isEwalletInquiry || isVoucherMode
+                      ? 'Pilih Nominal'
+                      : isLanggananMode
+                        ? 'Pilih Paket'
+                        : isGameInquiry
+                          ? 'Pilih Produk'
+                          : 'Daftar Produk'}
+                  </h5>
+                  {productsLoading && providerProducts.length === 0 ? (
+                    <div className="py-16 text-center space-y-2">
+                      <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
+                      <p className="text-xs text-gray-400 font-bold">Memuat produk...</p>
+                    </div>
+                  ) : providerProducts.length === 0 ? (
+                    <div className="py-10 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
+                      Tidak ada produk aktif untuk provider ini.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[480px] overflow-y-auto pr-1">
+                      {providerProducts.map((product) => {
+                        const active = selectedProduct?.id === product.id;
+                        const purchasable = isProductPurchasable(product);
+                        const statusLabel = catalogStatusLabel(product);
+                        return (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              if (isEwalletInquiry) setEwalletInquiry(null);
+                              if (isGameInquiry) setGameInquiry(null);
+                            }}
+                            className={`text-left p-4 rounded-2xl border transition-all duration-200 ${
+                              active
+                                ? 'border-primary-500 bg-primary-50/50 shadow-md shadow-primary-900/5 ring-1 ring-primary-200'
+                                : 'border-gray-100 bg-gray-50/80 hover:border-gray-300 hover:bg-white'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-extrabold text-gray-900 text-sm leading-snug min-w-0">
+                                {product.name}
+                              </div>
+                              <span
+                                className={`shrink-0 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                                  purchasable
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-100'
+                                }`}
+                              >
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                              <span className="text-base font-black text-primary-600">
+                                {formatIDR(product.price)}
+                              </span>
+                              {active && <ChevronRight className="w-4 h-4 text-primary-600" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               ) : (
-                'Lanjut ke Konfirmasi'
+                <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl">
+                  <p className="text-xs text-gray-500 font-semibold">
+                    {isGameInquiry
+                      ? 'Lengkapi data akun terlebih dahulu untuk menampilkan daftar produk.'
+                      : 'Masukkan nomor HP terlebih dahulu untuk menampilkan daftar nominal.'}
+                  </p>
+                </div>
               )}
-            </button>
+            </div>
+
+            <div className="lg:sticky lg:top-6">{renderSummaryPanel()}</div>
           </div>
         </div>
       )}
-
-      <AnimatePresence>
-        {ewalletInquiry && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-4 bg-black/55 backdrop-blur-[2px]"
-            role="dialog"
-            aria-modal="true"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black tracking-widest text-gray-400 uppercase">
-                    Konfirmasi E-Wallet
-                  </p>
-                  <h3 className="text-base font-extrabold text-gray-900 mt-1">
-                    {(selectedProvider || ewalletInquiry.provider_name || 'E-Wallet').toUpperCase()}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCancelEwalletInquiry}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
-                  aria-label="Tutup"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-5 py-4 space-y-3 text-sm">
-                <ConfirmRow label="E-Wallet" value={selectedProvider || ewalletInquiry.provider_name || '-'} />
-                <ConfirmRow label="Nomor HP" value={ewalletInquiry.customer_no} />
-                <ConfirmRow label="Nama Akun" value={ewalletInquiry.customer_name} emphasize />
-                <ConfirmRow
-                  label="Nominal"
-                  value={formatIDR(ewalletInquiry.nominal_amount ?? ewalletInquiry.bill_amount)}
-                />
-                <ConfirmRow label="Harga" value={formatIDR(ewalletInquiry.selling_price)} />
-              </div>
-              <div className="p-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={handleCancelEwalletInquiry}
-                  className="py-3 rounded-2xl border border-gray-200 font-extrabold text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  BATAL
-                </button>
-                <button
-                  type="button"
-                  onClick={handleEwalletLanjutBayar}
-                  className="py-3 rounded-2xl bg-primary-600 text-white font-extrabold text-sm hover:bg-primary-700"
-                >
-                  LANJUT BAYAR
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {gameInquiry && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-4 bg-black/55 backdrop-blur-[2px]"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="game-validasi-title"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black tracking-widest text-gray-400 uppercase">
-                    Validasi Game
-                  </p>
-                  <h3 id="game-validasi-title" className="text-base font-extrabold text-gray-900 mt-1">
-                    {(gameInquiry.game || selectedProvider || 'GAME').toUpperCase()}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCancelGameInquiry}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
-                  aria-label="Tutup"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-5 py-4 space-y-3 text-sm">
-                <ConfirmRow label="Game" value={gameInquiry.game || selectedProvider || '-'} />
-                <ConfirmRow label="ID / Zone" value={gameInquiry.id_zone_label || gameInquiry.customer_no} />
-                <ConfirmRow label="Nickname" value={gameInquiry.nickname} emphasize />
-                <ConfirmRow label="Item" value={gameInquiry.item || selectedProduct?.name || '-'} />
-                <ConfirmRow label="Harga" value={formatIDR(gameInquiry.price)} />
-              </div>
-              <p className="px-5 py-3 text-[11px] text-amber-800 bg-amber-50/80 border-y border-amber-100 leading-relaxed">
-                Pastikan <span className="font-extrabold">NICKNAME</span> sudah sesuai sebelum melanjutkan
-                pembayaran.
-              </p>
-              <div className="p-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={handleCancelGameInquiry}
-                  className="py-3 rounded-2xl border border-gray-200 font-extrabold text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  BATAL
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGameLanjutBayar}
-                  disabled={!gameInquiry.nickname}
-                  className="py-3 rounded-2xl bg-primary-600 text-white font-extrabold text-sm hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  LANJUT BAYAR
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {catalogSummaryOpen && selectedProduct && selectedProvider && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-4 bg-black/55 backdrop-blur-[2px]"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="catalog-summary-title"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black tracking-widest text-gray-400 uppercase">
-                    {isLanggananMode ? 'Ringkasan Langganan Digital' : 'Ringkasan Pembelian Voucher'}
-                  </p>
-                  <h3 id="catalog-summary-title" className="text-base font-extrabold text-gray-900 mt-1">
-                    {selectedProvider.toUpperCase()}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCatalogSummaryOpen(false)}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
-                  aria-label="Tutup"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-5 py-4 space-y-3 text-sm">
-                <ConfirmRow
-                  label="Kategori"
-                  value={isLanggananMode ? 'LANGGANAN DIGITAL' : 'VOUCHER DIGITAL'}
-                />
-                <ConfirmRow
-                  label={isLanggananMode ? 'Aplikasi' : 'Brand'}
-                  value={selectedProvider}
-                />
-                <ConfirmRow label="Varian" value={selectedProduct.name} />
-                <ConfirmRow label="Harga" value={formatIDR(selectedProduct.price)} emphasize />
-              </div>
-              <div className="p-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCatalogSummaryOpen(false)}
-                  className="py-3 rounded-2xl border border-gray-200 font-extrabold text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  BATAL
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSummaryLanjutBayar}
-                  className="py-3 rounded-2xl bg-primary-600 text-white font-extrabold text-sm hover:bg-primary-700"
-                >
-                  LANJUT BAYAR
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {checkoutData && (
         <CheckoutSummary
@@ -1016,21 +1005,41 @@ export function ProviderCatalogFlow({
   );
 }
 
-function ConfirmRow({
+function SummaryPanelShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-3xl bg-gradient-to-br from-primary-900 via-primary-950 to-gray-950 text-white p-5 shadow-xl shadow-primary-900/25 border border-primary-800/50">
+      {children}
+      <div className="mt-4 pt-4 border-t border-white/10">
+        <p className="text-[10px] text-white/65 leading-relaxed">
+          Produk terverifikasi tersedia saat ini. Jika transaksi gagal diproses, saldo GurkyPay otomatis
+          dikembalikan.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PanelActions({ children }: { children: ReactNode }) {
+  return <div className="mt-4 space-y-2">{children}</div>;
+}
+
+function SummaryRow({
   label,
   value,
   emphasize = false,
+  large = false,
 }: {
   label: string;
   value: string;
   emphasize?: boolean;
+  large?: boolean;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="text-xs font-semibold text-gray-500 shrink-0">{label}</span>
+    <div className={`flex items-start justify-between gap-3 py-1.5 ${large ? 'pt-2 mt-1 border-t border-white/10' : ''}`}>
+      <span className="text-[11px] font-semibold text-white/55 shrink-0">{label}</span>
       <span
-        className={`text-right text-xs font-extrabold ${
-          emphasize ? 'text-primary-800 uppercase tracking-wide' : 'text-gray-900'
+        className={`text-right font-extrabold ${
+          large ? 'text-lg text-white' : emphasize ? 'text-sm text-white uppercase tracking-wide' : 'text-xs text-white/90'
         }`}
       >
         {value}

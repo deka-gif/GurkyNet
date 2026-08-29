@@ -11,6 +11,7 @@ import {
   Star,
   Timer,
   TrendingUp,
+  Upload,
   Wallet,
   X,
   Zap,
@@ -18,6 +19,7 @@ import {
 import { operationsService } from '../../services/operations.service';
 import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 import { formatIDR } from '../../utils/currency';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 type ProviderCard = {
   id: number;
@@ -237,6 +239,8 @@ export const OperationsProductProviderControl: React.FC = () => {
 
   const mountedRef = useRef(true);
   const progressTimerRef = useRef<number | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoUploadTarget, setLogoUploadTarget] = useState<ProviderCard | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -372,6 +376,39 @@ export const OperationsProductProviderControl: React.FC = () => {
       const code = e?.providerCode || e?.code;
       setToast([code, e?.message || 'Aksi gagal'].filter(Boolean).join(' — '));
       return null;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleLogoFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const card = logoUploadTarget;
+    e.target.value = '';
+    setLogoUploadTarget(null);
+    if (!file || !card) return;
+
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+    if (!allowed.includes(file.type)) {
+      setToast('Format logo harus PNG, JPEG, WebP, atau SVG.');
+      return;
+    }
+
+    setBusyId(card.id);
+    try {
+      const uploadRes = await operationsService.uploadProviderLogoFile(file);
+      const path = uploadRes?.data?.path;
+      if (!path) {
+        setToast('Upload gagal — path media tidak ditemukan.');
+        return;
+      }
+      await runAction(
+        card.id,
+        () => operationsService.setProductProviderLogo(card.id, path),
+        'Logo berhasil diperbarui.'
+      );
+    } catch (err: any) {
+      setToast(err?.message || 'Upload logo gagal.');
     } finally {
       setBusyId(null);
     }
@@ -638,7 +675,15 @@ export const OperationsProductProviderControl: React.FC = () => {
           Memuat provider…
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={(e) => void handleLogoFileSelected(e)}
+          />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
           {cards.map((card) => {
             const busy = busyId === card.id || globalRefreshing;
             const audit = card.productAudit;
@@ -651,7 +696,7 @@ export const OperationsProductProviderControl: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
                       {card.logo ? (
-                        <img src={card.logo} alt="" className="w-full h-full object-cover" />
+                        <img src={resolveMediaUrl(card.logo)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <Zap className="w-5 h-5 text-slate-500" />
                       )}
@@ -666,6 +711,20 @@ export const OperationsProductProviderControl: React.FC = () => {
                         )}
                       </div>
                       <p className="text-xs text-slate-400 font-mono mt-0.5">{card.code}</p>
+                      {!isOwnerReadOnly && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setLogoUploadTarget(card);
+                            logoInputRef.current?.click();
+                          }}
+                          className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                        >
+                          <Upload className="w-3 h-3" />
+                          {card.logo ? 'Ganti Logo' : 'Upload Logo'}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <span
@@ -925,7 +984,8 @@ export const OperationsProductProviderControl: React.FC = () => {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {syncSummary && (

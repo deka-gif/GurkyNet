@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
   Zap,
-  CheckCircle2,
   AlertCircle,
   CreditCard,
   Wallet,
@@ -16,6 +14,7 @@ import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { plnService, PlnInquiryResult } from '../../services/pln/pln.service';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 export const TokenPlnPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -31,6 +30,14 @@ export const TokenPlnPage = () => {
   const [resumePin, setResumePin] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   const isValidCustomerId = customerId.length >= 11 && customerId.length <= 12;
   const inquiryReady =
@@ -150,44 +157,6 @@ export const TokenPlnPage = () => {
           </span>
         </div>
       </div>
-
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-emerald-900 text-sm">Pembayaran Token Berhasil!</h5>
-              <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
-            </div>
-            <button type="button" onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500">
-              Tutup
-            </button>
-          </motion.div>
-        )}
-
-        {errorMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3.5"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h5 className="font-bold text-red-900 text-sm">Perhatian</h5>
-              <p className="text-xs text-red-700 mt-0.5">{errorMsg}</p>
-            </div>
-            <button type="button" onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500">
-              Tutup
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6">

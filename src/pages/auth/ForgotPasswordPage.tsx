@@ -3,9 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
 import { Button } from '../../components/ui/Button';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 const step1Schema = z.object({
   email: z.string().min(1, 'Email wajib diisi').email('Format email tidak valid'),
@@ -34,6 +35,14 @@ export const ForgotPasswordPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   const { register: registerStep1, handleSubmit: handleSubmitStep1, formState: { errors: errorsStep1 } } = useForm<Step1Fields>({
     resolver: zodResolver(step1Schema),
@@ -142,19 +151,6 @@ export const ForgotPasswordPage: React.FC = () => {
         <div className="p-3.5 bg-accent-300/20 border border-accent-400/40 text-primary-900 rounded-2xl flex items-center gap-2 text-xs">
           <Sparkles className="w-4 h-4 text-accent-600 shrink-0" />
           <span><strong>Reviewer Sandbox OTP:</strong> <span className="font-mono font-bold tracking-widest text-primary-800 bg-white/80 px-2 py-0.5 rounded border border-accent-400/30">{sandboxOtpCode}</span></span>
-        </div>
-      )}
-
-      {errorMsg && (
-        <div role="alert" className="auth-alert-error">
-          <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
-          <span className="font-medium">{errorMsg}</span>
-        </div>
-      )}
-      {successMsg && (
-        <div role="status" className="auth-alert-success">
-          <CheckCircle className="w-5 h-5 shrink-0 text-primary-600 mt-0.5" />
-          <span className="font-medium">{successMsg}</span>
         </div>
       )}
 

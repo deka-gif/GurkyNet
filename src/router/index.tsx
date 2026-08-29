@@ -27,6 +27,8 @@ import {
   GamePage,
   VoucherDigitalPage,
   VoucherInternetPage,
+  VoucherElektronikZonaPage,
+  VoucherFisikZonaPage,
   TransferPage,
   TelekomunikasiHubPage,
   TagihanHubPage,
@@ -617,6 +619,14 @@ export const router = createBrowserRouter([
       {
         path: 'voucher-internet',
         element: <VoucherInternetPage />
+      },
+      {
+        path: 'voucher-internet/elektronik/:zona',
+        element: <VoucherElektronikZonaPage />
+      },
+      {
+        path: 'voucher-internet/fisik/:zona',
+        element: <VoucherFisikZonaPage />
       },
       {
         path: 'ewallet',

@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
-  AlertCircle,
   Camera,
-  CheckCircle2,
   CreditCard,
   RefreshCw,
   Search,
@@ -24,6 +21,7 @@ import {
   providerBadgeLabel,
 } from '../../utils/detectOperator';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 const PER_PAGE = 24;
 const RETURN_PATH = '/dashboard/telekomunikasi/aktivasi-perdana';
@@ -67,6 +65,14 @@ export function AktivasiPerdanaFlow() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   useEffect(() => {
     fetchWallet();
@@ -293,37 +299,6 @@ export function AktivasiPerdanaFlow() {
           </span>
         </div>
       </div>
-
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <div className="flex-1 text-xs text-emerald-700 font-semibold">{successMsg}</div>
-            <button type="button" onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500">
-              Tutup
-            </button>
-          </motion.div>
-        )}
-        {errorMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-            <div className="flex-1 text-xs text-red-700 font-semibold">{errorMsg}</div>
-            <button type="button" onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500">
-              Tutup
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className={`grid grid-cols-1 gap-6 ${showSidePanel ? 'lg:grid-cols-12' : ''}`}>
         <div

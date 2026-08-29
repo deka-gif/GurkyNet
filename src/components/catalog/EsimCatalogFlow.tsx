@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
-  AlertCircle,
-  CheckCircle2,
   Copy,
   CreditCard,
   Download,
@@ -21,6 +18,7 @@ import { formatIDR } from '../../utils/currency';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { providerApiName, providerBadgeLabel } from '../../utils/detectOperator';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 const PER_PAGE = 24;
 const RETURN_PATH = '/dashboard/telekomunikasi/esim';
@@ -105,6 +103,14 @@ export function EsimCatalogFlow() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [esimMeta, setEsimMeta] = useState<EsimDeliveryMeta | null>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (successMsg) toastSuccess('Berhasil', successMsg);
+  }, [successMsg]);
 
   useEffect(() => {
     fetchWallet();
@@ -260,126 +266,99 @@ export function EsimCatalogFlow() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-3"
-          >
-            <div className="flex gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <div className="flex-1">
-                <h5 className="font-bold text-emerald-900 text-sm">Transaksi eSIM berhasil</h5>
-                <p className="text-xs text-emerald-700 mt-0.5">{successMsg}</p>
-              </div>
-              <button type="button" onClick={() => setSuccessMsg(null)} className="text-xs font-bold text-emerald-500">
-                Tutup
-              </button>
-            </div>
-
-            {esimMeta ? (
-              <div className="bg-white rounded-2xl border border-emerald-100 p-4 space-y-3">
-                {(esimMeta.qrCodeUrl || esimMeta.qrPayload) && (
-                  <div className="flex flex-col sm:flex-row gap-4 items-start">
-                    <div className="w-40 h-40 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center overflow-hidden">
-                      {esimMeta.qrCodeUrl ? (
-                        <img src={esimMeta.qrCodeUrl} alt="QR eSIM" className="w-full h-full object-contain" />
-                      ) : (
-                        <div className="text-center p-3">
-                          <QrCode className="w-8 h-8 mx-auto text-gray-400" />
-                          <p className="text-[10px] text-gray-500 mt-2 font-semibold break-all">
-                            {esimMeta.qrPayload}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 space-y-2 text-xs">
-                      {esimMeta.msisdn && (
-                        <div>
-                          <span className="font-bold text-gray-500">Nomor Baru</span>
-                          <p className="font-black text-gray-900">{esimMeta.msisdn}</p>
-                        </div>
-                      )}
-                      {esimMeta.iccid && (
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <span className="font-bold text-gray-500">ICCID</span>
-                            <p className="font-mono text-gray-900 break-all">{esimMeta.iccid}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => copyText('ICCID', esimMeta.iccid)}
-                            className="p-2 rounded-lg border border-gray-100"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      {esimMeta.activationCode && (
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <span className="font-bold text-gray-500">Activation Code</span>
-                            <p className="font-mono text-gray-900 break-all">{esimMeta.activationCode}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => copyText('Activation', esimMeta.activationCode)}
-                            className="p-2 rounded-lg border border-gray-100"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      {esimMeta.activationGuide && (
-                        <p className="text-gray-600 leading-relaxed">{esimMeta.activationGuide}</p>
-                      )}
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {esimMeta.qrCodeUrl && (
-                          <button
-                            type="button"
-                            onClick={downloadQr}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-600 text-white text-[11px] font-bold"
-                          >
-                            <Download className="w-3.5 h-3.5" /> Download QR
-                          </button>
-                        )}
-                      </div>
-                      {copyHint && <p className="text-primary-600 font-bold">{copyHint}</p>}
-                    </div>
-                  </div>
-                )}
-                {!esimMeta.qrCodeUrl && !esimMeta.qrPayload && (
-                  <p className="text-xs text-amber-700 font-semibold">
-                    Provider belum mengembalikan QR/ICCID pada respons transaksi. Data aktivasi akan
-                    tampil di sini ketika API provider mendukungnya.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-amber-700 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                QR, nomor baru, ICCID, dan activation code belum tersedia dari provider. Struktur
-                halaman sudah siap — tanpa data palsu.
-              </p>
-            )}
-          </motion.div>
-        )}
-        {errorMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-            <div className="flex-1 text-xs text-red-700 font-semibold">{errorMsg}</div>
-            <button type="button" onClick={() => setErrorMsg(null)} className="text-xs font-bold text-red-500">
+      {esimMeta && (
+        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-3">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setEsimMeta(null);
+                setSuccessMsg(null);
+              }}
+              className="text-xs font-bold text-emerald-500"
+            >
               Tutup
             </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+          <div className="bg-white rounded-2xl border border-emerald-100 p-4 space-y-3">
+            {(esimMeta.qrCodeUrl || esimMeta.qrPayload) && (
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                <div className="w-40 h-40 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center overflow-hidden">
+                  {esimMeta.qrCodeUrl ? (
+                    <img src={esimMeta.qrCodeUrl} alt="QR eSIM" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="text-center p-3">
+                      <QrCode className="w-8 h-8 mx-auto text-gray-400" />
+                      <p className="text-[10px] text-gray-500 mt-2 font-semibold break-all">
+                        {esimMeta.qrPayload}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 space-y-2 text-xs">
+                  {esimMeta.msisdn && (
+                    <div>
+                      <span className="font-bold text-gray-500">Nomor Baru</span>
+                      <p className="font-black text-gray-900">{esimMeta.msisdn}</p>
+                    </div>
+                  )}
+                  {esimMeta.iccid && (
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-gray-500">ICCID</span>
+                        <p className="font-mono text-gray-900 break-all">{esimMeta.iccid}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyText('ICCID', esimMeta.iccid)}
+                        className="p-2 rounded-lg border border-gray-100"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {esimMeta.activationCode && (
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-gray-500">Activation Code</span>
+                        <p className="font-mono text-gray-900 break-all">{esimMeta.activationCode}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyText('Activation', esimMeta.activationCode)}
+                        className="p-2 rounded-lg border border-gray-100"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {esimMeta.activationGuide && (
+                    <p className="text-gray-600 leading-relaxed">{esimMeta.activationGuide}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {esimMeta.qrCodeUrl && (
+                      <button
+                        type="button"
+                        onClick={downloadQr}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-600 text-white text-[11px] font-bold"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Download QR
+                      </button>
+                    )}
+                  </div>
+                  {copyHint && <p className="text-primary-600 font-bold">{copyHint}</p>}
+                </div>
+              </div>
+            )}
+            {!esimMeta.qrCodeUrl && !esimMeta.qrPayload && (
+              <p className="text-xs text-amber-700 font-semibold">
+                Provider belum mengembalikan QR/ICCID pada respons transaksi. Data aktivasi akan
+                tampil di sini ketika API provider mendukungnya.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 gap-6 ${showSidePanel ? 'lg:grid-cols-12' : ''}`}>
         <div

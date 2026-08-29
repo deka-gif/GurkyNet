@@ -55,6 +55,14 @@ export const VoucherInternetPage = lazyNamed(
   () => import('../pages/dashboard/VoucherInternetPage'),
   'VoucherInternetPage'
 );
+export const VoucherElektronikZonaPage = lazyNamed(
+  () => import('../pages/dashboard/VoucherElektronikZonaPage'),
+  'VoucherElektronikZonaPage'
+);
+export const VoucherFisikZonaPage = lazyNamed(
+  () => import('../pages/dashboard/VoucherFisikZonaPage'),
+  'VoucherFisikZonaPage'
+);
 export const TransferPage = lazyNamed(
   () => import('../pages/dashboard/TransferPage'),
   'TransferPage'
