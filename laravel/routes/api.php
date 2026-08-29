@@ -98,6 +98,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/categories/{slug}', [ProductController::class, 'showCategory']);
         Route::get('/providers', [ProductController::class, 'indexProviders']);
         Route::get('/products', [ProductController::class, 'indexProducts']);
+        Route::get('/products/providers', [ProductController::class, 'indexCategoryProviders']);
         Route::get('/products/{sku_code}', [ProductController::class, 'showProduct']);
 
         // GurkyNet Information Architecture (mapped catalog — never Digi/VIP trees)

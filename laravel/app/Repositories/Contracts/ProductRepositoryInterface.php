@@ -11,4 +11,6 @@ interface ProductRepositoryInterface
     public function findById(int $id): ?Product;
     public function findBySku(string $skuCode): ?Product;
     public function getActiveProducts(): \Illuminate\Database\Eloquent\Collection;
+
+    public function getActiveProductsForCategory(string $category): \Illuminate\Database\Eloquent\Collection;
 }

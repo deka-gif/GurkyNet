@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Eloquent;
 
+use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Models\ProductProvider;
 use App\Models\ProductProviderSku;
@@ -35,6 +36,7 @@ class ProductRepository implements ProductRepositoryInterface
 
     public function getPaginatedProducts(array $filters = []): LengthAwarePaginator
     {
+        ProductResource::resetListingCache();
         static::$vipTraceBudget = 30;
         static::$visibilityTraceBudget = 30;
 
@@ -128,6 +130,7 @@ class ProductRepository implements ProductRepositoryInterface
 
     public function findById(int $id): ?Product
     {
+        ProductResource::exitListingMode();
         $this->repairAndReportLegacyUnmapped();
 
         $product = Product::with(['category', 'provider', 'productProvider', 'providerSkus.productProvider'])->find($id);
@@ -151,6 +154,7 @@ class ProductRepository implements ProductRepositoryInterface
 
     public function findBySku(string $skuCode): ?Product
     {
+        ProductResource::exitListingMode();
         $this->repairAndReportLegacyUnmapped();
 
         $product = Product::with(['category', 'provider', 'productProvider', 'providerSkus.productProvider'])
@@ -177,6 +181,10 @@ class ProductRepository implements ProductRepositoryInterface
 
     public function getActiveProducts(): EloquentCollection
     {
+        ProductResource::resetListingCache();
+        static::$vipTraceBudget = 30;
+        static::$visibilityTraceBudget = 30;
+
         $this->repairAndReportLegacyUnmapped();
 
         $query = Product::query()
@@ -187,6 +195,27 @@ class ProductRepository implements ProductRepositoryInterface
         $all = $query->orderBy('id')->get();
         $merged = $this->sortCatalogProducts($this->mergeDuplicateCatalogProducts($all));
         $this->logFilterTraceForCollection($merged, 'getActiveProducts');
+
+        return new EloquentCollection($merged->all());
+    }
+
+    public function getActiveProductsForCategory(string $category): EloquentCollection
+    {
+        ProductResource::resetListingCache();
+        static::$vipTraceBudget = 30;
+        static::$visibilityTraceBudget = 30;
+
+        $this->repairAndReportLegacyUnmapped();
+
+        $query = Product::query()
+            ->with(['category', 'provider', 'productProvider', 'providerSkus.productProvider']);
+
+        $this->applyControlCenterVisibility($query);
+        $this->applyListFilters($query, ['category' => $category]);
+
+        $all = $query->orderBy('id')->get();
+        $merged = $this->sortCatalogProducts($this->mergeDuplicateCatalogProducts($all));
+        $this->logFilterTraceForCollection($merged, 'getActiveProductsForCategory');
 
         return new EloquentCollection($merged->all());
     }

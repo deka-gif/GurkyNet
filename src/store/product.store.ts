@@ -1,15 +1,18 @@
 import { create } from 'zustand';
-import { productService, ProductFilters } from '../services/product/product.service';
+import { productService, ProductFilters, CategoryProviderSummary } from '../services/product/product.service';
 import { Product, Pagination } from '../types';
 
 interface ProductState {
   products: Product[];
   categories: any[];
   providers: any[];
+  categoryProviders: CategoryProviderSummary[];
+  categoryProvidersLoading: boolean;
   pagination: Pagination | null;
   loading: boolean;
   error: string | null;
   fetchProducts: (filters?: ProductFilters) => Promise<void>;
+  fetchCategoryProviders: (category: string) => Promise<void>;
   fetchCategories: () => Promise<void>;
   fetchProviders: () => Promise<void>;
   getProductsByCategory: (category: Product['category']) => Product[];
@@ -22,9 +25,29 @@ export const useProductStore = create<ProductState>((set, get) => ({
   products: [],
   categories: [],
   providers: [],
+  categoryProviders: [],
+  categoryProvidersLoading: false,
   pagination: null,
   loading: false,
   error: null,
+
+  fetchCategoryProviders: async (category) => {
+    set({ categoryProvidersLoading: true, error: null });
+    try {
+      const response = await productService.getCategoryProviders(category);
+      if (response.success) {
+        set({ categoryProviders: response.data, categoryProvidersLoading: false });
+      } else {
+        set({ categoryProviders: [], error: response.message, categoryProvidersLoading: false });
+      }
+    } catch (err: any) {
+      set({
+        categoryProviders: [],
+        error: err.message || 'Gagal memuat daftar provider.',
+        categoryProvidersLoading: false,
+      });
+    }
+  },
 
   fetchProducts: async (filters) => {
     set({ loading: true, error: null });

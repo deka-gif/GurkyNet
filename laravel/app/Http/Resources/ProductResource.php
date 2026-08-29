@@ -12,14 +12,47 @@ use App\Http\Resources\ProductProviderResource;
 
 class ProductResource extends JsonResource
 {
+    /** @var array<int, 'active'|'maintenance'|'offline'>|null */
+    protected static ?array $providerFulfillmentCache = null;
+
+    protected static bool $listingStatusMode = false;
+
+    public static function resetListingCache(): void
+    {
+        self::$providerFulfillmentCache = null;
+        self::$listingStatusMode = true;
+    }
+
+    public static function exitListingMode(): void
+    {
+        self::$listingStatusMode = false;
+    }
+
+    public static function isListingMode(): bool
+    {
+        return self::$listingStatusMode;
+    }
+
     public function toArray(Request $request): array
     {
         $pricingService = resolve(PricingService::class);
         $availabilityService = resolve(AvailabilityService::class);
 
         $pricingDetails = $pricingService->calculateForProduct($this->resource);
-        $availabilityStatus = $availabilityService->getStatus($this->resource);
-        // getStatus() already delegates to Control Center routing for 'active'.
+
+        if (self::$listingStatusMode) {
+            if (self::$providerFulfillmentCache === null) {
+                self::$providerFulfillmentCache = $availabilityService->buildProviderFulfillmentMap();
+            }
+            $availabilityStatus = $availabilityService->getListingStatus(
+                $this->resource,
+                self::$providerFulfillmentCache
+            );
+        } else {
+            $availabilityStatus = $availabilityService->getStatus($this->resource);
+        }
+
+        // getStatus()/getListingStatus() already delegates sellability for 'active'.
         $sellable = $availabilityStatus === 'active';
         $catalogVisible = $availabilityStatus === 'active' || $availabilityStatus === 'maintenance';
 

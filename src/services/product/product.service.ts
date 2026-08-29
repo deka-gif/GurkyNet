@@ -4,6 +4,7 @@ import { Product, ApiResponse } from '../../types';
 export interface ProductFilters {
   category?: string;
   provider?: string;
+  provider_id?: number;
   status?: string;
   keyword?: string;
   per_page?: number;
@@ -11,6 +12,13 @@ export interface ProductFilters {
   telkomsel_group?: string;
   data_group?: string;
   sort?: string;
+}
+
+export interface CategoryProviderSummary {
+  providerId: number;
+  name: string;
+  logo: string | null;
+  count: number;
 }
 
 export const productService = {
@@ -24,6 +32,7 @@ export const productService = {
     if (filters) {
       if (filters.category) params.append('category', filters.category);
       if (filters.provider) params.append('provider', filters.provider);
+      if (filters.provider_id != null) params.append('provider_id', String(filters.provider_id));
       if (filters.status) params.append('status', filters.status);
       if (filters.keyword) params.append('keyword', filters.keyword);
       if (filters.data_group) params.append('data_group', filters.data_group);
@@ -39,6 +48,14 @@ export const productService = {
     const response = await apiClient.get<ApiResponse<Product[]>>(`/products${queryString}`, {
       timeout: 120000,
     });
+    return response.data;
+  },
+
+  getCategoryProviders: async (category: string): Promise<ApiResponse<CategoryProviderSummary[]>> => {
+    const params = new URLSearchParams({ category });
+    const response = await apiClient.get<ApiResponse<CategoryProviderSummary[]>>(
+      `/products/providers?${params.toString()}`
+    );
     return response.data;
   },
 

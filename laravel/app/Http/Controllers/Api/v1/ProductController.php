@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\v1;
 
 use App\Http\Controllers\Controller;
 use App\Actions\Product\GetCategoryAction;
+use App\Actions\Product\GetCategoryProviderSummaryAction;
 use App\Actions\Product\GetProductAction;
 use App\Actions\Product\SearchProductAction;
 use App\Actions\Product\GetProviderAction;
@@ -22,17 +23,20 @@ class ProductController extends Controller
     protected GetProductAction $getProductAction;
     protected SearchProductAction $searchProductAction;
     protected GetProviderAction $getProviderAction;
+    protected GetCategoryProviderSummaryAction $getCategoryProviderSummaryAction;
 
     public function __construct(
         GetCategoryAction $getCategoryAction,
         GetProductAction $getProductAction,
         SearchProductAction $searchProductAction,
-        GetProviderAction $getProviderAction
+        GetProviderAction $getProviderAction,
+        GetCategoryProviderSummaryAction $getCategoryProviderSummaryAction,
     ) {
         $this->getCategoryAction = $getCategoryAction;
         $this->getProductAction = $getProductAction;
         $this->searchProductAction = $searchProductAction;
         $this->getProviderAction = $getProviderAction;
+        $this->getCategoryProviderSummaryAction = $getCategoryProviderSummaryAction;
     }
 
     /**
@@ -73,7 +77,7 @@ class ProductController extends Controller
     public function indexProducts(Request $request): JsonResponse
     {
         $filters = $request->only([
-            'category', 'provider', 'status', 'keyword', 'per_page', 'page',
+            'category', 'provider', 'provider_id', 'status', 'keyword', 'per_page', 'page',
             'telkomsel_group', 'data_group', 'sort',
         ]);
         
@@ -100,5 +104,20 @@ class ProductController extends Controller
         }
 
         return $this->successResponse('Detail produk berhasil didapatkan.', new ProductResource($product));
+    }
+
+    /**
+     * Provider/game brand summary for a GurkyNet category (lazy catalog step 1).
+     */
+    public function indexCategoryProviders(Request $request): JsonResponse
+    {
+        $category = trim((string) $request->query('category', ''));
+        if ($category === '') {
+            return $this->errorResponse('Parameter category wajib diisi.', 400);
+        }
+
+        $providers = $this->getCategoryProviderSummaryAction->execute($category);
+
+        return $this->successResponse('Daftar provider kategori berhasil didapatkan.', $providers);
     }
 }

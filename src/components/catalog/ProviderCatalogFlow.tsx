@@ -70,7 +70,7 @@ function resolveInquiryError(err: unknown, fallback: string): string {
 
 /**
  * Production PPOB pattern: Provider → Produk → Target → Checkout (PIN via CheckoutSummary).
- * Products always come from GET /products?category=...
+ * Products: step 1 GET /products/providers?category=..., step 2 GET /products?category=...&provider_id=...
  */
 export function ProviderCatalogFlow({
   category,
@@ -93,7 +93,14 @@ export function ProviderCatalogFlow({
   /** No customer inquiry — summary popup then PIN (voucher / langganan). */
   const isSummaryCheckoutMode = isVoucherMode || isLanggananMode;
   const { wallet, fetchWallet } = useWalletStore();
-  const { products, loading: productsLoading, fetchProducts } = useProductStore();
+  const {
+    products,
+    loading: productsLoading,
+    fetchProducts,
+    categoryProviders,
+    categoryProvidersLoading,
+    fetchCategoryProviders,
+  } = useProductStore();
   const toast = useToast();
 
   const showFlowError = useCallback(
@@ -128,13 +135,13 @@ export function ProviderCatalogFlow({
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category });
+    fetchCategoryProviders(category);
     const pending = consumePendingCheckout(returnPath);
     if (pending?.data) {
       setCheckoutData(pending.data);
       setResumePin(!!pending.resumePin);
     }
-  }, [fetchWallet, fetchProducts, category, returnPath]);
+  }, [fetchWallet, fetchCategoryProviders, category, returnPath]);
 
   useEffect(() => {
     if (!isGameInquiry || !selectedProvider || step !== 'products') return;
@@ -172,26 +179,13 @@ export function ProviderCatalogFlow({
   }, [isGameInquiry, selectedProvider, step]);
 
   const providers = useMemo(() => {
-    const map = new Map<string, { name: string; count: number; sample?: Product; logo?: string | null }>();
-    for (const p of products) {
-      if (!isCatalogListed(p)) continue;
-      const name = (p.operatorName || 'Lainnya').trim();
-      const key = name.toLowerCase();
-      const prev = map.get(key);
-      if (prev) {
-        prev.count += 1;
-      } else {
-        const ext = p as Product & { providerDetails?: { logo?: string | null } };
-        map.set(key, {
-          name,
-          count: 1,
-          sample: p,
-          logo: providerLogoFromProduct(ext),
-        });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [products]);
+    return categoryProviders.map((cp) => ({
+      providerId: cp.providerId,
+      name: cp.name,
+      count: cp.count,
+      logo: providerLogoFromProduct({ providerDetails: { logo: cp.logo } }),
+    }));
+  }, [categoryProviders]);
 
   const filteredProviders = useMemo(() => {
     const q = providerQuery.trim().toLowerCase();
@@ -236,7 +230,7 @@ export function ProviderCatalogFlow({
         ? 'Masukkan ID Game'
         : 'Masukkan nomor tujuan');
 
-  const selectProvider = (name: string) => {
+  const selectProvider = (name: string, providerId: number) => {
     setSelectedProvider(name);
     setSelectedProduct(null);
     setEwalletInquiry(null);
@@ -246,6 +240,7 @@ export function ProviderCatalogFlow({
     setSecondaryValue('');
     setGameAccount({});
     setStep('products');
+    void fetchProducts({ category, provider_id: providerId });
   };
 
   const goBackToProviders = () => {
@@ -562,7 +557,7 @@ export function ProviderCatalogFlow({
             </div>
           </div>
 
-          {productsLoading ? (
+          {categoryProvidersLoading ? (
             <div className="py-16 text-center space-y-2">
               <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
               <p className="text-xs text-gray-400 font-bold">Memuat katalog dari server...</p>
@@ -592,7 +587,7 @@ export function ProviderCatalogFlow({
                 <button
                   key={p.name}
                   type="button"
-                  onClick={() => selectProvider(p.name)}
+                  onClick={() => selectProvider(p.name, p.providerId)}
                   className="group text-left p-3.5 rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-primary-50/30 hover:border-primary-300 hover:shadow-md hover:shadow-primary-900/5 transition-all duration-200"
                 >
                   <BrandAvatar name={p.name} logoUrl={p.logo} size="md" className="mb-2.5" />
@@ -716,7 +711,12 @@ export function ProviderCatalogFlow({
                         ? 'Pilih Produk'
                         : 'Daftar Produk'}
                 </h5>
-                {providerProducts.length === 0 ? (
+                {productsLoading && providerProducts.length === 0 ? (
+                  <div className="py-16 text-center space-y-2">
+                    <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
+                    <p className="text-xs text-gray-400 font-bold">Memuat produk...</p>
+                  </div>
+                ) : providerProducts.length === 0 ? (
                   <div className="py-10 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
                     Tidak ada produk aktif untuk provider ini.
                   </div>
