@@ -57,18 +57,29 @@ export function BillPaymentFlow({
   const [resumePin, setResumePin] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [readyForCategory, setReadyForCategory] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setReadyForCategory(null);
     fetchWallet();
-    fetchProducts({ category });
+    void fetchProducts({ category }).then(() => {
+      if (!cancelled) setReadyForCategory(category);
+    });
     const pending = consumePendingCheckout(returnPath);
     if (pending?.data) {
       setCheckoutData(pending.data);
       setResumePin(!!pending.resumePin);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [fetchWallet, fetchProducts, category, returnPath]);
 
+  const isCatalogReady = readyForCategory === category && !productsLoading;
+
   const vendors = useMemo(() => {
+    if (!isCatalogReady) return [];
     const map = new Map<string, { name: string; products: Product[] }>();
     for (const p of products) {
       if (!isCatalogListed(p)) continue;
@@ -82,7 +93,7 @@ export function BillPaymentFlow({
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [products]);
+  }, [products, isCatalogReady]);
 
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();
@@ -109,11 +120,11 @@ export function BillPaymentFlow({
 
   // Single-vendor categories (e.g. PDAM): skip redundant vendor picker — land on input form directly.
   useEffect(() => {
-    if (productsLoading || vendors.length !== 1 || step !== 'vendor' || selectedVendor) {
+    if (!isCatalogReady || vendors.length !== 1 || step !== 'vendor' || selectedVendor) {
       return;
     }
     selectVendor(vendors[0].name);
-  }, [productsLoading, vendors, step, selectedVendor]);
+  }, [isCatalogReady, vendors, step, selectedVendor]);
 
   const goBackToVendors = () => {
     setStep('vendor');
@@ -258,7 +269,7 @@ export function BillPaymentFlow({
             </div>
           </div>
 
-          {productsLoading ? (
+          {(productsLoading || !isCatalogReady) ? (
             <div className="py-16 text-center space-y-2">
               <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
               <p className="text-xs text-gray-400 font-bold">Memuat katalog dari server...</p>
