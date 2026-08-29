@@ -226,6 +226,10 @@ export const MarketingMediaLibrary = lazyNamed(
   () => import('../pages/dashboard/MarketingMediaLibrary'),
   'MarketingMediaLibrary'
 );
+export const MarketingBrandLogoManagement = lazyNamed(
+  () => import('../pages/dashboard/MarketingBrandLogoManagement'),
+  'MarketingBrandLogoManagement'
+);
 
 export const CustomerSupportDashboard = lazyNamed(
   () => import('../pages/dashboard/CustomerSupportDashboard'),

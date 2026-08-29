@@ -31,6 +31,26 @@ class ProviderRepository implements ProviderRepositoryInterface
         return Provider::where('name', $name)->first();
     }
 
+    public function updateLogo(int $id, string $logo): ?Provider
+    {
+        $provider = Provider::find($id);
+        if (! $provider) {
+            return null;
+        }
+
+        $provider->logo = $logo;
+        $provider->save();
+
+        try {
+            \Illuminate\Support\Facades\Cache::tags(['providers'])->flush();
+        } catch (\BadMethodCallException $e) {
+            // cache driver doesn't support tags (e.g. file/database) — fall through
+        }
+        \Illuminate\Support\Facades\Cache::forget('providers_active_all');
+
+        return $provider;
+    }
+
     /**
      * Upsert Digiflazz catalog rows into digiflazz_products and the master products table.
      * Master `products` remains the single source of truth for Website / Ops / Checkout / Finance.

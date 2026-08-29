@@ -9,6 +9,7 @@ use App\Actions\Admin\Marketing\MarketingBannerAction;
 use App\Actions\Admin\Marketing\MarketingPromotionAction;
 use App\Actions\Admin\Marketing\MarketingVoucherAction;
 use App\Actions\Admin\Marketing\MarketingAnnouncementAction;
+use App\Actions\Admin\Marketing\MarketingBrandLogoAction;
 use App\Http\Requests\Admin\Marketing\MarketingFilterRequest;
 use App\Http\Requests\Admin\Marketing\CreateBannerRequest;
 use App\Http\Requests\Admin\Marketing\UpdateBannerRequest;
@@ -23,6 +24,7 @@ use App\Http\Resources\PromotionResource;
 use App\Http\Resources\VoucherResource;
 use App\Http\Resources\AnnouncementResource;
 use App\Http\Resources\ProductResource;
+use App\Http\Resources\ProviderResource;
 use App\Models\HomepageFeaturedProduct;
 use App\Models\Product;
 use Illuminate\Http\Request;
@@ -397,5 +399,33 @@ class MarketingController extends Controller
         \App\Services\Website\PublicHomepageCache::forget();
 
         return $this->successResponse('Featured product berhasil dihapus.');
+    }
+
+    /**
+     * List brands (Provider) currently live/visible to customers, for logo upload.
+     * GET /api/v1/admin/marketing/brand-logos
+     */
+    public function brandLogos(MarketingBrandLogoAction $action): JsonResponse
+    {
+        return $this->successResponse('Daftar brand berhasil dimuat.', $action->list());
+    }
+
+    /**
+     * Set/replace a brand's logo. Takes effect immediately for every customer.
+     * PUT /api/v1/admin/marketing/brand-logos/{id}
+     */
+    public function updateBrandLogo(string|int $id, Request $request, MarketingBrandLogoAction $action): JsonResponse
+    {
+        $data = $request->validate([
+            'logo' => 'required|string|max:500',
+        ]);
+
+        try {
+            $provider = $action->setLogo((int) $id, $data['logo']);
+
+            return $this->successResponse('Logo brand berhasil diperbarui.', new ProviderResource($provider));
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Brand tidak ditemukan.', 404);
+        }
     }
 }

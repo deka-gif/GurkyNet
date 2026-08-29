@@ -107,6 +107,7 @@ import {
   MarketingWebsiteMenu,
   MarketingStaticPages,
   MarketingMediaLibrary,
+  MarketingBrandLogoManagement,
   OwnerDashboard,
   OwnerCashFlowProjectionPage,
   OwnerExecutiveAlertsPage,
@@ -564,6 +565,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner']}>
             <MarketingMediaLibrary />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'marketing/brand-logos',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Marketing', 'Owner']}>
+            <MarketingBrandLogoManagement />
           </ProtectedRoute>
         )
       },

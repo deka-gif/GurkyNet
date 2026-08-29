@@ -543,6 +543,9 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/announcements', [MarketingController::class, 'storeAnnouncement']);
             Route::put('/announcements/{id}', [MarketingController::class, 'updateAnnouncement']);
             Route::delete('/announcements/{id}', [MarketingController::class, 'destroyAnnouncement']);
+
+            Route::get('/brand-logos', [MarketingController::class, 'brandLogos']);
+            Route::put('/brand-logos/{id}', [MarketingController::class, 'updateBrandLogo']);
         });
 
         // Customer Support Administration Module

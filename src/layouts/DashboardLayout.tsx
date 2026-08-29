@@ -48,6 +48,7 @@ import {
   AlertCircle,
   MessageSquare,
   ShieldCheck,
+  Palette,
   Landmark,
   Banknote,
 } from 'lucide-react';
@@ -183,18 +184,22 @@ export const DashboardLayout = () => {
 
       case 'Marketing':
         return [
+          { section: 'Utama' },
           { path: '/dashboard/marketing', label: 'Dashboard', icon: Megaphone },
           { path: '/dashboard/marketing/banners', label: 'Banner', icon: ImageIcon },
-          { path: '/dashboard/marketing/feedback-queue', label: 'Feedback Queue', icon: MessageSquare },
           { path: '/dashboard/marketing/promotions', label: 'Promotion', icon: Tag },
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/marketing/announcements', label: 'Announcement', icon: Bell },
+          { path: '/dashboard/marketing/feedback-queue', label: 'Feedback Queue', icon: MessageSquare },
+          { section: 'Katalog & Brand' },
+          { path: '/dashboard/marketing/brand-logos', label: 'Logo Brand', icon: Palette, isNew: true },
+          { section: 'Website' },
           { path: '/dashboard/marketing/website/settings', label: 'Website Settings', icon: Settings },
           { path: '/dashboard/marketing/website/homepage-builder', label: 'Homepage Builder', icon: Layers },
-          { path: '/dashboard/marketing/website/legal-center', label: 'Legal Center', icon: FileText },
           { path: '/dashboard/marketing/website/homepage-sections', label: 'Homepage Sections', icon: Layers },
           { path: '/dashboard/marketing/website/menus', label: 'Website Menu', icon: Menu },
           { path: '/dashboard/marketing/website/static-pages', label: 'Static Pages', icon: FileText },
+          { path: '/dashboard/marketing/website/legal-center', label: 'Legal Center', icon: FileText },
           { path: '/dashboard/marketing/website/media-library', label: 'Media Library', icon: ImageIcon },
           { path: '/dashboard/account', label: 'Akun', icon: User },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
@@ -418,6 +423,22 @@ export const DashboardLayout = () => {
         {/* Navigation Items */}
         <nav className="flex-1 py-6 px-3 space-y-1.5 overflow-y-auto">
           {menuItems.map((item: any, index: number) => {
+            if (item.section) {
+              return (
+                <div
+                  key={`section-${index}`}
+                  className={isSidebarCollapsed
+                    ? `${index === 0 ? 'mt-0' : 'mt-2'} mx-2 border-t border-gray-100`
+                    : `${index === 0 ? 'mt-0' : 'mt-4'} mb-1 px-4`}
+                >
+                  {!isSidebarCollapsed && (
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                      {item.section}
+                    </span>
+                  )}
+                </div>
+              );
+            }
             if (item.divider) {
               return (
                 <div
@@ -440,9 +461,14 @@ export const DashboardLayout = () => {
                   <motion.span 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="truncate"
+                    className="truncate flex items-center gap-1.5"
                   >
                     {item.label}
+                    {item.isNew && (
+                      <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#f8e3b0] text-[#7a5a1a]">
+                        Baru
+                      </span>
+                    )}
                   </motion.span>
                 )}
 

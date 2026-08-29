@@ -79,5 +79,26 @@ export const marketingService = {
     const res = await apiClient.delete<ApiResponse<any>>(`/admin/marketing/announcements/${id}`);
     return res.data;
   },
+
+  // Brand Logo (Provider-level — Telkomsel/OVO/DANA/etc, what customers actually see)
+  async getBrandLogos(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/brand-logos');
+    return res.data;
+  },
+  async uploadBrandLogoFile(file: File): Promise<ApiResponse<{ path?: string }>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'brand-logos');
+    formData.append('alt_text', file.name.split('.')[0] || 'brand-logo');
+
+    const res = await apiClient.post<ApiResponse<{ path?: string }>>('/admin/media', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  async setBrandLogo(id: string | number, logo: string): Promise<ApiResponse<any>> {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/marketing/brand-logos/${id}`, { logo });
+    return res.data;
+  },
 };
 
