@@ -336,7 +336,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     data.serviceName.toLowerCase() === 'samsat';
   const isEwalletReceipt =
     !!receiptData?.transaction_details?.is_ewallet ||
-    data.serviceName.toLowerCase() === 'top up digital' ||
+    data.serviceName.toLowerCase() === 'e-wallet' ||
     (!!data.inquiryRefId && typeof data.customDetails?.['Nama Akun'] === 'string');
   const ewalletAccountName =
     (receiptData?.transaction_details?.customer_name as string | undefined) ||

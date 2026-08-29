@@ -7,6 +7,7 @@ use App\Jobs\ProcessProductProviderTransaction;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductProvider;
+use App\Models\ProductProviderSku;
 use App\Models\Provider;
 use App\Models\User;
 use App\Models\Wallet;
@@ -236,5 +237,101 @@ class EwalletTopUpFlowTest extends TestCase
         $receipt->assertJsonPath('data.transaction_details.customer_name', 'REZA ADITYA')
             ->assertJsonPath('data.transaction_details.is_ewallet', true)
             ->assertJsonPath('data.transaction_details.serial_number', '81723918239123');
+    }
+
+    public function test_ewallet_inquiry_rejects_vip_only_product_without_digiflazz_mapping(): void
+    {
+        $vip = ProductProvider::vip();
+        $this->assertNotNull($vip);
+        $vip->update(['is_active' => true]);
+
+        $vipOnly = Product::create([
+            'product_category_id' => $this->product->product_category_id,
+            'provider_id' => $this->product->provider_id,
+            'product_provider_id' => $vip->id,
+            'sku_code' => 'VIP-DANA80',
+            'name' => 'DANA Rp 80.000',
+            'base_price' => 80350,
+            'sell_price' => 80800,
+            'admin_fee' => 500,
+            'status' => true,
+        ]);
+
+        ProductProviderSku::create([
+            'product_id' => $vipOnly->id,
+            'product_provider_id' => $vip->id,
+            'provider_sku' => 'VIP-DANA80',
+            'base_price' => 80350,
+            'is_preferred' => true,
+            'is_active' => true,
+        ]);
+
+        Http::fake();
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/ewallet/inquiry', [
+            'sku_code' => 'VIP-DANA80',
+            'customer_no' => '08123456789',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['sku_code'])
+            ->assertJsonPath('errors.sku_code.0', 'Produk belum terhubung ke Digiflazz.');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_ewallet_inquiry_parses_denomination_from_product_name_not_base_price(): void
+    {
+        Product::query()->where('sku_code', 'DANA50')->delete();
+
+        Product::create([
+            'product_category_id' => $this->product->product_category_id,
+            'provider_id' => $this->product->provider_id,
+            'sku_code' => 'DANA80K',
+            'name' => 'DANA Rp 80.000',
+            'base_price' => 80350,
+            'sell_price' => 80800,
+            'admin_fee' => 500,
+            'status' => true,
+        ]);
+
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNQEWALLET80K',
+                    'customer_no' => '08123456789',
+                    'customer_name' => 'REZA ADITYA',
+                    'buyer_sku_code' => 'DANA80K',
+                    'admin' => 500,
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'price' => 80000,
+                    'selling_price' => 80800,
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/ewallet/inquiry', [
+            'sku_code' => 'DANA80K',
+            'customer_no' => '08123456789',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.nominal_amount', 80000);
+
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return ($body['commands'] ?? null) === 'inq-pasca'
+                && ($body['buyer_sku_code'] ?? null) === 'DANA80K'
+                && ($body['customer_no'] ?? null) === '08123456789'
+                && (int) ($body['amount'] ?? 0) === 80000;
+        });
     }
 }
