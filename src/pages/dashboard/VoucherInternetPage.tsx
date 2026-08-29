@@ -35,7 +35,7 @@ import {
 import { TelkomselZonePicker } from '../../components/catalog/TelkomselZonePicker';
 import { productService } from '../../services/product/product.service';
 import {
-  addScannedSerials,
+  addCodesToScan,
   clearPendingScan,
   expandSnRange,
   loadPendingScan,
@@ -43,6 +43,7 @@ import {
   savePendingScan,
   type ScannedSerial,
 } from '../../utils/voucherPhysicalScan';
+import { VoucherCameraScan } from '../../components/catalog/VoucherCameraScan';
 import {
   voucherPhysicalBatchService,
   type VoucherPhysicalBatch,
@@ -75,6 +76,11 @@ export const VoucherInternetPage = () => {
   const [fisikStage, setFisikStage] = useState<FisikStage>('scan');
   const [scannedList, setScannedList] = useState<ScannedSerial[]>([]);
   const [scanInput, setScanInput] = useState('');
+  const [scanInputTab, setScanInputTab] = useState<'camera' | 'manual'>('camera');
+  const [scanToast, setScanToast] = useState<{ kind: 'added' | 'duplicate'; serial: string; index?: number } | null>(
+    null
+  );
+  const lastCameraDetectRef = useRef<{ serial: string; at: number } | null>(null);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
 
@@ -132,6 +138,12 @@ export const VoucherInternetPage = () => {
     }
     savePendingScan({ zona, skuCode: selectedProduct?.code ?? null, list: scannedList });
   }, [mode, zona, selectedProduct, scannedList]);
+
+  useEffect(() => {
+    if (!scanToast) return;
+    const timer = window.setTimeout(() => setScanToast(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [scanToast]);
 
   // Defense in depth: the store already fetches category='voucher-internet', but never
   // trust the API result blindly — a catalog sync bug or stale cache could leak other
@@ -291,22 +303,43 @@ export const VoucherInternetPage = () => {
       return;
     }
     const sns = expandSnRange(raw);
-    const room = MAX_BATCH_ITEMS - scannedList.length;
-    if (room <= 0) {
-      setScanNotice(`Batch sudah mencapai maksimal ${MAX_BATCH_ITEMS} SN.`);
-      return;
-    }
-    const overflow = Math.max(0, sns.length - room);
-    const toAdd = sns.slice(0, room);
-    const result = addScannedSerials(scannedList, toAdd);
+    const result = addCodesToScan(scannedList, sns, MAX_BATCH_ITEMS);
     setScannedList(result.list);
     setScanInput('');
+    setScanNotice(result.noticeParts.length ? result.noticeParts.join(', ') + '.' : null);
+  };
 
-    const parts: string[] = [];
-    if (result.added > 0) parts.push(`${result.added} SN ditambahkan`);
-    if (result.duplicates > 0) parts.push(`${result.duplicates} SN sudah pernah discan (dilewati)`);
-    if (overflow > 0) parts.push(`${overflow} SN dilewati (melebihi maksimal ${MAX_BATCH_ITEMS})`);
-    setScanNotice(parts.length ? parts.join(', ') + '.' : null);
+  const addCodesFromCamera = (text: string) => {
+    const serial = text.trim();
+    if (!serial) return;
+
+    const now = Date.now();
+    if (lastCameraDetectRef.current?.serial === serial && now - lastCameraDetectRef.current.at < 1500) {
+      return;
+    }
+    lastCameraDetectRef.current = { serial, at: now };
+
+    const result = addCodesToScan(scannedList, [serial], MAX_BATCH_ITEMS);
+    if (result.atCapacity && result.added === 0) {
+      setScanNotice(result.noticeParts[0] ?? `Batch sudah mencapai maksimal ${MAX_BATCH_ITEMS} SN.`);
+      return;
+    }
+
+    setScannedList(result.list);
+
+    if (result.added > 0) {
+      setScanToast({ kind: 'added', serial, index: result.list.length });
+      if (result.overflow > 0) {
+        setScanNotice(result.noticeParts.join(', ') + '.');
+      } else {
+        setScanNotice(null);
+      }
+      return;
+    }
+
+    if (result.duplicates > 0) {
+      setScanToast({ kind: 'duplicate', serial });
+    }
   };
 
   const handleRemoveScanned = (serial: string) => {
@@ -317,6 +350,8 @@ export const VoucherInternetPage = () => {
     setScannedList([]);
     setScanInput('');
     setScanNotice(null);
+    setScanToast(null);
+    lastCameraDetectRef.current = null;
     clearPendingScan();
   };
 
@@ -596,26 +631,83 @@ export const VoucherInternetPage = () => {
         {zona && mode === 'fisik' && fisikStage === 'scan' && (
           <div className="space-y-4">
             <h4 className="font-extrabold text-gray-900 text-sm">2. Scan / Input SN</h4>
-            <textarea
-              value={scanInput}
-              onChange={(e) => setScanInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleScanSubmit();
-                }
-              }}
-              rows={3}
-              placeholder={'Scan barcode atau input SN, lalu Enter.\nContoh range: ABC1000-ABC1010\nAtau list: SN1, SN2, SN3'}
-              className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <button
-              type="button"
-              onClick={handleScanSubmit}
-              className="w-full py-2.5 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 text-xs font-extrabold"
-            >
-              Tambahkan ke Batch
-            </button>
+
+            <div className="flex gap-2 p-1 rounded-xl bg-gray-100">
+              <button
+                type="button"
+                onClick={() => setScanInputTab('camera')}
+                className={`flex-1 py-2 rounded-lg text-xs font-extrabold transition ${
+                  scanInputTab === 'camera'
+                    ? 'bg-white text-primary-700 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📷 Scan Kamera
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanInputTab('manual')}
+                className={`flex-1 py-2 rounded-lg text-xs font-extrabold transition ${
+                  scanInputTab === 'manual'
+                    ? 'bg-white text-primary-700 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ⌨️ Input Manual
+              </button>
+            </div>
+
+            {scanInputTab === 'camera' ? (
+              <div className="space-y-2">
+                <VoucherCameraScan
+                  active={scannedList.length < MAX_BATCH_ITEMS}
+                  scanCount={scannedList.length}
+                  onDetected={addCodesFromCamera}
+                />
+                <AnimatePresence>
+                  {scanToast && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      className={`mx-auto max-w-sm px-3 py-2 rounded-xl text-[11px] font-bold text-center ${
+                        scanToast.kind === 'added'
+                          ? 'bg-primary-50 border border-primary-200 text-primary-800'
+                          : 'bg-amber-50 border border-amber-200 text-amber-800'
+                      }`}
+                    >
+                      {scanToast.kind === 'added'
+                        ? `#${scanToast.index} · ${scanToast.serial} ditambahkan`
+                        : `${scanToast.serial} dilewati — duplikat`}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleScanSubmit();
+                    }
+                  }}
+                  rows={3}
+                  placeholder={'Scan barcode atau input SN, lalu Enter.\nContoh range: ABC1000-ABC1010\nAtau list: SN1, SN2, SN3'}
+                  className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleScanSubmit}
+                  className="w-full py-2.5 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 text-xs font-extrabold"
+                >
+                  Tambahkan ke Batch
+                </button>
+              </>
+            )}
+
             {scanNotice && <p className="text-[11px] text-gray-500">{scanNotice}</p>}
 
             <div className="flex items-center justify-between">

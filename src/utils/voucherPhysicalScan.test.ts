@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  addCodesToScan,
   addScannedSerial,
   addScannedSerials,
   expandSnRange,
@@ -66,3 +67,25 @@ assert.deepEqual(
   ['SN001', 'SN003']
 );
 assert.equal(list.length, 3); // original untouched
+
+// addCodesToScan
+const cap = 3;
+const batch1 = addCodesToScan([], ['A', 'B'], cap);
+assert.equal(batch1.added, 2);
+assert.equal(batch1.list.length, 2);
+
+const batch2 = addCodesToScan(batch1.list, ['C'], cap);
+assert.equal(batch2.added, 1);
+assert.deepEqual(batch2.list.map((s) => s.serial), ['A', 'B', 'C']);
+assert.equal(batch2.atCapacity, true);
+
+const dupTry = addCodesToScan([{ serial: 'X1', scannedAt: 'T0' }], ['X1', 'Y1'], 5);
+assert.equal(dupTry.added, 1);
+assert.equal(dupTry.duplicates, 1);
+
+const batch3 = addCodesToScan(batch2.list, ['D'], cap);
+assert.equal(batch3.added, 0);
+assert.equal(batch3.atCapacity, true);
+assert.ok(batch3.noticeParts[0]?.includes('maksimal'));
+
+console.log('voucherPhysicalScan.test.ts: ok');

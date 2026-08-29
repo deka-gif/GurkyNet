@@ -78,6 +78,57 @@ export function addScannedSerials(
   return { list: next, added, duplicates };
 }
 
+export type AddCodesToScanResult = {
+  list: ScannedSerial[];
+  added: number;
+  duplicates: number;
+  overflow: number;
+  atCapacity: boolean;
+  noticeParts: string[];
+};
+
+/** Shared add-to-batch path for manual paste/range and camera single-code input. */
+export function addCodesToScan(
+  list: ScannedSerial[],
+  codes: string[],
+  maxItems: number,
+  nowIso: () => string = () => new Date().toISOString()
+): AddCodesToScanResult {
+  const trimmed = codes.map((c) => c.trim()).filter(Boolean);
+  if (trimmed.length === 0) {
+    return { list, added: 0, duplicates: 0, overflow: 0, atCapacity: list.length >= maxItems, noticeParts: [] };
+  }
+
+  const room = maxItems - list.length;
+  if (room <= 0) {
+    return {
+      list,
+      added: 0,
+      duplicates: 0,
+      overflow: trimmed.length,
+      atCapacity: true,
+      noticeParts: [`Batch sudah mencapai maksimal ${maxItems} SN.`],
+    };
+  }
+
+  const overflow = Math.max(0, trimmed.length - room);
+  const toAdd = trimmed.slice(0, room);
+  const result = addScannedSerials(list, toAdd, nowIso);
+  const parts: string[] = [];
+  if (result.added > 0) parts.push(`${result.added} SN ditambahkan`);
+  if (result.duplicates > 0) parts.push(`${result.duplicates} SN sudah pernah discan (dilewati)`);
+  if (overflow > 0) parts.push(`${overflow} SN dilewati (melebihi maksimal ${maxItems})`);
+
+  return {
+    list: result.list,
+    added: result.added,
+    duplicates: result.duplicates,
+    overflow,
+    atCapacity: result.list.length >= maxItems,
+    noticeParts: parts,
+  };
+}
+
 export function removeScannedSerial(list: ScannedSerial[], serial: string): ScannedSerial[] {
   return list.filter((s) => s.serial !== serial);
 }
