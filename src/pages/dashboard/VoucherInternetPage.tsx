@@ -31,7 +31,6 @@ import {
   isTelkomselOperator,
   telkomselNationalProducts,
   telkomselNeedsZoneGate,
-  type TelkomselRegionKey,
 } from '../../utils/telkomselVoucherZone';
 import { TelkomselZonePicker } from '../../components/catalog/TelkomselZonePicker';
 import { productService } from '../../services/product/product.service';
@@ -79,7 +78,7 @@ export const VoucherInternetPage = () => {
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
 
-  const [telkomselRegion, setTelkomselRegion] = useState<TelkomselRegionKey | null>(null);
+  const [telkomselNationalSelected, setTelkomselNationalSelected] = useState(false);
   const [telkomselZoneLabel, setTelkomselZoneLabel] = useState<string | null>(null);
   const [telkomselZoneReference, setTelkomselZoneReference] = useState<Record<string, string[]>>({});
 
@@ -184,15 +183,30 @@ export const VoucherInternetPage = () => {
     if (!telkomselCatalogActive || !telkomselZoneLabel) return [];
     return filterProductsByZoneLabel(catalogBaseProducts, telkomselZoneLabel);
   }, [telkomselCatalogActive, telkomselZoneLabel, catalogBaseProducts]);
-  const canPickTelkomselRegionalProducts = !telkomselZoneGateNeeded || !!telkomselZoneLabel;
+  const telkomselCatalogProductsToShow = useMemo(() => {
+    if (!telkomselZoneGateNeeded) return catalogBaseProducts;
+    if (telkomselNationalSelected) return telkomselNationalCatalogProducts;
+    if (telkomselZoneLabel) return telkomselRegionalCatalogProducts;
+    return [];
+  }, [
+    telkomselZoneGateNeeded,
+    catalogBaseProducts,
+    telkomselNationalSelected,
+    telkomselNationalCatalogProducts,
+    telkomselZoneLabel,
+    telkomselRegionalCatalogProducts,
+  ]);
+
+  const showTelkomselProductPicker =
+    !telkomselZoneGateNeeded || telkomselNationalSelected || !!telkomselZoneLabel;
 
   useEffect(() => {
-    setTelkomselRegion(null);
+    setTelkomselNationalSelected(false);
     setTelkomselZoneLabel(null);
   }, [activeCatalogProvider, mode]);
 
   const resetTelkomselZone = () => {
-    setTelkomselRegion(null);
+    setTelkomselNationalSelected(false);
     setTelkomselZoneLabel(null);
   };
 
@@ -314,30 +328,25 @@ export const VoucherInternetPage = () => {
         <TelkomselZonePicker
           products={catalogBaseProducts}
           zoneReference={telkomselZoneReference}
-          selectedRegion={telkomselRegion}
+          nationalSelected={telkomselNationalSelected}
           selectedZoneLabel={telkomselZoneLabel}
-          onRegionChange={setTelkomselRegion}
+          onNationalSelect={() => {
+            setTelkomselNationalSelected(true);
+            setTelkomselZoneLabel(null);
+            resetSelection();
+          }}
           onZoneLabelChange={(label) => {
+            setTelkomselNationalSelected(false);
             setTelkomselZoneLabel(label);
             resetSelection();
           }}
+          onReset={resetTelkomselZone}
         />
       )}
 
-      {telkomselZoneGateNeeded && telkomselNationalCatalogProducts.length > 0 && (
-        <div className="space-y-2">
-          <h5 className="text-xs font-bold text-gray-700">Berlaku semua wilayah</h5>
-          <ProductPicker
-            products={telkomselNationalCatalogProducts}
-            selected={selectedProduct}
-            onSelect={setSelectedProduct}
-          />
-        </div>
-      )}
-
-      {canPickTelkomselRegionalProducts && (
+      {showTelkomselProductPicker && telkomselCatalogProductsToShow.length > 0 && (
         <ProductPicker
-          products={telkomselZoneGateNeeded ? telkomselRegionalCatalogProducts : catalogBaseProducts}
+          products={telkomselCatalogProductsToShow}
           selected={selectedProduct}
           onSelect={setSelectedProduct}
         />
