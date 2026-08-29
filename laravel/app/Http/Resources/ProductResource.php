@@ -79,6 +79,7 @@ class ProductResource extends JsonResource
             'id' => $this->id,
             'code' => $this->sku_code,
             'name' => $this->name,
+            'zoneLabel' => $this->zone_label,
             'description' => $description,
             'quota' => $meta['quota'],
             'validity' => $meta['validity'],

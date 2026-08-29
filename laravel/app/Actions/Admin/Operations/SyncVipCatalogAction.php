@@ -10,6 +10,7 @@ use App\Models\ProductProviderSku;
 use App\Models\ProductSyncRun;
 use App\Models\Provider;
 use App\Models\Setting;
+use App\Services\Catalog\VoucherInternetZoneLabelResolver;
 use App\Services\VipService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
@@ -261,6 +262,11 @@ class SyncVipCatalogAction
                 $categoryMappingSource = $categoryResult['source'];
                 $operator = $this->upsertOperator($brand);
 
+                $zoneResolver = app(VoucherInternetZoneLabelResolver::class);
+                $zoneLabel = $zoneResolver->appliesToCategorySlug($category->slug)
+                    ? $zoneResolver->fromVipProviderMeta(is_array($providerMeta) ? $providerMeta : null, $providerName)
+                    : null;
+
                 // Prefer attaching VIP offer onto an existing Digiflazz/master product (same brand+name).
                 $matched = $this->findMatchingMasterProduct($category->id, $operator->id, $providerName);
                 if ($matched) {
@@ -270,6 +276,9 @@ class SyncVipCatalogAction
                     // Digi often left products.status=false. VIP can still sell — reopen the master.
                     if ($isActive && !$matched->status) {
                         $matched->forceFill(['status' => true])->save();
+                    }
+                    if ($zoneLabel !== null || $zoneResolver->appliesToCategorySlug($category->slug)) {
+                        $matched->forceFill(['zone_label' => $zoneLabel])->save();
                     }
                     $product = $matched->fresh();
                     $updated++;
@@ -309,6 +318,7 @@ class SyncVipCatalogAction
                             'provider_id' => $operator->id,
                             'product_provider_id' => $vipProvider->id,
                             'name' => $providerName,
+                            'zone_label' => $zoneLabel,
                             'base_price' => $providerPrice,
                             'sell_price' => $providerPrice + $previousMargin + $adminFee,
                             'status' => $isActive,
@@ -335,6 +345,7 @@ class SyncVipCatalogAction
                             'product_provider_id' => $vipProvider->id,
                             'sku_code' => $internalSku,
                             'name' => $providerName,
+                            'zone_label' => $zoneLabel,
                             'base_price' => $providerPrice,
                             'sell_price' => $providerPrice + $defaultMargin,
                             'admin_fee' => 0.00,

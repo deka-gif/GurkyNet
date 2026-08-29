@@ -10,6 +10,7 @@ use App\Models\ProductProviderSku;
 use App\Models\DigiflazzProduct;
 use App\Models\Setting;
 use App\Repositories\Contracts\ProviderRepositoryInterface;
+use App\Services\Catalog\VoucherInternetZoneLabelResolver;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
@@ -115,6 +116,11 @@ class ProviderRepository implements ProviderRepositoryInterface
                 ]
             );
 
+            $zoneResolver = app(VoucherInternetZoneLabelResolver::class);
+            $zoneLabel = $zoneResolver->appliesToCategorySlug($mapped['slug'])
+                ? $zoneResolver->fromDigiflazzType($dp['type'] ?? null, (string) ($dp['product_name'] ?? ''))
+                : null;
+
             // 3. Map & Sync Provider (brand)
             $provider = Provider::updateOrCreate(
                 ['name' => $dp['brand']],
@@ -152,6 +158,7 @@ class ProviderRepository implements ProviderRepositoryInterface
                     'provider_id' => $provider->id,
                     'product_provider_id' => $digiflazzProvider->id,
                     'name' => $dp['product_name'],
+                    'zone_label' => $zoneLabel,
                     'base_price' => $basePrice,
                     'sell_price' => $basePrice + $previousMargin + $adminFee,
                     'status' => $isActive,
@@ -178,6 +185,7 @@ class ProviderRepository implements ProviderRepositoryInterface
                     'product_provider_id' => $digiflazzProvider->id,
                     'sku_code' => $sku,
                     'name' => $dp['product_name'],
+                    'zone_label' => $zoneLabel,
                     'base_price' => $basePrice,
                     'sell_price' => $basePrice + $margin,
                     'admin_fee' => 0.00,

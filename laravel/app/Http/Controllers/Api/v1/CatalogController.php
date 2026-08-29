@@ -232,4 +232,18 @@ class CatalogController extends Controller
             'provinces' => $data['provinces'],
         ]);
     }
+
+    /**
+     * City→zone reference for Telkomsel Voucher Internet search assist (FR-OPS catalog UX).
+     * Authoritative zone list remains products.zone_label from GET /products.
+     */
+    public function telkomselVoucherZones(): JsonResponse
+    {
+        /** @var array<string, list<string>> $zones */
+        $zones = config('telkomsel_voucher_zones', []);
+
+        return $this->successResponse('Referensi zona voucher internet Telkomsel.', [
+            'zones' => $zones,
+        ]);
+    }
 }

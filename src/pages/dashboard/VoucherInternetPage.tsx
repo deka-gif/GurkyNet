@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -26,6 +26,15 @@ import { operatorsMatch } from '../../utils/operatorMatch';
 import { detectOperatorFromPhone } from '../../utils/detectOperator';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { filterVoucherInternetProducts } from '../../utils/voucherInternetGuard';
+import {
+  filterProductsByZoneLabel,
+  isTelkomselOperator,
+  telkomselNationalProducts,
+  telkomselNeedsZoneGate,
+  type TelkomselRegionKey,
+} from '../../utils/telkomselVoucherZone';
+import { TelkomselZonePicker } from '../../components/catalog/TelkomselZonePicker';
+import { productService } from '../../services/product/product.service';
 import {
   addScannedSerials,
   clearPendingScan,
@@ -57,7 +66,6 @@ export const VoucherInternetPage = () => {
   const [phoneNo, setPhoneNo] = useState('');
   const [autoProvider, setAutoProvider] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [qty, setQty] = useState(1);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [resumePin, setResumePin] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -70,6 +78,10 @@ export const VoucherInternetPage = () => {
   const [scanInput, setScanInput] = useState('');
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
+
+  const [telkomselRegion, setTelkomselRegion] = useState<TelkomselRegionKey | null>(null);
+  const [telkomselZoneLabel, setTelkomselZoneLabel] = useState<string | null>(null);
+  const [telkomselZoneReference, setTelkomselZoneReference] = useState<Record<string, string[]>>({});
 
   const restoredScanOnce = useRef(false);
 
@@ -98,6 +110,14 @@ export const VoucherInternetPage = () => {
       }
     }
   }, [fetchWallet, fetchProducts]);
+
+  useEffect(() => {
+    void productService.getTelkomselVoucherZoneReference().then((res) => {
+      if (res.success && res.data?.zones) {
+        setTelkomselZoneReference(res.data.zones);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (mode === 'tembak') {
@@ -146,6 +166,36 @@ export const VoucherInternetPage = () => {
       .sort((a, b) => a.price - b.price);
   }, [voucherInternetProducts, autoProvider, zona]);
 
+  const phoneDigits = phoneNo.replace(/\D/g, '');
+  const phoneReady = phoneDigits.length >= 10;
+  const tembakShowProducts = phoneReady && !!(autoProvider || zona);
+
+  const activeCatalogProvider = mode === 'tembak' ? autoProvider || zona : zona;
+  const catalogBaseProducts = mode === 'tembak' ? tembakProducts : zonaProducts;
+  const telkomselCatalogActive =
+    !!activeCatalogProvider && isTelkomselOperator(activeCatalogProvider) && catalogBaseProducts.length > 0;
+  const telkomselZoneGateNeeded =
+    telkomselCatalogActive && telkomselNeedsZoneGate(catalogBaseProducts);
+  const telkomselNationalCatalogProducts = useMemo(
+    () => (telkomselCatalogActive ? telkomselNationalProducts(catalogBaseProducts) : []),
+    [telkomselCatalogActive, catalogBaseProducts]
+  );
+  const telkomselRegionalCatalogProducts = useMemo(() => {
+    if (!telkomselCatalogActive || !telkomselZoneLabel) return [];
+    return filterProductsByZoneLabel(catalogBaseProducts, telkomselZoneLabel);
+  }, [telkomselCatalogActive, telkomselZoneLabel, catalogBaseProducts]);
+  const canPickTelkomselRegionalProducts = !telkomselZoneGateNeeded || !!telkomselZoneLabel;
+
+  useEffect(() => {
+    setTelkomselRegion(null);
+    setTelkomselZoneLabel(null);
+  }, [activeCatalogProvider, mode]);
+
+  const resetTelkomselZone = () => {
+    setTelkomselRegion(null);
+    setTelkomselZoneLabel(null);
+  };
+
   // Spec step 4 (Tembak Langsung): block checkout when the phone's detected operator
   // doesn't match the selected product's operator — this is a UX guard, not a security
   // boundary (the backend re-validates SKU/target independently at purchase time).
@@ -166,12 +216,12 @@ export const VoucherInternetPage = () => {
     setZona(null);
     setPhoneNo('');
     setAutoProvider(null);
-    setQty(1);
     setFisikStage('scan');
+    resetTelkomselZone();
     resetSelection();
   };
 
-  const startCheckout = (opts?: { targetOverride?: string; qtyOverride?: number }) => {
+  const startCheckout = (opts?: { targetOverride?: string }) => {
     if (!selectedProduct) {
       setErrorMsg('Pilih produk voucher internet terlebih dahulu.');
       return;
@@ -191,7 +241,7 @@ export const VoucherInternetPage = () => {
       setErrorMsg(providerMismatchError);
       return;
     }
-    if (!wallet || wallet.balance < selectedProduct.price * (opts?.qtyOverride || qty || 1)) {
+    if (!wallet || wallet.balance < selectedProduct.price) {
       setErrorMsg('Saldo GurkyPay tidak mencukupi.');
       return;
     }
@@ -200,13 +250,12 @@ export const VoucherInternetPage = () => {
       serviceName: 'Voucher Internet',
       productName: selectedProduct.name,
       targetNo: String(target),
-      amount: selectedProduct.price * (opts?.qtyOverride || 1),
+      amount: selectedProduct.price,
       adminFee: 0,
       skuCode: selectedProduct.code,
       customDetails: {
         Mode: mode,
         Zona: zona || autoProvider || '-',
-        Qty: String(opts?.qtyOverride || qty || 1),
       },
     });
   };
@@ -258,6 +307,45 @@ export const VoucherInternetPage = () => {
   };
 
   const physicalTotal = selectedProduct ? selectedProduct.price * scannedList.length : 0;
+
+  const renderCatalogProductSection = (checkoutAction?: ReactNode) => (
+    <>
+      {telkomselZoneGateNeeded && (
+        <TelkomselZonePicker
+          products={catalogBaseProducts}
+          zoneReference={telkomselZoneReference}
+          selectedRegion={telkomselRegion}
+          selectedZoneLabel={telkomselZoneLabel}
+          onRegionChange={setTelkomselRegion}
+          onZoneLabelChange={(label) => {
+            setTelkomselZoneLabel(label);
+            resetSelection();
+          }}
+        />
+      )}
+
+      {telkomselZoneGateNeeded && telkomselNationalCatalogProducts.length > 0 && (
+        <div className="space-y-2">
+          <h5 className="text-xs font-bold text-gray-700">Berlaku semua wilayah</h5>
+          <ProductPicker
+            products={telkomselNationalCatalogProducts}
+            selected={selectedProduct}
+            onSelect={setSelectedProduct}
+          />
+        </div>
+      )}
+
+      {canPickTelkomselRegionalProducts && (
+        <ProductPicker
+          products={telkomselZoneGateNeeded ? telkomselRegionalCatalogProducts : catalogBaseProducts}
+          selected={selectedProduct}
+          onSelect={setSelectedProduct}
+        />
+      )}
+
+      {checkoutAction}
+    </>
+  );
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
@@ -334,48 +422,53 @@ export const VoucherInternetPage = () => {
       </AnimatePresence>
 
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
-        {/* Zona */}
-        <div className="space-y-2.5">
-          <h4 className="font-extrabold text-gray-900 text-sm">1. Pilih Zona / Provider</h4>
-          {productsLoading ? (
-            <div className="py-8 text-center">
-              <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
-            </div>
-          ) : zonas.length === 0 ? (
-            <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
-              Katalog voucher internet kosong. Sinkronkan produk provider (kategori voucher-internet) di Operations.
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {zonas.map((z) => (
-                <button
-                  key={z.name}
-                  type="button"
-                  onClick={() => {
-                    setZona(z.name);
-                    resetSelection();
-                  }}
-                  className={`p-3 rounded-xl border text-left text-xs font-extrabold ${
-                    zona === z.name ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-100 bg-gray-50'
-                  }`}
-                >
-                  {z.name}
-                  <div className="text-[10px] font-semibold text-gray-400 mt-0.5">{z.count} produk</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {mode !== 'tembak' && (
+          <div className="space-y-2.5">
+            <h4 className="font-extrabold text-gray-900 text-sm">1. Pilih Zona / Provider</h4>
+            {productsLoading ? (
+              <div className="py-8 text-center">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
+              </div>
+            ) : zonas.length === 0 ? (
+              <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
+                Katalog voucher internet kosong. Sinkronkan produk provider (kategori voucher-internet) di Operations.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {zonas.map((z) => (
+                  <button
+                    key={z.name}
+                    type="button"
+                    onClick={() => {
+                      setZona(z.name);
+                      resetTelkomselZone();
+                      resetSelection();
+                    }}
+                    className={`p-3 rounded-xl border text-left text-xs font-extrabold ${
+                      zona === z.name ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-100 bg-gray-50'
+                    }`}
+                  >
+                    {z.name}
+                    <div className="text-[10px] font-semibold text-gray-400 mt-0.5">{z.count} produk</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-        {zona && mode === 'tembak' && (
+        {mode === 'tembak' && (
           <div className="space-y-4">
-            <h4 className="font-extrabold text-gray-900 text-sm">2. Nomor HP</h4>
+            <h4 className="font-extrabold text-gray-900 text-sm">1. Nomor HP</h4>
             <div className="relative">
               <Smartphone className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
                 type="tel"
                 value={phoneNo}
-                onChange={(e) => setPhoneNo(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  setPhoneNo(e.target.value.replace(/\D/g, ''));
+                  resetSelection();
+                }}
                 placeholder="08xxxxxxxxxx"
                 className="w-full pl-12 pr-28 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
@@ -385,31 +478,68 @@ export const VoucherInternetPage = () => {
                 </span>
               )}
             </div>
-            <ProductPicker
-              products={tembakProducts.length ? tembakProducts : zonaProducts}
-              selected={selectedProduct}
-              onSelect={setSelectedProduct}
-            />
-            {providerMismatchError && (
-              <div className="p-3.5 bg-red-50 border border-red-100 rounded-2xl flex gap-2.5">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-800 font-semibold">{providerMismatchError}</p>
+
+            {phoneReady && !autoProvider && (
+              <div className="space-y-2.5">
+                <p className="text-xs text-amber-700 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                  Operator tidak terdeteksi otomatis, pilih manual:
+                </p>
+                {productsLoading ? (
+                  <div className="py-6 text-center">
+                    <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {zonas.map((z) => (
+                      <button
+                        key={z.name}
+                        type="button"
+                        onClick={() => {
+                          setZona(z.name);
+                          resetTelkomselZone();
+                          resetSelection();
+                        }}
+                        className={`p-3 rounded-xl border text-left text-xs font-extrabold ${
+                          zona === z.name ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-100 bg-gray-50'
+                        }`}
+                      >
+                        {z.name}
+                        <div className="text-[10px] font-semibold text-gray-400 mt-0.5">{z.count} produk</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => startCheckout()}
-              disabled={!!providerMismatchError}
-              className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm"
-            >
-              Lanjut Bayar (PIN)
-            </button>
+
+            {tembakShowProducts && (
+              <>
+                {renderCatalogProductSection(
+                  <>
+                    {providerMismatchError && (
+                      <div className="p-3.5 bg-red-50 border border-red-100 rounded-2xl flex gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-800 font-semibold">{providerMismatchError}</p>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => startCheckout()}
+                      disabled={!!providerMismatchError}
+                      className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm"
+                    >
+                      Lanjut Bayar (PIN)
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
 
         {zona && mode === 'elektronik' && (
           <div className="space-y-4">
-            <h4 className="font-extrabold text-gray-900 text-sm">2. Produk & Qty</h4>
+            <h4 className="font-extrabold text-gray-900 text-sm">2. Produk</h4>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-700">Nomor HP (opsional untuk pengiriman)</label>
               <input
@@ -420,25 +550,15 @@ export const VoucherInternetPage = () => {
                 className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-700">Qty</label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={qty}
-                onChange={(e) => setQty(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                className="w-32 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <ProductPicker products={zonaProducts} selected={selectedProduct} onSelect={setSelectedProduct} />
-            <button
-              type="button"
-              onClick={() => startCheckout({ qtyOverride: qty })}
-              className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm"
-            >
-              Bayar & Generate Kode
-            </button>
+            {renderCatalogProductSection(
+              <button
+                type="button"
+                onClick={() => startCheckout()}
+                className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm"
+              >
+                Bayar & Generate Kode
+              </button>
+            )}
             {voucherCode && (
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
                 <p className="text-[10px] font-bold uppercase text-emerald-800">Kode Voucher</p>
@@ -518,7 +638,7 @@ export const VoucherInternetPage = () => {
               </div>
             )}
 
-            <ProductPicker products={zonaProducts} selected={selectedProduct} onSelect={setSelectedProduct} />
+            {renderCatalogProductSection()}
             <p className="text-[10px] text-gray-500">
               Satu batch hanya untuk satu nominal GB yang sama. Untuk nominal campuran, buat batch terpisah.
             </p>

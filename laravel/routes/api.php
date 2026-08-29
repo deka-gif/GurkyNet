@@ -113,6 +113,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/catalog/byu-data/taxonomy', [CatalogController::class, 'byuDataTaxonomy']);
         Route::get('/catalog/providers/{category}', [CatalogController::class, 'providersByCategory']);
         Route::get('/catalog/pajak-regions/{category}', [CatalogController::class, 'pajakRegions']);
+        Route::get('/catalog/telkomsel-voucher-zones', [CatalogController::class, 'telkomselVoucherZones']);
     });
 
     // Sprint 8 — public feature gates (purchase/withdraw/auto-topup)

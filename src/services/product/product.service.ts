@@ -81,6 +81,13 @@ export const productService = {
     );
     return response.data;
   },
+
+  getTelkomselVoucherZoneReference: async (): Promise<ApiResponse<{ zones: Record<string, string[]> }>> => {
+    const response = await apiClient.get<ApiResponse<{ zones: Record<string, string[]> }>>(
+      '/catalog/telkomsel-voucher-zones'
+    );
+    return response.data;
+  },
   
   getCategories: async (): Promise<ApiResponse<any[]>> => {
     const response = await apiClient.get<ApiResponse<any[]>>('/categories');

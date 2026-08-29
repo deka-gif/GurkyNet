@@ -19,6 +19,7 @@ class Product extends Model
         'product_provider_id',
         'sku_code',
         'name',
+        'zone_label',
         'base_price',
         'sell_price',
         'admin_fee',

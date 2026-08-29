@@ -107,6 +107,7 @@ export interface Product {
   badge?: string | null;
   telkomselGroup?: string | null;
   telkomselGroupLabel?: string | null;
+  zoneLabel?: string | null;
   requiresRegion?: boolean;
 }
 
