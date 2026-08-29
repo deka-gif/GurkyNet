@@ -13,23 +13,21 @@ type ServiceCategoryGridProps = {
   activeId?: string | null;
 };
 
-/** Brand-aligned icon tones — overrides pastel catalog tones without editing catalogCategories.ts */
+/** Brand-aligned gradient tiles — grouped by service type for quick visual scanning */
 const BRAND_CATEGORY_TONES: Record<string, string> = {
-  all: 'bg-primary-100 text-primary-700 border-primary-200',
-  telco: 'bg-primary-50 text-primary-600 border-primary-100',
-  tagihan: 'bg-primary-100 text-primary-800 border-primary-200',
-  pln: 'bg-accent-300/40 text-primary-800 border-accent-400/40',
-  'voucher-digital': 'bg-primary-50 text-primary-700 border-primary-100',
-  voucher: 'bg-primary-50 text-primary-700 border-primary-100',
-  game: 'bg-primary-100 text-primary-600 border-primary-200',
-  'topup-digital': 'bg-accent-300/30 text-primary-800 border-accent-400/35',
-  transfer: 'bg-primary-50 text-primary-700 border-primary-100',
-  international: 'bg-primary-100 text-primary-700 border-primary-200',
-  langganan: 'bg-accent-300/25 text-primary-800 border-accent-400/30',
+  telco: 'bg-gradient-to-br from-primary-500 to-primary-700',
+  tagihan: 'bg-gradient-to-br from-primary-500 to-primary-700',
+  international: 'bg-gradient-to-br from-primary-500 to-primary-700',
+  transfer: 'bg-gradient-to-br from-primary-500 to-primary-700',
+  game: 'bg-gradient-to-br from-primary-600 to-primary-900',
+  langganan: 'bg-gradient-to-br from-primary-600 to-primary-900',
+  all: 'bg-gradient-to-br from-primary-600 to-primary-900',
+  'topup-digital': 'bg-gradient-to-br from-accent-400 to-accent-600',
+  voucher: 'bg-gradient-to-br from-accent-400 to-accent-600',
 };
 
 function categoryTone(cat: DashboardServiceCategory): string {
-  return BRAND_CATEGORY_TONES[cat.id] ?? 'bg-primary-50 text-primary-600 border-primary-100';
+  return BRAND_CATEGORY_TONES[cat.id] ?? 'bg-gradient-to-br from-primary-500 to-primary-700';
 }
 
 function CategorySkeleton() {
@@ -161,10 +159,8 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
             >
               {cat.badge ? (
                 <span
-                  className={`absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${
-                    cat.badge === 'Promo'
-                      ? 'bg-accent-300/50 text-primary-800'
-                      : 'bg-primary-100 text-primary-700'
+                  className={`absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm ${
+                    cat.badge === 'Promo' ? 'bg-accent-500' : 'bg-primary-600'
                   }`}
                 >
                   {cat.badge}
@@ -172,7 +168,7 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
               ) : null}
 
               <div
-                className={`mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border shadow-sm transition-transform duration-200 will-change-transform group-hover:scale-105 ${categoryTone(cat)}`}
+                className={`mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-md shadow-primary-900/15 transition-transform duration-200 will-change-transform group-hover:scale-105 ${categoryTone(cat)}`}
               >
                 <Icon className="h-7 w-7" />
               </div>

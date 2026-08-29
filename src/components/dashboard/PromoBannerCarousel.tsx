@@ -38,48 +38,31 @@ function BannerSlideLayers({
 }) {
   const desktopSrc = resolveMediaUrl(banner.image || banner.imageUrl || '');
   const mobileSrc = banner.mobileImageUrl ? resolveMediaUrl(banner.mobileImageUrl) : null;
-  const backdropClass =
-    'absolute inset-0 h-full w-full object-cover scale-[1.12] blur-[20px] brightness-[0.8]';
-  const foregroundClass = 'absolute inset-0 z-[1] h-full w-full object-contain';
+  const imageClass = 'absolute inset-0 h-full w-full object-cover';
 
   if (mobileSrc) {
     return (
-      <>
-        <picture className="absolute inset-0 block h-full w-full overflow-hidden" aria-hidden>
-          <source media="(max-width: 767px)" srcSet={mobileSrc} />
-          <LazyImage src={desktopSrc} alt="" className={backdropClass} style={{ objectPosition }} />
-        </picture>
-        <picture className="absolute inset-0 block h-full w-full">
-          <source media="(max-width: 767px)" srcSet={mobileSrc} />
-          <LazyImage
-            priority={priority}
-            src={desktopSrc}
-            alt={banner.title}
-            className={foregroundClass}
-            style={{ objectPosition }}
-          />
-        </picture>
-      </>
+      <picture className="absolute inset-0 block h-full w-full">
+        <source media="(max-width: 767px)" srcSet={mobileSrc} />
+        <LazyImage
+          priority={priority}
+          src={desktopSrc}
+          alt={banner.title}
+          className={imageClass}
+          style={{ objectPosition }}
+        />
+      </picture>
     );
   }
 
   return (
-    <>
-      <LazyImage
-        src={desktopSrc}
-        alt=""
-        aria-hidden
-        className={backdropClass}
-        style={{ objectPosition }}
-      />
-      <LazyImage
-        priority={priority}
-        src={desktopSrc}
-        alt={banner.title}
-        className={foregroundClass}
-        style={{ objectPosition }}
-      />
-    </>
+    <LazyImage
+      priority={priority}
+      src={desktopSrc}
+      alt={banner.title}
+      className={imageClass}
+      style={{ objectPosition }}
+    />
   );
 }
 
