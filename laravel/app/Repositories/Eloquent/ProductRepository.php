@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -27,32 +28,39 @@ class ProductRepository implements ProductRepositoryInterface
     /** @var int */
     protected static $visibilityTraceBudget = 30;
 
+    protected function catalogTraceEnabled(): bool
+    {
+        return (bool) config('app.catalog_trace_enabled', false);
+    }
+
     public function getPaginatedProducts(array $filters = []): LengthAwarePaginator
     {
         static::$vipTraceBudget = 30;
         static::$visibilityTraceBudget = 30;
 
-        Log::info('CATALOG TRACE — product_providers', [
-            'rows' => ProductProvider::query()->get(['id', 'code', 'is_active', 'priority'])->map(fn (ProductProvider $p) => [
-                'id' => $p->id,
-                'code' => $p->code,
-                'is_active' => $p->is_active,
-                'priority' => $p->priority,
-            ])->all(),
-        ]);
+        if ($this->catalogTraceEnabled()) {
+            Log::info('CATALOG TRACE — product_providers', [
+                'rows' => ProductProvider::query()->get(['id', 'code', 'is_active', 'priority'])->map(fn (ProductProvider $p) => [
+                    'id' => $p->id,
+                    'code' => $p->code,
+                    'is_active' => $p->is_active,
+                    'priority' => $p->priority,
+                ])->all(),
+            ]);
 
-        Log::info('CATALOG TRACE — product_provider_skus active counts', [
-            'rows' => ProductProviderSku::query()
-                ->where('is_active', 1)
-                ->selectRaw('product_provider_id, COUNT(*) as total')
-                ->groupBy('product_provider_id')
-                ->get()
-                ->map(fn ($r) => [
-                    'product_provider_id' => $r->product_provider_id,
-                    'total' => (int) $r->total,
-                ])
-                ->all(),
-        ]);
+            Log::info('CATALOG TRACE — product_provider_skus active counts', [
+                'rows' => ProductProviderSku::query()
+                    ->where('is_active', 1)
+                    ->selectRaw('product_provider_id, COUNT(*) as total')
+                    ->groupBy('product_provider_id')
+                    ->get()
+                    ->map(fn ($r) => [
+                        'product_provider_id' => $r->product_provider_id,
+                        'total' => (int) $r->total,
+                    ])
+                    ->all(),
+            ]);
+        }
 
         $this->repairAndReportLegacyUnmapped();
 
@@ -64,41 +72,47 @@ class ProductRepository implements ProductRepositoryInterface
         $perPage = (int) ($filters['per_page'] ?? 15);
         $page = max(1, (int) ($filters['page'] ?? request()->input('page', 1)));
 
-        Log::info('CATALOG TRACE — Raw SQL', [
-            'sql' => $query->toSql(),
-        ]);
+        if ($this->catalogTraceEnabled()) {
+            Log::info('CATALOG TRACE — Raw SQL', [
+                'sql' => $query->toSql(),
+            ]);
 
-        Log::info('CATALOG TRACE — Bindings', [
-            'bindings' => $query->getBindings(),
-        ]);
+            Log::info('CATALOG TRACE — Bindings', [
+                'bindings' => $query->getBindings(),
+            ]);
+        }
 
         $all = $query->orderBy('id')->get();
 
-        Log::info('CATALOG TRACE — count($all) after get()', [
-            'count' => $all->count(),
-        ]);
+        if ($this->catalogTraceEnabled()) {
+            Log::info('CATALOG TRACE — count($all) after get()', [
+                'count' => $all->count(),
+            ]);
 
-        $this->logVipCatalogMappings($all);
+            $this->logVipCatalogMappings($all);
+        }
 
         $merged = $this->mergeDuplicateCatalogProducts($all);
         $merged = $this->applyTelkomselGroupFilter($merged, $filters);
         $merged = $this->sortCatalogProducts($merged, $filters);
 
-        Log::info('CATALOG TRACE — count after mergeDuplicateCatalogProducts()', [
-            'count' => $merged->count(),
-        ]);
+        if ($this->catalogTraceEnabled()) {
+            Log::info('CATALOG TRACE — count after mergeDuplicateCatalogProducts()', [
+                'count' => $merged->count(),
+            ]);
 
-        $this->logFilterTraceForCollection($merged, 'getPaginatedProducts');
+            $this->logFilterTraceForCollection($merged, 'getPaginatedProducts');
+
+            Log::info('CATALOG TRACE — final count before paginator', [
+                'total' => $merged->count(),
+                'slice_count' => min($perPage, max(0, $merged->count() - (($page - 1) * $perPage))),
+                'page' => $page,
+                'per_page' => $perPage,
+            ]);
+        }
 
         $total = $merged->count();
         $slice = $merged->slice(($page - 1) * $perPage, $perPage)->values();
-
-        Log::info('CATALOG TRACE — final count before paginator', [
-            'total' => $total,
-            'slice_count' => $slice->count(),
-            'page' => $page,
-            'per_page' => $perPage,
-        ]);
 
         return new LengthAwarePaginator(
             $slice,
@@ -189,20 +203,22 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function applyControlCenterVisibility(Builder $query): void
     {
-        $providers = ProductProvider::query()->get(['id', 'code', 'is_active', 'priority']);
-        $availableIds = $providers->pluck('id')->values()->all();
-        $filteredIds = $providers->where('is_active', true)->pluck('id')->values()->all();
+        if ($this->catalogTraceEnabled()) {
+            $providers = ProductProvider::query()->get(['id', 'code', 'is_active', 'priority']);
+            $availableIds = $providers->pluck('id')->values()->all();
+            $filteredIds = $providers->where('is_active', true)->pluck('id')->values()->all();
 
-        Log::info('CATALOG TRACE — applyControlCenterVisibility BEFORE', [
-            'Provider IDs available' => $availableIds,
-            'Provider IDs filtered (is_active=1)' => $filteredIds,
-            'providers' => $providers->map(fn (ProductProvider $p) => [
-                'id' => $p->id,
-                'code' => $p->code,
-                'is_active' => (bool) $p->is_active,
-                'priority' => $p->priority,
-            ])->all(),
-        ]);
+            Log::info('CATALOG TRACE — applyControlCenterVisibility BEFORE', [
+                'Provider IDs available' => $availableIds,
+                'Provider IDs filtered (is_active=1)' => $filteredIds,
+                'providers' => $providers->map(fn (ProductProvider $p) => [
+                    'id' => $p->id,
+                    'code' => $p->code,
+                    'is_active' => (bool) $p->is_active,
+                    'priority' => $p->priority,
+                ])->all(),
+            ]);
+        }
 
         // Product Management Control Center: hide ops_status=inactive from User Dashboard.
         // Maintenance stays visible (buy disabled via AvailabilityService / ProductResource).
@@ -218,13 +234,19 @@ class ProductRepository implements ProductRepositoryInterface
                 });
         });
 
-        Log::info('CATALOG TRACE — applyControlCenterVisibility AFTER', [
-            'Provider IDs available' => $availableIds,
-            'Provider IDs filtered' => $filteredIds,
-            'Remaining product count' => (clone $query)->count(),
-            'Generated SQL' => $query->toSql(),
-            'Bindings' => $query->getBindings(),
-        ]);
+        if ($this->catalogTraceEnabled()) {
+            $providers = ProductProvider::query()->get(['id', 'code', 'is_active', 'priority']);
+            $availableIds = $providers->pluck('id')->values()->all();
+            $filteredIds = $providers->where('is_active', true)->pluck('id')->values()->all();
+
+            Log::info('CATALOG TRACE — applyControlCenterVisibility AFTER', [
+                'Provider IDs available' => $availableIds,
+                'Provider IDs filtered' => $filteredIds,
+                'Remaining product count' => (clone $query)->count(),
+                'Generated SQL' => $query->toSql(),
+                'Bindings' => $query->getBindings(),
+            ]);
+        }
     }
 
     /**
@@ -246,7 +268,7 @@ class ProductRepository implements ProductRepositoryInterface
                 $visible = true;
             }
 
-            if (static::$visibilityTraceBudget > 0) {
+            if ($this->catalogTraceEnabled() && static::$visibilityTraceBudget > 0) {
                 Log::info('VIP CATALOG TRACE — isVisibleViaControlCenter SKU', [
                     'Product ID' => $product->id,
                     'provider_id' => $sku->product_provider_id,
@@ -260,7 +282,7 @@ class ProductRepository implements ProductRepositoryInterface
             }
         }
 
-        if (static::$visibilityTraceBudget > 0) {
+        if ($this->catalogTraceEnabled() && static::$visibilityTraceBudget > 0) {
             static::$visibilityTraceBudget--;
             Log::info('VIP CATALOG TRACE — isVisibleViaControlCenter', [
                 'Product ID' => $product->id,
@@ -277,6 +299,12 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function repairAndReportLegacyUnmapped(): void
     {
+        if (Cache::has('catalog:legacy-unmapped-repair:throttle')) {
+            return;
+        }
+
+        Cache::put('catalog:legacy-unmapped-repair:throttle', true, now()->addMinutes(10));
+
         $legacy = Product::query()
             ->where('status', true)
             ->whereDoesntHave('providerSkus')
@@ -336,11 +364,13 @@ class ProductRepository implements ProductRepositoryInterface
                 $product->save();
             }
 
-            Log::info('PRODUCT FILTER TRACE — LEGACY MAPPED TO DIGIFLAZZ', [
-                'product_id' => $product->id,
-                'sku' => $product->sku_code,
-                'product_provider_id' => $digi->id,
-            ]);
+            if ($this->catalogTraceEnabled()) {
+                Log::info('PRODUCT FILTER TRACE — LEGACY MAPPED TO DIGIFLAZZ', [
+                    'product_id' => $product->id,
+                    'sku' => $product->sku_code,
+                    'product_provider_id' => $digi->id,
+                ]);
+            }
         }
     }
 
@@ -370,26 +400,28 @@ class ProductRepository implements ProductRepositoryInterface
             $discarded = $chosen->id === $kept->id ? $product : $kept;
             $reason = $this->preferCatalogReason($kept, $product, $chosen);
 
-            Log::info('VIP CATALOG TRACE — mergeDuplicateCatalogProducts', [
-                'Normalized Name' => LogicalProductKey::normalizeName((string) $product->name),
-                'Denomination' => LogicalProductKey::extractDenomination((string) $product->name),
-                'Group key' => $key,
-                'Category' => $product->category?->slug,
-                'Category family' => LogicalProductKey::familyFromProduct($product),
-                'Provider IDs' => [
-                    $kept->product_provider_id,
-                    $product->product_provider_id,
-                ],
-                'Provider Priority' => [
-                    $this->bestActiveOfferPriority($kept),
-                    $this->bestActiveOfferPriority($product),
-                ],
-                'Chosen Provider' => $chosen->productProvider?->code ?? $chosen->sku_code,
-                'Chosen product_id' => $chosen->id,
-                'Discarded Provider' => $discarded->productProvider?->code ?? $discarded->sku_code,
-                'Discarded product_id' => $discarded->id,
-                'Reason' => $reason,
-            ]);
+            if ($this->catalogTraceEnabled()) {
+                Log::info('VIP CATALOG TRACE — mergeDuplicateCatalogProducts', [
+                    'Normalized Name' => LogicalProductKey::normalizeName((string) $product->name),
+                    'Denomination' => LogicalProductKey::extractDenomination((string) $product->name),
+                    'Group key' => $key,
+                    'Category' => $product->category?->slug,
+                    'Category family' => LogicalProductKey::familyFromProduct($product),
+                    'Provider IDs' => [
+                        $kept->product_provider_id,
+                        $product->product_provider_id,
+                    ],
+                    'Provider Priority' => [
+                        $this->bestActiveOfferPriority($kept),
+                        $this->bestActiveOfferPriority($product),
+                    ],
+                    'Chosen Provider' => $chosen->productProvider?->code ?? $chosen->sku_code,
+                    'Chosen product_id' => $chosen->id,
+                    'Discarded Provider' => $discarded->productProvider?->code ?? $discarded->sku_code,
+                    'Discarded product_id' => $discarded->id,
+                    'Reason' => $reason,
+                ]);
+            }
 
             $groups[$key] = $chosen;
         }
@@ -656,6 +688,10 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function logVipCatalogMappings(Collection|EloquentCollection $products): void
     {
+        if (!$this->catalogTraceEnabled()) {
+            return;
+        }
+
         foreach ($products->take(30) as $product) {
             $product->loadMissing(['providerSkus.productProvider', 'category']);
 
@@ -701,6 +737,10 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function logFilterTraceForCollection(Collection|EloquentCollection $products, string $context): void
     {
+        if (!$this->catalogTraceEnabled()) {
+            return;
+        }
+
         $enabledProviders = ProductProvider::query()
             ->where('is_active', true)
             ->get(['id', 'code', 'name', 'is_active'])
@@ -725,6 +765,10 @@ class ProductRepository implements ProductRepositoryInterface
 
     protected function logFilterTrace(Product $product, string $verdict, string $reason): void
     {
+        if (!$this->catalogTraceEnabled()) {
+            return;
+        }
+
         $product->loadMissing('providerSkus.productProvider');
 
         $activeOffers = [];

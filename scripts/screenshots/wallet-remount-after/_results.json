@@ -1,0 +1,45 @@
+{
+  "baseUrl": "http://127.0.0.1:4173",
+  "capturedAt": "2026-08-29T03:11:27.076Z",
+  "log": [
+    {
+      "step": "1-wallet-direct",
+      "ringkasan": true,
+      "isiSaldo": false,
+      "topUpDigital": true,
+      "eWalletTitle": false,
+      "url": "http://127.0.0.1:4173/dashboard/wallet"
+    },
+    {
+      "step": "2-topup-saldo",
+      "ringkasan": false,
+      "isiSaldo": true,
+      "topUpDigital": true,
+      "eWalletTitle": false,
+      "url": "http://127.0.0.1:4173/dashboard/topup"
+    },
+    {
+      "step": "3-wallet-again",
+      "ringkasan": true,
+      "isiSaldo": false,
+      "topUpDigital": true,
+      "eWalletTitle": false,
+      "url": "http://127.0.0.1:4173/dashboard/wallet"
+    },
+    {
+      "step": "4-sidebar-labels",
+      "hasTopUpSaldo": true,
+      "hasEWallet": false,
+      "hasTopUpDigital": true
+    },
+    {
+      "step": "5-ewallet-page",
+      "ringkasan": false,
+      "isiSaldo": false,
+      "topUpDigital": true,
+      "eWalletTitle": true,
+      "hasDana": true,
+      "url": "http://127.0.0.1:4173/dashboard/topup-digital"
+    }
+  ]
+}

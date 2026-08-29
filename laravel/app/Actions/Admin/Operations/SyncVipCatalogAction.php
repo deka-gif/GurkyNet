@@ -192,7 +192,7 @@ class SyncVipCatalogAction
             // Align VIP catalog families with Digiflazz / User Dashboard slugs so
             // findMatchingMasterProduct can attach VIP SKUs onto Digi masters and
             // GET /products?category=pulsa returns VIP offers when Digi is off.
-            $categoryName = $this->normalizeVipCategoryName($categoryName, $game !== '');
+            $categoryName = $this->normalizeVipCategoryName($categoryName, $game !== '', $brand, $providerName);
 
             $statusRaw = $normalized['status'] !== '' ? $normalized['status'] : 'available';
             $providerPrice = $normalized['resolved_price']; // NEVER (float)$row['price'] when array
@@ -256,7 +256,7 @@ class SyncVipCatalogAction
                     continue;
                 }
 
-                $categoryResult = $this->upsertCategory($categoryName);
+                $categoryResult = $this->upsertCategory($categoryName, $game !== '', $brand, $providerName);
                 $category = $categoryResult['category'];
                 $categoryMappingSource = $categoryResult['source'];
                 $operator = $this->upsertOperator($brand);
@@ -742,13 +742,17 @@ class SyncVipCatalogAction
      * Without this, VIP rows land in slug "prepaid" while the User Dashboard
      * requests category=pulsa — Digi OFF + VIP ON then returns an empty list.
      */
-    protected function normalizeVipCategoryName(string $categoryName, bool $isGame): string
-    {
+    protected function normalizeVipCategoryName(
+        string $categoryName,
+        bool $isGame,
+        string $brand = '',
+        string $productName = ''
+    ): string {
         $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
             'vip',
             $categoryName,
-            '',
-            '',
+            $brand,
+            $productName,
             $isGame
         );
 
@@ -758,14 +762,18 @@ class SyncVipCatalogAction
     /**
      * @return array{category: ProductCategory, source: string}
      */
-    protected function upsertCategory(string $categoryName): array
-    {
+    protected function upsertCategory(
+        string $categoryName,
+        bool $isGame = false,
+        string $brand = '',
+        string $productName = ''
+    ): array {
         $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
             'vip',
             $categoryName,
-            '',
-            '',
-            false
+            $brand,
+            $productName,
+            $isGame
         );
 
         $slug = $mapped['slug'] ?: 'vip';

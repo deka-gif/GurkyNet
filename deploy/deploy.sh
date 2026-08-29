@@ -22,6 +22,10 @@ $PHP_BIN artisan config:clear
 echo "==> Migrations"
 $PHP_BIN artisan migrate --force
 
+echo "==> Storage permissions (PHP-FPM must own writable dirs)"
+sudo chown -R www-data:www-data laravel/storage laravel/bootstrap/cache
+sudo chmod -R ug+rwx laravel/storage laravel/bootstrap/cache
+
 echo "==> Optimize"
 $PHP_BIN artisan optimize
 $PHP_BIN artisan storage:link || true

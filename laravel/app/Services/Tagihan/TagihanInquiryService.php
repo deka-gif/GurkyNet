@@ -221,6 +221,17 @@ class TagihanInquiryService
 
     protected function resolveEwalletDenomination(Product $product): int
     {
+        if (preg_match('/(\d{1,3}(?:[.\s]?\d{3})+|\d+)\s*(ribu|rb|k)?/iu', (string) $product->name, $m)) {
+            $n = (int) preg_replace('/\D/', '', $m[1]);
+            $suffix = strtolower((string) ($m[2] ?? ''));
+            if (in_array($suffix, ['ribu', 'rb', 'k'], true) && $n < 1000) {
+                $n *= 1000;
+            }
+            if ($n > 0) {
+                return $n;
+            }
+        }
+
         $base = (int) round((float) $product->base_price);
         if ($base > 0) {
             return $base;
@@ -229,16 +240,6 @@ class TagihanInquiryService
         $sell = (int) round((float) $product->sell_price);
         if ($sell > 0) {
             return $sell;
-        }
-
-        if (preg_match('/(\d{1,3}(?:[.\s]?\d{3})+|\d+)\s*(ribu|rb|k)?/iu', (string) $product->name, $m)) {
-            $n = (int) preg_replace('/\D/', '', $m[1]);
-            $suffix = strtolower((string) ($m[2] ?? ''));
-            if (in_array($suffix, ['ribu', 'rb', 'k'], true) && $n < 1000) {
-                $n *= 1000;
-            }
-
-            return $n;
         }
 
         return 0;
@@ -287,9 +288,8 @@ class TagihanInquiryService
             }
         }
 
-        $fallback = trim((string) $product->sku_code);
-
-        return $fallback !== '' ? $fallback : null;
+        // Jangan fallback ke internal SKU (mis. VIP-DANA80) — bukan buyer_sku_code Digiflazz.
+        return null;
     }
 
     /**

@@ -10,9 +10,9 @@ import { PajakNegaraFlow } from '../../components/catalog/PajakNegaraFlow';
 export const TopUpDigitalPage = () => (
   <ProviderCatalogFlow
     category="topup-digital"
-    title="Top Up Digital"
+    title="E-Wallet"
     subtitle="GoPay, OVO, DANA, ShopeePay, LinkAja, dan e-wallet lain. Pilih provider dulu, lalu nominal dari katalog."
-    serviceName="Top Up Digital"
+    serviceName="E-Wallet"
     returnPath="/dashboard/topup-digital"
     targetMode="phone"
     targetLabel="Nomor HP"

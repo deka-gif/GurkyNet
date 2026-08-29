@@ -279,7 +279,7 @@ export const OperationsProductManagement: React.FC = () => {
               <option value="pulsa">Pulsa</option>
               <option value="data">Paket Data</option>
               <option value="pln">PLN Token</option>
-              <option value="topup-digital">Top Up Digital / E-Wallet</option>
+              <option value="topup-digital">E-Wallet</option>
               <option value="voucher-digital">Voucher Digital</option>
               <option value="game">Game</option>
               <option value="langganan-digital">Langganan Digital</option>

@@ -1,0 +1,11 @@
+{
+  "path": "/dashboard/game",
+  "badMatches": [],
+  "goodGameMatches": [
+    "/mobile legends/i",
+    "/free fire/i",
+    "/pubg/i",
+    "/valorant/i"
+  ],
+  "loading": false
+}

@@ -3,9 +3,9 @@ import { ProviderCatalogFlow } from '../../components/catalog/ProviderCatalogFlo
 export const EwalletPage = () => (
   <ProviderCatalogFlow
     category="topup-digital"
-    title="Top Up Digital"
+    title="E-Wallet"
     subtitle="GoPay, OVO, DANA, ShopeePay, LinkAja, dan e-wallet lain dari katalog provider."
-    serviceName="Top Up Digital"
+    serviceName="E-Wallet"
     returnPath="/dashboard/topup-digital"
     targetMode="phone"
     targetLabel="Nomor HP"

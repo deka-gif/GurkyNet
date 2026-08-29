@@ -567,11 +567,11 @@ export const router = createBrowserRouter([
 
       {
         path: 'wallet',
-        element: <WalletPage />
+        element: <WalletPage key="wallet-index" />
       },
       {
         path: 'topup',
-        element: <WalletPage defaultTab="topup" />
+        element: <WalletPage key="wallet-topup" defaultTab="topup" />
       },
       {
         path: 'telekomunikasi',

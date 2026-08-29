@@ -18,4 +18,10 @@ return [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
+
+    /*
+    | Debug instrumentation for ProductRepository catalog reads (CATALOG TRACE logs).
+    | Keep false in production — enables extra queries + per-row logging when true.
+    */
+    'catalog_trace_enabled' => (bool) env('CATALOG_TRACE_ENABLED', false),
 ];

@@ -253,7 +253,7 @@ export const DashboardLayout = () => {
           { divider: true },
           { path: '/dashboard/telekomunikasi', label: 'Telekomunikasi', icon: Smartphone },
           { path: '/dashboard/tagihan', label: 'Pembayaran Tagihan', icon: Zap },
-          { path: '/dashboard/topup-digital', label: 'Top Up Digital', icon: CreditCard },
+          { path: '/dashboard/topup-digital', label: 'E-Wallet', icon: CreditCard },
           { path: '/dashboard/game', label: 'Game', icon: Gamepad2 },
           { path: '/dashboard/voucher-digital', label: 'Voucher Digital', icon: Gift },
           { path: '/dashboard/langganan-digital', label: 'Langganan Digital', icon: PlayCircle },

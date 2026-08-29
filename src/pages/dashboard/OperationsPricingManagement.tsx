@@ -37,7 +37,7 @@ const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'data', label: 'Paket Data' },
   { value: 'voucher-internet', label: 'Voucher Internet' },
   { value: 'pln', label: 'PLN' },
-  { value: 'topup-digital', label: 'Top Up Digital' },
+  { value: 'topup-digital', label: 'E-Wallet' },
   { value: 'game', label: 'Game' },
   { value: 'voucher-digital', label: 'Voucher Digital' },
   { value: 'langganan-digital', label: 'Langganan Digital' },

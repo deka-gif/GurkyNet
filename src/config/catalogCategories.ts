@@ -99,7 +99,7 @@ export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
   },
   {
     id: 'topup-digital',
-    label: 'Top Up Digital',
+    label: 'E-Wallet',
     description: 'e-Wallet & dompet digital',
     icon: CreditCard,
     tone: 'bg-emerald-50 text-emerald-600 border-emerald-100',
@@ -169,7 +169,7 @@ export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
       { key: 'pulsa', label: 'Pulsa', path: '/dashboard/pulsa', productCategory: 'pulsa', icon: Smartphone },
       { key: 'data', label: 'Paket Data', path: '/dashboard/paket-data', productCategory: 'data', icon: Wifi },
       { key: 'pln', label: 'Token PLN', path: '/dashboard/token-pln', productCategory: 'pln', icon: Zap },
-      { key: 'topup-digital', label: 'Top Up Digital', path: '/dashboard/topup-digital', productCategory: 'topup-digital', icon: CreditCard },
+      { key: 'topup-digital', label: 'E-Wallet', path: '/dashboard/topup-digital', productCategory: 'topup-digital', icon: CreditCard },
       { key: 'game', label: 'Game', path: '/dashboard/game', productCategory: 'game', icon: Gamepad2 },
       { key: 'voucher', label: 'Voucher', path: '/dashboard/voucher-digital', productCategory: 'voucher-digital', icon: Gift },
       { key: 'voucher-internet', label: 'Voucher Internet', path: '/dashboard/voucher-internet', productCategory: 'voucher-internet', icon: Wifi },
