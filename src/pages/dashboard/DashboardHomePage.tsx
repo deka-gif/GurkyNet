@@ -13,7 +13,7 @@ import { useBannerStore } from '../../store/banner.store';
 import { useTransactionStore } from '../../store/transaction.store';
 import { useNotificationStore } from '../../store/notification.store';
 import { websiteService } from '../../services/website.service';
-import { useState, useEffect, useMemo, useCallback, type MouseEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback, type CSSProperties, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PlusCircle,
@@ -25,14 +25,11 @@ import {
   EyeOff,
   RotateCw,
   HelpCircle,
-  Megaphone,
   X,
-  Info,
 } from 'lucide-react';
 import { runWhenIdle } from '../../utils/perf';
 import { preloadDashboardCore } from '../../router/lazyPages';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
-import { Button } from '../../components/ui/Button';
 
 export const DashboardHomePage = () => {
   const navigate = useNavigate();
@@ -123,27 +120,38 @@ export const DashboardHomePage = () => {
     .filter(Boolean)
     .join('  •  ');
 
-  const showNoticeStack = announcementText.length > 0 || !featureFlags.purchase_enabled;
+  const marqueeSegments = useMemo(() => {
+    const segments: string[] = [];
+    if (announcementText.length > 0) segments.push(announcementText);
+    if (!featureFlags.purchase_enabled) {
+      segments.push('Segera Hadir — pembelian produk yang memotong saldo belum diaktifkan.');
+    }
+    return segments;
+  }, [announcementText, featureFlags.purchase_enabled]);
+
+  const marqueeContent = marqueeSegments.join('  •  ');
+  const showNoticeMarquee = marqueeSegments.length > 0;
+
+  const marqueeDuration = useMemo(() => {
+    const len = Math.max(marqueeContent.length, 40);
+    const seconds = Math.min(90, Math.max(30, 22 + len * 0.12));
+    return `${seconds}s`;
+  }, [marqueeContent]);
 
   return (
     <div className="space-y-4 pb-24 md:pb-8 max-w-7xl mx-auto">
 
-      {showNoticeStack && (
-        <div className="dashboard-notice-stack">
-          {announcementText.length > 0 && (
-            <div className="dashboard-notice-row">
-              <Megaphone className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
-              <p className="leading-snug truncate">{announcementText}</p>
-            </div>
-          )}
-          {!featureFlags.purchase_enabled && (
-            <div className="dashboard-notice-row bg-accent-300/15 text-primary-800">
-              <Info className="w-4 h-4 text-accent-600 shrink-0 mt-0.5" />
-              <p className="leading-snug">
-                Segera Hadir — pembelian produk yang memotong saldo belum diaktifkan.
-              </p>
-            </div>
-          )}
+      {showNoticeMarquee && (
+        <div
+          className="dashboard-notice-marquee"
+          style={{ '--marquee-duration': marqueeDuration } as CSSProperties}
+        >
+          <div className="dashboard-notice-marquee-track">
+            <span className="dashboard-notice-marquee-segment">{marqueeContent}  •  </span>
+            <span className="dashboard-notice-marquee-segment" aria-hidden="true">
+              {marqueeContent}  •  
+            </span>
+          </div>
         </div>
       )}
 
@@ -173,8 +181,17 @@ export const DashboardHomePage = () => {
 
       {/* Single hero balance card — greeting + saldo + aksi (no duplicate body cards) */}
       <div className="dashboard-balance-card dashboard-balance-card-home">
-        <div className="brand-glow-accent -right-12 -top-12 w-40 h-40 pointer-events-none absolute" />
-        <div className="brand-glow-primary -left-8 bottom-0 w-36 h-36 pointer-events-none absolute" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,.85) 1px, transparent 0)',
+            backgroundSize: '16px 16px',
+            maskImage: 'linear-gradient(to bottom, black 0%, transparent 85%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, transparent 85%)',
+          }}
+        />
+        <div className="brand-glow-accent -right-16 -top-16 w-48 h-48 pointer-events-none absolute" />
+        <div className="brand-glow-primary -left-12 bottom-[-1rem] w-44 h-44 pointer-events-none absolute" />
 
         <div className="relative z-10 flex flex-col gap-2.5 md:gap-4">
           {/* Row 1: greeting + compact avatar */}
@@ -186,24 +203,29 @@ export const DashboardHomePage = () => {
               <h1 className="mt-0.5 truncate text-base font-bold tracking-tight md:text-xl">
                 {(user?.name || 'Pelanggan GurkyNet').toUpperCase()}
               </h1>
+              <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-bold text-primary-50">
+                ✦ Member Aktif
+              </span>
             </div>
-            <div className="h-10 w-10 overflow-hidden rounded-xl border border-white/20 bg-white/10 shadow-inner shrink-0 md:h-11 md:w-11 md:rounded-2xl">
-              {user?.avatar ? (
-                <img
-                  src={resolveMediaUrl(user.avatar)}
-                  alt={user.name || 'Avatar'}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs font-bold text-white md:text-sm">
-                  {(user?.name || 'G')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('')
-                    .toUpperCase()}
-                </div>
-              )}
+            <div className="shrink-0 rounded-[14px] bg-gradient-to-br from-accent-400 to-accent-500 p-[2px] md:rounded-2xl md:p-[2.5px]">
+              <div className="h-10 w-10 overflow-hidden rounded-[12px] bg-primary-800 md:h-11 md:w-11 md:rounded-[14px]">
+                {user?.avatar ? (
+                  <img
+                    src={resolveMediaUrl(user.avatar)}
+                    alt={user.name || 'Avatar'}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs font-bold text-white md:text-sm">
+                    {(user?.name || 'G')
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase()}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -235,10 +257,10 @@ export const DashboardHomePage = () => {
               </div>
 
               {walletLoading && !wallet ? (
-                <div className="h-8 w-40 animate-pulse rounded-lg bg-white/15 md:h-9" />
+                <div className="h-9 w-44 animate-pulse rounded-lg bg-white/15 md:h-10" />
               ) : (
                 <div className="flex flex-wrap items-end gap-2">
-                  <h2 className="text-2xl font-black tracking-tight tabular-nums leading-none md:text-3xl">
+                  <h2 className="text-3xl font-black tracking-tight tabular-nums leading-none md:text-4xl">
                     {showBalance ? formatIDR(wallet?.balance ?? 0) : 'Rp ••••••••'}
                   </h2>
                   <div className="flex items-center gap-1 pb-0.5">
@@ -264,19 +286,18 @@ export const DashboardHomePage = () => {
             </div>
 
             <div className="flex flex-col gap-1.5 shrink-0 sm:flex-row sm:gap-2">
-              <Button
+              <button
                 type="button"
-                variant="secondary"
-                className="!px-3 !py-1.5 text-[10px] font-bold sm:!px-3.5 sm:!py-2 sm:text-[11px] md:!px-4 md:!py-2.5 md:text-xs"
                 onClick={() => navigate('/dashboard/topup')}
+                className="inline-flex items-center justify-center gap-1 rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-primary-800 shadow-lg shadow-primary-900/20 transition hover:bg-primary-50 sm:px-3.5 sm:py-2 sm:text-[11px] md:px-4 md:py-2.5 md:text-xs"
               >
                 <PlusCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
                 Top Up<span className="hidden sm:inline"> Saldo</span>
-              </Button>
+              </button>
               <button
                 type="button"
                 onClick={() => navigate('/dashboard/riwayat')}
-                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[10px] font-bold text-white backdrop-blur-sm hover:bg-white/15 transition-all sm:px-3.5 sm:py-2 sm:text-[11px] md:px-4 md:py-2.5 md:text-xs"
+                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/18 bg-white/12 px-3 py-1.5 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-white/18 sm:px-3.5 sm:py-2 sm:text-[11px] md:px-4 md:py-2.5 md:text-xs"
               >
                 <History className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
                 Riwayat

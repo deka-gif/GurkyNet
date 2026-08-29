@@ -123,6 +123,20 @@
   .dashboard-notice-row {
     @apply flex items-start gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-primary-900;
   }
+  .dashboard-notice-marquee {
+    @apply relative overflow-hidden rounded-xl h-9 md:h-10 flex items-center;
+    background: linear-gradient(to right, var(--color-primary-800), var(--color-primary-600));
+  }
+  .dashboard-notice-marquee:hover .dashboard-notice-marquee-track {
+    animation-play-state: paused;
+  }
+  .dashboard-notice-marquee-track {
+    @apply flex w-max items-center whitespace-nowrap text-[11px] md:text-xs font-bold text-white;
+    animation: dashboard-marquee-scroll var(--marquee-duration, 30s) linear infinite;
+  }
+  .dashboard-notice-marquee-segment {
+    @apply shrink-0 px-4;
+  }
   .dashboard-segment-tabs {
     @apply flex flex-wrap gap-1 p-1 rounded-2xl bg-gray-100/80 border border-gray-200/80;
   }
@@ -232,4 +246,13 @@
 }
 .legal-editor-surface blockquote {
   @apply border-l-4 border-primary-300 pl-3 italic text-gray-600;
+}
+
+@keyframes dashboard-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }

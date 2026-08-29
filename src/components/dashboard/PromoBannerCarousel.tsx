@@ -27,6 +27,62 @@ function bannerObjectPosition(banner: Banner): string {
   );
 }
 
+function BannerSlideLayers({
+  banner,
+  priority,
+  objectPosition,
+}: {
+  banner: Banner;
+  priority?: boolean;
+  objectPosition: string;
+}) {
+  const desktopSrc = resolveMediaUrl(banner.image || banner.imageUrl || '');
+  const mobileSrc = banner.mobileImageUrl ? resolveMediaUrl(banner.mobileImageUrl) : null;
+  const backdropClass =
+    'absolute inset-0 h-full w-full object-cover scale-[1.12] blur-[20px] brightness-[0.8]';
+  const foregroundClass = 'absolute inset-0 z-[1] h-full w-full object-contain';
+
+  if (mobileSrc) {
+    return (
+      <>
+        <picture className="absolute inset-0 block h-full w-full overflow-hidden" aria-hidden>
+          <source media="(max-width: 767px)" srcSet={mobileSrc} />
+          <LazyImage src={desktopSrc} alt="" className={backdropClass} style={{ objectPosition }} />
+        </picture>
+        <picture className="absolute inset-0 block h-full w-full">
+          <source media="(max-width: 767px)" srcSet={mobileSrc} />
+          <LazyImage
+            priority={priority}
+            src={desktopSrc}
+            alt={banner.title}
+            className={foregroundClass}
+            style={{ objectPosition }}
+          />
+        </picture>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <LazyImage
+        src={desktopSrc}
+        alt=""
+        aria-hidden
+        className={backdropClass}
+        style={{ objectPosition }}
+      />
+      <LazyImage
+        priority={priority}
+        src={desktopSrc}
+        alt={banner.title}
+        className={foregroundClass}
+        style={{ objectPosition }}
+      />
+    </>
+  );
+}
+
 /**
  * Full-image marketing carousel (Tokopedia / GoPay style).
  * Matches saldo card height on desktop (≈280px); wider aspect on mobile.
@@ -111,7 +167,7 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
 
   return (
     <div
-      className="relative h-[168px] max-h-[300px] w-full overflow-hidden rounded-2xl bg-slate-100 aspect-[16/7] sm:h-[200px] lg:aspect-auto lg:h-[280px]"
+      className="relative h-[168px] max-h-[300px] w-full overflow-hidden bg-slate-100 aspect-[16/7] sm:h-[200px] lg:aspect-auto lg:h-[280px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={onTouchStart}
@@ -150,21 +206,11 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
                 className="absolute inset-0 cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left"
                 aria-label={`Buka promo ${current.title}`}
               >
-                <picture className="absolute inset-0 block h-full w-full">
-                  {current.mobileImageUrl ? (
-                    <source
-                      media="(max-width: 767px)"
-                      srcSet={resolveMediaUrl(current.mobileImageUrl)}
-                    />
-                  ) : null}
-                  <LazyImage
-                    priority={index === 0}
-                    src={resolveMediaUrl(current.image || current.imageUrl || '')}
-                    alt={current.title}
-                    className="h-full w-full object-cover"
-                    style={{ objectPosition }}
-                  />
-                </picture>
+                <BannerSlideLayers
+                  banner={current}
+                  priority={index === 0}
+                  objectPosition={objectPosition}
+                />
               </motion.button>
             ) : null}
           </AnimatePresence>
