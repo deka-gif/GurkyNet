@@ -9,6 +9,7 @@ import {
   filterCities,
   hasTelkomselNationalProducts,
   orphanZoneLabels,
+  TELKOMSEL_REGION_LABELS,
   TELKOMSEL_REGION_MENU_LABELS,
   uniqueCityNamesForRegion,
   zoneLabelsForCity,
@@ -171,7 +172,7 @@ export function TelkomselZonePicker({
         )}
 
         {showMenu && (
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {showNationalMenu && (
               <button
                 type="button"
@@ -179,9 +180,16 @@ export function TelkomselZonePicker({
                   onNationalSelect();
                   setStep('menu');
                 }}
-                className="w-full p-3 rounded-xl border border-amber-200 bg-white text-left text-xs font-extrabold text-gray-900 hover:border-amber-400"
+                className="relative text-left bg-gradient-to-br from-primary-50 to-white border border-primary-200 rounded-2xl p-4 transition-all duration-200 hover:border-primary-400 hover:shadow-lg hover:shadow-primary-900/10 hover:-translate-y-0.5"
               >
-                Voucher Nasional (Berlaku Semua Wilayah)
+                <div className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center mb-2.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[19px] h-[19px]">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" />
+                  </svg>
+                </div>
+                <div className="text-xs font-extrabold text-gray-900 leading-snug">Voucher Nasional</div>
+                <div className="text-[10px] font-semibold text-gray-400 mt-0.5">Berlaku semua wilayah</div>
               </button>
             )}
 
@@ -190,9 +198,17 @@ export function TelkomselZonePicker({
                 key={region}
                 type="button"
                 onClick={() => openCategory(region)}
-                className="w-full p-3 rounded-xl border border-amber-200 bg-white text-left text-xs font-extrabold text-gray-900 hover:border-amber-400"
+                className="relative text-left bg-white border border-gray-200 rounded-2xl p-4 transition-all duration-200 hover:border-primary-300 hover:shadow-lg hover:shadow-primary-900/10 hover:-translate-y-0.5"
               >
-                {TELKOMSEL_REGION_MENU_LABELS[region]}
+                <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-primary-400" />
+                <div className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center mb-2.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[19px] h-[19px]">
+                    <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
+                    <circle cx="12" cy="10" r="2.4" />
+                  </svg>
+                </div>
+                <div className="text-xs font-extrabold text-gray-900 leading-snug">{TELKOMSEL_REGION_LABELS[region]}</div>
+                <div className="text-[10px] font-semibold text-gray-400 mt-0.5">Tersedia</div>
               </button>
             ))}
 
@@ -200,9 +216,18 @@ export function TelkomselZonePicker({
               <button
                 type="button"
                 onClick={() => openCategory('orphan')}
-                className="w-full p-3 rounded-xl border border-amber-200 bg-white text-left text-xs font-extrabold text-gray-900 hover:border-amber-400"
+                className="relative text-left bg-white border border-gray-200 rounded-2xl p-4 transition-all duration-200 hover:border-primary-300 hover:shadow-lg hover:shadow-primary-900/10 hover:-translate-y-0.5"
               >
-                Voucher Wilayah Lainnya
+                <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-primary-400" />
+                <div className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center mb-2.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[19px] h-[19px]">
+                    <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
+                    <path d="M9.5 9a2.5 2.5 0 1 1 4.2 1.8c-.6.5-1.2 1.1-1.2 2.2V14" />
+                    <circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="none" />
+                  </svg>
+                </div>
+                <div className="text-xs font-extrabold text-gray-900 leading-snug">Lainnya</div>
+                <div className="text-[10px] font-semibold text-gray-400 mt-0.5">Wilayah Lainnya</div>
               </button>
             )}
           </div>
