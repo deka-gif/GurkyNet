@@ -328,11 +328,18 @@ class ProductRepository implements ProductRepositoryInterface
      */
     protected function repairAndReportLegacyUnmapped(): void
     {
-        if (Cache::has('catalog:legacy-unmapped-repair:throttle')) {
-            return;
-        }
+        try {
+            if (Cache::has('catalog:legacy-unmapped-repair:throttle')) {
+                return;
+            }
 
-        Cache::put('catalog:legacy-unmapped-repair:throttle', true, now()->addMinutes(10));
+            Cache::put('catalog:legacy-unmapped-repair:throttle', true, now()->addMinutes(10));
+        } catch (\Throwable $e) {
+            // Throttle cache must never break catalog GET (file driver permission/subdir issues).
+            Log::warning('Catalog legacy-unmapped repair throttle cache unavailable — continuing without throttle', [
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         $legacy = Product::query()
             ->where('status', true)
