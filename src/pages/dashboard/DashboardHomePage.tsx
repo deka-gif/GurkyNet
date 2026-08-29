@@ -6,24 +6,16 @@ import { RecentTransactionsCard } from '../../components/dashboard/RecentTransac
 import { useFavoriteStore } from '../../store/favorite.store';
 import type { DashboardServiceCategory } from '../../config/catalogCategories';
 import { formatIDR } from '../../utils/currency';
-import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { getDynamicGreeting } from '../../utils/greeting';
 import { useAuthStore } from '../../store/auth.store';
-import { useWalletStore } from '../../store/wallet.store';
 import { useBannerStore } from '../../store/banner.store';
 import { useTransactionStore } from '../../store/transaction.store';
 import { useNotificationStore } from '../../store/notification.store';
 import { websiteService } from '../../services/website.service';
-import { useState, useEffect, useMemo, useCallback, type CSSProperties, type MouseEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  PlusCircle,
-  History,
-  Copy,
-  Check,
   Star,
-  Eye,
-  EyeOff,
-  RotateCw,
   HelpCircle,
   X,
 } from 'lucide-react';
@@ -35,9 +27,6 @@ export const DashboardHomePage = () => {
   const navigate = useNavigate();
 
   const user = useAuthStore((s) => s.user);
-  const wallet = useWalletStore((s) => s.wallet);
-  const walletLoading = useWalletStore((s) => s.loading);
-  const fetchWallet = useWalletStore((s) => s.fetchWallet);
   const banners = useBannerStore((s) => s.banners);
   const bannerLoading = useBannerStore((s) => s.loading);
   const bannerError = useBannerStore((s) => s.error);
@@ -52,15 +41,11 @@ export const DashboardHomePage = () => {
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
   const { flags: featureFlags } = useFeatureFlags();
 
-  const [showBalance, setShowBalance] = useState(true);
-  const [isRefreshingWallet, setIsRefreshingWallet] = useState(false);
-  const [copiedWalletNo, setCopiedWalletNo] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<DashboardServiceCategory | null>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [popupAnnouncement, setPopupAnnouncement] = useState<any | null>(null);
 
   useEffect(() => {
-    fetchWallet();
     fetchBanners();
     fetchTransactions();
     fetchNotifications();
@@ -76,7 +61,7 @@ export const DashboardHomePage = () => {
         }
       })
       .catch(() => setAnnouncements([]));
-  }, [fetchWallet, fetchBanners, fetchTransactions, fetchNotifications, hydrateFavorites]);
+  }, [fetchBanners, fetchTransactions, fetchNotifications, hydrateFavorites]);
 
   useEffect(() => {
     return runWhenIdle(() => {
@@ -91,29 +76,6 @@ export const DashboardHomePage = () => {
     }
     setSelectedCategory(category);
   }, [navigate]);
-
-  const dynamicGreeting = useMemo(() => {
-    const now = new Date();
-    const currentHour = now.getHours() + now.getMinutes() / 60;
-    if (currentHour >= 4 && currentHour < 11) return 'Selamat Pagi';
-    if (currentHour >= 11 && currentHour < 15) return 'Selamat Siang';
-    if (currentHour >= 15 && currentHour < 18.5) return 'Selamat Sore';
-    return 'Selamat Malam';
-  }, []);
-
-  const handleRefreshBalance = async () => {
-    setIsRefreshingWallet(true);
-    await fetchWallet();
-    setTimeout(() => setIsRefreshingWallet(false), 500);
-  };
-
-  const handleCopyWalletNo = (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (!wallet?.walletNo) return;
-    navigator.clipboard.writeText(wallet.walletNo);
-    setCopiedWalletNo(true);
-    setTimeout(() => setCopiedWalletNo(false), 2000);
-  };
 
   const announcementText = announcements
     .map((a) => a.title || a.message || '')
@@ -179,135 +141,14 @@ export const DashboardHomePage = () => {
         </div>
       )}
 
-      {/* Single hero balance card — greeting + saldo + aksi (no duplicate body cards) */}
-      <div className="dashboard-balance-card dashboard-balance-card-home">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,.85) 1px, transparent 0)',
-            backgroundSize: '16px 16px',
-            maskImage: 'linear-gradient(to bottom, black 0%, transparent 85%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, transparent 85%)',
-          }}
-        />
-        <div className="brand-glow-accent -right-16 -top-16 w-48 h-48 pointer-events-none absolute" />
-        <div className="brand-glow-primary -left-12 bottom-[-1rem] w-44 h-44 pointer-events-none absolute" />
-
-        <div className="relative z-10 flex flex-col gap-2.5 md:gap-4">
-          {/* Row 1: greeting + compact avatar */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-primary-100/90 md:text-sm">
-                {dynamicGreeting} <span aria-hidden="true">👋</span>
-              </p>
-              <h1 className="mt-0.5 truncate text-base font-bold tracking-tight md:text-xl">
-                {(user?.name || 'Pelanggan GurkyNet').toUpperCase()}
-              </h1>
-              <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-bold text-primary-50">
-                ✦ Member Aktif
-              </span>
-            </div>
-            <div className="shrink-0 rounded-[14px] bg-gradient-to-br from-accent-400 to-accent-500 p-[2px] md:rounded-2xl md:p-[2.5px]">
-              <div className="h-10 w-10 overflow-hidden rounded-[12px] bg-primary-800 md:h-11 md:w-11 md:rounded-[14px]">
-                {user?.avatar ? (
-                  <img
-                    src={resolveMediaUrl(user.avatar)}
-                    alt={user.name || 'Avatar'}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xs font-bold text-white md:text-sm">
-                    {(user?.name || 'G')
-                      .split(' ')
-                      .map((n) => n[0])
-                      .slice(0, 2)
-                      .join('')
-                      .toUpperCase()}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Row 2: saldo + CTA side-by-side (all breakpoints) for compact mobile height */}
-          <div className="flex items-end justify-between gap-2 sm:gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary-200/85">
-                  Saldo GurkyNet
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowBalance(!showBalance)}
-                  className="rounded-md p-0.5 text-primary-200 hover:bg-white/10 transition-colors"
-                  title={showBalance ? 'Sembunyikan Saldo' : 'Tampilkan Saldo'}
-                  aria-label="Toggle Tampilan Saldo"
-                >
-                  {showBalance ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCopyWalletNo}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-bold text-primary-50 hover:bg-white/15 transition-colors"
-                  title="Salin nomor dompet"
-                >
-                  <span className="max-w-[7rem] truncate sm:max-w-[8rem]">{wallet?.walletNo || 'GK-XXXXXXXX'}</span>
-                  {copiedWalletNo ? <Check className="h-2.5 w-2.5 text-accent-400" /> : <Copy className="h-2.5 w-2.5" />}
-                </button>
-              </div>
-
-              {walletLoading && !wallet ? (
-                <div className="h-9 w-44 animate-pulse rounded-lg bg-white/15 md:h-10" />
-              ) : (
-                <div className="flex flex-wrap items-end gap-2">
-                  <h2 className="text-3xl font-black tracking-tight tabular-nums leading-none md:text-4xl">
-                    {showBalance ? formatIDR(wallet?.balance ?? 0) : 'Rp ••••••••'}
-                  </h2>
-                  <div className="flex items-center gap-1 pb-0.5">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary-100/75">
-                      <span className="h-1 w-1 animate-pulse rounded-full bg-accent-400" />
-                      {wallet?.lastUpdated
-                        ? new Date(wallet.lastUpdated).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                        : 'Realtime'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleRefreshBalance}
-                      disabled={isRefreshingWallet}
-                      className={`rounded-md p-0.5 text-primary-100 hover:bg-white/10 ${isRefreshingWallet ? 'animate-spin' : ''}`}
-                      title="Perbarui Saldo"
-                      aria-label="Perbarui Saldo"
-                    >
-                      <RotateCw className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1.5 shrink-0 sm:flex-row sm:gap-2">
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard/topup')}
-                className="inline-flex items-center justify-center gap-1 rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-primary-800 shadow-lg shadow-primary-900/20 transition hover:bg-primary-50 sm:px-3.5 sm:py-2 sm:text-[11px] md:px-4 md:py-2.5 md:text-xs"
-              >
-                <PlusCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
-                Top Up<span className="hidden sm:inline"> Saldo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard/riwayat')}
-                className="inline-flex items-center justify-center gap-1 rounded-full border border-white/18 bg-white/12 px-3 py-1.5 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-white/18 sm:px-3.5 sm:py-2 sm:text-[11px] md:px-4 md:py-2.5 md:text-xs"
-              >
-                <History className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
-                Riwayat
-              </button>
-            </div>
-          </div>
-        </div>
+      <div className="lg:hidden flex items-center gap-1.5 px-1 text-sm">
+        <span className="font-semibold text-primary-700">{getDynamicGreeting()}</span>
+        <span aria-hidden="true">👋</span>
+        <span className="text-gray-300">•</span>
+        <span className="font-bold text-gray-800 truncate">{user?.name || 'Pelanggan GurkyNet'}</span>
       </div>
 
-      {/* Promo banner — full width, no duplicate balance card */}
+      {/* Promo banner — full width hero */}
       <PromoBannerCarousel
         banners={banners}
         loading={bannerLoading}

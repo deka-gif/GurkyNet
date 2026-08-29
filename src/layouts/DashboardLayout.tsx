@@ -17,7 +17,6 @@ import {
   LogOut, 
   ChevronLeft, 
   ChevronRight, 
-  Search, 
   Sparkles,
   ArrowRight,
   UserCheck,
@@ -68,12 +67,12 @@ import { useRealtimeChannel } from '../hooks/useRealtimeChannel';
 import { useSoftRefresh } from '../hooks/useSoftRefresh';
 import { RefreshPolicy } from '../lib/refreshPolicy';
 import { formatIDR } from '../utils/currency';
+import { getDynamicGreeting } from '../utils/greeting';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
 export const DashboardLayout = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -504,7 +503,7 @@ export const DashboardLayout = () => {
         {/* HEADER AREA */}
         <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-4 md:px-8 shrink-0 sticky top-0 z-30">
           
-          {/* Left Block: Brand on mobile, search on desktop */}
+          {/* Left Block: Brand on mobile */}
           <div className="flex items-center gap-4 flex-1">
             {/* Mobile Brand Logo */}
             <div className="flex md:hidden items-center gap-2">
@@ -523,18 +522,6 @@ export const DashboardLayout = () => {
               <span className="font-extrabold text-base text-gray-900 tracking-tight truncate max-w-[140px]">
                 {brandName}
               </span>
-            </div>
-
-            {/* Search bar placeholder */}
-            <div className="hidden sm:flex items-center relative w-full max-w-md ml-4 md:ml-0">
-              <Search className="w-4.5 h-4.5 text-gray-400 absolute left-3.5 pointer-events-none" />
-              <input 
-                type="text" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari layanan, voucher, tagihan..."
-                className="w-full bg-gray-50 border border-gray-100 hover:border-gray-200 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 rounded-2xl pl-10 pr-4 py-2 text-sm text-gray-900 outline-none transition-all placeholder-gray-400 font-medium"
-              />
             </div>
           </div>
 
@@ -652,7 +639,8 @@ export const DashboardLayout = () => {
                 </div>
               )}
               <div className="text-left hidden lg:block">
-                <div className="text-xs font-bold text-gray-900 leading-tight group-hover:text-primary-600 transition-colors">{currentUser.name}</div>
+                <div className="text-[10px] font-semibold text-primary-600 leading-none">{getDynamicGreeting()} 👋</div>
+                <div className="text-xs font-bold text-gray-900 leading-tight mt-1 group-hover:text-primary-600 transition-colors">{currentUser.name}</div>
                 <div className="text-[10px] font-bold text-indigo-600 mt-0.5 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100 inline-block">{currentUser.role}</div>
               </div>
             </Link>
