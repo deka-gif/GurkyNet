@@ -1,11 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserCodeReader, BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
+import { DecodeHintType } from '@zxing/library';
 
 type Props = {
   onDetected: (text: string) => void;
   active?: boolean;
   scanCount?: number;
 };
+
+const DECODE_EMIT_DEBOUNCE_MS = 800;
+
+function playBeep() {
+  try {
+    const AudioCtx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.12);
+    oscillator.onended = () => void ctx.close();
+  } catch {
+    // Web Audio unsupported/blocked — scan continues without sound.
+  }
+}
+
+function buildVideoConstraints(deviceId?: string): MediaStreamConstraints {
+  const advanced = [{ focusMode: 'continuous' }] as MediaTrackConstraintSet[];
+  return {
+    video: deviceId
+      ? {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced,
+        }
+      : {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced,
+        },
+  };
+}
 
 function pickDefaultDeviceIndex(devices: MediaDeviceInfo[]): number {
   const backIdx = devices.findIndex((d) => /back|rear|environment/i.test(d.label));
@@ -29,6 +73,7 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
   const controlsRef = useRef<IScannerControls | null>(null);
   const onDetectedRef = useRef(onDetected);
   const defaultDeviceSetRef = useRef(false);
+  const lastDecodeEmitRef = useRef<{ text: string; at: number } | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceIndex, setDeviceIndex] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -58,10 +103,30 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
     }
 
     let cancelled = false;
-    const reader = new BrowserMultiFormatReader(undefined, {
+    const hints = new Map();
+    hints.set(DecodeHintType.TRY_HARDER, true);
+
+    const reader = new BrowserMultiFormatReader(hints, {
       delayBetweenScanAttempts: 300,
       delayBetweenScanSuccess: 800,
     });
+
+    const emitDetection = (raw: string) => {
+      const text = raw.trim();
+      if (!text) return;
+
+      const now = Date.now();
+      if (
+        lastDecodeEmitRef.current?.text === text &&
+        now - lastDecodeEmitRef.current.at < DECODE_EMIT_DEBOUNCE_MS
+      ) {
+        return;
+      }
+
+      lastDecodeEmitRef.current = { text, at: now };
+      playBeep();
+      onDetectedRef.current(text);
+    };
 
     const start = async () => {
       setStarting(true);
@@ -86,9 +151,10 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
         const videoEl = videoRef.current;
         if (!videoEl) return;
 
-        const controls = await reader.decodeFromVideoDevice(deviceId || undefined, videoEl, (result) => {
+        const constraints = buildVideoConstraints(deviceId);
+        const controls = await reader.decodeFromConstraints(constraints, videoEl, (result) => {
           if (result) {
-            onDetectedRef.current(result.getText());
+            emitDetection(result.getText());
           }
         });
 
