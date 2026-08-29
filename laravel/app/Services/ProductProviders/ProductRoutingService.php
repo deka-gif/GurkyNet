@@ -23,6 +23,11 @@ class ProductRoutingService
         protected ProviderFailoverPolicy $failoverPolicy,
     ) {}
 
+    protected function routingTraceEnabled(): bool
+    {
+        return (bool) config('app.catalog_trace_enabled', false);
+    }
+
     public function failoverPolicy(): ProviderFailoverPolicy
     {
         return $this->failoverPolicy;
@@ -44,14 +49,16 @@ class ProductRoutingService
             ->where('is_active', true)
             ->get();
 
-        Log::info('PRODUCT ROUTING — candidates loaded', [
-            'transaction_id' => $transactionId,
-            'product_id' => $product->id,
-            'internal_sku' => $product->sku_code,
-            'logical_group' => LogicalProductKey::groupKey($product),
-            'sibling_product_ids' => $productIds,
-            'raw_offer_count' => $offers->count(),
-        ]);
+        if ($this->routingTraceEnabled()) {
+            Log::info('PRODUCT ROUTING — candidates loaded', [
+                'transaction_id' => $transactionId,
+                'product_id' => $product->id,
+                'internal_sku' => $product->sku_code,
+                'logical_group' => LogicalProductKey::groupKey($product),
+                'sibling_product_ids' => $productIds,
+                'raw_offer_count' => $offers->count(),
+            ]);
+        }
 
         // Backward-compatible Digiflazz synthetic offer when no mapping rows yet
         if ($offers->isEmpty()) {
@@ -68,11 +75,13 @@ class ProductRoutingService
                 $synthetic->setRelation('productProvider', $digi);
                 $offers = collect([$synthetic]);
 
-                Log::info('PRODUCT ROUTING — synthetic Digiflazz offer', [
-                    'transaction_id' => $transactionId,
-                    'product_id' => $product->id,
-                    'provider_sku' => $product->sku_code,
-                ]);
+                if ($this->routingTraceEnabled()) {
+                    Log::info('PRODUCT ROUTING — synthetic Digiflazz offer', [
+                        'transaction_id' => $transactionId,
+                        'product_id' => $product->id,
+                        'provider_sku' => $product->sku_code,
+                    ]);
+                }
             }
         }
 
@@ -160,15 +169,17 @@ class ProductRoutingService
                 }
             }
 
-            Log::info('PRODUCT ROUTING — provider selected candidate', [
-                'transaction_id' => $transactionId,
-                'product_id' => $product->id,
-                'offer_product_id' => $offer->product_id,
-                'provider_code' => $pp->code,
-                'priority' => (int) $pp->priority,
-                'provider_sku' => $offer->provider_sku,
-                'is_preferred' => (bool) $offer->is_preferred,
-            ]);
+            if ($this->routingTraceEnabled()) {
+                Log::info('PRODUCT ROUTING — provider selected candidate', [
+                    'transaction_id' => $transactionId,
+                    'product_id' => $product->id,
+                    'offer_product_id' => $offer->product_id,
+                    'provider_code' => $pp->code,
+                    'priority' => (int) $pp->priority,
+                    'provider_sku' => $offer->provider_sku,
+                    'is_preferred' => (bool) $offer->is_preferred,
+                ]);
+            }
         }
 
         $accepted = collect(array_values($bestByProvider));
@@ -185,16 +196,18 @@ class ProductRoutingService
             $sorted = collect([$preferred])->concat($sorted)->values();
         }
 
-        Log::info('PRODUCT ROUTING — ordered candidates', [
-            'transaction_id' => $transactionId,
-            'product_id' => $product->id,
-            'order' => $sorted->map(fn (ProductProviderSku $o) => [
-                'provider' => $o->productProvider?->code,
-                'priority' => (int) ($o->productProvider?->priority ?? 0),
-                'provider_sku' => $o->provider_sku,
-                'offer_product_id' => $o->product_id,
-            ])->all(),
-        ]);
+        if ($this->routingTraceEnabled()) {
+            Log::info('PRODUCT ROUTING — ordered candidates', [
+                'transaction_id' => $transactionId,
+                'product_id' => $product->id,
+                'order' => $sorted->map(fn (ProductProviderSku $o) => [
+                    'provider' => $o->productProvider?->code,
+                    'priority' => (int) ($o->productProvider?->priority ?? 0),
+                    'provider_sku' => $o->provider_sku,
+                    'offer_product_id' => $o->product_id,
+                ])->all(),
+            ]);
+        }
 
         return $sorted;
     }
@@ -258,13 +271,15 @@ class ProductRoutingService
         string $reason,
         ProductProviderSku $offer
     ): void {
-        Log::info('PRODUCT ROUTING — provider skipped', [
-            'transaction_id' => $transactionId,
-            'product_id' => $product->id,
-            'provider_code' => $provider?->code,
-            'reason_skipped' => $reason,
-            'provider_sku' => $offer->provider_sku,
-        ]);
+        if ($this->routingTraceEnabled()) {
+            Log::info('PRODUCT ROUTING — provider skipped', [
+                'transaction_id' => $transactionId,
+                'product_id' => $product->id,
+                'provider_code' => $provider?->code,
+                'reason_skipped' => $reason,
+                'provider_sku' => $offer->provider_sku,
+            ]);
+        }
 
         if ($transactionId && $provider) {
             try {

@@ -36,7 +36,9 @@ export const productService = {
       params.append('per_page', '5000');
     }
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    const response = await apiClient.get<ApiResponse<Product[]>>(`/products${queryString}`);
+    const response = await apiClient.get<ApiResponse<Product[]>>(`/products${queryString}`, {
+      timeout: 120000,
+    });
     return response.data;
   },
 

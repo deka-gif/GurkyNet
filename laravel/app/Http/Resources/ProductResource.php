@@ -19,21 +19,27 @@ class ProductResource extends JsonResource
 
         $pricingDetails = $pricingService->calculateForProduct($this->resource);
         $availabilityStatus = $availabilityService->getStatus($this->resource);
-        $sellable = $availabilityStatus === 'active' && $this->isSellableViaControlCenter();
+        // getStatus() already delegates to Control Center routing for 'active'.
+        $sellable = $availabilityStatus === 'active';
         $catalogVisible = $availabilityStatus === 'active' || $availabilityStatus === 'maintenance';
 
-        $resolver = resolve(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
-        $metaSvc = $resolver->meta();
-        $description = $metaSvc->descriptionFor($this->resource);
-        $meta = $metaSvc->parseMeta((string) $this->name, $description);
-        $operatorTaxonomy = $resolver->forBrand($this->provider?->name);
+        $description = '';
+        $meta = ['quota' => null, 'validity' => null];
         $dataGroup = null;
         $badge = null;
         $requiresRegion = false;
-        if ($operatorTaxonomy) {
-            $dataGroup = $operatorTaxonomy->classify((string) $this->name, $description);
-            $badge = $operatorTaxonomy->badgeFor($this->resource, $dataGroup);
-            $requiresRegion = $operatorTaxonomy->mentionsRegion((string) $this->name, $description);
+
+        if ($this->needsOperatorTaxonomy()) {
+            $resolver = resolve(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
+            $metaSvc = $resolver->meta();
+            $description = $metaSvc->descriptionFor($this->resource);
+            $meta = $metaSvc->parseMeta((string) $this->name, $description);
+            $operatorTaxonomy = $resolver->forBrand($this->provider?->name);
+            if ($operatorTaxonomy) {
+                $dataGroup = $operatorTaxonomy->classify((string) $this->name, $description);
+                $badge = $operatorTaxonomy->badgeFor($this->resource, $dataGroup);
+                $requiresRegion = $operatorTaxonomy->mentionsRegion((string) $this->name, $description);
+            }
         }
 
         return [
@@ -91,12 +97,20 @@ class ProductResource extends JsonResource
     }
 
     /**
-     * Sellable when any active SKU belongs to an enabled, non-maintenance Product Provider.
-     * Falls back to products.status when SKU relations are not loaded.
+     * Telkomsel/XL/… data UX taxonomy — skip for game/voucher/langganan/international hubs.
      */
-    protected function isSellableViaControlCenter(): bool
+    protected function needsOperatorTaxonomy(): bool
     {
-        return resolve(\App\Services\AvailabilityService::class)
-            ->isSellableViaControlCenter($this->resource);
+        $slug = (string) ($this->category?->slug ?? '');
+
+        return in_array($slug, [
+            'data',
+            'pulsa',
+            'voucher-internet',
+            'sms-telepon',
+            'masa-aktif',
+            'aktivasi-perdana',
+            'esim',
+        ], true);
     }
 }
