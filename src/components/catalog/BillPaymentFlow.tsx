@@ -107,6 +107,14 @@ export function BillPaymentFlow({
     setStep('input');
   };
 
+  // Single-vendor categories (e.g. PDAM): skip redundant vendor picker — land on input form directly.
+  useEffect(() => {
+    if (productsLoading || vendors.length !== 1 || step !== 'vendor' || selectedVendor) {
+      return;
+    }
+    selectVendor(vendors[0].name);
+  }, [productsLoading, vendors, step, selectedVendor]);
+
   const goBackToVendors = () => {
     setStep('vendor');
     setSelectedVendor(null);
@@ -284,14 +292,16 @@ export function BillPaymentFlow({
 
       {step === 'input' && selectedVendor && (
         <div className="space-y-4">
-          <button
-            type="button"
-            onClick={goBackToVendors}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-primary-600"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Ganti vendor
-          </button>
+          {vendors.length > 1 && (
+            <button
+              type="button"
+              onClick={goBackToVendors}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-primary-600"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Ganti vendor
+            </button>
+          )}
 
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
             <div>

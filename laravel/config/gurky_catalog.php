@@ -331,6 +331,7 @@ return [
         // Tagihan brands (Digiflazz pascabayar uses category=Pascabayar + brand=sub-type)
         'pln' => 'pln',
         'pdam' => 'pdam',
+        'bpjs ketenagakerjaan' => 'bpjs-tk',
         'bpjs' => 'bpjs-kesehatan',
         'internet pascabayar' => 'internet-pascabayar',
         'tv pascabayar' => 'tv-pascabayar',
