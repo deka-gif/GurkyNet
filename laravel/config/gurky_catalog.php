@@ -328,10 +328,15 @@ return [
         'apple music' => 'langganan-digital',
         'itunes music' => 'langganan-digital',
 
-        // Tagihan brands
+        // Tagihan brands (Digiflazz pascabayar uses category=Pascabayar + brand=sub-type)
         'pln' => 'pln',
         'pdam' => 'pdam',
         'bpjs' => 'bpjs-kesehatan',
+        'internet pascabayar' => 'internet-pascabayar',
+        'tv pascabayar' => 'tv-pascabayar',
+        'multifinance' => 'multifinance',
+        'pbb' => 'pbb',
+        'gas negara' => 'gas',
     ],
 
     /*

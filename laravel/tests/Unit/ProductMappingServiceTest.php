@@ -121,4 +121,29 @@ class ProductMappingServiceTest extends TestCase
         $m = $svc->map('digiflazz', 'E-Money', 'DANA', 'DANA 50.000');
         $this->assertSame('topup-digital', $m['slug']);
     }
+
+    /** Digiflazz pascabayar sub-types resolve via brand_overrides (category is always Pascabayar). */
+    public function test_pascabayar_internet_brand_maps_to_internet_pascabayar(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pascabayar', 'INTERNET PASCABAYAR', 'XL HOME');
+        $this->assertSame('internet-pascabayar', $m['slug']);
+        $this->assertSame('brand_override', $m['source']);
+    }
+
+    public function test_pascabayar_hp_brand_stays_on_generic_tagihan(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pascabayar', 'HP PASCABAYAR', 'Halo Postpaid');
+        $this->assertSame('tagihan', $m['slug']);
+        $this->assertSame('provider_category', $m['source']);
+    }
+
+    public function test_pascabayar_gas_negara_brand_maps_to_gas(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pascabayar', 'GAS NEGARA', 'Gas Negara');
+        $this->assertSame('gas', $m['slug']);
+        $this->assertSame('brand_override', $m['source']);
+    }
 }
