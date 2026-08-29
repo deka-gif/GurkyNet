@@ -54,6 +54,25 @@ export type DashboardServiceCategory = {
   hubChildren?: CatalogHubChild[];
 };
 
+export type CategoryToneStyle = { bg: string; gradient: string; shadow: string };
+
+/** Jewel-tone palette: kartu latar pastel + badge gradasi kaya per kategori (disetujui Owner). */
+export const CATEGORY_TONES: Record<string, CategoryToneStyle> = {
+  telco: { bg: 'bg-primary-50', gradient: 'bg-gradient-to-br from-primary-500 to-primary-700', shadow: 'shadow-primary-700/30' },
+  transfer: { bg: 'bg-primary-50', gradient: 'bg-gradient-to-br from-primary-500 to-primary-700', shadow: 'shadow-primary-700/30' },
+  tagihan: { bg: 'bg-indigo-50', gradient: 'bg-gradient-to-br from-indigo-400 to-indigo-600', shadow: 'shadow-indigo-600/30' },
+  'topup-digital': { bg: 'bg-emerald-50', gradient: 'bg-gradient-to-br from-emerald-400 to-emerald-600', shadow: 'shadow-emerald-600/30' },
+  game: { bg: 'bg-violet-50', gradient: 'bg-gradient-to-br from-violet-400 to-violet-600', shadow: 'shadow-violet-600/30' },
+  voucher: { bg: 'bg-accent-300/25', gradient: 'bg-gradient-to-br from-accent-400 to-accent-600', shadow: 'shadow-accent-600/30' },
+  langganan: { bg: 'bg-rose-50', gradient: 'bg-gradient-to-br from-rose-400 to-rose-600', shadow: 'shadow-rose-600/30' },
+  international: { bg: 'bg-sky-50', gradient: 'bg-gradient-to-br from-sky-400 to-sky-600', shadow: 'shadow-sky-600/30' },
+  all: { bg: 'bg-slate-100', gradient: 'bg-gradient-to-br from-primary-700 to-primary-900', shadow: 'shadow-primary-900/30' },
+};
+
+export function categoryTone(id: string): CategoryToneStyle {
+  return CATEGORY_TONES[id] ?? CATEGORY_TONES.telco;
+}
+
 export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
   {
     id: 'telco',
@@ -163,7 +182,7 @@ export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
     description: 'Jelajahi seluruh layanan',
     icon: LayoutGrid,
     tone: 'bg-primary-50 text-primary-600 border-primary-100',
-    path: '#all-services',
+    path: '/dashboard/semua-produk',
     mode: 'hub',
     hubChildren: [
       { key: 'pulsa', label: 'Pulsa', path: '/dashboard/pulsa', productCategory: 'pulsa', icon: Smartphone },

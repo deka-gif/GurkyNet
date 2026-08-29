@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import {
   DASHBOARD_SERVICE_CATEGORIES,
   PRODUCT_COUNT_CATEGORY_KEYS,
+  categoryTone,
   type DashboardServiceCategory,
 } from '../../config/catalogCategories';
 import { productService } from '../../services/product/product.service';
@@ -12,23 +13,6 @@ type ServiceCategoryGridProps = {
   onSelect: (category: DashboardServiceCategory) => void;
   activeId?: string | null;
 };
-
-/** Brand-aligned gradient tiles — grouped by service type for quick visual scanning */
-const BRAND_CATEGORY_TONES: Record<string, string> = {
-  telco: 'bg-gradient-to-br from-primary-500 to-primary-700',
-  tagihan: 'bg-gradient-to-br from-primary-500 to-primary-700',
-  international: 'bg-gradient-to-br from-primary-500 to-primary-700',
-  transfer: 'bg-gradient-to-br from-primary-500 to-primary-700',
-  game: 'bg-gradient-to-br from-primary-600 to-primary-900',
-  langganan: 'bg-gradient-to-br from-primary-600 to-primary-900',
-  all: 'bg-gradient-to-br from-primary-600 to-primary-900',
-  'topup-digital': 'bg-gradient-to-br from-accent-400 to-accent-600',
-  voucher: 'bg-gradient-to-br from-accent-400 to-accent-600',
-};
-
-function categoryTone(cat: DashboardServiceCategory): string {
-  return BRAND_CATEGORY_TONES[cat.id] ?? 'bg-gradient-to-br from-primary-500 to-primary-700';
-}
 
 function CategorySkeleton() {
   return (
@@ -168,9 +152,14 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
               ) : null}
 
               <div
-                className={`mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-md shadow-primary-900/15 transition-transform duration-200 will-change-transform group-hover:scale-105 ${categoryTone(cat)}`}
+                className={`relative mb-3 flex h-14 w-14 items-center justify-center rounded-2xl transition-transform duration-200 will-change-transform group-hover:scale-105 ${categoryTone(cat.id).bg}`}
               >
-                <Icon className="h-7 w-7" />
+                <div
+                  className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${categoryTone(cat.id).gradient} ${categoryTone(cat.id).shadow}`}
+                >
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
+                  <Icon className="relative h-5 w-5" />
+                </div>
               </div>
 
               <div className="text-sm font-bold text-slate-900 group-hover:text-primary-700">

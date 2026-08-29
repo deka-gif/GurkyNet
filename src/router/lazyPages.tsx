@@ -68,6 +68,10 @@ export const TagihanHubPage = lazyNamed(
   () => import('../pages/dashboard/ServiceHubPages'),
   'TagihanHubPage'
 );
+export const AllProductsPage = lazyNamed(
+  () => import('../pages/dashboard/ServiceHubPages'),
+  'AllProductsPage'
+);
 
 export const TopUpDigitalPage = lazyNamed(
   () => import('../pages/dashboard/MappedCatalogPages'),

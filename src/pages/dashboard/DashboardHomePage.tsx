@@ -1,7 +1,6 @@
 import { CatalogSearchBar } from '../../components/catalog/CatalogSearchBar';
 import { PromoBannerCarousel } from '../../components/dashboard/PromoBannerCarousel';
 import { ServiceCategoryGrid } from '../../components/dashboard/ServiceCategoryGrid';
-import { ProductPickerSheet } from '../../components/dashboard/ProductPickerSheet';
 import { RecentTransactionsCard } from '../../components/dashboard/RecentTransactionsCard';
 import { useFavoriteStore } from '../../store/favorite.store';
 import type { DashboardServiceCategory } from '../../config/catalogCategories';
@@ -41,7 +40,6 @@ export const DashboardHomePage = () => {
   const removeFavorite = useFavoriteStore((s) => s.removeFavorite);
   const { flags: featureFlags } = useFeatureFlags();
 
-  const [selectedCategory, setSelectedCategory] = useState<DashboardServiceCategory | null>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [popupAnnouncement, setPopupAnnouncement] = useState<any | null>(null);
 
@@ -70,11 +68,7 @@ export const DashboardHomePage = () => {
   }, []);
 
   const handleCategorySelect = useCallback((category: DashboardServiceCategory) => {
-    if (category.mode === 'navigate') {
-      navigate(category.path);
-      return;
-    }
-    setSelectedCategory(category);
+    navigate(category.path);
   }, [navigate]);
 
   const announcementText = announcements
@@ -161,7 +155,6 @@ export const DashboardHomePage = () => {
       </div>
 
       <ServiceCategoryGrid
-        activeId={selectedCategory?.id}
         onSelect={handleCategorySelect}
       />
 
@@ -253,13 +246,6 @@ export const DashboardHomePage = () => {
           </div>
         </div>
       </div>
-
-      <ProductPickerSheet
-        open={Boolean(selectedCategory)}
-        category={selectedCategory}
-        transactions={Array.isArray(transactions) ? transactions : []}
-        onClose={() => setSelectedCategory(null)}
-      />
 
     </div>
   );

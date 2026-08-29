@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LucideIcon, ChevronRight } from 'lucide-react';
+import { categoryTone } from '../../config/catalogCategories';
 
 export type HubChild = {
   key: string;
@@ -7,42 +8,23 @@ export type HubChild = {
   description?: string;
   path: string;
   icon?: LucideIcon;
-  /** Tailwind classes for icon tile — brand-aligned teal/emerald family */
-  tone?: string;
 };
 
 interface ServiceHubPageProps {
   title: string;
   subtitle: string;
   children: HubChild[];
+  /** Category id untuk lookup warna jewel-tone — lihat CATEGORY_TONES di src/config/catalogCategories.ts */
+  tone: string;
 }
 
-const DEFAULT_HUB_TONES: Record<string, string> = {
-  pulsa: 'bg-primary-50 text-primary-700 border-primary-100',
-  data: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  'voucher-internet': 'bg-teal-50 text-teal-700 border-teal-100',
-  'sms-telepon': 'bg-primary-50 text-primary-600 border-primary-100',
-  'masa-aktif': 'bg-emerald-50 text-emerald-600 border-emerald-100',
-  'aktivasi-perdana': 'bg-primary-100/60 text-primary-800 border-primary-200',
-  esim: 'bg-teal-50 text-teal-800 border-teal-100',
-  pln: 'bg-accent-300/25 text-primary-900 border-accent-400/30',
-  'pln-pascabayar': 'bg-accent-300/20 text-primary-800 border-accent-400/25',
-  pdam: 'bg-primary-50 text-primary-700 border-primary-100',
-  'bpjs-kesehatan': 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  'bpjs-tk': 'bg-teal-50 text-teal-700 border-teal-100',
-  internet: 'bg-primary-50 text-primary-600 border-primary-100',
-  tv: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  gas: 'bg-accent-300/20 text-primary-800 border-accent-400/25',
-  pbb: 'bg-primary-50 text-primary-700 border-primary-100',
-  samsat: 'bg-teal-50 text-teal-700 border-teal-100',
-  multifinance: 'bg-emerald-50 text-emerald-800 border-emerald-100',
-  lainnya: 'bg-gray-50 text-gray-600 border-gray-100',
-};
-
 /**
- * Category hub: user picks a service first, then provider → product flow.
+ * Category hub: user pilih layanan dulu, baru masuk ke provider/produk.
+ * Semua item di 1 halaman hub pakai 1 jewel-tone yang sama, senada dengan warna tile kategori induknya di Home.
  */
-export function ServiceHubPage({ title, subtitle, children }: ServiceHubPageProps) {
+export function ServiceHubPage({ title, subtitle, children, tone }: ServiceHubPageProps) {
+  const style = categoryTone(tone);
+
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
       <div>
@@ -53,17 +35,17 @@ export function ServiceHubPage({ title, subtitle, children }: ServiceHubPageProp
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {children.map((item) => {
           const Icon = item.icon;
-          const tone = item.tone || DEFAULT_HUB_TONES[item.key] || 'bg-primary-50 text-primary-600 border-primary-100';
           return (
             <Link
               key={item.key}
               to={item.path}
               className="group dashboard-panel !p-4 !rounded-2xl !shadow-sm hover:!shadow-md hover:border-primary-200/80 flex items-center gap-4 transition-all duration-200"
             >
-              <div
-                className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${tone}`}
-              >
-                {Icon ? <Icon className="w-5 h-5" /> : <span className="text-sm font-black">{item.label.slice(0, 2)}</span>}
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${style.bg}`}>
+                <div className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${style.gradient} ${style.shadow}`}>
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
+                  {Icon ? <Icon className="relative w-4 h-4" /> : <span className="relative text-[10px] font-black">{item.label.slice(0, 2)}</span>}
+                </div>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-extrabold text-gray-900 text-sm group-hover:text-primary-700 transition-colors">

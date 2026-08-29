@@ -30,6 +30,7 @@ import {
   TransferPage,
   TelekomunikasiHubPage,
   TagihanHubPage,
+  AllProductsPage,
   TopUpDigitalPage,
   LanggananDigitalPage,
   InternationalTopUpPage,
@@ -640,6 +641,10 @@ export const router = createBrowserRouter([
       {
         path: 'transfer',
         element: <TransferPage />
+      },
+      {
+        path: 'semua-produk',
+        element: <AllProductsPage />
       },
       {
         path: 'tagihan',
