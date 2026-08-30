@@ -208,7 +208,7 @@ export const VoucherFisikZonaPage = () => {
 
       {stage === 'scan' && (
         <div className="relative bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-200/40 overflow-hidden">
-          <div className="p-6 space-y-4 max-h-[calc(100vh-280px)] overflow-y-auto pb-28">
+                    <div className="p-6 space-y-4 pb-28">
             {scanInputTab === 'camera' ? (
               <>
                 <VoucherCameraScan
