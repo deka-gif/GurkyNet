@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
 import { useProductStore } from '../../store/product.store';
 import { ProductPicker } from '../../components/catalog/ProductPicker';
 import { PhysicalBatchCheckout } from '../../components/catalog/PhysicalBatchCheckout';
-import { TelkomselZonePicker } from '../../components/catalog/TelkomselZonePicker';
 import { VoucherCameraScan } from '../../components/catalog/VoucherCameraScan';
 import { Product } from '../../types';
 import { formatIDR } from '../../utils/currency';
@@ -13,13 +12,7 @@ import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import { filterVoucherInternetProducts } from '../../utils/voucherInternetGuard';
-import {
-  filterProductsByZoneLabel,
-  isTelkomselOperator,
-  telkomselNationalProducts,
-  telkomselNeedsZoneGate,
-} from '../../utils/telkomselVoucherZone';
-import { productService } from '../../services/product/product.service';
+import { isTelkomselOperator, telkomselNationalProducts } from '../../utils/telkomselVoucherZone';
 import {
   addCodesToScan,
   clearPendingScan,
@@ -30,7 +23,7 @@ import {
   type ScannedSerial,
 } from '../../utils/voucherPhysicalScan';
 
-type FisikStage = 'scan' | 'pilih-produk' | 'ringkasan';
+type FisikStage = 'scan' | 'pilih-produk';
 
 const MAX_BATCH_ITEMS = 200;
 
@@ -50,13 +43,10 @@ export const VoucherFisikZonaPage = () => {
   const [scannedList, setScannedList] = useState<ScannedSerial[]>([]);
   const [scanInput, setScanInput] = useState('');
   const [scanInputTab, setScanInputTab] = useState<'camera' | 'manual'>('camera');
+  const [snListExpanded, setSnListExpanded] = useState(false);
   const lastCameraDetectRef = useRef<{ serial: string; at: number } | null>(null);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
-
-  const [telkomselNationalSelected, setTelkomselNationalSelected] = useState(false);
-  const [telkomselZoneLabel, setTelkomselZoneLabel] = useState<string | null>(null);
-  const [telkomselZoneReference, setTelkomselZoneReference] = useState<Record<string, string[]>>({});
 
   const restoredScanOnce = useRef(false);
 
@@ -87,14 +77,6 @@ export const VoucherFisikZonaPage = () => {
   }, [fetchWallet, fetchProducts, zona]);
 
   useEffect(() => {
-    void productService.getTelkomselVoucherZoneReference().then((res) => {
-      if (res.success && res.data?.zones) {
-        setTelkomselZoneReference(res.data.zones);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
     if (scannedList.length === 0) {
       clearPendingScan();
       return;
@@ -111,42 +93,15 @@ export const VoucherFisikZonaPage = () => {
       .sort((a, b) => a.price - b.price);
   }, [voucherInternetProducts, zona]);
 
-  const telkomselCatalogActive =
-    !!zona && isTelkomselOperator(zona) && zonaProducts.length > 0;
-  const telkomselZoneGateNeeded =
-    telkomselCatalogActive && telkomselNeedsZoneGate(zonaProducts);
-  const telkomselNationalCatalogProducts = useMemo(
-    () => (telkomselCatalogActive ? telkomselNationalProducts(zonaProducts) : []),
+  // Voucher Fisik is national-only — Telkomsel regional-zone products are always excluded here,
+  // regardless of whether the shared zone-gate would normally require picking a region.
+  const telkomselCatalogActive = !!zona && isTelkomselOperator(zona) && zonaProducts.length > 0;
+  const catalogProductsToShow = useMemo(
+    () => (telkomselCatalogActive ? telkomselNationalProducts(zonaProducts) : zonaProducts),
     [telkomselCatalogActive, zonaProducts]
   );
-  const telkomselRegionalCatalogProducts = useMemo(() => {
-    if (!telkomselCatalogActive || !telkomselZoneLabel) return [];
-    return filterProductsByZoneLabel(zonaProducts, telkomselZoneLabel);
-  }, [telkomselCatalogActive, telkomselZoneLabel, zonaProducts]);
-  const catalogProductsToShow = useMemo(() => {
-    if (!telkomselZoneGateNeeded) return zonaProducts;
-    if (telkomselNationalSelected) return telkomselNationalCatalogProducts;
-    if (telkomselZoneLabel) return telkomselRegionalCatalogProducts;
-    return [];
-  }, [
-    telkomselZoneGateNeeded,
-    zonaProducts,
-    telkomselNationalSelected,
-    telkomselNationalCatalogProducts,
-    telkomselZoneLabel,
-    telkomselRegionalCatalogProducts,
-  ]);
-
-  const showProductPicker =
-    !telkomselZoneGateNeeded || telkomselNationalSelected || !!telkomselZoneLabel;
 
   const physicalTotal = selectedProduct ? selectedProduct.price * scannedList.length : 0;
-
-  const resetTelkomselZone = () => {
-    setTelkomselNationalSelected(false);
-    setTelkomselZoneLabel(null);
-    setSelectedProduct(null);
-  };
 
   const handleScanSubmit = () => {
     const raw = scanInput.trim();
@@ -203,6 +158,7 @@ export const VoucherFisikZonaPage = () => {
     setScannedList([]);
     setScanInput('');
     setScanNotice(null);
+    setSnListExpanded(false);
     lastCameraDetectRef.current = null;
     clearPendingScan();
   };
@@ -238,9 +194,8 @@ export const VoucherFisikZonaPage = () => {
               </span>
             </div>
             <p className="text-sm text-gray-500 mt-1">
-              {stage === 'scan' && 'Tahap 1 — Scan serial number voucher'}
-              {stage === 'pilih-produk' && 'Tahap 2 — Pilih nominal paket'}
-              {stage === 'ringkasan' && 'Tahap 3 — Ringkasan & bayar'}
+              {stage === 'scan' && 'Tahap 1 dari 2 — Scan serial number voucher'}
+              {stage === 'pilih-produk' && 'Tahap 2 dari 2 — Pilih nominal, lalu bayar'}
             </p>
           </div>
         </div>
@@ -254,39 +209,30 @@ export const VoucherFisikZonaPage = () => {
       {stage === 'scan' && (
         <div className="relative bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-200/40 overflow-hidden">
           <div className="p-6 space-y-4 max-h-[calc(100vh-280px)] overflow-y-auto pb-28">
-            <div className="flex gap-2 p-1 rounded-xl bg-gray-100">
-              <button
-                type="button"
-                onClick={() => setScanInputTab('camera')}
-                className={`flex-1 py-2 rounded-lg text-xs font-extrabold transition ${
-                  scanInputTab === 'camera'
-                    ? 'bg-white text-primary-700 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                📷 Scan Kamera
-              </button>
-              <button
-                type="button"
-                onClick={() => setScanInputTab('manual')}
-                className={`flex-1 py-2 rounded-lg text-xs font-extrabold transition ${
-                  scanInputTab === 'manual'
-                    ? 'bg-white text-primary-700 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                ⌨️ Input Manual
-              </button>
-            </div>
-
             {scanInputTab === 'camera' ? (
-              <VoucherCameraScan
-                active={scannedList.length < MAX_BATCH_ITEMS}
-                scanCount={scannedList.length}
-                onDetected={addCodesFromCamera}
-              />
+              <>
+                <VoucherCameraScan
+                  active={scannedList.length < MAX_BATCH_ITEMS}
+                  scanCount={scannedList.length}
+                  onDetected={addCodesFromCamera}
+                />
+                <button
+                  type="button"
+                  onClick={() => setScanInputTab('manual')}
+                  className="text-[11px] font-bold text-primary-600 hover:text-primary-700"
+                >
+                  + Input Manual
+                </button>
+              </>
             ) : (
               <>
+                <button
+                  type="button"
+                  onClick={() => setScanInputTab('camera')}
+                  className="text-[11px] font-bold text-primary-600 hover:text-primary-700"
+                >
+                  ← Kembali ke Kamera
+                </button>
                 <textarea
                   value={scanInput}
                   onChange={(e) => setScanInput(e.target.value)}
@@ -321,7 +267,7 @@ export const VoucherFisikZonaPage = () => {
 
             {scannedList.length > 0 && (
               <div className="space-y-1.5">
-                {scannedList.map((s) => (
+                {(snListExpanded ? scannedList : scannedList.slice(0, 3)).map((s) => (
                   <div
                     key={s.serial}
                     className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 text-xs"
@@ -337,6 +283,24 @@ export const VoucherFisikZonaPage = () => {
                     </button>
                   </div>
                 ))}
+                {!snListExpanded && scannedList.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setSnListExpanded(true)}
+                    className="w-full text-center text-[11px] font-bold text-gray-400 py-1.5"
+                  >
+                    + {scannedList.length - 3} lainnya · lihat semua
+                  </button>
+                )}
+                {snListExpanded && scannedList.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setSnListExpanded(false)}
+                    className="w-full text-center text-[11px] font-bold text-gray-400 py-1.5"
+                  >
+                    Sembunyikan
+                  </button>
+                )}
               </div>
             )}
 
@@ -367,39 +331,17 @@ export const VoucherFisikZonaPage = () => {
       {stage === 'pilih-produk' && (
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
           <div className="flex items-center justify-between">
-            <h4 className="font-extrabold text-gray-900 text-sm">Pilih Produk</h4>
+            <h4 className="font-extrabold text-gray-900 text-sm">Pilih Nominal</h4>
             <button type="button" onClick={() => setStage('scan')} className="text-[10px] font-bold text-primary-600">
               Kembali ke Scan
             </button>
           </div>
 
-          {telkomselZoneGateNeeded && (
-            <TelkomselZonePicker
-              products={zonaProducts}
-              zoneReference={telkomselZoneReference}
-              nationalSelected={telkomselNationalSelected}
-              selectedZoneLabel={telkomselZoneLabel}
-              onNationalSelect={() => {
-                setTelkomselNationalSelected(true);
-                setTelkomselZoneLabel(null);
-                setSelectedProduct(null);
-              }}
-              onZoneLabelChange={(label) => {
-                setTelkomselNationalSelected(false);
-                setTelkomselZoneLabel(label);
-                setSelectedProduct(null);
-              }}
-              onReset={resetTelkomselZone}
-            />
-          )}
-
-          {showProductPicker && (
-            <ProductPicker
-              products={catalogProductsToShow}
-              selected={selectedProduct}
-              onSelect={setSelectedProduct}
-            />
-          )}
+          <ProductPicker
+            products={catalogProductsToShow}
+            selected={selectedProduct}
+            onSelect={setSelectedProduct}
+          />
 
           <button
             type="button"
@@ -408,72 +350,11 @@ export const VoucherFisikZonaPage = () => {
                 setErrorMsg('Pilih nominal paket terlebih dahulu.');
                 return;
               }
-              setStage('ringkasan');
+              setBatchCheckoutOpen(true);
             }}
             className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm"
           >
-            Lanjut ke Ringkasan
-          </button>
-        </div>
-      )}
-
-      {stage === 'ringkasan' && selectedProduct && (
-        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-extrabold text-gray-900 text-sm">Ringkasan &amp; Bayar</h4>
-            <button type="button" onClick={() => setStage('pilih-produk')} className="text-[10px] font-bold text-primary-600">
-              Kembali
-            </button>
-          </div>
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-2 text-xs">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Produk</span>
-              <span className="font-extrabold text-gray-900">{selectedProduct.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Jumlah Voucher</span>
-              <span className="font-extrabold text-gray-900">{scannedList.length} SN</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Harga / SN</span>
-              <span className="font-extrabold text-gray-900">{formatIDR(selectedProduct.price)}</span>
-            </div>
-            <div className="flex justify-between pt-2 border-t border-dashed border-gray-200">
-              <span className="text-gray-700 font-bold">Total</span>
-              <span className="font-black text-primary-700">{formatIDR(physicalTotal)}</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5 max-h-48 overflow-y-auto border border-gray-100 rounded-2xl p-2">
-            {scannedList.map((s) => (
-              <div key={s.serial} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 text-xs">
-                <span className="font-mono font-bold text-gray-800 truncate mr-2">{s.serial}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveScanned(s.serial)}
-                  className="text-gray-400 hover:text-red-500 shrink-0"
-                  aria-label={`Hapus ${s.serial}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {(!wallet || wallet.balance < physicalTotal) && (
-            <div className="p-3.5 bg-red-50 border border-red-100 rounded-2xl flex gap-2.5">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-800 font-semibold">Saldo GurkyPay tidak mencukupi untuk batch ini.</p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setBatchCheckoutOpen(true)}
-            disabled={!wallet || wallet.balance < physicalTotal || scannedList.length === 0}
-            className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm"
-          >
-            Bayar &amp; Aktivasi ({scannedList.length} SN)
+            Lanjut Bayar
           </button>
         </div>
       )}
@@ -482,6 +363,7 @@ export const VoucherFisikZonaPage = () => {
         <PhysicalBatchCheckout
           product={selectedProduct}
           serials={scannedList}
+          insufficientBalance={!wallet || wallet.balance < physicalTotal}
           onClose={() => setBatchCheckoutOpen(false)}
           onSettled={() => {
             setBatchCheckoutOpen(false);

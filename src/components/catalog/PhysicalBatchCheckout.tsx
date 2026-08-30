@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { RefreshCw, X } from 'lucide-react';
+import { AlertCircle, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import { savePendingCheckout, buildCreatePinUrl } from '../../utils/pinGate';
@@ -38,6 +38,7 @@ export const PHYSICAL_BATCH_LOGICAL_ID = 'voucher-internet-physical-batch';
 export type PhysicalBatchCheckoutProps = {
   product: Product;
   serials: ScannedSerial[];
+  insufficientBalance?: boolean;
   onClose: () => void;
   onSettled: () => void;
 };
@@ -51,6 +52,7 @@ export type PhysicalBatchCheckoutProps = {
 export function PhysicalBatchCheckout({
   product,
   serials,
+  insufficientBalance = false,
   onClose,
   onSettled,
 }: PhysicalBatchCheckoutProps) {
@@ -209,6 +211,12 @@ export function PhysicalBatchCheckout({
                 <span className="font-black text-primary-700">{formatIDR(total)}</span>
               </div>
             </div>
+            {insufficientBalance && (
+              <div className="p-3.5 bg-red-50 border border-red-100 rounded-2xl flex gap-2.5">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-800 font-semibold">Saldo GurkyPay tidak mencukupi untuk batch ini.</p>
+              </div>
+            )}
             {submitError && <p className="text-xs text-red-600 font-semibold">{submitError}</p>}
             {!featureFlags.purchase_enabled && (
               <p className="text-xs text-amber-600 font-semibold">{featureFlags.messages.purchase}</p>
@@ -216,7 +224,7 @@ export function PhysicalBatchCheckout({
             <button
               type="button"
               onClick={goToPin}
-              disabled={!featureFlags.purchase_enabled}
+              disabled={!featureFlags.purchase_enabled || insufficientBalance}
               className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-2xl font-bold text-sm"
             >
               Bayar Sekarang

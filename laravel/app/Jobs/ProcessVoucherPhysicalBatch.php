@@ -61,7 +61,8 @@ class ProcessVoucherPhysicalBatch implements ShouldQueue, ShouldBeUnique
         }
 
         $candidates = $selection->candidatesForProduct($batch->product, $batch->transaction_id);
-        $offer = $candidates->first(function ($o) use ($registry, $breaker) {
+
+        $isViable = function ($o) use ($registry, $breaker) {
             $provider = $o->productProvider;
 
             return $provider
@@ -69,7 +70,10 @@ class ProcessVoucherPhysicalBatch implements ShouldQueue, ShouldBeUnique
                 && $registry->has($provider->code)
                 && $registry->get($provider->code)->isConfigured()
                 && $breaker->allowsFulfillment($provider->code);
-        });
+        };
+
+        $viableCandidates = $candidates->filter($isViable)->values();
+        $offer = $viableCandidates->first();
 
         if (! $offer) {
             $this->failWholeBatch($batch, $refundService, 'no_active_provider');
@@ -77,8 +81,16 @@ class ProcessVoucherPhysicalBatch implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        // Second distinct-provider viable candidate, resolved ONCE for the whole batch — every
+        // item job gets it up front so it can fail over to it without a fresh lookup per item.
+        $fallbackOffer = $viableCandidates->first(
+            fn ($o) => $o->productProvider->code !== $offer->productProvider->code
+        );
+
         $providerCode = $offer->productProvider->code;
         $providerSku = $offer->provider_sku;
+        $fallbackProviderCode = $fallbackOffer?->productProvider->code;
+        $fallbackProviderSku = $fallbackOffer?->provider_sku;
         $rateLimit = (int) config('ppob.physical_batch.rate_limit_per_minute.' . $providerCode, 60);
 
         $batch->update(['status' => VoucherPhysicalBatch::STATUS_PROCESSING]);
@@ -88,7 +100,14 @@ class ProcessVoucherPhysicalBatch implements ShouldQueue, ShouldBeUnique
                 continue;
             }
             $item->update(['provider_code' => $providerCode, 'provider_sku' => $providerSku]);
-            ProcessVoucherPhysicalBatchItem::dispatch($item->id, $providerCode, $providerSku, $rateLimit);
+            ProcessVoucherPhysicalBatchItem::dispatch(
+                $item->id,
+                $providerCode,
+                $providerSku,
+                $rateLimit,
+                $fallbackProviderCode,
+                $fallbackProviderSku
+            );
         }
     }
 

@@ -43,6 +43,10 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
 
     public int $rateLimitPerMinute;
 
+    public ?string $fallbackProviderCode;
+
+    public ?string $fallbackProviderSku;
+
     public int $tries = 3;
 
     /** @var array<int, int> */
@@ -50,12 +54,20 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
 
     public int $timeout = 30;
 
-    public function __construct(int $itemId, string $providerCode, string $providerSku, int $rateLimitPerMinute)
-    {
+    public function __construct(
+        int $itemId,
+        string $providerCode,
+        string $providerSku,
+        int $rateLimitPerMinute,
+        ?string $fallbackProviderCode = null,
+        ?string $fallbackProviderSku = null
+    ) {
         $this->itemId = $itemId;
         $this->providerCode = $providerCode;
         $this->providerSku = $providerSku;
         $this->rateLimitPerMinute = max(1, $rateLimitPerMinute);
+        $this->fallbackProviderCode = $fallbackProviderCode;
+        $this->fallbackProviderSku = $fallbackProviderSku;
     }
 
     public function uniqueId(): string
@@ -83,7 +95,6 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
         ]);
 
         $transaction = $item->batch->transaction;
-        $refId = $transaction->invoice_number . '-' . $item->id . '-' . $item->retry_count;
 
         if (! $registry->has($this->providerCode) || ! $breaker->allowsFulfillment($this->providerCode)) {
             $item->update(['failure_reason' => 'provider_unavailable']);
@@ -96,6 +107,7 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
             throw new \RuntimeException("Provider {$this->providerCode} not configured");
         }
 
+        $refId = $transaction->invoice_number . '-' . $item->id . '-' . $item->retry_count;
         $result = $adapter->fulfill($transaction, $this->providerSku, $item->serial_number, $refId);
 
         if ($result->ok && $result->status === 'success') {
@@ -113,16 +125,84 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
 
         if (! $result->ok && $result->status === 'failed') {
             $breaker->recordFailure($this->providerCode, $result->reason ?? 'provider_rejected');
+
+            // Automatic cross-vendor failover — mirrors ProductProviderFulfillmentService's
+            // single-hop failover already used for the normal (non-batch) purchase pipeline.
+            // Only a CONFIRMED failure with shouldFailover=true tries the fallback; ambiguous
+            // outcomes never do (see the pending/error/timeout branch below).
+            if ($result->shouldFailover && $this->fallbackProviderCode && $this->fallbackProviderSku
+                && $registry->has($this->fallbackProviderCode)
+                && $registry->get($this->fallbackProviderCode)->isConfigured()
+                && $breaker->allowsFulfillment($this->fallbackProviderCode)
+            ) {
+                Log::info('ProcessVoucherPhysicalBatchItem: primary provider failed, attempting fallback', [
+                    'item_id' => $this->itemId,
+                    'primary_provider' => $this->providerCode,
+                    'fallback_provider' => $this->fallbackProviderCode,
+                    'primary_reason' => $result->reason,
+                ]);
+
+                $this->attemptFallback($item, $transaction, $registry, $breaker);
+
+                return;
+            }
+
             $this->markItemFailedAndRefund($item->id, $result->reason ?? 'provider_rejected');
 
             return;
         }
 
-        // pending / error / timeout — ambiguous, never guess-refund. Record last-known
-        // reason and let job retries (backoff) resolve it.
+        // pending / error / timeout — ambiguous, never guess-refund and never failover (the order
+        // may still land at the primary provider). Record last-known reason and let job retries
+        // (backoff) resolve it.
         $item->update(['failure_reason' => $result->reason ?? $result->status]);
         $breaker->recordFailure($this->providerCode, $result->reason ?? 'ambiguous');
         throw new \RuntimeException('Ambiguous provider result for item ' . $this->itemId . ': ' . ($result->reason ?? $result->status));
+    }
+
+    /**
+     * One-hop fallback attempt against the pre-resolved secondary provider (chosen once for the
+     * whole batch in ProcessVoucherPhysicalBatch, same viability rules as the primary). Reuses the
+     * exact same success / confirmed-failed / ambiguous handling as the primary attempt — the only
+     * difference is which provider_code/provider_sku ends up persisted on success or refund.
+     */
+    protected function attemptFallback(
+        VoucherPhysicalBatchItem $item,
+        \App\Models\Transaction $transaction,
+        ProductProviderRegistry $registry,
+        ProviderCircuitBreaker $breaker
+    ): void {
+        $adapter = $registry->get($this->fallbackProviderCode);
+        $refId = $transaction->invoice_number . '-' . $item->id . '-' . $item->retry_count . '-fo';
+        $result = $adapter->fulfill($transaction, $this->fallbackProviderSku, $item->serial_number, $refId);
+
+        if ($result->ok && $result->status === 'success') {
+            $breaker->recordSuccess($this->fallbackProviderCode);
+            $item->update([
+                'status' => VoucherPhysicalBatchItem::STATUS_SUCCESS,
+                'provider_code' => $this->fallbackProviderCode,
+                'provider_sku' => $this->fallbackProviderSku,
+                'provider_ref' => $result->sn ?: $refId,
+                'activated_at' => now(),
+                'failure_reason' => null,
+            ]);
+            $this->closeBatchIfDone($item->batch_id);
+
+            return;
+        }
+
+        if (! $result->ok && $result->status === 'failed') {
+            $breaker->recordFailure($this->fallbackProviderCode, $result->reason ?? 'provider_rejected');
+            $this->markItemFailedAndRefund($item->id, $result->reason ?? 'provider_rejected');
+
+            return;
+        }
+
+        // Fallback outcome ambiguous too — same no-guess-refund rule; record reason and let job
+        // retries resolve it (a retry re-tries the primary first, then fails over again if needed).
+        $item->update(['failure_reason' => $result->reason ?? $result->status]);
+        $breaker->recordFailure($this->fallbackProviderCode, $result->reason ?? 'ambiguous');
+        throw new \RuntimeException('Ambiguous fallback provider result for item ' . $this->itemId . ': ' . ($result->reason ?? $result->status));
     }
 
     /**

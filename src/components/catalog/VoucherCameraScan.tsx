@@ -11,6 +11,10 @@ type Props = {
 };
 
 const DECODE_EMIT_DEBOUNCE_MS = 800;
+// Chrome/Windows sometimes reports a just-released webcam as busy for a brief moment
+// (NotReadableError/TrackStartError) when the page re-mounts the scanner quickly after
+// leaving and returning. Retry a couple of times with a short delay before surfacing an error.
+const CAMERA_BUSY_RETRY_DELAYS_MS = [400, 900];
 
 function playTone(frequency: number, durationSec: number, onEnd?: () => void) {
   try {
@@ -33,7 +37,6 @@ function playTone(frequency: number, durationSec: number, onEnd?: () => void) {
       onEnd?.();
     };
   } catch {
-    // Web Audio unsupported/blocked — scan continues without sound.
     onEnd?.();
   }
 }
@@ -79,6 +82,15 @@ function pickDefaultDeviceIndex(devices: MediaDeviceInfo[]): number {
   return devices.length > 1 ? devices.length - 1 : 0;
 }
 
+function isTransientCameraBusyError(err: unknown): boolean {
+  const name = err instanceof DOMException ? err.name : '';
+  return name === 'NotReadableError' || name === 'TrackStartError';
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function cameraErrorMessage(err: unknown): string {
   const name = err instanceof DOMException ? err.name : '';
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
@@ -86,6 +98,9 @@ function cameraErrorMessage(err: unknown): string {
   }
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
     return 'Kamera tidak ditemukan di perangkat ini. Gunakan tab Input Manual.';
+  }
+  if (isTransientCameraBusyError(err)) {
+    return 'Kamera sedang dipakai aplikasi lain atau baru saja dilepas. Tutup aplikasi lain yang memakai kamera lalu coba lagi, atau gunakan tab Input Manual.';
   }
   return 'Tidak bisa mengakses kamera. Gunakan tab Input Manual.';
 }
@@ -102,8 +117,11 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [manuallyOff, setManuallyOff] = useState(false);
 
   onDetectedRef.current = onDetected;
+
+  const effectiveActive = active && !manuallyOff;
 
   const stopCamera = useCallback(() => {
     controlsRef.current?.stop();
@@ -119,7 +137,7 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
   }, []);
 
   useEffect(() => {
-    if (!active) {
+    if (!effectiveActive) {
       stopCamera();
       return;
     }
@@ -186,16 +204,34 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
           });
         };
 
-        let controls: IScannerControls;
-        try {
-          controls = await tryDecode(!deviceId);
-        } catch (firstErr) {
-          if (!deviceId) {
-            controls = await tryDecode(false);
-          } else {
+        const decodeWithFallback = async (): Promise<IScannerControls> => {
+          try {
+            return await tryDecode(!deviceId);
+          } catch (firstErr) {
+            if (!deviceId) {
+              return await tryDecode(false);
+            }
             throw firstErr;
           }
+        };
+
+        let controls: IScannerControls | null = null;
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt <= CAMERA_BUSY_RETRY_DELAYS_MS.length; attempt += 1) {
+          try {
+            controls = await decodeWithFallback();
+            break;
+          } catch (err) {
+            lastErr = err;
+            const isLastAttempt = attempt === CAMERA_BUSY_RETRY_DELAYS_MS.length;
+            if (cancelled || !isTransientCameraBusyError(err) || isLastAttempt) {
+              throw err;
+            }
+            await wait(CAMERA_BUSY_RETRY_DELAYS_MS[attempt]);
+            if (cancelled) throw err;
+          }
         }
+        if (!controls) throw lastErr;
 
         if (cancelled) {
           controls.stop();
@@ -221,7 +257,7 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
       cancelled = true;
       stopCamera();
     };
-  }, [active, deviceIndex, stopCamera]);
+  }, [effectiveActive, deviceIndex, stopCamera]);
 
   const flipCamera = () => {
     if (devices.length <= 1) return;
@@ -236,7 +272,6 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
       await controls.switchTorch(next);
       setTorchOn(next);
     } catch {
-      // Torch unsupported on this device/browser — hide gracefully next time
       setTorchAvailable(false);
       setTorchOn(false);
     }
@@ -284,13 +319,15 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
       >
         <video
           ref={videoRef}
-          className={`absolute inset-0 h-full w-full object-cover ${cameraError ? 'opacity-0' : 'opacity-100'}`}
+          className={`absolute inset-0 h-full w-full object-cover ${
+            cameraError || manuallyOff ? 'opacity-0' : 'opacity-100'
+          }`}
           muted
           playsInline
           autoPlay
         />
 
-        {!cameraError && (
+        {!cameraError && !manuallyOff && (
           <>
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute top-[14%] left-[12%] right-[12%] bottom-[22%]">
@@ -372,6 +409,22 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
                   </svg>
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setManuallyOff(true)}
+                className="w-11 h-11 rounded-full flex items-center justify-center text-white/90 transition hover:bg-white/10"
+                style={{
+                  background: 'rgba(255,255,255,.12)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,.18)',
+                }}
+                aria-label="Matikan kamera"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                  <path d="M12 2v10" />
+                  <path d="M18.4 6.6a9 9 0 1 1-12.77.04" />
+                </svg>
+              </button>
             </div>
 
             <p className="absolute bottom-14 left-0 right-0 text-center text-[11px] font-semibold text-white/70 px-4 pointer-events-none">
@@ -380,7 +433,7 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
           </>
         )}
 
-        {(cameraError || (starting && active)) && (
+        {(cameraError || (starting && active && !manuallyOff)) && (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
             <div
               className="max-w-xs rounded-2xl px-4 py-3 text-xs font-semibold text-white/90 leading-relaxed"
@@ -391,6 +444,30 @@ export function VoucherCameraScan({ onDetected, active = true, scanCount = 0 }: 
               }}
             >
               {cameraError || 'Menyiapkan kamera…'}
+            </div>
+          </div>
+        )}
+
+        {manuallyOff && active && !cameraError && (
+          <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
+            <div className="flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setManuallyOff(false)}
+                className="w-14 h-14 rounded-full flex items-center justify-center text-white transition hover:bg-white/10"
+                style={{
+                  background: 'rgba(31,168,122,.35)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(59,201,148,.5)',
+                }}
+                aria-label="Nyalakan kamera"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                  <path d="M12 2v10" />
+                  <path d="M18.4 6.6a9 9 0 1 1-12.77.04" />
+                </svg>
+              </button>
+              <p className="text-xs font-semibold text-white/80">Kamera dimatikan. Ketuk untuk menyalakan.</p>
             </div>
           </div>
         )}
