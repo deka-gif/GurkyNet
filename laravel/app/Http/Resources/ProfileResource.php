@@ -34,6 +34,8 @@ class ProfileResource extends JsonResource
             'has_pin' => $hasPin,
             'pinUpdatedAt' => $this->pin_updated_at?->toIso8601String(),
             'pin_updated_at' => $this->pin_updated_at?->toIso8601String(),
+            'notifyTransactions' => (bool) ($this->notify_transactions ?? true),
+            'notify_transactions' => (bool) ($this->notify_transactions ?? true),
             'wallet' => $this->wallet ? [
                 'id' => $this->wallet->id,
                 'walletNo' => $this->wallet->wallet_number,

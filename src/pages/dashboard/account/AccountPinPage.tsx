@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { profileService } from '../../../services/profile/profile.service';
 import { AccountShell, AccountCard } from './AccountShell';
@@ -111,7 +111,16 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
       <AccountCard>
         <form onSubmit={submit} className="space-y-3">
           {mode === 'change' && (
-            <input inputMode="numeric" maxLength={6} placeholder="PIN lama" value={oldPin} onChange={(e) => setOldPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold tracking-widest" required />
+            <>
+              <input inputMode="numeric" maxLength={6} placeholder="PIN lama" value={oldPin} onChange={(e) => setOldPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold tracking-widest" required />
+              {step === 'request' && (
+                <div className="text-right -mt-1">
+                  <Link to={`/dashboard/account/pin/forgot?returnTo=${encodeURIComponent(returnTo)}`} className="text-xs font-bold text-primary-700 underline underline-offset-2">
+                    Lupa PIN?
+                  </Link>
+                </div>
+              )}
+            </>
           )}
           {mode === 'forgot' && (
             <>

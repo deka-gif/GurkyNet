@@ -96,6 +96,25 @@ class ProfileController extends Controller
     }
 
     /**
+     * Update notification preference.
+     * PUT /api/v1/profile/notification-preference
+     */
+    public function updateNotificationPreference(Request $request, ProfileAction $action): JsonResponse
+    {
+        $request->validate([
+            'notify_transactions' => 'required|boolean',
+        ]);
+
+        $user = $request->user();
+        $updatedUser = $action->updateNotificationPreference($user, (bool) $request->input('notify_transactions'));
+
+        return $this->successResponse(
+            'Preferensi notifikasi berhasil disimpan.',
+            new ProfileResource($updatedUser)
+        );
+    }
+
+    /**
      * Get security overview.
      * GET /api/v1/profile/security
      */

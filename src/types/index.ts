@@ -10,6 +10,7 @@ export interface User {
   role: string;
   isVerified: boolean;
   hasPin?: boolean;
+  notifyTransactions?: boolean;
   createdAt?: string;
   kycStatus?: string;
   phoneVerified?: boolean;
@@ -149,6 +150,8 @@ export interface Profile {
   avatar?: string | null;
   hasPin?: boolean;
   has_pin?: boolean;
+  notifyTransactions?: boolean;
+  notify_transactions?: boolean;
   pinUpdatedAt?: string | null;
   wallet?: User['wallet'];
   user?: User;

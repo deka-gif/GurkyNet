@@ -10,10 +10,10 @@ import {
   FileText,
   Info,
   MessageSquareWarning,
-  KeyRound,
   Gift,
   Users,
   ChevronRight,
+  ScrollText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
@@ -110,14 +110,7 @@ export const AccountHubPage: React.FC = () => {
             to: '/dashboard/account/security',
             icon: Shield,
             label: 'Keamanan',
-            desc: 'PIN, sesi, riwayat login',
-            iconClass: 'bg-sky-100 text-sky-600',
-          },
-          {
-            to: '/dashboard/account/pin/create',
-            icon: KeyRound,
-            label: 'Transaction PIN',
-            desc: user?.hasPin ? 'Kelola PIN transaksi' : 'Buat PIN transaksi',
+            desc: 'Transaction PIN, sesi & riwayat login',
             iconClass: 'bg-sky-100 text-sky-600',
           },
         ],
@@ -202,6 +195,13 @@ export const AccountHubPage: React.FC = () => {
             iconClass: 'bg-gray-100 text-gray-500',
           },
           {
+            to: '/dashboard/account/terms',
+            icon: ScrollText,
+            label: 'Terms & Conditions',
+            desc: 'Syarat & ketentuan',
+            iconClass: 'bg-gray-100 text-gray-500',
+          },
+          {
             to: '/dashboard/account/about',
             icon: Info,
             label: 'About',
@@ -211,7 +211,7 @@ export const AccountHubPage: React.FC = () => {
         ],
       },
     ],
-    [balance, loyaltySummary, referralSummary, referralFriends, user?.hasPin]
+    [balance, loyaltySummary, referralSummary, referralFriends]
   );
 
   return (

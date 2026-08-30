@@ -188,6 +188,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::put('/', [ProfileController::class, 'update']);
             Route::put('/password', [ProfileController::class, 'updatePassword']);
             Route::put('/pin', [ProfileController::class, 'updatePin']);
+            Route::put('/notification-preference', [ProfileController::class, 'updateNotificationPreference']);
             Route::post('/avatar', [AccountController::class, 'uploadAvatar']);
             Route::get('/security', [ProfileController::class, 'security']);
             Route::delete('/sessions/{id}', [ProfileController::class, 'revokeSession']);

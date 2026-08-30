@@ -27,6 +27,13 @@ export const profileService = {
     return response.data;
   },
 
+  updateNotificationPreference: async (enabled: boolean): Promise<ApiResponse<Profile>> => {
+    const response = await apiClient.put<ApiResponse<Profile>>('/profile/notification-preference', {
+      notify_transactions: enabled,
+    });
+    return response.data;
+  },
+
   uploadAvatar: async (file: File): Promise<ApiResponse<Profile>> => {
     const form = new FormData();
     form.append('avatar', file);

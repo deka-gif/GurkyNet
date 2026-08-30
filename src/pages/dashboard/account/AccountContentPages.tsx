@@ -1,5 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { accountContentService } from '../../../services/account/accountContent.service';
+import { websiteService } from '../../../services/website.service';
+import { LegalProse, prepareLegalHtml } from '../../../components/legal/legalContent';
+import { BookOpen, Clock } from 'lucide-react';
 import { AccountShell, AccountCard } from './AccountShell';
 
 export const AccountHelpPage: React.FC = () => {
@@ -38,33 +41,66 @@ export const AccountCmsPage: React.FC<{ kind: 'privacy' | 'terms' | 'about' }> =
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const title = kind === 'privacy' ? 'Privacy Policy' : kind === 'terms' ? 'Terms & Conditions' : 'About';
+  const isLegalDoc = kind === 'privacy' || kind === 'terms';
 
   useEffect(() => {
-    const load = kind === 'privacy' ? accountContentService.privacy : kind === 'terms' ? accountContentService.terms : accountContentService.about;
-    load().then((res) => setData(res.data)).catch((e) => setErr(e?.message || 'Gagal memuat'));
-  }, [kind]);
+    setData(null);
+    setErr(null);
+    if (isLegalDoc) {
+      const slug = kind === 'privacy' ? 'privacy-policy' : 'terms-conditions';
+      websiteService
+        .getPublicLegalDocument(slug)
+        .then((res: any) => setData(res?.data || res))
+        .catch((e: any) => setErr(e?.message || 'Gagal memuat dokumen'));
+    } else {
+      accountContentService
+        .about()
+        .then((res) => setData(res.data))
+        .catch((e) => setErr(e?.message || 'Gagal memuat'));
+    }
+  }, [kind, isLegalDoc]);
+
+  const prepared = useMemo(() => prepareLegalHtml(isLegalDoc ? data?.content || '' : ''), [isLegalDoc, data?.content]);
+  const formatDate = (iso?: string | null) => {
+    if (!iso) return '—';
+    try {
+      return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <AccountShell title={title}>
       {err && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{err}</div>}
-      <AccountCard>
-        {kind === 'about' ? (
-          <div className="space-y-2 text-sm">
-            <p><span className="font-bold">Aplikasi:</span> {data?.appName || data?.title}</p>
-            <p><span className="font-bold">Versi:</span> {data?.version || '—'}</p>
-            <p><span className="font-bold">Build:</span> {data?.buildNumber || '—'}</p>
-            <p><span className="font-bold">Developer:</span> {data?.developer || '—'}</p>
-            <p><span className="font-bold">Website:</span> {data?.website || '—'}</p>
-            <p><span className="font-bold">Email:</span> {data?.email || '—'}</p>
-            {data?.content && <div className="prose prose-sm max-w-none mt-4 whitespace-pre-wrap">{data.content}</div>}
+
+      {isLegalDoc ? (
+        <article className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 md:p-10">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-gray-400 mb-4">
+            <span className="inline-flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5" /> Dokumen Legal</span>
+            <span>·</span>
+            <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Diperbarui {formatDate(data?.lastUpdated)}</span>
           </div>
-        ) : (
-          <div>
-            <h2 className="text-base font-extrabold text-gray-900 mb-3">{data?.title}</h2>
-            <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{data?.content}</div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mb-6">{data?.title || title}</h1>
+          {data ? <LegalProse html={prepared.html} /> : !err && <p className="text-sm text-gray-400">Memuat...</p>}
+        </article>
+      ) : (
+        <article className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 md:p-10">
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mb-6">{data?.appName || data?.title || 'GurkyNet'}</h1>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm mb-6">
+            <div><p className="text-[10px] font-bold uppercase text-slate-400">Versi</p><p className="font-bold text-gray-800 mt-1">{data?.version || '—'}</p></div>
+            <div><p className="text-[10px] font-bold uppercase text-slate-400">Build</p><p className="font-bold text-gray-800 mt-1">{data?.buildNumber || '—'}</p></div>
+            <div><p className="text-[10px] font-bold uppercase text-slate-400">Website</p><p className="font-bold text-gray-800 mt-1">{data?.website || '—'}</p></div>
+            <div><p className="text-[10px] font-bold uppercase text-slate-400">Email</p><p className="font-bold text-gray-800 mt-1">{data?.email || '—'}</p></div>
+            <div><p className="text-[10px] font-bold uppercase text-slate-400">Developer</p><p className="font-bold text-gray-800 mt-1">{data?.developer || '—'}</p></div>
           </div>
-        )}
-      </AccountCard>
+          {data?.content && (
+            <div className="pt-6 border-t border-gray-100">
+              <LegalProse html={data.content} />
+            </div>
+          )}
+        </article>
+      )}
     </AccountShell>
   );
 };

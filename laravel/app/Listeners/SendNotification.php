@@ -25,6 +25,15 @@ class SendNotification implements ShouldQueue
         $this->notificationService = $notificationService;
     }
 
+    private function channelsFor($user, array $channels): array
+    {
+        if ($user && ($user->notify_transactions ?? true) === false) {
+            return array_values(array_diff($channels, ['push']));
+        }
+
+        return $channels;
+    }
+
     /**
      * Handle the event.
      */
@@ -36,13 +45,13 @@ class SendNotification implements ShouldQueue
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                $this->notificationService->send($user, 'Transaksi Dibuat', "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . " telah dibuat.", 'info', ['database']);
+                $this->notificationService->send($user, 'Transaksi Dibuat', "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . " telah dibuat.", 'info', $this->channelsFor($user, ['database']));
             }
         } elseif ($event instanceof TransactionProcessing) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                $this->notificationService->send($user, 'Transaksi Diproses', "Transaksi #{$tx->invoice_number} sedang diproses.", 'info', ['database']);
+                $this->notificationService->send($user, 'Transaksi Diproses', "Transaksi #{$tx->invoice_number} sedang diproses.", 'info', $this->channelsFor($user, ['database']));
             }
         } elseif ($event instanceof TransactionSuccess) {
             $tx = $event->transaction;
@@ -58,7 +67,7 @@ class SendNotification implements ShouldQueue
                     'Pembayaran Berhasil',
                     "Transaksi #{$tx->invoice_number} senilai Rp" . number_format((float) $tx->amount, 0, ',', '.') . ' telah berhasil diselesaikan.',
                     'transaction_success',
-                    ['database', 'push']
+                    $this->channelsFor($user, ['database', 'push'])
                 );
             }
         } elseif ($event instanceof TransactionFailed) {
@@ -80,19 +89,19 @@ class SendNotification implements ShouldQueue
                     $title,
                     $message,
                     $isTimeout ? 'transaction_timeout' : 'transaction_failed',
-                    ['database', 'push']
+                    $this->channelsFor($user, ['database', 'push'])
                 );
             }
         } elseif ($event instanceof WalletCredited) {
             $user = $event->wallet->user;
             if ($user) {
                 $title = str_contains(strtolower($event->reason), 'refund') ? 'Refund Berhasil' : 'Saldo Bertambah';
-                $this->notificationService->send($user, $title, "Saldo Anda bertambah sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'success', ['database', 'push']);
+                $this->notificationService->send($user, $title, "Saldo Anda bertambah sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'success', $this->channelsFor($user, ['database', 'push']));
             }
         } elseif ($event instanceof WalletDebited) {
             $user = $event->wallet->user;
             if ($user) {
-                $this->notificationService->send($user, 'Saldo Berkurang', "Saldo Anda berkurang sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'info', ['database', 'push']);
+                $this->notificationService->send($user, 'Saldo Berkurang', "Saldo Anda berkurang sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'info', $this->channelsFor($user, ['database', 'push']));
             }
         } elseif ($event instanceof PaymentSettled) {
             // TransactionSuccess already sends "Pembayaran Berhasil" — avoid duplicate badge noise.

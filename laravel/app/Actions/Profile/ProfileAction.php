@@ -20,4 +20,11 @@ class ProfileAction
     {
         return $this->profileRepository->updateProfile($user, $data);
     }
+
+    public function updateNotificationPreference(User $user, bool $enabled): User
+    {
+        $user->forceFill(['notify_transactions' => $enabled])->save();
+
+        return $user->fresh();
+    }
 }
