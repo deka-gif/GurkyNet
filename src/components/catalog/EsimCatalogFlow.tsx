@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Copy,
   CreditCard,
@@ -11,14 +11,13 @@ import {
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
 import { CheckoutSummary, CheckoutData } from '../CheckoutSummary';
-import { productService } from '../../services/product/product.service';
+import { CategoryProviderSummary, productService } from '../../services/product/product.service';
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
-import { operatorsMatch } from '../../utils/operatorMatch';
-import { providerApiName, providerBadgeLabel } from '../../utils/detectOperator';
-import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
 const PER_PAGE = 24;
 const RETURN_PATH = '/dashboard/telekomunikasi/esim';
@@ -80,15 +79,15 @@ function SkeletonCard() {
 }
 
 /**
- * eSIM: pilih provider → produk → checkout (tanpa nomor HP).
+ * eSIM: pilih negara → produk → checkout (tanpa nomor HP).
  * Success menampilkan QR/ICCID hanya jika provider mengembalikan data nyata.
  */
 export function EsimCatalogFlow() {
   const { wallet, fetchWallet } = useWalletStore();
 
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [categoryProviders, setCategoryProviders] = useState<CategoryProviderSummary[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<CategoryProviderSummary | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -122,13 +121,9 @@ export function EsimCatalogFlow() {
     (async () => {
       setProvidersLoading(true);
       try {
-        const res = await productService.getProducts({
-          category: 'esim',
-          per_page: 500,
-          page: 1,
-        });
+        const res = await productService.getCategoryProviders('esim');
         if (res.success && Array.isArray(res.data)) {
-          setAllProducts(res.data.filter((p) => isCatalogListed(p)));
+          setCategoryProviders(res.data);
         }
       } finally {
         setProvidersLoading(false);
@@ -141,18 +136,6 @@ export function EsimCatalogFlow() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const providers = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of allProducts) {
-      const name = (p.operatorName || '').trim();
-      if (!name) continue;
-      map.set(name, (map.get(name) || 0) + 1);
-    }
-    return Array.from(map.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [allProducts]);
-
   const loadProducts = useCallback(
     async (pageNum: number, append: boolean) => {
       if (!selectedProvider) return;
@@ -160,7 +143,7 @@ export function EsimCatalogFlow() {
       try {
         const res = await productService.getProducts({
           category: 'esim',
-          provider: providerApiName(selectedProvider) || selectedProvider,
+          provider_id: selectedProvider.providerId,
           keyword: debouncedSearch || undefined,
           page: pageNum,
           per_page: PER_PAGE,
@@ -170,8 +153,7 @@ export function EsimCatalogFlow() {
           if (!append) setProducts([]);
           return;
         }
-        let rows = Array.isArray(res.data) ? res.data : [];
-        rows = rows.filter((p) => operatorsMatch(p.operatorName, selectedProvider));
+        const rows = Array.isArray(res.data) ? res.data : [];
         setProducts((prev) => (append ? [...prev, ...rows] : rows));
         const pag = res.pagination;
         if (pag) {
@@ -199,7 +181,7 @@ export function EsimCatalogFlow() {
 
   const handleCheckout = () => {
     if (!selectedProvider || !selectedProduct) {
-      setErrorMsg('Pilih provider dan paket eSIM terlebih dahulu.');
+      setErrorMsg('Pilih negara dan paket eSIM terlebih dahulu.');
       return;
     }
     if (!isProductPurchasable(selectedProduct)) {
@@ -219,7 +201,8 @@ export function EsimCatalogFlow() {
       adminFee: 0,
       skuCode: selectedProduct.code,
       customDetails: {
-        Provider: selectedProvider,
+        Provider: selectedProvider.name,
+        Negara: selectedProvider.name,
         Tipe: 'eSIM',
       },
     });
@@ -254,7 +237,7 @@ export function EsimCatalogFlow() {
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">eSIM</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Pilih provider dan paket. Nomor baru & QR dikirim setelah transaksi sukses (jika API
+            Pilih negara dan paket. Nomor baru & QR dikirim setelah transaksi sukses (jika API
             provider mendukung).
           </p>
         </div>
@@ -365,32 +348,35 @@ export function EsimCatalogFlow() {
           className={`${showSidePanel ? 'lg:col-span-8' : ''} bg-white rounded-3xl p-5 md:p-6 border border-gray-100 shadow-xl space-y-5`}
         >
           <div>
-            <p className="text-xs font-black text-gray-700 mb-2">Pilih Provider</p>
+            <p className="text-xs font-black text-gray-700 mb-2">Pilih Negara</p>
             {providersLoading ? (
               <RefreshCw className="w-5 h-5 text-gray-300 animate-spin" />
-            ) : providers.length === 0 ? (
+            ) : categoryProviders.length === 0 ? (
               <p className="text-xs text-gray-400 font-semibold">Belum ada produk eSIM di katalog.</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {providers.map((p) => {
-                  const active = selectedProvider === p.name;
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                {categoryProviders.map((p) => {
+                  const active = selectedProvider?.providerId === p.providerId;
                   return (
                     <button
-                      key={p.name}
+                      key={p.providerId}
                       type="button"
                       onClick={() => {
-                        setSelectedProvider(p.name);
+                        setSelectedProvider(p);
                         setSelectedProduct(null);
                         setShowCheckoutPanel(false);
                       }}
-                      className={`px-4 py-2.5 rounded-full text-xs font-bold border ${
-                        active
-                          ? 'bg-primary-600 border-primary-600 text-white'
-                          : 'bg-white border-gray-200 text-gray-700 hover:border-primary-300'
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-center transition-colors ${
+                        active ? 'border-primary-600 bg-primary-50' : 'border-gray-100 hover:border-primary-200'
                       }`}
                     >
-                      {providerBadgeLabel(p.name) || p.name}
-                      <span className="ml-1 opacity-70">({p.count})</span>
+                      <BrandAvatar
+                        name={p.name}
+                        logoUrl={providerLogoFromProduct({ providerDetails: { logo: p.logo } })}
+                        size="md"
+                      />
+                      <span className="text-[11px] font-bold text-gray-900 truncate max-w-full">{p.name}</span>
+                      <span className="text-[10px] text-gray-400 font-semibold">{p.count} paket</span>
                     </button>
                   );
                 })}
@@ -419,7 +405,7 @@ export function EsimCatalogFlow() {
                 </div>
               ) : products.length === 0 ? (
                 <div className="py-12 text-center border border-dashed rounded-3xl text-sm font-bold text-gray-600">
-                  Tidak ada paket eSIM untuk provider ini.
+                  Tidak ada paket eSIM untuk negara ini.
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
@@ -471,7 +457,7 @@ export function EsimCatalogFlow() {
 
           {!selectedProvider && !providersLoading && (
             <div className="p-10 border border-dashed rounded-3xl text-center text-xs text-gray-400 font-semibold">
-              Pilih provider untuk menampilkan paket eSIM. Tidak perlu memasukkan nomor HP.
+              Pilih negara untuk menampilkan paket eSIM. Tidak perlu memasukkan nomor HP.
             </div>
           )}
         </div>
@@ -486,8 +472,8 @@ export function EsimCatalogFlow() {
             </div>
             <div className="text-xs font-bold text-gray-500 space-y-2">
               <div className="flex justify-between">
-                <span>Provider</span>
-                <span className="text-gray-900">{selectedProvider}</span>
+                <span>Negara</span>
+                <span className="text-gray-900">{selectedProvider?.name}</span>
               </div>
               <div className="p-3 bg-gray-50 rounded-xl font-bold text-sm text-gray-900">{selectedProduct.name}</div>
               <div className="flex justify-between items-center pt-2">

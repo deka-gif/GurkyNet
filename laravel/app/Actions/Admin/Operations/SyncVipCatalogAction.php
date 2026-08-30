@@ -260,7 +260,7 @@ class SyncVipCatalogAction
                 $categoryResult = $this->upsertCategory($categoryName, $game !== '', $brand, $providerName);
                 $category = $categoryResult['category'];
                 $categoryMappingSource = $categoryResult['source'];
-                $operator = $this->upsertOperator($brand);
+                $operator = $this->upsertOperator($brand, $category->slug, $providerName);
 
                 $zoneResolver = app(VoucherInternetZoneLabelResolver::class);
                 $zoneLabel = $zoneResolver->appliesToCategorySlug($category->slug)
@@ -821,9 +821,17 @@ class SyncVipCatalogAction
             ->first();
     }
 
-    protected function upsertOperator(string $brand): Provider
+    protected function upsertOperator(string $brand, string $categorySlug = '', string $productName = ''): Provider
     {
         $name = $brand !== '' ? $brand : 'VIP';
+
+        if ($categorySlug === 'esim') {
+            $country = app(\App\Services\Catalog\EsimCountryResolver::class)->extractCountry($productName);
+            if ($country !== null) {
+                $name = $country;
+            }
+        }
+
         $operator = Provider::withTrashed()->firstOrNew(['name' => $name]);
         if ($operator->trashed()) {
             $operator->restore();

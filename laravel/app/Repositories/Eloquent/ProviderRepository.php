@@ -10,6 +10,7 @@ use App\Models\ProductProviderSku;
 use App\Models\DigiflazzProduct;
 use App\Models\Setting;
 use App\Repositories\Contracts\ProviderRepositoryInterface;
+use App\Services\Catalog\EsimCountryResolver;
 use App\Services\Catalog\VoucherInternetZoneLabelResolver;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
@@ -141,14 +142,29 @@ class ProviderRepository implements ProviderRepositoryInterface
                 ? $zoneResolver->fromDigiflazzType($dp['type'] ?? null, (string) ($dp['product_name'] ?? ''))
                 : null;
 
-            // 3. Map & Sync Provider (brand)
-            $provider = Provider::updateOrCreate(
-                ['name' => $dp['brand']],
-                [
-                    'logo' => Str::slug($dp['brand']) . '.png',
-                    'is_active' => true,
-                ]
-            );
+            // 3. Map & Sync Provider (brand) — eSIM has no real brand from the
+            // vendor, only a country embedded in the product name; every other
+            // category keeps using the vendor's brand field as-is.
+            $providerName = (string) $dp['brand'];
+            if ($mapped['slug'] === 'esim') {
+                $country = app(EsimCountryResolver::class)->extractCountry((string) ($dp['product_name'] ?? ''));
+                if ($country !== null) {
+                    $providerName = $country;
+                }
+            }
+
+            $provider = Provider::withTrashed()->firstOrNew(['name' => $providerName]);
+            if ($provider->trashed()) {
+                $provider->restore();
+            }
+            $provider->fill([
+                // Never clobber a logo Marketing already uploaded — only fill the
+                // auto-generated placeholder the first time this brand/country
+                // row is created. (This was previously overwritten on every sync.)
+                'logo' => $provider->logo ?: (Str::slug($providerName) . '.png'),
+                'is_active' => true,
+            ]);
+            $provider->save();
 
             // 4. Map & Sync master Product — preserve existing margin when updating cost
             $existing = Product::withTrashed()->where('sku_code', $sku)->first();
