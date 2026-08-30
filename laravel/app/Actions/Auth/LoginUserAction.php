@@ -21,8 +21,10 @@ class LoginUserAction
      * @var list<string>
      */
     public const TWO_FACTOR_ROLES = [
-        UserRole::FINANCE->value,
-        UserRole::OWNER->value,
+        // Kosong sesuai permintaan Owner — semua role login langsung tanpa OTP.
+        // Sebelumnya berisi Finance & Owner (SRS Bagian 8.1 Sprint 2 keputusan #2).
+        // Kalau suatu saat mau diaktifkan lagi, tinggal isi array ini dengan
+        // UserRole::FINANCE->value / UserRole::OWNER->value.
     ];
 
     public const TWO_FACTOR_OTP_ACTION = 'login_2fa';
