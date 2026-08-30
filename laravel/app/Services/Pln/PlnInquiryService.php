@@ -44,7 +44,27 @@ class PlnInquiryService
 
         try {
             $response = $this->digiflazz->inquiryPln($customerNo);
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::warning('Digiflazz PLN inquiry: connection failure', ['message' => $e->getMessage()]);
+            throw ValidationException::withMessages([
+                'inquiry' => ['Gagal menghubungi provider. Silakan coba lagi.'],
+            ]);
         } catch (\Throwable $e) {
+            // DigiflazzService::postRequest() throws a plain Exception for non-2xx HTTP
+            // responses, embedding the raw JSON body in the message. Try to recover the
+            // real Digiflazz reason instead of always showing a generic sentence.
+            $decoded = $this->tryExtractBodyFromExceptionMessage($e->getMessage());
+            Log::warning('Digiflazz PLN inquiry: non-2xx response', [
+                'raw_message' => $e->getMessage(),
+                'decoded' => $decoded,
+            ]);
+            if (is_array($decoded['data'] ?? null)) {
+                $rc = DigiflazzResponseCodeClassifier::normalize($decoded['data']['rc'] ?? null);
+                $classifier = $rc !== null ? DigiflazzResponseCodeClassifier::classify($rc) : null;
+                throw ValidationException::withMessages([
+                    'inquiry' => [$this->resolveFailureUserMessage($decoded['data'], $classifier)],
+                ]);
+            }
             throw ValidationException::withMessages([
                 'inquiry' => ['Gagal menghubungi provider. Silakan coba lagi.'],
             ]);
@@ -116,6 +136,25 @@ class PlnInquiryService
             'segment_power' => $normalized['segment_power'],
             'expires_in_seconds' => self::CACHE_TTL_MINUTES * 60,
         ];
+    }
+
+    /**
+     * DigiflazzService::postRequest() encodes non-2xx bodies into the exception
+     * message as 'Digiflazz API error (STATUS): {json}'. Best-effort recovery of
+     * that JSON so the real provider message can still reach the user.
+     *
+     * @return array<string, mixed>
+     */
+    protected function tryExtractBodyFromExceptionMessage(string $message): array
+    {
+        $pos = strpos($message, '): ');
+        if ($pos === false) {
+            return [];
+        }
+        $json = substr($message, $pos + 3);
+        $decoded = json_decode($json, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

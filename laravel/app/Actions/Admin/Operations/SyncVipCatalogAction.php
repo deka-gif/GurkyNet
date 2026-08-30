@@ -832,6 +832,16 @@ class SyncVipCatalogAction
             }
         }
 
+        if ($categorySlug === 'topup-digital') {
+            $resolver = app(\App\Services\Catalog\EwalletBrandResolver::class);
+            if ($resolver->isGenericBrand($name)) {
+                $wallet = $resolver->extractWallet($productName);
+                if ($wallet !== null) {
+                    $name = $wallet;
+                }
+            }
+        }
+
         $operator = Provider::withTrashed()->firstOrNew(['name' => $name]);
         if ($operator->trashed()) {
             $operator->restore();

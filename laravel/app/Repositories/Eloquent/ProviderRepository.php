@@ -11,6 +11,7 @@ use App\Models\DigiflazzProduct;
 use App\Models\Setting;
 use App\Repositories\Contracts\ProviderRepositoryInterface;
 use App\Services\Catalog\EsimCountryResolver;
+use App\Services\Catalog\EwalletBrandResolver;
 use App\Services\Catalog\VoucherInternetZoneLabelResolver;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
@@ -150,6 +151,15 @@ class ProviderRepository implements ProviderRepositoryInterface
                 $country = app(EsimCountryResolver::class)->extractCountry((string) ($dp['product_name'] ?? ''));
                 if ($country !== null) {
                     $providerName = $country;
+                }
+            }
+            if ($mapped['slug'] === 'topup-digital') {
+                $resolver = app(EwalletBrandResolver::class);
+                if ($resolver->isGenericBrand($providerName)) {
+                    $wallet = $resolver->extractWallet((string) ($dp['product_name'] ?? ''));
+                    if ($wallet !== null) {
+                        $providerName = $wallet;
+                    }
                 }
             }
 

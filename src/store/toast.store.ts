@@ -7,7 +7,7 @@ export interface ToastItem {
   type: ToastType;
   title: string;
   description?: string;
-  /** Total visible duration in ms (default by type: success/info 5s, warning/error 6s). */
+  /** Total visible duration in ms (default: 8s for every toast type). */
   durationMs: number;
   /** Opaque source id (e.g. backend notification id) for dedupe. */
   sourceId?: string;
@@ -33,17 +33,8 @@ const DEDUPE_WINDOW_MS = 3_000;
 /** Recent title+description fingerprints within the dedupe window. */
 const recentFingerprints: { fp: string; at: number }[] = [];
 
-export function defaultToastDurationMs(type: ToastType): number {
-  switch (type) {
-    case 'success':
-    case 'info':
-      return 5_000;
-    case 'warning':
-    case 'error':
-      return 6_000;
-    default:
-      return 5_000;
-  }
+export function defaultToastDurationMs(_type: ToastType): number {
+  return 8_000;
 }
 
 export function toastFingerprint(title: string, description?: string): string {
