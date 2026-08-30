@@ -8,6 +8,8 @@ import { StaticPageView } from '../pages/public/StaticPageView';
 import { LegalCenterPage } from '../pages/public/LegalCenterPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
+import { GoogleLandingPage } from '../pages/auth/GoogleLandingPage';
+import { GoogleCompleteRegistrationPage } from '../pages/auth/GoogleCompleteRegistrationPage';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
 import { NotFoundPage } from '../pages/public/NotFoundPage';
 import { UnauthorizedPage } from '../pages/public/UnauthorizedPage';
@@ -161,6 +163,14 @@ export const router = createBrowserRouter([
       {
         path: 'register',
         element: <RegisterPage />
+      },
+      {
+        path: 'auth/google/landing',
+        element: <GoogleLandingPage />
+      },
+      {
+        path: 'register/google-complete',
+        element: <GoogleCompleteRegistrationPage />
       },
       {
         path: 'forgot-password',

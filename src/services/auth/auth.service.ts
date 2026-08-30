@@ -1,4 +1,4 @@
-import { apiClient } from '../api';
+import { apiClient, API_BASE_URL } from '../api';
 import { User, ApiResponse } from '../../types';
 
 export interface LoginPayload {
@@ -12,6 +12,7 @@ export interface RegisterPayload {
   email: string;
   password: string;
   passwordConfirmation: string;
+  referralCode?: string;
 }
 
 export interface RegisterStartResponse {
@@ -68,6 +69,34 @@ export interface VerifyOtpPayload {
 }
 
 export const authService = {
+  googleRedirectUrl: (): string => {
+    const base = (API_BASE_URL || apiClient.defaults.baseURL || '').replace(/\/$/, '');
+    return `${base}/auth/google/redirect`;
+  },
+
+  completeGoogleRegistration: async (payload: {
+    googleToken: string;
+    phone: string;
+    pin: string;
+    pinConfirmation: string;
+    referralCode?: string;
+  }): Promise<ApiResponse<{ token: string; user: User }>> => {
+    const response = await apiClient.post<ApiResponse<{ token: string; user: User }>>('/auth/google/complete', {
+      google_token: payload.googleToken,
+      phone_number: payload.phone,
+      pin: payload.pin,
+      pin_confirmation: payload.pinConfirmation,
+      referral_code: payload.referralCode || undefined,
+      accept_policies: true,
+    });
+    return response.data;
+  },
+
+  resendOnboardingOtpWhatsapp: async (onboardingId: number): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>('/auth/otp/resend-whatsapp', { onboarding_id: onboardingId });
+    return response.data;
+  },
+
   // Authentication Specific Methods
   login: async (
     payload: LoginPayload
@@ -98,6 +127,7 @@ export const authService = {
       phone_number: payload.phone,
       password: payload.password,
       password_confirmation: payload.passwordConfirmation,
+      ...(payload.referralCode ? { referral_code: payload.referralCode } : {}),
     });
     return response.data;
   },

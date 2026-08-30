@@ -16,6 +16,7 @@ class UserRepository implements UserRepositoryInterface
             'phone_number' => $data['phone_number'],
             'password' => Hash::make($data['password']),
             'role' => $data['role'] ?? \App\Enums\UserRole::USER,
+            ...(isset($data['google_id']) ? ['google_id' => $data['google_id']] : []),
         ]);
     }
 

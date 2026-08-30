@@ -26,10 +26,14 @@ export const AccountShell: React.FC<{
   </div>
 );
 
-export const AccountCard: React.FC<{ children: React.ReactNode; className?: string; id?: string }> = ({
+export const AccountCard: React.FC<{ children: React.ReactNode; className?: string; id?: string; title?: string }> = ({
   children,
   className = '',
   id,
+  title,
 }) => (
-  <div id={id} className={`rounded-2xl border border-gray-100 bg-white p-5 shadow-sm ${className}`}>{children}</div>
+  <div id={id} className={`rounded-2xl border border-gray-100 bg-white p-5 shadow-sm ${className}`}>
+    {title && <h3 className="text-sm font-extrabold text-gray-900 mb-3">{title}</h3>}
+    {children}
+  </div>
 );

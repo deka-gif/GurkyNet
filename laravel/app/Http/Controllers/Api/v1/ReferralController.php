@@ -56,4 +56,12 @@ class ReferralController extends Controller
             'is_custom' => $row->is_custom,
         ]);
     }
+
+    public function downlines(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $rows = $this->commissions->userDownlines($user, (int) $request->input('per_page', 20));
+
+        return $this->successResponse('Referral downlines', $rows);
+    }
 }

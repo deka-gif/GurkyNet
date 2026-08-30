@@ -3,13 +3,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, KeyRound } from 'lucide-react';
+import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, KeyRound, Ticket, MessageCircle } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
 import { getRedirectPathForRole } from '../../constants/auth';
 import { Button } from '../../components/ui/Button';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { AuthDivider, GoogleAuthButton } from '../../components/auth/GoogleAuthButton';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Nama lengkap minimal 3 karakter').max(255, 'Nama lengkap maksimal 255 karakter'),
@@ -17,6 +18,7 @@ const registerSchema = z.object({
   phone: z.string().min(10, 'Nomor HP minimal 10 digit').max(13, 'Nomor HP maksimal 13 digit').regex(/^08[0-9]{8,11}$/, 'Nomor HP harus diawali 08 dan hanya berisi angka (10-13 digit)'),
   password: z.string().min(8, 'Password minimal 8 karakter'),
   passwordConfirmation: z.string().min(1, 'Konfirmasi password wajib diisi'),
+  referralCode: z.string().optional().refine((val) => !val || /^[A-Za-z0-9]{6,20}$/.test(val), 'Kode referral 6-20 karakter huruf/angka'),
   agreeTerms: z.boolean().refine((val) => val === true, { message: 'Anda wajib menyetujui syarat & ketentuan' }),
 }).refine((data) => data.password === data.passwordConfirmation, {
   message: 'Konfirmasi password tidak cocok',
@@ -73,6 +75,8 @@ export const RegisterPage: React.FC = () => {
   const [onboardingId, setOnboardingId] = useState<number | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [rememberDevice, setRememberDevice] = useState(true);
+  const [showReferralField, setShowReferralField] = useState(false);
+  const [busyWhatsapp, setBusyWhatsapp] = useState(false);
 
   useEffect(() => {
     if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
@@ -82,9 +86,9 @@ export const RegisterPage: React.FC = () => {
     if (successMsg) toastSuccess('Berhasil', successMsg);
   }, [successMsg]);
 
-  const { register, handleSubmit, formState: { errors }, setError } = useForm<RegisterFields>({
+  const { register, handleSubmit, formState: { errors }, setError, setValue } = useForm<RegisterFields>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { fullName: '', email: '', phone: '', password: '', passwordConfirmation: '', agreeTerms: false },
+    defaultValues: { fullName: '', email: '', phone: '', password: '', passwordConfirmation: '', referralCode: '', agreeTerms: false },
   });
 
   const submitRegister = async (data: RegisterFields) => {
@@ -92,7 +96,10 @@ export const RegisterPage: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const response = await authService.register(data);
+      const response = await authService.register({
+        ...data,
+        referralCode: data.referralCode || undefined,
+      });
       if (response.success) {
         setOnboardingId(response.data.onboarding_id);
         setRegisteredEmail(response.data.email);
@@ -128,6 +135,24 @@ export const RegisterPage: React.FC = () => {
       setErrorMsg(err.message || 'Verifikasi OTP gagal.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const resendWhatsappOtp = async () => {
+    if (!onboardingId) return;
+    setBusyWhatsapp(true);
+    setErrorMsg(null);
+    try {
+      const response = await authService.resendOnboardingOtpWhatsapp(onboardingId);
+      if (response.success) {
+        setSuccessMsg('Kode OTP baru dikirim ke WhatsApp Anda.');
+      } else {
+        setErrorMsg(response.message || 'Gagal mengirim OTP via WhatsApp.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal mengirim OTP via WhatsApp.');
+    } finally {
+      setBusyWhatsapp(false);
     }
   };
 
@@ -178,7 +203,10 @@ export const RegisterPage: React.FC = () => {
       <RegisterStepper step={step} />
 
       {step === 'register' && (
-        <form onSubmit={handleSubmit(submitRegister)} className="space-y-4" noValidate>
+        <>
+          <GoogleAuthButton href={authService.googleRedirectUrl()} label="Lanjutkan dengan Google" />
+          <AuthDivider label="atau daftar dengan email" />
+          <form onSubmit={handleSubmit(submitRegister)} className="space-y-4" noValidate>
           <div>
             <label htmlFor="reg-fullname" className="auth-label">Nama Lengkap</label>
             <div className="auth-input-icon-wrap">
@@ -225,6 +253,42 @@ export const RegisterPage: React.FC = () => {
               {errors.passwordConfirmation && <p className="mt-1 text-xs font-semibold text-red-600">{errors.passwordConfirmation.message}</p>}
             </div>
           </div>
+          {!showReferralField ? (
+            <button
+              type="button"
+              onClick={() => setShowReferralField(true)}
+              className="w-full border border-dashed border-gray-300 rounded-2xl px-4 py-3 text-xs font-bold text-gray-600 flex items-center justify-between cursor-pointer hover:border-primary-400 hover:text-primary-700"
+            >
+              <span className="flex items-center gap-2">
+                <Ticket className="w-4 h-4" /> Punya kode referral?
+              </span>
+            </button>
+          ) : (
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <input
+                  id="reg-referral"
+                  type="text"
+                  placeholder="Kode referral (opsional)"
+                  {...register('referralCode', {
+                    onChange: (e) => {
+                      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
+                    },
+                  })}
+                  disabled={busy}
+                  className={`auth-input uppercase ${errors.referralCode ? 'auth-input-error' : ''}`}
+                />
+                {errors.referralCode && <p className="mt-1 text-xs font-semibold text-red-600">{errors.referralCode.message}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowReferralField(false); setValue('referralCode', ''); }}
+                className="text-xs font-bold text-gray-500 hover:text-primary-600 shrink-0 mt-2.5"
+              >
+                Lewati
+              </button>
+            </div>
+          )}
           <label className="flex items-start gap-3 rounded-2xl border border-primary-100 bg-primary-50/40 px-4 py-3 cursor-pointer hover:bg-primary-50/70 transition-colors">
             <input type="checkbox" {...register('agreeTerms')} disabled={busy} className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
             <span className="text-xs text-gray-600 leading-relaxed">Saya menyetujui <Link to="/legal/terms-conditions" className="auth-link">Syarat & Ketentuan</Link> dan <Link to="/legal/privacy-policy" className="auth-link">Kebijakan Privasi</Link>.</span>
@@ -232,6 +296,7 @@ export const RegisterPage: React.FC = () => {
           {errors.agreeTerms && <p className="text-xs font-semibold text-red-600">{errors.agreeTerms.message}</p>}
           <Button type="submit" variant="primary" disabled={busy} className="w-full">{busy ? 'Memproses...' : <>Lanjut Verifikasi <ArrowRight className="w-4 h-4" /></>}</Button>
         </form>
+        </>
       )}
 
       {step === 'verify' && (
@@ -241,6 +306,15 @@ export const RegisterPage: React.FC = () => {
           </button>
           <div className="auth-info-box">Kode OTP dikirim ke <strong>{registeredEmail}</strong>. Masukkan 6 digit OTP untuk melanjutkan.</div>
           <input inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className="auth-otp-input" placeholder="000000" />
+          <button
+            type="button"
+            disabled={busyWhatsapp || !onboardingId}
+            onClick={() => void resendWhatsappOtp()}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 text-primary-700 text-xs font-bold py-2.5 hover:bg-primary-100 disabled:opacity-50"
+          >
+            <MessageCircle className="w-4 h-4" />
+            {busyWhatsapp ? 'Mengirim...' : 'Tidak menerima email? Kirim ke WhatsApp'}
+          </button>
           <Button type="button" variant="primary" disabled={busy || otpCode.length !== 6} onClick={submitOtp} className="w-full">Verifikasi OTP</Button>
         </div>
       )}

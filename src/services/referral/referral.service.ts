@@ -15,6 +15,10 @@ export const referralService = {
     const res = await apiClient.put<ApiResponse<any>>('/referral/code', { code });
     return res.data.data;
   },
+  async getDownlines(perPage = 20) {
+    const res = await apiClient.get<ApiResponse<any>>('/referral/downlines', { params: { per_page: perPage } });
+    return res.data.data;
+  },
 };
 
 /** SRS 31 — Finance referral program */

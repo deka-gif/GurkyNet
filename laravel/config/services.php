@@ -74,4 +74,18 @@ return [
     'health' => [
         'metrics_token' => env('HEALTH_METRICS_TOKEN'),
     ],
+
+    'frontend_url' => env('FRONTEND_URL', 'https://gurkynet.my.id'),
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL', 'http://localhost') . '/api/v1/auth/google/callback'),
+    ],
+
+    'whatsapp_otp' => [
+        'base_url' => env('WHATSAPP_OTP_BASE_URL'),
+        'api_key' => env('WHATSAPP_OTP_API_KEY'),
+        'sender_name' => env('WHATSAPP_OTP_SENDER_NAME', 'GurkyNet'),
+    ],
 ];

@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight, Shield } from 'lucide-react';
+import { authService } from '../../services/auth/auth.service';
 import { getRedirectPathForRole } from '../../constants/auth';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
 import { Button } from '../../components/ui/Button';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { AuthDivider, GoogleAuthButton } from '../../components/auth/GoogleAuthButton';
 
 const loginSchema = z.object({
   identity: z.string().min(1, 'Email atau Nomor HP wajib diisi'),
@@ -35,6 +37,7 @@ export const LoginPage: React.FC = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { login, verifyLogin2fa, twoFactorChallenge, clearTwoFactorChallenge, fetchUser } = useAuthStore();
 
   const {
@@ -51,7 +54,9 @@ export const LoginPage: React.FC = () => {
     const remembered = storageService.getRememberedIdentity();
     if (remembered) setValue('identity', remembered);
     if (location.state?.message) setSuccessMsg(location.state.message);
-  }, [setValue, location.state]);
+    const googleError = searchParams.get('google_error');
+    if (googleError) setErrorMsg(decodeURIComponent(googleError));
+  }, [setValue, location.state, searchParams]);
 
   const finishLogin = async () => {
     setSuccessMsg('Login berhasil! Mengalihkan ke dashboard...');
@@ -162,6 +167,9 @@ export const LoginPage: React.FC = () => {
         <h3 className="auth-heading mb-2">Masuk ke Akun</h3>
         <p className="auth-subheading">Akses transaksi PPOB dan manajemen akun GurkyNet Anda.</p>
       </div>
+
+      <GoogleAuthButton href={authService.googleRedirectUrl()} label="Masuk dengan Google" />
+      <AuthDivider label="atau masuk dengan email" />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div>

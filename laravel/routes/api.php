@@ -145,6 +145,9 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     // SRS Bagian 8.1 / 17 — named limiters (login / password-reset).
     Route::middleware('throttle:login')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
+        Route::get('/auth/google/redirect', [\App\Http\Controllers\Api\v1\GoogleAuthController::class, 'redirect']);
+        Route::get('/auth/google/callback', [\App\Http\Controllers\Api\v1\GoogleAuthController::class, 'callback']);
+        Route::post('/auth/google/complete', [\App\Http\Controllers\Api\v1\GoogleAuthController::class, 'complete']);
         Route::post('/auth/login', [AuthController::class, 'login']);
         Route::post('/auth/login/pin', [AuthController::class, 'pinLogin']);
         // SRS Bagian 8.1 — Sprint 2 keputusan #2: kelanjutan login untuk role
@@ -164,6 +167,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
     Route::middleware('throttle:otp')->group(function () {
         Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
         Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
+        Route::post('/auth/otp/resend-whatsapp', [AuthController::class, 'resendOnboardingOtpWhatsapp']);
     });
 
     // Protected API Endpoints (Requires Laravel Sanctum)
@@ -265,6 +269,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             // SRS 31 / FR-REF-07 — Referral (own data only)
             Route::get('/referral', [\App\Http\Controllers\Api\v1\ReferralController::class, 'summary']);
             Route::get('/referral/history', [\App\Http\Controllers\Api\v1\ReferralController::class, 'history']);
+            Route::get('/referral/downlines', [\App\Http\Controllers\Api\v1\ReferralController::class, 'downlines']);
             Route::put('/referral/code', [\App\Http\Controllers\Api\v1\ReferralController::class, 'setCode']);
 
             // FR-DIFF-02 — Auto-Reorder subscriptions (own only)

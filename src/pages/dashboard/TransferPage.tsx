@@ -4,7 +4,8 @@ import {
   ArrowRight, 
   Wallet,
   RefreshCw,
-  Building2
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
 import { useAuth } from '../../hooks/useAuth';
@@ -13,6 +14,8 @@ import { buildCreatePinUrl, PENDING_TRANSFER_KEY } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { getOrCreateIdempotencyKey } from '../../utils/idempotency';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+
+const QUICK_AMOUNTS = [25_000, 50_000, 100_000, 200_000, 500_000] as const;
 
 /**
  * Transfer page — P2P wallet transfer only.
@@ -197,6 +200,49 @@ export const TransferPage = () => {
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-5 gap-2">
+                {QUICK_AMOUNTS.map((nominal) => {
+                  const active = amount === String(nominal);
+                  return (
+                    <button
+                      key={nominal}
+                      type="button"
+                      onClick={() => setAmount(String(nominal))}
+                      className={`py-2 rounded-xl text-[10px] font-extrabold transition-colors ${
+                        active
+                          ? 'border border-primary-600 bg-primary-50 text-primary-700'
+                          : 'border border-gray-200 bg-white text-gray-700 hover:border-primary-200'
+                      }`}
+                    >
+                      {(nominal / 1000).toLocaleString('id-ID')}k
+                    </button>
+                  );
+                })}
+              </div>
+
+              {accountNo.trim() && parseInt(amount, 10) >= 1000 && (
+                <div className="rounded-2xl border border-dashed border-primary-300 bg-primary-50/60 p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-primary-600 shrink-0" />
+                    <p className="text-xs font-extrabold text-primary-900">Periksa sebelum kirim</p>
+                  </div>
+                  <div className="text-xs text-gray-700 space-y-1">
+                    <p>
+                      <span className="text-gray-500">Tujuan:</span>{' '}
+                      <span className="font-bold font-mono">{accountNo.trim()}</span>
+                    </p>
+                    <p>
+                      <span className="text-gray-500">Nominal:</span>{' '}
+                      <span className="font-bold">{formatIDR(parseInt(amount, 10))}</span>
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    Pastikan nomor wallet tujuan sudah benar. Transfer P2P tidak dapat dibatalkan setelah PIN
+                    dimasukkan.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-700">PIN Transaksi</label>

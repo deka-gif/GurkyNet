@@ -377,6 +377,22 @@ class ReferralCommissionService
         ];
     }
 
+    public function userDownlines(User $user, int $perPage = 20)
+    {
+        return \App\Models\ReferralRelation::query()
+            ->where('upline_user_id', $user->id)
+            ->with(['downline:id,name,created_at'])
+            ->orderByDesc('id')
+            ->paginate(min(50, max(1, $perPage)))
+            ->through(function ($row) {
+                return [
+                    'name' => $row->downline?->name ?? '—',
+                    'level' => (int) $row->level,
+                    'joined_at' => optional($row->downline?->created_at)->toIso8601String(),
+                ];
+            });
+    }
+
     public function capUsage(User $upline, ?Carbon $now = null): array
     {
         $now = $now ?? now();

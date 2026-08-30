@@ -389,6 +389,37 @@ class AuthController extends Controller
         }
     }
 
+    public function resendOnboardingOtpWhatsapp(Request $request): JsonResponse
+    {
+        $request->validate(['onboarding_id' => 'required|integer|exists:onboarding_attempts,id']);
+        $attempt = OnboardingAttempt::query()->findOrFail((int) $request->input('onboarding_id'));
+
+        if (!$attempt->phone_number) {
+            return $this->errorResponse('Nomor HP tidak ditemukan pada pendaftaran ini.', 422);
+        }
+
+        try {
+            $otp = $this->unifiedOtpService->issue(
+                $attempt->email,
+                'onboarding_registration',
+                'email',
+                null,
+                ['onboarding_id' => $attempt->id],
+                10,
+                60,
+                5,
+                ['via' => 'whatsapp', 'phone' => $attempt->phone_number]
+            );
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        }
+
+        return $this->successResponse('Kode OTP dikirim ke WhatsApp Anda.', [
+            'onboarding_id' => $attempt->id,
+            'expires_at' => $otp->expires_at?->toIso8601String(),
+        ]);
+    }
+
     public function finalizeRegistration(Request $request): JsonResponse
     {
         $data = $request->validate([

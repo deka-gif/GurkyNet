@@ -5,6 +5,7 @@ namespace App\Services\Security;
 use App\Models\ActivityLog;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\Notifications\WhatsappOtpService;
 use App\Services\OtpMailService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -14,6 +15,7 @@ class OtpService
 {
     public function __construct(
         protected OtpMailService $otpMailService,
+        protected WhatsappOtpService $whatsappOtpService,
     ) {}
 
     public function issue(
@@ -25,7 +27,12 @@ class OtpService
         int $expiryMinutes = 5,
         int $resendCooldownSeconds = 60,
         int $maxAttempts = 5,
+        ?array $deliveryOverride = null,
     ): OtpCode {
+        if ($deliveryOverride !== null) {
+            $meta['delivery_override'] = $deliveryOverride;
+        }
+
         $latestActive = OtpCode::query()
             ->where('phone_number', $identifier)
             ->where('action', $action)
@@ -135,6 +142,15 @@ class OtpService
 
     protected function deliver(OtpCode $otp, int $expiryMinutes): void
     {
+        if (($otp->meta['delivery_override']['via'] ?? null) === 'whatsapp') {
+            $this->whatsappOtpService->send(
+                (string) $otp->meta['delivery_override']['phone'],
+                $otp->code,
+                $expiryMinutes
+            );
+            return;
+        }
+
         if ($otp->channel === 'email') {
             $this->otpMailService->sendOtp($otp->phone_number, $otp->code, $otp->action, $expiryMinutes);
             return;
