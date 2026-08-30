@@ -8,6 +8,8 @@ import {
 } from '../../config/catalogCategories';
 import { productService } from '../../services/product/product.service';
 import { CacheTTL, cachedFetch } from '../../utils/queryCache';
+import { useCategoryIconMap } from '../../hooks/useCategoryIconMap';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 type ServiceCategoryGridProps = {
   onSelect: (category: DashboardServiceCategory) => void;
@@ -37,6 +39,7 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
 }: ServiceCategoryGridProps) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loadingCounts, setLoadingCounts] = useState(true);
+  const iconMap = useCategoryIconMap();
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +129,7 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
         {categories.map((cat) => {
           const Icon = cat.icon;
+          const customIconUrl = resolveMediaUrl(iconMap[`hub:${cat.id}`] || '');
           const count = resolveCount(cat);
           const isActive = activeId === cat.id;
 
@@ -158,7 +162,11 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
                   className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${categoryTone(cat.id).gradient} ${categoryTone(cat.id).shadow}`}
                 >
                   <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
-                  <Icon className="relative h-5 w-5" />
+                  {customIconUrl ? (
+                    <img src={customIconUrl} alt={cat.label} className="relative h-9 w-9 object-contain" loading="lazy" />
+                  ) : (
+                    <Icon className="relative h-5 w-5" />
+                  )}
                 </div>
               </div>
 

@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { LucideIcon, ChevronRight } from 'lucide-react';
 import { categoryTone } from '../../config/catalogCategories';
+import { useCategoryIconMap } from '../../hooks/useCategoryIconMap';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export type HubChild = {
   key: string;
@@ -24,6 +26,7 @@ interface ServiceHubPageProps {
  */
 export function ServiceHubPage({ title, subtitle, children, tone }: ServiceHubPageProps) {
   const style = categoryTone(tone);
+  const iconMap = useCategoryIconMap();
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
@@ -35,6 +38,7 @@ export function ServiceHubPage({ title, subtitle, children, tone }: ServiceHubPa
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {children.map((item) => {
           const Icon = item.icon;
+          const customIconUrl = resolveMediaUrl(iconMap[`sub:${tone}:${item.key}`] || '');
           return (
             <Link
               key={item.key}
@@ -44,7 +48,13 @@ export function ServiceHubPage({ title, subtitle, children, tone }: ServiceHubPa
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${style.bg}`}>
                 <div className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${style.gradient} ${style.shadow}`}>
                   <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
-                  {Icon ? <Icon className="relative w-4 h-4" /> : <span className="relative text-[10px] font-black">{item.label.slice(0, 2)}</span>}
+                  {customIconUrl ? (
+                    <img src={customIconUrl} alt={item.label} className="relative w-8 h-8 object-contain" loading="lazy" />
+                  ) : Icon ? (
+                    <Icon className="relative w-4 h-4" />
+                  ) : (
+                    <span className="relative text-[10px] font-black">{item.label.slice(0, 2)}</span>
+                  )}
                 </div>
               </div>
               <div className="flex-1 min-w-0">

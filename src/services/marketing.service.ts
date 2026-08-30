@@ -100,5 +100,28 @@ export const marketingService = {
     const res = await apiClient.put<ApiResponse<any>>(`/admin/marketing/brand-logos/${id}`, { logo });
     return res.data;
   },
+
+  async getCategoryIcons(): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/marketing/category-icons');
+    return res.data;
+  },
+  async uploadCategoryIconFile(file: File): Promise<ApiResponse<{ path?: string }>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'category-icons');
+    formData.append('alt_text', file.name.split('.')[0] || 'category-icon');
+
+    const res = await apiClient.post<ApiResponse<{ path?: string }>>('/admin/media', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  async setCategoryIcon(key: string, icon: string | null): Promise<ApiResponse<any>> {
+    const res = await apiClient.put<ApiResponse<any>>(
+      `/admin/marketing/category-icons/${encodeURIComponent(key)}`,
+      { icon }
+    );
+    return res.data;
+  },
 };
 

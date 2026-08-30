@@ -43,6 +43,7 @@ class MarketingBrandLogoAction
                     'logo' => $provider->logo,
                     'productCount' => 0,
                     'categories' => [],
+                    'categorySlugs' => [],
                 ];
             }
 
@@ -52,11 +53,17 @@ class MarketingBrandLogoAction
             if ($categoryName !== '') {
                 $groups[$id]['categories'][$categoryName] = $categoryName;
             }
+
+            $categorySlug = trim((string) ($product->category?->slug ?? ''));
+            if ($categorySlug !== '') {
+                $groups[$id]['categorySlugs'][$categorySlug] = $categorySlug;
+            }
         }
 
         $out = array_values(array_map(function (array $g) {
             $g['categories'] = array_values($g['categories']);
             sort($g['categories']);
+            $g['categorySlugs'] = array_values($g['categorySlugs'] ?? []);
 
             return $g;
         }, $groups));

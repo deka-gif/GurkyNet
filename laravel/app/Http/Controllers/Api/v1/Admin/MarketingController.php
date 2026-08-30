@@ -10,6 +10,7 @@ use App\Actions\Admin\Marketing\MarketingPromotionAction;
 use App\Actions\Admin\Marketing\MarketingVoucherAction;
 use App\Actions\Admin\Marketing\MarketingAnnouncementAction;
 use App\Actions\Admin\Marketing\MarketingBrandLogoAction;
+use App\Actions\Admin\Marketing\MarketingCategoryIconAction;
 use App\Http\Requests\Admin\Marketing\MarketingFilterRequest;
 use App\Http\Requests\Admin\Marketing\CreateBannerRequest;
 use App\Http\Requests\Admin\Marketing\UpdateBannerRequest;
@@ -427,5 +428,33 @@ class MarketingController extends Controller
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return $this->errorResponse('Brand tidak ditemukan.', 404);
         }
+    }
+
+    /**
+     * List category icons grouped by hub, for the Marketing admin icon-upload UI.
+     * GET /api/v1/admin/marketing/category-icons
+     */
+    public function categoryIcons(MarketingCategoryIconAction $action): JsonResponse
+    {
+        return $this->successResponse('Daftar icon kategori berhasil dimuat.', $action->list());
+    }
+
+    /**
+     * Set/replace/clear one category icon. Takes effect immediately for every customer.
+     * PUT /api/v1/admin/marketing/category-icons/{key}
+     */
+    public function updateCategoryIcon(string $key, Request $request, MarketingCategoryIconAction $action): JsonResponse
+    {
+        $data = $request->validate([
+            'icon' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $icon = $action->setIcon($key, $data['icon'] ?? null);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        }
+
+        return $this->successResponse('Icon kategori berhasil diperbarui.', $icon);
     }
 }

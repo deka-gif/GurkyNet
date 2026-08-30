@@ -9,6 +9,7 @@ use App\Models\ProductCategory;
 use App\Models\Provider;
 use App\Services\Catalog\ProductMappingService;
 use App\Services\Pajak\PajakRegionService;
+use App\Actions\Admin\Marketing\MarketingCategoryIconAction;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,15 @@ class CatalogController extends Controller
             'Taksonomi katalog GurkyNet.',
             $this->mapping->taxonomyForFrontend()
         );
+    }
+
+    /**
+     * Flat {key: iconPath} map of every Marketing-uploaded category icon — customer app renders
+     * these in place of the default Lucide icon when a key is present.
+     */
+    public function categoryIcons(MarketingCategoryIconAction $action): JsonResponse
+    {
+        return $this->successResponse('Peta icon kategori.', $action->publicMap());
     }
 
     /**

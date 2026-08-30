@@ -16,7 +16,6 @@ import {
   Nfc,
   Droplets,
   Heart,
-  Briefcase,
   Tv,
   Flame,
   Home,
@@ -73,6 +72,18 @@ export function categoryTone(id: string): CategoryToneStyle {
   return CATEGORY_TONES[id] ?? CATEGORY_TONES.telco;
 }
 
+/** Which real ProductCategory slugs live under each of the 7 customer-facing hubs — used by the
+ *  Marketing Logo Brand admin page to group brands the same way the customer nav is grouped. */
+export const HUB_CATEGORY_SLUGS: Record<string, string[]> = {
+  telco: ['pulsa', 'data', 'voucher-internet', 'sms-telepon', 'masa-aktif', 'aktivasi-perdana', 'esim'],
+  tagihan: ['pln', 'pln-pascabayar', 'pdam', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'pbb', 'samsat', 'multifinance', 'tagihan'],
+  'topup-digital': ['topup-digital'],
+  game: ['game'],
+  voucher: ['voucher-digital'],
+  langganan: ['langganan-digital'],
+  international: ['international'],
+};
+
 export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
   {
     id: 'telco',
@@ -105,8 +116,7 @@ export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
       { key: 'pln', label: 'Token PLN', path: '/dashboard/token-pln', productCategory: 'pln', icon: Zap },
       { key: 'pln-pascabayar', label: 'PLN Pascabayar', path: '/dashboard/tagihan/pln-pascabayar', icon: Zap },
       { key: 'pdam', label: 'PDAM', path: '/dashboard/tagihan/pdam', icon: Droplets },
-      { key: 'bpjs-kesehatan', label: 'BPJS Kesehatan', path: '/dashboard/tagihan/bpjs-kesehatan', icon: Heart },
-      { key: 'bpjs-tk', label: 'BPJS TK', path: '/dashboard/tagihan/bpjs-tk', icon: Briefcase },
+      { key: 'bpjs', label: 'BPJS', path: '/dashboard/tagihan/bpjs', icon: Heart },
       { key: 'internet', label: 'Internet', path: '/dashboard/tagihan/internet', icon: Wifi },
       { key: 'tv', label: 'TV Pascabayar', path: '/dashboard/tagihan/tv', icon: Tv },
       { key: 'gas', label: 'Gas Negara', path: '/dashboard/tagihan/gas', icon: Flame },

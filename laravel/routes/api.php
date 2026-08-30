@@ -103,6 +103,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
 
         // GurkyNet Information Architecture (mapped catalog — never Digi/VIP trees)
         Route::get('/catalog/taxonomy', [CatalogController::class, 'taxonomy']);
+        Route::get('/catalog/category-icons', [CatalogController::class, 'categoryIcons']);
         Route::get('/catalog/search', [CatalogController::class, 'search']);
         Route::get('/catalog/telkomsel-data/taxonomy', [CatalogController::class, 'telkomselDataTaxonomy']);
         Route::get('/catalog/xl-data/taxonomy', [CatalogController::class, 'xlDataTaxonomy']);
@@ -546,6 +547,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
 
             Route::get('/brand-logos', [MarketingController::class, 'brandLogos']);
             Route::put('/brand-logos/{id}', [MarketingController::class, 'updateBrandLogo']);
+            Route::get('/category-icons', [MarketingController::class, 'categoryIcons']);
+            Route::put('/category-icons/{key}', [MarketingController::class, 'updateCategoryIcon'])->where('key', '.+');
         });
 
         // Customer Support Administration Module

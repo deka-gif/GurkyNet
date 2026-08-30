@@ -692,26 +692,23 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'tagihan/bpjs-kesehatan',
+        path: 'tagihan/bpjs',
         element: (
           <TagihanSubPage
-            category="bpjs-kesehatan"
-            title="BPJS Kesehatan"
-            subtitle="Bayar iuran BPJS Kesehatan dari katalog provider."
-            path="/dashboard/tagihan/bpjs-kesehatan"
+            category="bpjs"
+            title="BPJS"
+            subtitle="Pilih BPJS Kesehatan atau BPJS Ketenagakerjaan, lalu bayar dari katalog provider."
+            path="/dashboard/tagihan/bpjs"
           />
         ),
       },
       {
+        path: 'tagihan/bpjs-kesehatan',
+        element: <Navigate to="/dashboard/tagihan/bpjs" replace />,
+      },
+      {
         path: 'tagihan/bpjs-tk',
-        element: (
-          <TagihanSubPage
-            category="bpjs-tk"
-            title="BPJS Ketenagakerjaan"
-            subtitle="Bayar iuran BPJS Ketenagakerjaan dari katalog provider."
-            path="/dashboard/tagihan/bpjs-tk"
-          />
-        ),
+        element: <Navigate to="/dashboard/tagihan/bpjs" replace />,
       },
       {
         path: 'tagihan/internet',
