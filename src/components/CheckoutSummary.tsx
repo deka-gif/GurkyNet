@@ -57,10 +57,14 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const { createTransaction, fetchTransactions, upsertTransaction } = useTransactionStore();
   const { user, fetchUser } = useAuth();
   const { fetchNotifications } = useNotificationStore();
-  const { flags: featureFlags } = useFeatureFlags();
+  const { flags: featureFlags, loading: flagsLoading, refresh } = useFeatureFlags();
   const navigate = useNavigate();
   const location = useLocation();
-  const purchaseEnabled = featureFlags.purchase_enabled;
+  const purchaseEnabled = !flagsLoading && featureFlags.purchase_enabled;
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const [step, setStep] = useState<CheckoutStep>(() => (initialStep === 'PIN' && !user?.hasPin ? 'CONFIRM' : initialStep));
   const [pin, setPin] = useState<string>('');
@@ -549,7 +553,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
               </div>
             </div>
 
-            {!purchaseEnabled && (
+            {!flagsLoading && !featureFlags.purchase_enabled && (
               <div className="flex items-center gap-2 text-xs font-bold text-amber-800 px-1 bg-amber-50 p-3 rounded-xl border border-amber-100">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>Segera Hadir — {featureFlags.messages.purchase}</span>
@@ -577,7 +581,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                <span>{purchaseEnabled ? 'Lanjut' : 'Segera Hadir'}</span>
+                <span>{flagsLoading ? 'Memuat...' : purchaseEnabled ? 'Lanjut' : 'Segera Hadir'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -638,7 +642,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                 }`}
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>{purchaseEnabled ? 'Konfirmasi & Bayar' : 'Segera Hadir'}</span>
+                <span>{flagsLoading ? 'Memuat...' : purchaseEnabled ? 'Konfirmasi & Bayar' : 'Segera Hadir'}</span>
               </button>
             </div>
           </div>

@@ -27,10 +27,9 @@ async function loadFeatures(force = false): Promise<FeatureFlags> {
         return cached;
       }
     } catch {
-      // Fail closed: keep purchase/withdraw disabled.
+      // Fail closed for this call, but do not cache — next loadFeatures() retries the API.
     }
-    cached = DEFAULT_FEATURE_FLAGS;
-    return cached;
+    return DEFAULT_FEATURE_FLAGS;
   })();
 
   try {
