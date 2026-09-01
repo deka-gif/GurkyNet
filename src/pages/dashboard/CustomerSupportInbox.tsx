@@ -80,11 +80,6 @@ export const CustomerSupportInbox: React.FC = () => {
     (evt) => {
       if (evt.event === 'ConversationUpdated' || evt.event === 'ChatMessageSent') {
         void loadInbox();
-        if (activeId && (evt.payload as any)?.conversationId === activeId) {
-          void openThread(activeId);
-        } else if (activeId && evt.event === 'ConversationUpdated' && String((evt.payload as any)?.id) === activeId) {
-          void openThread(activeId);
-        }
       }
     },
     () => storageService.getToken(),
