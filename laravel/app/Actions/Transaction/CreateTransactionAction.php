@@ -357,7 +357,7 @@ class CreateTransactionAction
                 $brand = trim((string) ($product->provider?->name ?? ''));
                 $resolver = app(\App\Services\Langganan\LanggananAccountResolver::class);
                 $builder = app(\App\Services\Langganan\LanggananTargetBuilder::class);
-                $schema = $resolver->resolve($brand);
+                $schema = $resolver->resolveForProduct($brand, $product->sku_code);
                 $builder->assertValidTarget($targetNumber, $schema);
 
                 $itemMeta['is_langganan'] = true;

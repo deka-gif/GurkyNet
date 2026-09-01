@@ -10,6 +10,7 @@ export type LanggananAccountField = {
 
 export type LanggananAccountSchema = {
   brand: string;
+  sku?: string;
   code: string;
   label: string;
   delivery: 'account' | 'voucher' | string;
@@ -17,10 +18,13 @@ export type LanggananAccountSchema = {
 };
 
 export const langgananService = {
-  accountSchema: async (brand: string): Promise<ApiResponse<LanggananAccountSchema>> => {
+  accountSchema: async (
+    brand: string,
+    sku: string
+  ): Promise<ApiResponse<LanggananAccountSchema>> => {
     const response = await apiClient.get<ApiResponse<LanggananAccountSchema>>(
       '/langganan/account-schema',
-      { params: { brand } }
+      { params: { brand, sku } }
     );
     return response.data;
   },

@@ -6,6 +6,16 @@
  * delivery=account → user must fill fields; values compose customer_no for Digiflazz/VIP.
  */
 return [
+    /** Per-SKU overrides (buyer_sku_code) — takes priority over brand schema. */
+    'sku_schemas' => [
+        // 'NFLX30' => [
+        //     'delivery' => 'account',
+        //     'fields' => [
+        //         ['key' => 'email', 'label' => 'Email Akun Netflix', 'required' => true, 'input' => 'email'],
+        //     ],
+        // ],
+    ],
+
     'brand_schemas' => [
         'netflix' => [
             'label' => 'Netflix',

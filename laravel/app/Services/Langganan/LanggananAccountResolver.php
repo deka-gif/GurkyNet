@@ -10,6 +10,42 @@ use Illuminate\Support\Str;
 class LanggananAccountResolver
 {
     /**
+     * Resolve schema for a specific product SKU (config → Digiflazz desc → brand fallback).
+     *
+     * @return array{code:string,label:string,delivery:string,fields:list<array{key:string,label:string,required:bool,input:string}>}
+     */
+    public function resolveForProduct(string $brand, ?string $skuCode = null): array
+    {
+        $sku = strtoupper(trim((string) $skuCode));
+
+        $skuSchemas = config('gurky_langganan.sku_schemas', []);
+        if ($sku !== '' && is_array($skuSchemas)) {
+            foreach ($skuSchemas as $code => $meta) {
+                if (!is_array($meta)) {
+                    continue;
+                }
+                if (strcasecmp((string) $code, $sku) === 0) {
+                    return $this->formatSchemaEntry($meta, $brand, (string) $code);
+                }
+            }
+        }
+
+        if ($sku !== '') {
+            $fromDesc = app(LanggananDigiflazzHintReader::class)->read($sku);
+            if ($fromDesc !== null) {
+                return [
+                    'code' => Str::slug($sku),
+                    'label' => trim($brand) !== '' ? trim($brand) : 'Langganan Digital',
+                    'delivery' => (string) ($fromDesc['delivery'] ?? 'voucher'),
+                    'fields' => $this->normalizeFields($fromDesc['fields'] ?? []),
+                ];
+            }
+        }
+
+        return $this->resolve($brand);
+    }
+
+    /**
      * @return array{code:string,label:string,delivery:string,fields:list<array{key:string,label:string,required:bool,input:string}>}
      */
     public function resolve(string $brand): array
@@ -78,5 +114,19 @@ class LanggananAccountResolver
         $v = preg_replace('/[^a-z0-9]+/', ' ', $v) ?? $v;
 
         return trim(preg_replace('/\s+/', ' ', $v) ?? $v);
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @return array{code:string,label:string,delivery:string,fields:list<array{key:string,label:string,required:bool,input:string}>}
+     */
+    protected function formatSchemaEntry(array $meta, string $brand, string $code): array
+    {
+        return [
+            'code' => (string) ($meta['code'] ?? Str::slug($code)),
+            'label' => (string) ($meta['label'] ?? (trim($brand) !== '' ? trim($brand) : 'Langganan Digital')),
+            'delivery' => (string) ($meta['delivery'] ?? 'voucher'),
+            'fields' => $this->normalizeFields($meta['fields'] ?? []),
+        ];
     }
 }

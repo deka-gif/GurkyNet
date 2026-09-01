@@ -210,6 +210,25 @@ class LanggananDigitalFlowTest extends TestCase
         $create->execute($this->user, $product->sku_code, 'LANGGANAN', '123456');
     }
 
+    public function test_langganan_account_schema_requires_sku(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $this->getJson('/api/v1/langganan/account-schema?brand=Vidio')
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_langganan_account_schema_returns_voucher_for_vidio_sku(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $this->getJson('/api/v1/langganan/account-schema?brand=Vidio&sku=VIDIO30')
+            ->assertOk()
+            ->assertJsonPath('data.delivery', 'voucher')
+            ->assertJsonPath('data.fields', []);
+    }
+
     public function test_langganan_account_delivery_stores_email_target(): void
     {
         Http::fake([

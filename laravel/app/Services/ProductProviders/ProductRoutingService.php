@@ -230,7 +230,10 @@ class ProductRoutingService
     protected function logicalSiblingProductIds(Product $product): array
     {
         $product->loadMissing(['category', 'provider']);
-        $key = LogicalProductKey::groupKey($product);
+        $isLangganan = \App\Services\Langganan\LanggananCatalogIdentity::isLanggananProduct($product);
+        $key = $isLangganan
+            ? \App\Services\Langganan\LanggananCatalogIdentity::groupKey($product)
+            : LogicalProductKey::groupKey($product);
         $operatorId = (int) ($product->provider_id ?? 0);
         $family = LogicalProductKey::familyFromProduct($product);
         $slugs = LogicalProductKey::categoryFilterSlugs($family);
@@ -243,7 +246,10 @@ class ProductRoutingService
 
         $ids = [];
         foreach ($candidates as $candidate) {
-            if (LogicalProductKey::groupKey($candidate) === $key) {
+            $candidateKey = $isLangganan
+                ? \App\Services\Langganan\LanggananCatalogIdentity::groupKey($candidate)
+                : LogicalProductKey::groupKey($candidate);
+            if ($candidateKey === $key) {
                 $ids[] = (int) $candidate->id;
             }
         }

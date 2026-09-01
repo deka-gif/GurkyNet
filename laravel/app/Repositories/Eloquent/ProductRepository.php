@@ -570,6 +570,10 @@ class ProductRepository implements ProductRepositoryInterface
 
     protected function catalogGroupKey(Product $product): string
     {
+        if (\App\Services\Langganan\LanggananCatalogIdentity::isLanggananProduct($product)) {
+            return \App\Services\Langganan\LanggananCatalogIdentity::groupKey($product);
+        }
+
         return LogicalProductKey::groupKey($product);
     }
 
@@ -593,6 +597,12 @@ class ProductRepository implements ProductRepositoryInterface
 
     protected function preferCatalogProduct(Product $a, Product $b): Product
     {
+        $aLang = \App\Services\Langganan\LanggananCatalogIdentity::isLanggananProduct($a);
+        $bLang = \App\Services\Langganan\LanggananCatalogIdentity::isLanggananProduct($b);
+        if ($aLang && $bLang) {
+            return $this->preferLanggananCatalogProduct($a, $b);
+        }
+
         $pa = $this->bestActiveOfferPriority($a);
         $pb = $this->bestActiveOfferPriority($b);
 
@@ -609,8 +619,66 @@ class ProductRepository implements ProductRepositoryInterface
         return (float) $a->sell_price <= (float) $b->sell_price ? $a : $b;
     }
 
+    /**
+     * Langganan Digital — Digiflazz PRIMARY card; VIP row is hidden but kept for failover routing.
+     */
+    protected function preferLanggananCatalogProduct(Product $a, Product $b): Product
+    {
+        $aDigi = $this->isDigiflazzPrimaryCatalogRow($a);
+        $bDigi = $this->isDigiflazzPrimaryCatalogRow($b);
+        if ($aDigi !== $bDigi) {
+            return $aDigi ? $a : $b;
+        }
+
+        $pa = $this->bestActiveOfferPriority($a);
+        $pb = $this->bestActiveOfferPriority($b);
+        if ($pa !== $pb) {
+            return $pa < $pb ? $a : $b;
+        }
+
+        $aVip = str_starts_with((string) $a->sku_code, 'VIP-');
+        $bVip = str_starts_with((string) $b->sku_code, 'VIP-');
+        if ($aVip !== $bVip) {
+            return $aVip ? $b : $a;
+        }
+
+        return (float) $a->sell_price <= (float) $b->sell_price ? $a : $b;
+    }
+
+    protected function isDigiflazzPrimaryCatalogRow(Product $product): bool
+    {
+        if (! str_starts_with((string) $product->sku_code, 'VIP-')) {
+            return true;
+        }
+
+        $digi = ProductProvider::digiflazz();
+        if ($digi && (int) $product->product_provider_id === (int) $digi->id) {
+            return true;
+        }
+
+        foreach ($product->providerSkus ?? [] as $sku) {
+            if (! $sku->is_active) {
+                continue;
+            }
+            $pp = $sku->productProvider;
+            if ($pp && $pp->code === 'digiflazz' && $pp->is_active) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     protected function preferCatalogReason(Product $a, Product $b, Product $chosen): string
     {
+        $aLang = \App\Services\Langganan\LanggananCatalogIdentity::isLanggananProduct($a);
+        $bLang = \App\Services\Langganan\LanggananCatalogIdentity::isLanggananProduct($b);
+        if ($aLang && $bLang) {
+            if ($this->isDigiflazzPrimaryCatalogRow($chosen) && ! $this->isDigiflazzPrimaryCatalogRow($chosen->id === $a->id ? $b : $a)) {
+                return 'langganan_digiflazz_primary';
+            }
+        }
+
         $pa = $this->bestActiveOfferPriority($a);
         $pb = $this->bestActiveOfferPriority($b);
         if ($pa !== $pb) {

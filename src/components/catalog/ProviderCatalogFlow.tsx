@@ -193,13 +193,20 @@ export function ProviderCatalogFlow({
   }, [isGameInquiry, selectedProvider, step]);
 
   useEffect(() => {
-    if (!isLanggananMode || !selectedProvider || step !== 'products') return;
+    if (!isLanggananMode || !selectedProvider || !selectedProduct || step !== 'products') {
+      if (!selectedProduct && isLanggananMode) {
+        setLanggananFields([]);
+        setLanggananAccount({});
+        setLanggananDelivery('voucher');
+      }
+      return;
+    }
     let cancelled = false;
     setLanggananSchemaLoading(true);
     setLanggananFields([]);
     setLanggananAccount({});
     void langgananService
-      .accountSchema(selectedProvider)
+      .accountSchema(selectedProvider, selectedProduct.code)
       .then((res) => {
         if (cancelled) return;
         if (res.success && res.data) {
@@ -222,7 +229,7 @@ export function ProviderCatalogFlow({
     return () => {
       cancelled = true;
     };
-  }, [isLanggananMode, selectedProvider, step]);
+  }, [isLanggananMode, selectedProvider, selectedProduct, step]);
 
   const providers = useMemo(() => {
     return categoryProviders.map((cp) => ({
@@ -257,6 +264,8 @@ export function ProviderCatalogFlow({
       gameFields.every((f) => !f.required || (gameAccount[f.key] || '').trim() !== ''));
   const langgananReady =
     !isLanggananMode ||
+    !selectedProduct ||
+    langgananSchemaLoading ||
     langgananFields.length === 0 ||
     isLanggananAccountReady(langgananFields, langgananAccount);
   const showProducts =
@@ -948,51 +957,14 @@ export function ProviderCatalogFlow({
                     : isEwalletInquiry
                       ? 'Masukkan nomor HP, lalu pilih nominal dari katalog.'
                       : isLanggananMode
-                        ? 'Pilih paket langganan, lalu lengkapi data tujuan jika diperlukan.'
+                        ? 'Pilih paket langganan. Setelah paket dipilih, lengkapi data tujuan jika diperlukan.'
                         : isVoucherMode
                           ? 'Pilih nominal voucher dari katalog.'
                           : 'Pilih produk, lengkapi data tujuan, lalu lanjut ke konfirmasi.'}
                 </p>
               </div>
 
-              {isSummaryCheckoutMode ? null : isLanggananMode && selectedProduct ? (
-                <div className="space-y-3">
-                  {langgananSchemaLoading ? (
-                    <div className="py-6 text-center">
-                      <RefreshCw className="w-5 h-5 mx-auto text-gray-300 animate-spin" />
-                    </div>
-                  ) : langgananFields.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {langgananFields.map((field) => (
-                        <div key={field.key} className="space-y-1.5">
-                          <label className="text-xs font-bold text-gray-700">
-                            {field.label}
-                            {field.required ? '' : ' (opsional)'}
-                          </label>
-                          <input
-                            type={field.input === 'email' ? 'email' : field.input === 'phone' ? 'tel' : 'text'}
-                            value={langgananAccount[field.key] || ''}
-                            onChange={(e) => {
-                              const val =
-                                field.input === 'phone'
-                                  ? e.target.value.replace(/\D/g, '')
-                                  : e.target.value;
-                              setLanggananAccount((prev) => ({ ...prev, [field.key]: val }));
-                            }}
-                            placeholder={field.label}
-                            className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
-                      Paket ini mengirim kode aktivasi otomatis setelah pembayaran — tidak perlu mengisi
-                      email atau nomor tujuan.
-                    </p>
-                  )}
-                </div>
-              ) : isLanggananMode ? null : isGameInquiry ? (
+              {isSummaryCheckoutMode ? null : isLanggananMode ? null : isGameInquiry ? (
                 <div className="space-y-3">
                   {schemaLoading ? (
                     <div className="py-6 text-center">
@@ -1095,6 +1067,9 @@ export function ProviderCatalogFlow({
                               setSelectedProduct(product);
                               if (isEwalletInquiry) setEwalletInquiry(null);
                               if (isGameInquiry) setGameInquiry(null);
+                              if (isLanggananMode) {
+                                setLanggananAccount({});
+                              }
                             }}
                             className={`text-left p-4 rounded-2xl border transition-all duration-200 ${
                               active
@@ -1137,6 +1112,49 @@ export function ProviderCatalogFlow({
                   </p>
                 </div>
               )}
+
+              {isLanggananMode && selectedProduct ? (
+                <div className="space-y-3 border-t border-gray-100 pt-5">
+                  <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                    Data Tujuan — {selectedProduct.name}
+                  </h5>
+                  {langgananSchemaLoading ? (
+                    <div className="py-6 text-center">
+                      <RefreshCw className="w-5 h-5 mx-auto text-gray-300 animate-spin" />
+                      <p className="text-[10px] text-gray-400 mt-2 font-semibold">Memuat kebutuhan input produk…</p>
+                    </div>
+                  ) : langgananFields.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {langgananFields.map((field) => (
+                        <div key={field.key} className="space-y-1.5">
+                          <label className="text-xs font-bold text-gray-700">
+                            {field.label}
+                            {field.required ? '' : ' (opsional)'}
+                          </label>
+                          <input
+                            type={field.input === 'email' ? 'email' : field.input === 'phone' ? 'tel' : 'text'}
+                            value={langgananAccount[field.key] || ''}
+                            onChange={(e) => {
+                              const val =
+                                field.input === 'phone'
+                                  ? e.target.value.replace(/\D/g, '')
+                                  : e.target.value;
+                              setLanggananAccount((prev) => ({ ...prev, [field.key]: val }));
+                            }}
+                            placeholder={field.label}
+                            className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
+                      Paket ini mengirim kode aktivasi otomatis setelah pembayaran — tidak perlu mengisi
+                      email, nomor HP, atau ID tujuan.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div className="lg:sticky lg:top-6">{renderSummaryPanel()}</div>
