@@ -24,6 +24,12 @@ import {
   GameInquiryResult,
 } from '../../services/game/game.service';
 import {
+  langgananService,
+  LanggananAccountField,
+  buildLanggananCustomerNo,
+  langgananAccountReady as isLanggananAccountReady,
+} from '../../services/langganan/langganan.service';
+import {
   catalogStatusLabel,
   isCatalogListed,
   isProductPurchasable,
@@ -95,8 +101,8 @@ export function ProviderCatalogFlow({
   const isGameInquiry = inquiryMode === 'game';
   const isVoucherMode = inquiryMode === 'voucher';
   const isLanggananMode = inquiryMode === 'langganan';
-  /** No customer inquiry — summary popup then PIN (voucher / langganan). */
-  const isSummaryCheckoutMode = isVoucherMode || isLanggananMode;
+  /** No customer inquiry — summary popup then PIN (voucher only). */
+  const isSummaryCheckoutMode = isVoucherMode;
   const { wallet, fetchWallet } = useWalletStore();
   const {
     products,
@@ -136,6 +142,10 @@ export function ProviderCatalogFlow({
   const [gameFields, setGameFields] = useState<GameAccountField[]>([]);
   const [gameAccount, setGameAccount] = useState<Record<string, string>>({});
   const [schemaLoading, setSchemaLoading] = useState(false);
+  const [langgananFields, setLanggananFields] = useState<LanggananAccountField[]>([]);
+  const [langgananAccount, setLanggananAccount] = useState<Record<string, string>>({});
+  const [langgananDelivery, setLanggananDelivery] = useState<string>('voucher');
+  const [langgananSchemaLoading, setLanggananSchemaLoading] = useState(false);
 
   useEffect(() => {
     fetchWallet();
@@ -182,6 +192,38 @@ export function ProviderCatalogFlow({
     };
   }, [isGameInquiry, selectedProvider, step]);
 
+  useEffect(() => {
+    if (!isLanggananMode || !selectedProvider || step !== 'products') return;
+    let cancelled = false;
+    setLanggananSchemaLoading(true);
+    setLanggananFields([]);
+    setLanggananAccount({});
+    void langgananService
+      .accountSchema(selectedProvider)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setLanggananFields(res.data.fields || []);
+          setLanggananDelivery(res.data.delivery || 'voucher');
+        } else {
+          setLanggananFields([]);
+          setLanggananDelivery('voucher');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLanggananFields([]);
+          setLanggananDelivery('voucher');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLanggananSchemaLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLanggananMode, selectedProvider, step]);
+
   const providers = useMemo(() => {
     return categoryProviders.map((cp) => ({
       providerId: cp.providerId,
@@ -213,6 +255,10 @@ export function ProviderCatalogFlow({
     !isGameInquiry ||
     (gameFields.length > 0 &&
       gameFields.every((f) => !f.required || (gameAccount[f.key] || '').trim() !== ''));
+  const langgananReady =
+    !isLanggananMode ||
+    langgananFields.length === 0 ||
+    isLanggananAccountReady(langgananFields, langgananAccount);
   const showProducts =
     (!isEwalletInquiry || phoneReady) && (!isGameInquiry || gameAccountReady);
 
@@ -242,6 +288,9 @@ export function ProviderCatalogFlow({
     setTargetNo('');
     setSecondaryValue('');
     setGameAccount({});
+    setLanggananFields([]);
+    setLanggananAccount({});
+    setLanggananDelivery('voucher');
     setStep('products');
     void fetchProducts({ category, provider_id: providerId });
   };
@@ -254,6 +303,9 @@ export function ProviderCatalogFlow({
     setGameInquiry(null);
     setGameFields([]);
     setGameAccount({});
+    setLanggananFields([]);
+    setLanggananAccount({});
+    setLanggananDelivery('voucher');
   };
 
   const handleCheckout = () => {
@@ -441,6 +493,43 @@ export function ProviderCatalogFlow({
     setGameInquiry(null);
   };
 
+  const handleLanggananLanjutBayar = () => {
+    if (!selectedProduct || !selectedProvider) return;
+    if (!isLanggananAccountReady(langgananFields, langgananAccount)) {
+      showFlowError('Lengkapi data tujuan langganan terlebih dahulu.');
+      return;
+    }
+    if (!wallet || wallet.balance < selectedProduct.price) {
+      showFlowError('Saldo GurkyPay Anda tidak mencukupi untuk pembelian langganan ini.');
+      return;
+    }
+
+    const target = buildLanggananCustomerNo(langgananFields, langgananAccount, langgananDelivery);
+    const customDetails: Record<string, string> = {
+      Kategori: 'LANGGANAN DIGITAL',
+      Aplikasi: selectedProvider,
+      Varian: selectedProduct.name,
+    };
+    if (langgananDelivery === 'account' && langgananFields.length > 0) {
+      langgananFields.forEach((f) => {
+        const val = (langgananAccount[f.key] || '').trim();
+        if (val) customDetails[f.label] = val;
+      });
+    } else {
+      customDetails['Pengiriman'] = 'Kode aktivasi via provider setelah pembayaran';
+    }
+
+    setCheckoutData({
+      serviceName,
+      productName: selectedProduct.name,
+      targetNo: target,
+      amount: selectedProduct.price,
+      adminFee: 0,
+      skuCode: selectedProduct.code,
+      customDetails,
+    });
+  };
+
   const handleSummaryNext = () => {
     if (!selectedProduct || !selectedProvider) {
       showFlowError(
@@ -538,17 +627,49 @@ export function ProviderCatalogFlow({
       );
     }
 
+    if (isLanggananMode && selectedProduct) {
+      return (
+        <SummaryPanelShell>
+          <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
+            Ringkasan Langganan
+          </p>
+          <SummaryRow label="Kategori" value="LANGGANAN DIGITAL" />
+          <SummaryRow label="Aplikasi" value={selectedProvider || '-'} />
+          <SummaryRow label="Varian" value={selectedProduct.name} />
+          {langgananDelivery === 'account' && langgananFields.length > 0 ? (
+            langgananFields.map((f) => (
+              <SummaryRow
+                key={f.key}
+                label={f.label}
+                value={(langgananAccount[f.key] || '').trim() || '-'}
+              />
+            ))
+          ) : (
+            <SummaryRow label="Pengiriman" value="Kode aktivasi via provider" />
+          )}
+          <SummaryRow label="Harga" value={formatIDR(selectedProduct.price)} large />
+          <PanelActions>
+            <button
+              type="button"
+              onClick={handleLanggananLanjutBayar}
+              disabled={!isProductPurchasable(selectedProduct) || !langgananReady}
+              className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Lanjut Konfirmasi
+            </button>
+          </PanelActions>
+        </SummaryPanelShell>
+      );
+    }
+
     if (isSummaryCheckoutMode) {
       return (
         <SummaryPanelShell>
           <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
-            {isLanggananMode ? 'Ringkasan Langganan' : 'Ringkasan Voucher'}
+            Ringkasan Voucher
           </p>
-          <SummaryRow
-            label="Kategori"
-            value={isLanggananMode ? 'LANGGANAN DIGITAL' : 'VOUCHER DIGITAL'}
-          />
-          <SummaryRow label={isLanggananMode ? 'Aplikasi' : 'Brand'} value={selectedProvider || '-'} />
+          <SummaryRow label="Kategori" value="VOUCHER DIGITAL" />
+          <SummaryRow label="Brand" value={selectedProvider || '-'} />
           <SummaryRow label="Varian" value={selectedProduct.name} />
           <SummaryRow label="Harga" value={formatIDR(selectedProduct.price)} large />
           <PanelActions>
@@ -827,14 +948,51 @@ export function ProviderCatalogFlow({
                     : isEwalletInquiry
                       ? 'Masukkan nomor HP, lalu pilih nominal dari katalog.'
                       : isLanggananMode
-                        ? 'Pilih paket langganan dari katalog.'
+                        ? 'Pilih paket langganan, lalu lengkapi data tujuan jika diperlukan.'
                         : isVoucherMode
                           ? 'Pilih nominal voucher dari katalog.'
                           : 'Pilih produk, lengkapi data tujuan, lalu lanjut ke konfirmasi.'}
                 </p>
               </div>
 
-              {isSummaryCheckoutMode ? null : isGameInquiry ? (
+              {isSummaryCheckoutMode ? null : isLanggananMode && selectedProduct ? (
+                <div className="space-y-3">
+                  {langgananSchemaLoading ? (
+                    <div className="py-6 text-center">
+                      <RefreshCw className="w-5 h-5 mx-auto text-gray-300 animate-spin" />
+                    </div>
+                  ) : langgananFields.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {langgananFields.map((field) => (
+                        <div key={field.key} className="space-y-1.5">
+                          <label className="text-xs font-bold text-gray-700">
+                            {field.label}
+                            {field.required ? '' : ' (opsional)'}
+                          </label>
+                          <input
+                            type={field.input === 'email' ? 'email' : field.input === 'phone' ? 'tel' : 'text'}
+                            value={langgananAccount[field.key] || ''}
+                            onChange={(e) => {
+                              const val =
+                                field.input === 'phone'
+                                  ? e.target.value.replace(/\D/g, '')
+                                  : e.target.value;
+                              setLanggananAccount((prev) => ({ ...prev, [field.key]: val }));
+                            }}
+                            placeholder={field.label}
+                            className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
+                      Paket ini mengirim kode aktivasi otomatis setelah pembayaran — tidak perlu mengisi
+                      email atau nomor tujuan.
+                    </p>
+                  )}
+                </div>
+              ) : isLanggananMode ? null : isGameInquiry ? (
                 <div className="space-y-3">
                   {schemaLoading ? (
                     <div className="py-6 text-center">
@@ -990,7 +1148,7 @@ export function ProviderCatalogFlow({
         <CheckoutSummary
           data={checkoutData}
           initialStep={
-            resumePin || isEwalletInquiry || isGameInquiry || isSummaryCheckoutMode ? 'PIN' : 'SUMMARY'
+            resumePin || isEwalletInquiry || isGameInquiry || isVoucherMode ? 'PIN' : 'SUMMARY'
           }
           onClose={() => {
             setCheckoutData(null);

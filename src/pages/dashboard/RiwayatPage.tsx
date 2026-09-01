@@ -28,7 +28,7 @@ import {
 } from '../../utils/transactionStatus';
 import {
   formatTransactionDateTime,
-  maskTargetNumber,
+  formatHistoryTarget,
   resolveProviderBadge,
 } from '../../utils/transactionDisplay';
 
@@ -46,6 +46,7 @@ export const RiwayatPage = () => {
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [receiptCode, setReceiptCode] = useState<{ label: string; code: string; url?: string | null } | null>(null);
+  const [receiptTargetDisplay, setReceiptTargetDisplay] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('HISTORY RENDER — mount fetch');
@@ -108,6 +109,7 @@ export const RiwayatPage = () => {
   useEffect(() => {
     if (!selectedTx) {
       setReceiptCode(null);
+      setReceiptTargetDisplay(null);
       return;
     }
     let cancelled = false;
@@ -118,6 +120,9 @@ export const RiwayatPage = () => {
       .then((res) => {
         if (cancelled || !res.success || !res.data) return;
         const d = res.data.transaction_details || {};
+        setReceiptTargetDisplay(
+          typeof d.langganan_target_display === 'string' ? d.langganan_target_display : null
+        );
         if (d.voucher_code) {
           setReceiptCode({ label: 'Kode Voucher', code: d.voucher_code, url: d.voucher_url });
         } else if (d.activation_code) {
@@ -129,7 +134,10 @@ export const RiwayatPage = () => {
         }
       })
       .catch(() => {
-        if (!cancelled) setReceiptCode(null);
+        if (!cancelled) {
+          setReceiptCode(null);
+          setReceiptTargetDisplay(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -272,6 +280,7 @@ export const RiwayatPage = () => {
               <option value="paket data">Paket Data</option>
               <option value="token pln">Token Listrik PLN</option>
               <option value="voucher">Voucher Game & Belanja</option>
+              <option value="langganan">Langganan Digital</option>
               <option value="transfer">Transfer Saldo</option>
               <option value="tagihan">Tagihan Bulanan</option>
               <option value="top up">Top Up Saldo</option>
@@ -377,8 +386,12 @@ export const RiwayatPage = () => {
                       {tx.productName}
                     </h4>
                     <p className="text-[10px] text-gray-400 mt-0.5">
-                      Tujuan: {maskTargetNumber(tx.targetNo)} •{' '}
-                      {formatTransactionDateTime(tx.date)}
+                      Tujuan:{' '}
+                      {formatHistoryTarget(tx.targetNo, {
+                        langgananTargetDisplay: null,
+                        serviceName: tx.serviceName,
+                      })}{' '}
+                      • {formatTransactionDateTime(tx.date)}
                       {resolveProviderBadge(tx.providerCode, tx.providerName)
                         ? ` • ${resolveProviderBadge(tx.providerCode, tx.providerName)}`
                         : ''}
@@ -482,8 +495,13 @@ export const RiwayatPage = () => {
                   </div>
 
                   <div className="flex justify-between">
-                    <span>Nomor HP / Target</span>
-                    <span className="text-gray-900">{selectedTx.targetNo}</span>
+                    <span>Data Tujuan</span>
+                    <span className="text-gray-900 text-right break-all max-w-[60%]">
+                      {formatHistoryTarget(selectedTx.targetNo, {
+                        langgananTargetDisplay: receiptTargetDisplay,
+                        serviceName: selectedTx.serviceName,
+                      })}
+                    </span>
                   </div>
 
                   <div className="flex justify-between">

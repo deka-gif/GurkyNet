@@ -182,4 +182,89 @@ class LanggananDigitalFlowTest extends TestCase
             $this->assertSame($before, (float) $this->wallet->fresh()->balance);
         }
     }
+
+    public function test_langganan_account_delivery_rejects_voucher_placeholder(): void
+    {
+        $provider = Provider::create([
+            'name' => 'Netflix',
+            'logo' => null,
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'product_category_id' => $this->product->product_category_id,
+            'provider_id' => $provider->id,
+            'sku_code' => 'NFLX30',
+            'name' => 'Netflix Premium 30 Hari',
+            'base_price' => 55000,
+            'sell_price' => 56000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        $create = resolve(CreateTransactionAction::class);
+        $create->execute($this->user, $product->sku_code, 'LANGGANAN', '123456');
+    }
+
+    public function test_langganan_account_delivery_stores_email_target(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNGLANG003',
+                    'customer_no' => 'user@example.com',
+                    'buyer_sku_code' => 'NFLX30',
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'sn' => 'NFLX-ACTIVATED',
+                    'price' => 55000,
+                ],
+            ], 200),
+        ]);
+
+        $provider = Provider::create([
+            'name' => 'Netflix',
+            'logo' => null,
+            'is_active' => true,
+        ]);
+
+        $product = Product::create([
+            'product_category_id' => $this->product->product_category_id,
+            'provider_id' => $provider->id,
+            'sku_code' => 'NFLX30',
+            'name' => 'Netflix Premium 30 Hari',
+            'base_price' => 55000,
+            'sell_price' => 56000,
+            'admin_fee' => 0,
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($this->user);
+        Queue::fake();
+
+        $create = resolve(CreateTransactionAction::class);
+        $transaction = $create->execute(
+            $this->user,
+            $product->sku_code,
+            'user@example.com',
+            '123456'
+        );
+
+        $meta = $transaction->items->first()?->custom_metadata ?? [];
+        $this->assertSame('account', $meta['langganan_delivery'] ?? null);
+        $this->assertSame('user@example.com', $meta['langganan_target_display'] ?? null);
+
+        $job = new ProcessProductProviderTransaction($transaction->id);
+        app()->call([$job, 'handle']);
+
+        $this->getJson('/api/v1/transactions/' . $transaction->invoice_number . '/receipt')
+            ->assertOk()
+            ->assertJsonPath('data.transaction_details.langganan_target_display', 'user@example.com')
+            ->assertJsonPath('data.transaction_details.activation_code', 'NFLX-ACTIVATED');
+    }
 }

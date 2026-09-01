@@ -19,8 +19,11 @@ import {
 } from '../../utils/transactionStatus';
 import {
   formatTransactionDateTime,
+  formatHistoryTarget,
+  maskEmail,
   maskTargetNumber,
   resolveProviderBadge,
+  resolveTargetLabel,
 } from '../../utils/transactionDisplay';
 import type { Transaction } from '../../types';
 
@@ -36,6 +39,10 @@ export function TransactionDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [receiptCode, setReceiptCode] = useState<{ label: string; code: string; url?: string | null } | null>(null);
+  const [receiptMeta, setReceiptMeta] = useState<{
+    langgananTargetDisplay?: string | null;
+    langgananDelivery?: string | null;
+  } | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
   const fromStore = useMemo(() => {
@@ -90,6 +97,7 @@ export function TransactionDetailPage() {
   useEffect(() => {
     if (!tx) {
       setReceiptCode(null);
+      setReceiptMeta(null);
       return;
     }
     let cancelled = false;
@@ -100,6 +108,10 @@ export function TransactionDetailPage() {
       .then((res) => {
         if (cancelled || !res.success || !res.data) return;
         const d = res.data.transaction_details || {};
+        setReceiptMeta({
+          langgananTargetDisplay: d.langganan_target_display ?? null,
+          langgananDelivery: d.langganan_delivery ?? null,
+        });
         if (d.voucher_code) {
           setReceiptCode({ label: 'Kode Voucher', code: d.voucher_code, url: d.voucher_url });
         } else if (d.activation_code) {
@@ -111,7 +123,10 @@ export function TransactionDetailPage() {
         }
       })
       .catch(() => {
-        if (!cancelled) setReceiptCode(null);
+        if (!cancelled) {
+          setReceiptCode(null);
+          setReceiptMeta(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -185,6 +200,18 @@ export function TransactionDetailPage() {
   }
 
   const provider = resolveProviderBadge(tx.providerCode, tx.providerName);
+  const targetLabel = resolveTargetLabel(
+    tx.serviceName,
+    tx.targetNo,
+    receiptMeta?.langgananDelivery
+  );
+  const targetValue = (() => {
+    const display = String(receiptMeta?.langgananTargetDisplay || '').trim();
+    if (display) {
+      return display.includes('@') ? maskEmail(display) : maskTargetNumber(display);
+    }
+    return formatHistoryTarget(tx.targetNo, { serviceName: tx.serviceName });
+  })();
 
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-10">
@@ -234,7 +261,7 @@ export function TransactionDetailPage() {
           <Row label="Invoice" value={tx.transactionCode || tx.invoice_number || '—'} mono />
           <Row label="Layanan" value={tx.serviceName || '—'} />
           <Row label="Produk" value={tx.productName || '—'} />
-          <Row label="Nomor Tujuan" value={maskTargetNumber(tx.targetNo)} />
+          <Row label={targetLabel} value={targetValue} />
           <Row label="Tanggal" value={formatTransactionDateTime(tx.date)} />
           <Row label="Nominal" value={formatIDR(tx.amount || 0)} bold />
           {tx.totalPayment != null ? (

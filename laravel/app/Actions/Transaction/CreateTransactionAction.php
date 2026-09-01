@@ -354,8 +354,18 @@ class CreateTransactionAction
             }
 
             if (!$isPasca && $this->isLanggananDigitalProduct($product)) {
+                $brand = trim((string) ($product->provider?->name ?? ''));
+                $resolver = app(\App\Services\Langganan\LanggananAccountResolver::class);
+                $builder = app(\App\Services\Langganan\LanggananTargetBuilder::class);
+                $schema = $resolver->resolve($brand);
+                $builder->assertValidTarget($targetNumber, $schema);
+
                 $itemMeta['is_langganan'] = true;
-                $itemMeta['langganan_brand'] = $product->provider->name ?? null;
+                $itemMeta['langganan_brand'] = $brand !== '' ? $brand : null;
+                $itemMeta['langganan_delivery'] = $schema['delivery'] ?? 'voucher';
+                if (($schema['delivery'] ?? '') === 'account' && ($schema['fields'] ?? []) !== []) {
+                    $itemMeta['langganan_target_display'] = $targetNumber;
+                }
             }
 
             $this->itemRepository->create([

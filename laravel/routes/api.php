@@ -350,6 +350,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::middleware('throttle:20,1')->group(function () {
             Route::get('/game/account-schema', [\App\Http\Controllers\Api\v1\GameController::class, 'accountSchema']);
             Route::post('/game/inquiry', [\App\Http\Controllers\Api\v1\GameController::class, 'inquiry']);
+            Route::get('/langganan/account-schema', [\App\Http\Controllers\Api\v1\LanggananController::class, 'accountSchema']);
         });
 
         // Prepaid PLN meter inquiry (Digiflazz /inquiry-pln) — no wallet debit

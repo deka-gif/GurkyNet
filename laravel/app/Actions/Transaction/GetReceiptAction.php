@@ -90,6 +90,8 @@ class GetReceiptAction
                 'game_zone_id' => $meta['zone_id'] ?? null,
                 'voucher_brand' => $meta['voucher_brand'] ?? ($meta['provider'] ?? null),
                 'langganan_brand' => $meta['langganan_brand'] ?? ($meta['provider'] ?? null),
+                'langganan_target_display' => $meta['langganan_target_display'] ?? null,
+                'langganan_delivery' => $meta['langganan_delivery'] ?? null,
                 'pajak_jenis' => $meta['pajak_jenis'] ?? null,
                 'bill_amount' => $meta['bill_amount'] ?? null,
                 'nominal_amount' => $meta['nominal_amount'] ?? ($meta['bill_amount'] ?? null),
