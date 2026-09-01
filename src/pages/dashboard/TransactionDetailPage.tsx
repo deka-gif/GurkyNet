@@ -22,7 +22,6 @@ import {
   formatHistoryTarget,
   maskEmail,
   maskTargetNumber,
-  resolveProviderBadge,
   resolveTargetLabel,
 } from '../../utils/transactionDisplay';
 import type { Transaction } from '../../types';
@@ -199,7 +198,6 @@ export function TransactionDetailPage() {
     );
   }
 
-  const provider = resolveProviderBadge(tx.providerCode, tx.providerName);
   const targetLabel = resolveTargetLabel(
     tx.serviceName,
     tx.targetNo,
@@ -249,11 +247,6 @@ export function TransactionDetailPage() {
                 {transactionStatusLabel(tx.status)}
               </span>
             )}
-            {provider ? (
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-                {provider}
-              </span>
-            ) : null}
           </div>
         </div>
 

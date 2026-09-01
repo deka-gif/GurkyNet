@@ -812,6 +812,37 @@ class SyncVipCatalogAction
             return null;
         }
 
+        $category = ProductCategory::find($categoryId);
+        $operator = Provider::find($operatorId);
+        if ($category && $operator) {
+            $probe = new Product([
+                'name' => $name,
+                'provider_id' => $operatorId,
+                'product_category_id' => $categoryId,
+            ]);
+            $probe->setRelation('category', $category);
+            $probe->setRelation('provider', $operator);
+
+            $targetKey = \App\Services\ProductProviders\LogicalProductKey::groupKey($probe);
+            $family = \App\Services\ProductProviders\LogicalProductKey::familyFromProduct($probe);
+            $slugs = \App\Services\ProductProviders\LogicalProductKey::categoryFilterSlugs($family);
+
+            $candidates = Product::withTrashed()
+                ->with(['category', 'provider'])
+                ->where('provider_id', $operatorId)
+                ->where('sku_code', 'not like', 'VIP-%')
+                ->whereHas('category', fn ($q) => $q->whereIn('slug', $slugs))
+                ->orderByRaw('CASE WHEN product_category_id = ? THEN 0 ELSE 1 END', [$categoryId])
+                ->orderBy('id')
+                ->get();
+
+            foreach ($candidates as $candidate) {
+                if (\App\Services\ProductProviders\LogicalProductKey::groupKey($candidate) === $targetKey) {
+                    return $candidate;
+                }
+            }
+        }
+
         return Product::withTrashed()
             ->where('provider_id', $operatorId)
             ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
@@ -842,8 +873,16 @@ class SyncVipCatalogAction
             }
         }
 
-        if ($categorySlug === 'voucher-digital') {
+        if ($categorySlug === 'voucher-digital' || $categorySlug === 'game') {
             $canonical = app(\App\Services\Catalog\VoucherBrandResolver::class)->resolve($name, $productName);
+            if ($canonical !== null) {
+                $name = $canonical;
+            }
+        }
+
+        $telecomResolver = app(\App\Services\Catalog\TelecomOperatorBrandResolver::class);
+        if ($telecomResolver->appliesToCategory($categorySlug)) {
+            $canonical = $telecomResolver->resolve($name, $productName);
             if ($canonical !== null) {
                 $name = $canonical;
             }

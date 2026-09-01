@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\UserRole;
 use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,7 +25,7 @@ class TransactionResource extends JsonResource
             $normalizedStatus = 'pending';
         }
 
-        return [
+        $payload = [
             'id' => $this->id,
             'transactionCode' => $this->invoice_number,
             'serviceName' => $this->service_name,
@@ -38,13 +39,31 @@ class TransactionResource extends JsonResource
             'status' => $normalizedStatus,
             'status_srs' => TransactionStatusMapper::toSrs($rawStatus),
             'notes' => $this->notes,
-            // Existing fulfillment column — expose for history badges (no provider logic change).
-            'providerCode' => $this->fulfillment_provider_code,
-            'providerName' => $this->fulfillment_provider_code,
             'items' => TransactionItemResource::collection($this->whenLoaded('items')),
             'date' => $this->created_at?->toIso8601String(),
             'createdAt' => $this->created_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
         ];
+
+        if ($this->exposesInternalFulfillment($request)) {
+            $payload['providerCode'] = $this->fulfillment_provider_code;
+            $payload['providerName'] = $this->fulfillment_provider_code;
+        }
+
+        return $payload;
+    }
+
+    protected function exposesInternalFulfillment(Request $request): bool
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return false;
+        }
+
+        $role = $user->role instanceof UserRole
+            ? $user->role
+            : UserRole::tryFrom((string) $user->role);
+
+        return $role !== null && $role !== UserRole::USER;
     }
 }

@@ -29,7 +29,6 @@ import {
 import {
   formatTransactionDateTime,
   formatHistoryTarget,
-  resolveProviderBadge,
 } from '../../utils/transactionDisplay';
 
 export const RiwayatPage = () => {
@@ -392,9 +391,6 @@ export const RiwayatPage = () => {
                         serviceName: tx.serviceName,
                       })}{' '}
                       • {formatTransactionDateTime(tx.date)}
-                      {resolveProviderBadge(tx.providerCode, tx.providerName)
-                        ? ` • ${resolveProviderBadge(tx.providerCode, tx.providerName)}`
-                        : ''}
                     </p>
                   </div>
                 </div>

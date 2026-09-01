@@ -162,9 +162,17 @@ class ProviderRepository implements ProviderRepositoryInterface
                     }
                 }
             }
-            if ($mapped['slug'] === 'voucher-digital') {
+            if (in_array($mapped['slug'], ['voucher-digital', 'game'], true)) {
                 $canonical = app(\App\Services\Catalog\VoucherBrandResolver::class)
                     ->resolve($providerName, (string) ($dp['product_name'] ?? ''));
+                if ($canonical !== null) {
+                    $providerName = $canonical;
+                }
+            }
+
+            $telecomResolver = app(\App\Services\Catalog\TelecomOperatorBrandResolver::class);
+            if ($telecomResolver->appliesToCategory($mapped['slug'])) {
+                $canonical = $telecomResolver->resolve($providerName, (string) ($dp['product_name'] ?? ''));
                 if ($canonical !== null) {
                     $providerName = $canonical;
                 }

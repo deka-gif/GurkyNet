@@ -23,7 +23,6 @@ import {
 import {
   formatTransactionDateTime,
   maskTargetNumber,
-  resolveProviderBadge,
 } from '../../utils/transactionDisplay';
 
 type RecentTransactionsCardProps = {
@@ -164,7 +163,6 @@ export const RecentTransactionsCard = memo(function RecentTransactionsCard({
           ) : (
             items.map((tx) => {
               const { box, Icon } = serviceTone(tx);
-              const provider = resolveProviderBadge(tx.providerCode, tx.providerName);
               const detailId = tx.id || tx.transactionCode;
 
               return (
@@ -188,11 +186,6 @@ export const RecentTransactionsCard = memo(function RecentTransactionsCard({
                       <div className="mt-0.5 truncate text-xs text-gray-400">
                         {maskTargetNumber(tx.targetNo)} · {formatTransactionDateTime(tx.date)}
                       </div>
-                      {provider ? (
-                        <span className="mt-1 inline-flex rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                          {provider}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
 
