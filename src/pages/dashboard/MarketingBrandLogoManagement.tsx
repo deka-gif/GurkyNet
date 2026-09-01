@@ -142,7 +142,7 @@ export const MarketingBrandLogoManagement: React.FC = () => {
     if (!selectedHub) return [];
     const q = searchKeyword.trim().toLowerCase();
     return brands.filter((brand) => {
-      const matchesSearch = !q || brand.name.toLowerCase().includes(q);
+      const matchesSearch = !q || String(brand.name ?? '').toLowerCase().includes(q);
       const matchesHub =
         selectedHub === 'lainnya' ? brandInLainnya(brand) : brandInHub(brand, selectedHub);
       return matchesSearch && matchesHub;

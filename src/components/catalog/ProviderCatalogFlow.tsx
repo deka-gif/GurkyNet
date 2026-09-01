@@ -194,7 +194,7 @@ export function ProviderCatalogFlow({
   const filteredProviders = useMemo(() => {
     const q = providerQuery.trim().toLowerCase();
     if (!q) return providers;
-    return providers.filter((p) => p.name.toLowerCase().includes(q));
+    return providers.filter((p) => String(p.name ?? '').toLowerCase().includes(q));
   }, [providers, providerQuery]);
 
   const providerProducts = useMemo(() => {
@@ -203,7 +203,7 @@ export function ProviderCatalogFlow({
       .filter(
         (p) =>
           isCatalogListed(p) &&
-          (p.operatorName || '').trim().toLowerCase() === selectedProvider.toLowerCase()
+          String(p.operatorName ?? '').trim().toLowerCase() === selectedProvider.toLowerCase()
       )
       .sort((a, b) => a.price - b.price);
   }, [products, selectedProvider]);

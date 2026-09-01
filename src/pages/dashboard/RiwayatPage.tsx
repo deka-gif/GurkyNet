@@ -114,9 +114,9 @@ export const RiwayatPage = () => {
 
   const filteredTransactions = transactions.filter((tx) => {
     const matchSearch =
-      tx.transactionCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tx.serviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tx.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(tx.transactionCode ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(tx.serviceName ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(tx.productName ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       tx.targetNo.includes(searchQuery);
 
     const matchStatus =
@@ -124,7 +124,7 @@ export const RiwayatPage = () => {
 
     const matchCategory =
       selectedCategory === 'all' ||
-      tx.serviceName.toLowerCase().includes(selectedCategory.toLowerCase());
+      String(tx.serviceName ?? '').toLowerCase().includes(selectedCategory.toLowerCase());
 
     let matchNominal = true;
     if (selectedNominalRange === 'under-50k') {

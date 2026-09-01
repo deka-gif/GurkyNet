@@ -97,8 +97,29 @@ class DailyClosingService
     {
         $summary = $closing->summary ?? [];
         $title = 'GurkyNet Daily Closing '.$closing->closing_date?->format('Y-m-d');
-        $body = "Daily reconciliation closing\n"
-            .json_encode($summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $incidentsOpen = (int) ($summary['incidents_open'] ?? 0);
+        $frozenActive = (bool) ($summary['frozen_withdraw_active'] ?? false);
+        $pendingWithdraw = (int) ($summary['pending_withdraw_requests'] ?? 0);
+        $totalSukses = (float) ($summary['total_successful_transactions'] ?? 0);
+
+        $bodyLines = [
+            sprintf('Closing harian tanggal %s sudah selesai diproses.', $closing->closing_date?->format('d M Y')),
+            sprintf('Total transaksi sukses: Rp%s', number_format($totalSukses, 0, ',', '.')),
+            sprintf('Insiden rekonsiliasi terbuka: %d', $incidentsOpen),
+        ];
+
+        if ($frozenActive) {
+            $bodyLines[] = 'PERHATIAN: ada insiden yang sedang membekukan penarikan dana (freeze_withdraw aktif). Mohon segera cek halaman Reconciliation.';
+        }
+
+        if ($pendingWithdraw > 0) {
+            $bodyLines[] = sprintf('Permintaan withdraw yang masih pending: %d', $pendingWithdraw);
+        }
+
+        $bodyLines[] = 'Buka halaman Reconciliation di dashboard Finance untuk rincian lengkap per insiden.';
+
+        $body = implode("\n", $bodyLines);
 
         $recipients = User::query()
             ->whereIn('role', [UserRole::FINANCE->value, UserRole::OWNER->value, 'finance', 'owner'])

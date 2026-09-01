@@ -67,14 +67,14 @@ export const VoucherPage = () => {
   const filteredCatalog = useMemo(() => {
     return products.filter(v => {
       // API products might not have 'type' or 'category' exact matches, we adapt based on name or operatorName
-      const isFisik = v.name.toLowerCase().includes('fisik') || v.name.toLowerCase().includes('cetak');
+      const isFisik = String(v.name ?? '').toLowerCase().includes('fisik') || String(v.name ?? '').toLowerCase().includes('cetak');
       const matchType = (activeTab === 'fisik' && isFisik) || (activeTab === 'digital' && !isFisik);
       
       const vCat = v.category || 'game'; 
-      const matchCategory = activeCategory === 'all' || vCat.includes(activeCategory) || v.name.toLowerCase().includes(activeCategory);
+      const matchCategory = activeCategory === 'all' || vCat.includes(activeCategory) || String(v.name ?? '').toLowerCase().includes(activeCategory);
       
-      const matchSearch = v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          v.operatorName?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchSearch = String(v.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          String(v.operatorName ?? '').toLowerCase().includes(searchQuery.toLowerCase());
       
       return matchType && matchCategory && matchSearch && isCatalogListed(v);
     });

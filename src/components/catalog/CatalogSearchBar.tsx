@@ -127,7 +127,7 @@ export function CatalogSearchBar() {
                   key={p.id}
                   type="button"
                   onClick={() => {
-                    const n = p.name.toLowerCase();
+                    const n = String(p.name ?? '').toLowerCase();
                     if (/(gopay|ovo|dana|shopee|linkaja|grab|maxim)/.test(n)) go('/dashboard/topup-digital');
                     else if (/(netflix|spotify|vidio|wetv|viu|canva|youtube)/.test(n)) go('/dashboard/langganan-digital');
                     else if (/(google play|steam wallet|razer|unipin|playstation|xbox)/.test(n)) go('/dashboard/voucher-digital');

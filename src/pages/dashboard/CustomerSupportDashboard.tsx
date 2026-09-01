@@ -110,10 +110,10 @@ export const CustomerSupportDashboard: React.FC = () => {
     const statusStr = ticket.status || '';
 
     const matchesSearch = 
-      idStr.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      nameStr.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emailStr.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      catStr.toLowerCase().includes(searchQuery.toLowerCase());
+      String(idStr ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(nameStr ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(emailStr ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(catStr ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 
     if (selectedStatus === 'Semua') return matchesSearch;
     return matchesSearch && statusStr === selectedStatus;

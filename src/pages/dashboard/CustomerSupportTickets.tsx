@@ -162,11 +162,11 @@ export const CustomerSupportTickets: React.FC = () => {
     return normalizedTickets
       .filter((t) => {
         const matchSearch =
-          t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          t.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          t.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          t.category.toLowerCase().includes(searchQuery.toLowerCase());
+          String(t.id ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          String(t.customerName ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          String(t.customerEmail ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          String(t.subject ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          String(t.category ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchStatus = statusFilter === 'All' || t.status === statusFilter;
         const matchPriority = priorityFilter === 'All' || t.priority === priorityFilter;

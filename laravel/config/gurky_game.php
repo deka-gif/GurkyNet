@@ -22,6 +22,13 @@ return [
                 ['key' => 'player_id', 'label' => 'Player ID', 'required' => true],
             ],
         ],
+        'fc-mobile' => [
+            'label' => 'FC Mobile',
+            'aliases' => ['fc mobile', 'fcmobile', 'ea sports fc mobile', 'fifa mobile', 'fifamobile'],
+            'fields' => [
+                ['key' => 'player_id', 'label' => 'Player ID / EA ID', 'required' => true],
+            ],
+        ],
         'pubg' => [
             'label' => 'PUBG Mobile',
             'aliases' => ['pubg', 'pubg mobile', 'pubgm'],

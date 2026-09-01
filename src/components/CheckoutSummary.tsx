@@ -326,24 +326,24 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     (receiptData?.transaction_details?.token_code_grouped as string | undefined) ||
     (plnTokenDigits ? formatPlnTokenGrouped(plnTokenDigits) : null);
   const isPlnTokenReceipt =
-    data.serviceName.toLowerCase().includes('token pln') ||
+    String(data.serviceName ?? '').toLowerCase().includes('token pln') ||
     !!receiptData?.transaction_details?.is_pln_token ||
     !!plnTokenDigits;
 
   const isPajakReceipt =
     !!receiptData?.transaction_details?.is_pajak_negara ||
-    data.serviceName.toLowerCase() === 'pbb' ||
-    data.serviceName.toLowerCase() === 'samsat';
+    String(data.serviceName ?? '').toLowerCase() === 'pbb' ||
+    String(data.serviceName ?? '').toLowerCase() === 'samsat';
   const isEwalletReceipt =
     !!receiptData?.transaction_details?.is_ewallet ||
-    data.serviceName.toLowerCase() === 'e-wallet' ||
+    String(data.serviceName ?? '').toLowerCase() === 'e-wallet' ||
     (!!data.inquiryRefId && typeof data.customDetails?.['Nama Akun'] === 'string');
   const ewalletAccountName =
     (receiptData?.transaction_details?.customer_name as string | undefined) ||
     (typeof data.customDetails?.['Nama Akun'] === 'string' ? data.customDetails['Nama Akun'] : undefined);
   const isGameReceipt =
     !!receiptData?.transaction_details?.is_game ||
-    data.serviceName.toLowerCase() === 'game' ||
+    String(data.serviceName ?? '').toLowerCase() === 'game' ||
     typeof data.customDetails?.Nickname === 'string';
   const gameNickname =
     (receiptData?.transaction_details?.nickname as string | undefined) ||
@@ -360,7 +360,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     (typeof data.customDetails?.['Zone ID'] === 'string' ? data.customDetails['Zone ID'] : undefined);
   const isVoucherReceipt =
     !!receiptData?.transaction_details?.is_voucher ||
-    data.serviceName.toLowerCase() === 'voucher digital';
+    String(data.serviceName ?? '').toLowerCase() === 'voucher digital';
   const voucherCode =
     (receiptData?.transaction_details?.voucher_code as string | undefined) ||
     (isVoucherReceipt
@@ -371,7 +371,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const voucherCopyValue = voucherCode || voucherUrl || voucherBarcode || '';
   const isLanggananReceipt =
     !!receiptData?.transaction_details?.is_langganan ||
-    data.serviceName.toLowerCase() === 'langganan digital';
+    String(data.serviceName ?? '').toLowerCase() === 'langganan digital';
   const activationCode =
     (receiptData?.transaction_details?.activation_code as string | undefined) ||
     (isLanggananReceipt
@@ -381,7 +381,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const activationCopyValue = activationCode || activationUrl || '';
   const isVoucherInternetReceipt =
     !!receiptData?.transaction_details?.is_voucher_internet ||
-    data.serviceName.toLowerCase() === 'voucher internet';
+    String(data.serviceName ?? '').toLowerCase() === 'voucher internet';
   const voucherInternetCode =
     (receiptData?.transaction_details?.voucher_internet_code as string | undefined) ||
     (isVoucherInternetReceipt
@@ -1202,7 +1202,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
                       ) : null}
                       <div className="flex justify-between items-start gap-3 text-xs">
                         <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                          {receiptData.transaction_details?.pajak_jenis === 'samsat' || data.serviceName.toLowerCase() === 'samsat'
+                          {receiptData.transaction_details?.pajak_jenis === 'samsat' || String(data.serviceName ?? '').toLowerCase() === 'samsat'
                             ? 'Nomor Polisi'
                             : 'Nomor Objek Pajak'}
                         </span>

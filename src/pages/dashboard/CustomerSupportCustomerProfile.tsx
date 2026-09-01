@@ -177,8 +177,8 @@ export const CustomerSupportCustomerProfile: React.FC = () => {
     const now = new Date();
     return transactions.filter((trx) => {
       const matchSearch =
-        trx.invoiceNumber.toLowerCase().includes(searchInvoice.toLowerCase()) ||
-        trx.product.toLowerCase().includes(searchInvoice.toLowerCase());
+        String(trx.invoiceNumber ?? '').toLowerCase().includes(searchInvoice.toLowerCase()) ||
+        String(trx.product ?? '').toLowerCase().includes(searchInvoice.toLowerCase());
 
       const matchStatus = statusFilter === 'All' || trx.status === statusFilter;
       const matchCategory = categoryFilter === 'All' || trx.category === categoryFilter;

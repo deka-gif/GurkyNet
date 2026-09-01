@@ -60,7 +60,6 @@ import { useAuthStore } from '../store/auth.store';
 import { useWebsiteStore } from '../store/website.store';
 import { UserRole } from '../constants/auth';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
-import { NotificationToast } from '../components/notifications/NotificationToast';
 // @ts-ignore
 import { resolveMediaSrc } from '../utils/mediaUrl';
 import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
@@ -692,9 +691,6 @@ export const DashboardLayout = () => {
           </LazyRoute>
         </main>
       </div>
-
-      {/* Modern toast host — queued, auto-hide 15s, pause on hover */}
-      <NotificationToast />
 
       {/* ========================================================= */}
       {/* MOBILE BOTTOM NAVIGATION */}

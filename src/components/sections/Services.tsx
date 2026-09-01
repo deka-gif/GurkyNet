@@ -221,8 +221,8 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                     </h3>
                     <p className="text-xs text-gray-500 leading-relaxed">
                       {cat.preview?.name
-                        ? `${cat.preview.name} dan produk ${cat.name.toLowerCase()} lainnya.`
-                        : `Layanan transaksi digital otomatis untuk kebutuhan ${cat.name.toLowerCase()}.`}
+                        ? `${cat.preview.name} dan produk ${String(cat.name ?? '').toLowerCase()} lainnya.`
+                        : `Layanan transaksi digital otomatis untuk kebutuhan ${String(cat.name ?? '').toLowerCase()}.`}
                     </p>
                   </div>
 

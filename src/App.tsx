@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { router } from './router';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { NotificationToast } from './components/notifications/NotificationToast';
 import { useEffect } from 'react';
 import { useAuthStore } from './store/auth.store';
 
@@ -45,6 +46,7 @@ export default function App() {
         <AuthHydrator>
           <RouterProvider router={router} />
         </AuthHydrator>
+        <NotificationToast />
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
     </ErrorBoundary>

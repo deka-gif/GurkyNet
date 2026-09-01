@@ -41,7 +41,7 @@ export const NotifikasiPage = () => {
 
   // Map icons helper based on title or content keywords
   const renderNotifIcon = (title: string) => {
-    const text = title.toLowerCase();
+    const text = String(title || '').toLowerCase();
     if (text.includes('promo') || text.includes('diskon')) return <Gift className="w-5 h-5 text-amber-500" />;
     if (text.includes('transaksi') || text.includes('pembelian')) return <Smartphone className="w-5 h-5 text-indigo-500" />;
     if (text.includes('saldo') || text.includes('transfer')) return <Send className="w-5 h-5 text-emerald-500" />;
