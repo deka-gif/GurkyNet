@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useWebsiteStore } from '../../store/website.store';
+import { websiteService } from '../../services/website.service';
 import { Hero } from '../../components/sections/Hero';
 import { About } from '../../components/sections/About';
 import { Features } from '../../components/sections/Features';
@@ -109,9 +110,48 @@ export const HomePage = () => {
     settings,
   } = useWebsiteStore();
 
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+
   useEffect(() => {
     void fetchHomepage();
   }, [fetchHomepage]);
+
+  useEffect(() => {
+    websiteService
+      .getPublicAnnouncements({ per_page: 10 })
+      .then((res: any) => {
+        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res?.data?.data) ? res.data.data : [];
+        setAnnouncements(rows);
+      })
+      .catch(() => setAnnouncements([]));
+  }, []);
+
+  const announcementText = announcements
+    .map((a) => a.title || a.message || '')
+    .filter(Boolean)
+    .join('  •  ');
+
+  const showNoticeMarquee = announcementText.length > 0;
+
+  const marqueeDuration = useMemo(() => {
+    const len = Math.max(announcementText.length, 40);
+    const seconds = Math.min(90, Math.max(30, 22 + len * 0.12));
+    return `${seconds}s`;
+  }, [announcementText]);
+
+  const noticeMarquee = showNoticeMarquee ? (
+    <div
+      className="dashboard-notice-marquee"
+      style={{ '--marquee-duration': marqueeDuration } as CSSProperties}
+    >
+      <div className="dashboard-notice-marquee-track">
+        <span className="dashboard-notice-marquee-segment">{announcementText}  •  </span>
+        <span className="dashboard-notice-marquee-segment" aria-hidden="true">
+          {announcementText}  •  
+        </span>
+      </div>
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!homepageReady) return;
@@ -156,6 +196,7 @@ export const HomePage = () => {
   if (sections.length === 0) {
     return (
       <>
+        {noticeMarquee}
         <Hero />
         <About />
         <Features />
@@ -175,5 +216,10 @@ export const HomePage = () => {
     .filter((s) => s.visible && (s.status === undefined || s.status === 'active'))
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  return <>{activeSections.map((sec) => renderSection(sec))}</>;
+  return (
+    <>
+      {noticeMarquee}
+      {activeSections.map((sec) => renderSection(sec))}
+    </>
+  );
 };

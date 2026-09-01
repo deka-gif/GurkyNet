@@ -57,7 +57,9 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
             activeBanners.map((banner, index) => {
               const bgColors = ["bg-blue-50", "bg-purple-50", "bg-emerald-50", "bg-amber-50"];
               const bannerBg = bgColors[index % bgColors.length];
-              const bannerImg = getImageUrl(banner.image);
+              const desktopImg = getImageUrl(banner.image);
+              const mobileImgRaw = banner.mobileImage ? getImageUrl(banner.mobileImage) : '';
+              const mobileImg = mobileImgRaw || desktopImg;
 
               return (
                 <motion.div
@@ -94,14 +96,19 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
                     
                     {/* Body Elements */}
                     <div className="p-4 flex flex-col gap-4 flex-1">
-                      {bannerImg ? (
+                      {desktopImg ? (
                         <div className="w-full h-32 rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-white">
-                          <img 
-                            src={bannerImg} 
-                            alt={banner.title} 
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                          />
+                          <picture className="block w-full h-full">
+                            {mobileImgRaw ? (
+                              <source media="(max-width:767px)" srcSet={mobileImg} />
+                            ) : null}
+                            <img
+                              src={desktopImg}
+                              alt={banner.title}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                            />
+                          </picture>
                         </div>
                       ) : (
                         <div className="w-full h-24 bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-col justify-between">

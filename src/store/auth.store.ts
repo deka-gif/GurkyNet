@@ -285,12 +285,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
         set({ user: normalizedUser, loading: false });
       } else {
-        storageService.clear();
-        set({ user: null, token: null, loading: false });
+        // Non-success response yang BUKAN 401 sudah pernah ditangani secara global
+        // oleh apiClient response interceptor di services/api.ts (lihat baris
+        // 167-180 di sana), yang menghapus sesi HANYA saat status 401 (token
+        // benar-benar ditolak server) dan memicu event 'auth-unauthorized'.
+        // fetchUser() sendiri TIDAK BOLEH menghapus sesi lagi di sini — kalau
+        // dibiarkan, request yang gagal karena alasan lain (timeout, 5xx, request
+        // dibatalkan karena navigasi cepat) akan salah dianggap sebagai "sesi
+        // berakhir" dan diam-diam menghapus identitas user yang sebenarnya masih
+        // valid. Cukup hentikan loading state, jangan sentuh session storage/state.
+        set({ loading: false });
       }
     } catch {
-      storageService.clear();
-      set({ user: null, token: null, loading: false });
+      // Sama seperti di atas: JANGAN hapus sesi di sini. Kalau request ini gagal
+      // karena token benar-benar invalid (401), interceptor di services/api.ts
+      // SUDAH menghapus sesi dan memicu 'auth-unauthorized' SEBELUM promise ini
+      // reject — jadi tidak perlu diulang di sini. Kalau gagal karena alasan lain
+      // (timeout/network/5xx/request dibatalkan), sesi yang masih valid harus
+      // tetap dibiarkan utuh, bukan dihapus diam-diam.
+      set({ loading: false });
     }
   },
 
