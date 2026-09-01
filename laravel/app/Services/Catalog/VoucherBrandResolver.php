@@ -34,6 +34,8 @@ class VoucherBrandResolver
         'razer gold' => 'Razer Gold',
         'steam wallet' => 'Steam Wallet',
         'steam' => 'Steam Wallet',
+        'psn' => 'PlayStation Network',
+        'itunes' => 'ITUNES',
     ];
 
     /**
