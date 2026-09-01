@@ -45,4 +45,19 @@ class IdentityVerificationGate
             throw ValidationException::withMessages($errors);
         }
     }
+
+    /**
+     * FR-KYC-01 purchase path — respects TransactionFeatureGate::purchaseKycRequired().
+     *
+     * @throws ValidationException
+     */
+    public function assertTier1RequiredForPurchase(User $user): void
+    {
+        $gate = app(\App\Support\Features\TransactionFeatureGate::class);
+        if (! $gate->purchaseKycRequired()) {
+            return;
+        }
+
+        $this->assertTier1($user);
+    }
 }

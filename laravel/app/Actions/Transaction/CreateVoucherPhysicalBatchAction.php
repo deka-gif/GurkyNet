@@ -48,7 +48,7 @@ class CreateVoucherPhysicalBatchAction
         string $pin,
         ?string $idempotencyKey = null
     ): VoucherPhysicalBatch {
-        app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1($user);
+        app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1RequiredForPurchase($user);
 
         $gate = app(\App\Support\Features\TransactionFeatureGate::class);
         if (! $gate->purchaseEnabled()) {

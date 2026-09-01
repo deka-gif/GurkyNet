@@ -12,6 +12,12 @@ class TransactionFeatureGate
         return (bool) config('features.purchase_enabled', false);
     }
 
+    /** FR-KYC-01 — Tier 1 prerequisite for wallet purchase (toggle without removing KYC system). */
+    public function purchaseKycRequired(): bool
+    {
+        return (bool) config('features.purchase_kyc_required', true);
+    }
+
     public function withdrawEnabled(): bool
     {
         return (bool) config('features.withdraw_enabled', false);

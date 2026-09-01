@@ -232,7 +232,7 @@ class Sprint12SecurityKycTest extends TestCase
 
     public function test_10_unverified_phone_blocked_from_transaction(): void
     {
-        config(['features.purchase_enabled' => true]);
+        config(['features.purchase_enabled' => true, 'features.purchase_kyc_required' => true]);
         $user = $this->makeEndUser('t1-phone@gurkynet.test', '081812200013', [
             'phone_verified_at' => null,
             'email_verified_at' => now(),
@@ -251,7 +251,7 @@ class Sprint12SecurityKycTest extends TestCase
 
     public function test_11_unverified_email_blocked_from_transaction(): void
     {
-        config(['features.purchase_enabled' => true]);
+        config(['features.purchase_enabled' => true, 'features.purchase_kyc_required' => true]);
         $user = $this->makeEndUser('t1-email@gurkynet.test', '081812200014', [
             'phone_verified_at' => now(),
             'email_verified_at' => null,
@@ -286,6 +286,31 @@ class Sprint12SecurityKycTest extends TestCase
         $this->assertArrayNotHasKey('phone', $errors);
         $this->assertArrayNotHasKey('email', $errors);
         $this->assertTrue(isset($errors['sku_code']) || str_contains(strtolower((string) $res->json('message')), 'aktif') || isset($errors['sku_code']));
+    }
+
+    public function test_purchase_skips_tier1_when_kyc_requirement_disabled(): void
+    {
+        config([
+            'features.purchase_enabled' => true,
+            'features.purchase_kyc_required' => false,
+        ]);
+        $user = $this->makeEndUser('t1-skip@gurkynet.test', '081812200016', [
+            'phone_verified_at' => null,
+            'email_verified_at' => null,
+        ]);
+        Wallet::create(['user_id' => $user->id, 'wallet_number' => '104812200016', 'balance' => 100000, 'status' => 'active']);
+
+        Sanctum::actingAs($user);
+        $res = $this->postJson('/api/v1/transactions', [
+            'sku_code' => 'S12-PULSA',
+            'target_number' => '081234567890',
+            'pin' => '123456',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertStatus(422);
+
+        $errors = $res->json('errors') ?? [];
+        $this->assertArrayNotHasKey('phone', $errors);
+        $this->assertArrayNotHasKey('email', $errors);
     }
 
     // ——— KYC Tier 2 ———

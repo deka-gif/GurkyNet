@@ -76,8 +76,8 @@ class CreateTransactionAction
         ?string $idempotencyKey = null,
         array $options = []
     ): Transaction {
-        // FR-KYC-01 / SRS Bagian 21 — Tier 1 before identity-gated transactions.
-        app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1($user);
+        // FR-KYC-01 / SRS Bagian 21 — Tier 1 before identity-gated transactions (configurable).
+        app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1RequiredForPurchase($user);
 
         // Sprint 8 / .cursorrules #8 — public purchase disabled until explicit go-live.
         $gate = app(\App\Support\Features\TransactionFeatureGate::class);
