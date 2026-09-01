@@ -32,9 +32,14 @@ export const customerSupportService = {
     return res.data;
   },
 
-  async updateTicket(id: string | number, data: Record<string, any>) {
-    const res = await apiClient.put<ApiResponse<any>>(`/admin/customer-support/tickets/${id}`, data);
+  async updateTicket(id: string | number, data: { status: string; assigned_to?: number | null }) {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/customer-support/tickets/${id}/status`, data);
     return res.data;
+  },
+
+  async getStaffOptions(): Promise<{ id: number; name: string }[]> {
+    const res = await apiClient.get<ApiResponse<{ id: number; name: string }[]>>('/admin/customer-support/staff');
+    return (res.data as any)?.data ?? [];
   },
 
   async replyTicket(id: string | number, message: string | Record<string, any>) {

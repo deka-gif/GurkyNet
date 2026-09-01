@@ -563,6 +563,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::prefix('admin/customer-support')->middleware([EnsureRole::class . ':customer_support,owner', EnsureOwnerReadOnly::class])->group(function () {
             Route::get('/dashboard', [CustomerSupportController::class, 'dashboard']);
             Route::get('/stats', [CustomerSupportController::class, 'stats']);
+            Route::get('/staff', [CustomerSupportController::class, 'staffOptions']);
             Route::get('/hub-stats', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'hubStats']);
             Route::get('/inbox', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'index']);
             Route::get('/inbox/{id}', [\App\Http\Controllers\Api\v1\Admin\SupportInboxController::class, 'show']);

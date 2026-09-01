@@ -21,6 +21,7 @@ import {
 
 import { useCustomerSupportStore } from '../../store/customerSupport.store';
 import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
+import { customerSupportService } from '../../services/customerSupport.service';
 
 export interface TicketData {
   id: string;
@@ -69,8 +70,9 @@ export const CustomerSupportTickets: React.FC = () => {
   const [statusTicketModal, setStatusTicketModal] = useState<any | null>(null);
   const [createTicketModalOpen, setCreateTicketModalOpen] = useState(false);
 
-  const [selectedStaff, setSelectedStaff] = useState<string>('CS Budi');
   const [selectedStatus, setSelectedStatus] = useState<string>('Open');
+  const [staffOptions, setStaffOptions] = useState<{ id: number; name: string }[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<number | ''>('');
 
   // New Ticket Form State
   const [newTicketForm, setNewTicketForm] = useState({
@@ -88,6 +90,10 @@ export const CustomerSupportTickets: React.FC = () => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  useEffect(() => {
+    customerSupportService.getStaffOptions().then(setStaffOptions).catch(() => setStaffOptions([]));
+  }, []);
 
   useEffect(() => {
     fetchTickets({
@@ -220,12 +226,13 @@ export const CustomerSupportTickets: React.FC = () => {
   // Action Handlers
   const handleAssignSubmit = async () => {
     if (!assignTicket) return;
+    const staffName = staffOptions.find((s) => s.id === selectedStaffId)?.name ?? 'Unassigned';
     const res = await updateTicket(assignTicket.id, {
-      assignedTo: selectedStaff,
-      assigned_to: selectedStaff
+      status: assignTicket.status,
+      assigned_to: selectedStaffId === '' ? null : selectedStaffId
     });
     if (res.success) {
-      showToast(`Tiket ${assignTicket.id} berhasil ditugaskan ke ${selectedStaff}`);
+      showToast(`Tiket ${assignTicket.id} berhasil ditugaskan ke ${staffName}`);
       fetchTickets();
     } else {
       showToast(res.message || 'Gagal memperbarui penugasan.');
@@ -683,7 +690,15 @@ export const CustomerSupportTickets: React.FC = () => {
                             <button
                               onClick={() => {
                                 setAssignTicket(t);
-                                setSelectedStaff(t.assignedTo === 'Unassigned' ? 'CS Budi' : t.assignedTo);
+                                const assignedName = t.assignedTo;
+                                const match = staffOptions.find((s) => s.name === assignedName);
+                                setSelectedStaffId(
+                                  assignedName === 'Unassigned' || !assignedName
+                                    ? ''
+                                    : match
+                                      ? match.id
+                                      : ''
+                                );
                               }}
                               title="Assign Staff"
                               className="p-1.5 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -885,14 +900,14 @@ export const CustomerSupportTickets: React.FC = () => {
             </div>
 
             <select
-              value={selectedStaff}
-              onChange={(e) => setSelectedStaff(e.target.value)}
+              value={selectedStaffId}
+              onChange={(e) => setSelectedStaffId(e.target.value === '' ? '' : Number(e.target.value))}
               className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
-              <option value="CS Budi">CS Budi (Layanan Pulsa & PLN)</option>
-              <option value="CS Ani">CS Ani (Transfer & Akun)</option>
-              <option value="CS Doni">CS Doni (Tagihan & Voucher)</option>
-              <option value="Unassigned">Unassigned (Lepas Penugasan)</option>
+              <option value="">Unassigned (Lepas Penugasan)</option>
+              {staffOptions.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
             </select>
 
             <div className="flex items-center gap-2 pt-2">

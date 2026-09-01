@@ -18,6 +18,8 @@ use App\Http\Resources\SupportTicketResource;
 use App\Http\Resources\TicketReplyResource;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\TransactionResource;
+use App\Enums\UserRole;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -44,6 +46,21 @@ class CustomerSupportController extends Controller
     {
         $data = $action->execute();
         return $this->successResponse('Statistik customer support berhasil dimuat.', $data);
+    }
+
+    /**
+     * Get CS Staff Options (for ticket assignment dropdown).
+     * GET /api/v1/admin/customer-support/staff
+     */
+    public function staffOptions(): JsonResponse
+    {
+        $staff = User::query()
+            ->where('role', UserRole::CUSTOMER_SUPPORT->value)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name]);
+
+        return $this->successResponse('Daftar staff CS berhasil dimuat.', $staff);
     }
 
     /**

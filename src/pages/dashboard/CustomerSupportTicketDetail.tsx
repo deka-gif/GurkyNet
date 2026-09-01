@@ -20,6 +20,7 @@ import {
 
 import { useCustomerSupportStore } from '../../store/customerSupport.store';
 import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
+import { customerSupportService } from '../../services/customerSupport.service';
 
 interface TimelineItem {
   id: string;
@@ -49,6 +50,10 @@ export const CustomerSupportTicketDetail: React.FC = () => {
       fetchTicketById(id);
     }
   }, [id, fetchTicketById]);
+
+  useEffect(() => {
+    customerSupportService.getStaffOptions().then(setStaffOptions).catch(() => setStaffOptions([]));
+  }, []);
 
   // Normalized values from real ticket detail API
   const currentTicket = selectedTicket || {};
@@ -118,9 +123,22 @@ export const CustomerSupportTicketDetail: React.FC = () => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
-  const [selectedStaffOption, setSelectedStaffOption] = useState(assignedStaff);
+  const [staffOptions, setStaffOptions] = useState<{ id: number; name: string }[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<number | ''>('');
   const [selectedStatusOption, setSelectedStatusOption] = useState(status);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const openAssignModal = () => {
+    const match = staffOptions.find((s) => s.name === assignedStaff);
+    setSelectedStaffId(
+      assignedStaff === 'Unassigned' || !assignedStaff
+        ? ''
+        : match
+          ? match.id
+          : ''
+    );
+    setShowAssignModal(true);
+  };
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -129,11 +147,12 @@ export const CustomerSupportTicketDetail: React.FC = () => {
 
   // Action Handlers — each performs the real API call, then re-fetches the ticket
   const handleAssignSubmit = async () => {
+    const staffName = staffOptions.find((s) => s.id === selectedStaffId)?.name ?? 'Unassigned';
     if (id) {
-      await updateTicket(id, { assignedTo: selectedStaffOption });
+      await updateTicket(id, { status, assigned_to: selectedStaffId === '' ? null : selectedStaffId });
       await fetchTicketById(id);
     }
-    triggerToast(`Tiket berhasil ditugaskan ke ${selectedStaffOption}`);
+    triggerToast(`Tiket berhasil ditugaskan ke ${staffName}`);
     setShowAssignModal(false);
   };
 
@@ -257,7 +276,7 @@ export const CustomerSupportTicketDetail: React.FC = () => {
           {!isOwnerReadOnly && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowAssignModal(true)}
+                onClick={openAssignModal}
                 className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-medium transition"
               >
                 Assign Staff
@@ -402,7 +421,7 @@ export const CustomerSupportTicketDetail: React.FC = () => {
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Action Panel</h2>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 <button
-                  onClick={() => setShowAssignModal(true)}
+                  onClick={openAssignModal}
                   className="flex items-center justify-center gap-1.5 p-2.5 bg-gray-50 hover:bg-indigo-50 text-indigo-700 border border-gray-200 hover:border-indigo-200 rounded-xl text-xs font-semibold transition"
                 >
                   <UserCheck className="w-4 h-4" />
@@ -571,14 +590,17 @@ export const CustomerSupportTicketDetail: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="text-xs text-gray-600">Masukkan nama staff Customer Support penanggung jawab:</div>
-            <input
-              type="text"
-              value={selectedStaffOption === 'Unassigned' ? '' : selectedStaffOption}
-              onChange={(e) => setSelectedStaffOption(e.target.value || 'Unassigned')}
-              placeholder="Nama petugas CS..."
+            <div className="text-xs text-gray-600">Pilih staff Customer Support penanggung jawab:</div>
+            <select
+              value={selectedStaffId}
+              onChange={(e) => setSelectedStaffId(e.target.value === '' ? '' : Number(e.target.value))}
               className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none"
-            />
+            >
+              <option value="">Unassigned (Lepas Penugasan)</option>
+              {staffOptions.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowAssignModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium">Batal</button>
               <button onClick={handleAssignSubmit} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold">Simpan</button>

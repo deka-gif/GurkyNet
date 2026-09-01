@@ -86,7 +86,7 @@ export interface CustomerSupportState {
   fetchTickets: (params?: Record<string, any>) => Promise<void>;
   fetchTicketById: (id: string | number) => Promise<any>;
   createTicket: (data: Record<string, any>) => Promise<{ success: boolean; message?: string; errors?: any; data?: any }>;
-  updateTicket: (id: string | number, data: Record<string, any>) => Promise<{ success: boolean; message?: string; errors?: any }>;
+  updateTicket: (id: string | number, data: { status: string; assigned_to?: number | null }) => Promise<{ success: boolean; message?: string; errors?: any }>;
   replyTicket: (id: string | number, message: string | Record<string, any>) => Promise<{ success: boolean; message?: string; errors?: any }>;
 
   fetchCustomers: (params?: Record<string, any>) => Promise<void>;
