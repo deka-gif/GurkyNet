@@ -116,6 +116,24 @@ export const DashboardLayout = () => {
     void fetchNotifications();
   });
 
+  // SRS 8.1 — staff Sanctum tokens idle-timeout after 30 minutes (TokenPolicy.php), slid
+  // forward on every authenticated request by RenewTokenExpiration. The notification poll
+  // above (useSoftRefresh) already keeps that alive while this tab is visible, but it
+  // deliberately PAUSES while the tab is hidden — so a staff member who backgrounds a
+  // division tab for >30 minutes has their token silently expire server-side, and the next
+  // request after returning gets a genuine 401, forcing a full logout ("berubah menjadi
+  // User/Ghost"). This heartbeat keeps running regardless of tab visibility, staff-only, so
+  // RenewTokenExpiration gets a chance to renew the token before it can expire.
+  useEffect(() => {
+    if (!authUser?.id || userRole === 'User') return;
+
+    const interval = window.setInterval(() => {
+      void useAuthStore.getState().fetchUser();
+    }, RefreshPolicy.staffSessionKeepAlive);
+
+    return () => window.clearInterval(interval);
+  }, [authUser?.id, userRole]);
+
   // Redirect if session is cleared manually
   useEffect(() => {
     const token = storageService.getToken();

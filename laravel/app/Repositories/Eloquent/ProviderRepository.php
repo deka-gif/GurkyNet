@@ -162,6 +162,13 @@ class ProviderRepository implements ProviderRepositoryInterface
                     }
                 }
             }
+            if ($mapped['slug'] === 'voucher-digital') {
+                $canonical = app(\App\Services\Catalog\VoucherBrandResolver::class)
+                    ->resolve($providerName, (string) ($dp['product_name'] ?? ''));
+                if ($canonical !== null) {
+                    $providerName = $canonical;
+                }
+            }
 
             $provider = Provider::withTrashed()->firstOrNew(['name' => $providerName]);
             if ($provider->trashed()) {

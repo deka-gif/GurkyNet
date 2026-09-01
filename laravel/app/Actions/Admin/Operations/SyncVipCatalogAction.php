@@ -842,6 +842,13 @@ class SyncVipCatalogAction
             }
         }
 
+        if ($categorySlug === 'voucher-digital') {
+            $canonical = app(\App\Services\Catalog\VoucherBrandResolver::class)->resolve($name, $productName);
+            if ($canonical !== null) {
+                $name = $canonical;
+            }
+        }
+
         $operator = Provider::withTrashed()->firstOrNew(['name' => $name]);
         if ($operator->trashed()) {
             $operator->restore();

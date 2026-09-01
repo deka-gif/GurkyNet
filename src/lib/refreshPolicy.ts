@@ -21,6 +21,15 @@ export const RefreshPolicy = {
   realtimeFloor: 3_000,
   providerBalance: 600_000,
   settlement: 60_000,
+  /**
+   * SRS 8.1 — staff Sanctum tokens idle-timeout after 30 min
+   * (TokenPolicy::STAFF_IDLE_TIMEOUT_MINUTES). DashboardLayout's staff-only
+   * keep-alive heartbeat (runs regardless of tab visibility) uses this interval
+   * to call fetchUser() so RenewTokenExpiration can slide the token forward
+   * before it can expire while a division tab is backgrounded. Must stay
+   * safely under 30 minutes.
+   */
+  staffSessionKeepAlive: 600_000,
 } as const;
 
 export type RefreshSurface = keyof typeof RefreshPolicy;

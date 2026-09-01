@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { NotificationToast } from './components/notifications/NotificationToast';
 import { useEffect } from 'react';
 import { useAuthStore } from './store/auth.store';
+import { toastWarning } from './hooks/useToast';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,7 @@ function AuthHydrator({ children }: { children: React.ReactNode }) {
     
     const handleUnauthorized = () => {
       logout();
+      toastWarning('Sesi berakhir', 'Sesi Anda telah berakhir karena tidak aktif. Silakan login kembali.');
     };
 
     window.addEventListener('auth-unauthorized', handleUnauthorized);
