@@ -88,11 +88,20 @@ class ProductMappingService
             return $direct;
         }
 
+        $aliasMap = config('gurky_catalog.filter_aliases', []);
+
+        // A slug that is itself a defined family key is ALREADY canonical — resolve it
+        // immediately, before scanning any other family's alias list. Without this guard,
+        // a broad "catch-all" filter family (e.g. 'bpjs' listing both 'bpjs-kesehatan' and
+        // 'bpjs-tk' as aliases so a generic `category=bpjs` filter matches both) can hijack
+        // a real category's own canonical slug if that family happens to be enumerated
+        // earlier in the config array than the slug's own family entry.
+        if (array_key_exists($slug, $aliasMap)) {
+            return $slug;
+        }
+
         // Reverse-lookup filter aliases (e.g. prepaid → pulsa, e-money → topup-digital)
-        foreach (config('gurky_catalog.filter_aliases', []) as $family => $aliases) {
-            if ($family === $slug) {
-                return (string) $family;
-            }
+        foreach ($aliasMap as $family => $aliases) {
             foreach ($aliases as $alias) {
                 if (Str::lower((string) $alias) === $slug) {
                     return (string) $family;
