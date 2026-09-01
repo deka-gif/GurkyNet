@@ -564,16 +564,18 @@ export const DashboardLayout = () => {
           {/* Right Block: Actions & Profile */}
           <div className="flex items-center gap-3.5 md:gap-5">
             
-            {/* Header Mini Wallet Balance Indicator */}
-            <div className="hidden md:flex items-center gap-2.5 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2">
-              <div className="w-7 h-7 rounded-lg bg-primary-100 flex items-center justify-center text-primary-600 shrink-0">
-                <Wallet className="w-4 h-4" />
+            {/* Header Mini Wallet Balance Indicator — hanya untuk akun Customer/User, bukan staff internal */}
+            {userRole === 'User' && (
+              <div className="hidden md:flex items-center gap-2.5 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2">
+                <div className="w-7 h-7 rounded-lg bg-primary-100 flex items-center justify-center text-primary-600 shrink-0">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <div className="text-[10px] text-gray-400 font-bold leading-none uppercase tracking-wider">Saldo Anda</div>
+                  <div className="text-xs font-extrabold text-gray-800 mt-0.5">{wallet ? formatIDR(wallet.balance) : 'Loading...'}</div>
+                </div>
               </div>
-              <div className="text-left">
-                <div className="text-[10px] text-gray-400 font-bold leading-none uppercase tracking-wider">Saldo Anda</div>
-                <div className="text-xs font-extrabold text-gray-800 mt-0.5">{wallet ? formatIDR(wallet.balance) : 'Loading...'}</div>
-              </div>
-            </div>
+            )}
 
             {/* Notification Badge Button */}
             <div className="relative">

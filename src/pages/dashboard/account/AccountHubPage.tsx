@@ -39,6 +39,7 @@ type MenuGroup = {
 
 export const AccountHubPage: React.FC = () => {
   const { user, fetchUser } = useAuth();
+  const isInternalStaff = (user?.role || 'User') !== 'User';
   const { wallet, fetchWallet } = useWalletStore();
   const [copied, setCopied] = useState(false);
   const [loyaltySummary, setLoyaltySummary] = useState<{ points_balance?: number } | null>(null);
@@ -53,6 +54,7 @@ export const AccountHubPage: React.FC = () => {
   }, [fetchUser, fetchWallet]);
 
   useEffect(() => {
+    if (isInternalStaff) return;
     void (async () => {
       try {
         const data = await loyaltyService.getSummary();
@@ -61,9 +63,10 @@ export const AccountHubPage: React.FC = () => {
         setLoyaltySummary(null);
       }
     })();
-  }, []);
+  }, [isInternalStaff]);
 
   useEffect(() => {
+    if (isInternalStaff) return;
     void (async () => {
       try {
         const data = await referralService.getSummary();
@@ -72,7 +75,7 @@ export const AccountHubPage: React.FC = () => {
         setReferralSummary(null);
       }
     })();
-  }, []);
+  }, [isInternalStaff]);
 
   const walletNo = user?.wallet?.wallet_number || user?.wallet?.walletNo || wallet?.walletNo || '—';
   const balance = user?.wallet?.balance ?? wallet?.balance ?? 0;
@@ -87,8 +90,72 @@ export const AccountHubPage: React.FC = () => {
   const referralFriends =
     (referralSummary?.level_1_count ?? 0) + (referralSummary?.level_2_count ?? 0);
 
-  const menuGroups: MenuGroup[] = useMemo(
-    () => [
+  const menuGroups: MenuGroup[] = useMemo(() => {
+    if (isInternalStaff) {
+      return [
+        {
+          title: 'Profil & Keamanan',
+          items: [
+            {
+              to: '/dashboard/account/settings',
+              icon: Settings,
+              label: 'Pengaturan Akun',
+              desc: 'Semua pengaturan di satu tempat',
+              iconClass: 'bg-sky-100 text-sky-600',
+            },
+            {
+              to: '/dashboard/account/security',
+              icon: Shield,
+              label: 'Keamanan',
+              desc: 'Transaction PIN, sesi & riwayat login',
+              iconClass: 'bg-sky-100 text-sky-600',
+            },
+          ],
+        },
+        {
+          title: 'Bantuan & Legal',
+          items: [
+            {
+              to: '/dashboard/account/help',
+              icon: HelpCircle,
+              label: 'Help Center',
+              desc: 'FAQ & kontak support',
+              iconClass: 'bg-sky-100 text-sky-600',
+            },
+            {
+              to: '/dashboard/account/complaints',
+              icon: MessageSquareWarning,
+              label: 'Complaint Center',
+              desc: 'Buat & lacak tiket',
+              iconClass: 'bg-rose-100 text-rose-600',
+            },
+            {
+              to: '/dashboard/account/privacy',
+              icon: FileText,
+              label: 'Privacy Policy',
+              desc: 'Kebijakan privasi',
+              iconClass: 'bg-gray-100 text-gray-500',
+            },
+            {
+              to: '/dashboard/account/terms',
+              icon: ScrollText,
+              label: 'Terms & Conditions',
+              desc: 'Syarat & ketentuan',
+              iconClass: 'bg-gray-100 text-gray-500',
+            },
+            {
+              to: '/dashboard/account/about',
+              icon: Info,
+              label: 'About',
+              desc: 'Versi & informasi aplikasi',
+              iconClass: 'bg-gray-100 text-gray-500',
+            },
+          ],
+        },
+      ];
+    }
+
+    return [
       {
         title: 'Profil & Keamanan',
         items: [
@@ -210,16 +277,21 @@ export const AccountHubPage: React.FC = () => {
           },
         ],
       },
-    ],
-    [balance, loyaltySummary, referralSummary, referralFriends]
-  );
+    ];
+  }, [isInternalStaff, balance, loyaltySummary, referralSummary, referralFriends]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Akun</p>
-        <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">User Account Center</h1>
-        <p className="text-sm text-gray-500 mt-1">Pusat profil, keamanan, wallet, dan bantuan.</p>
+        <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+          {isInternalStaff ? 'Staff Account Center' : 'User Account Center'}
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {isInternalStaff
+            ? 'Pusat profil, keamanan, dan bantuan.'
+            : 'Pusat profil, keamanan, wallet, dan bantuan.'}
+        </p>
       </div>
 
       <div className="dashboard-balance-card rounded-3xl p-6 text-white">
@@ -257,26 +329,28 @@ export const AccountHubPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-3">
-            <p className="text-[10px] font-bold uppercase text-primary-100">Wallet Number</p>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-sm font-extrabold font-mono truncate">{walletNo}</p>
-              <button
-                type="button"
-                onClick={copyWallet}
-                className="p-1 rounded-lg hover:bg-white/10 border border-transparent hover:border-white/20"
-              >
-                <Copy className="w-3.5 h-3.5 text-primary-100" />
-              </button>
-              {copied && <span className="text-[10px] font-bold text-emerald-200">Copied</span>}
+        {!isInternalStaff && (
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-3">
+              <p className="text-[10px] font-bold uppercase text-primary-100">Wallet Number</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm font-extrabold font-mono truncate">{walletNo}</p>
+                <button
+                  type="button"
+                  onClick={copyWallet}
+                  className="p-1 rounded-lg hover:bg-white/10 border border-transparent hover:border-white/20"
+                >
+                  <Copy className="w-3.5 h-3.5 text-primary-100" />
+                </button>
+                {copied && <span className="text-[10px] font-bold text-emerald-200">Copied</span>}
+              </div>
+            </div>
+            <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-3">
+              <p className="text-[10px] font-bold uppercase text-primary-100">Saldo GurkyPay</p>
+              <p className="text-sm font-extrabold mt-1">{formatIdr(Number(balance))}</p>
             </div>
           </div>
-          <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-3">
-            <p className="text-[10px] font-bold uppercase text-primary-100">Saldo GurkyPay</p>
-            <p className="text-sm font-extrabold mt-1">{formatIdr(Number(balance))}</p>
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="space-y-5">
