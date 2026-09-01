@@ -103,7 +103,7 @@ export function ProviderCatalogFlow({
   const isLanggananMode = inquiryMode === 'langganan';
   /** No customer inquiry — summary popup then PIN (voucher only). */
   const isSummaryCheckoutMode = isVoucherMode;
-  const { wallet, fetchWallet } = useWalletStore();
+  const { wallet, fetchWallet, syncAuthoritativeBalance } = useWalletStore();
   const {
     products,
     loading: productsLoading,
@@ -1172,16 +1172,11 @@ export function ProviderCatalogFlow({
             setCheckoutData(null);
             setResumePin(false);
           }}
-          onSuccess={(trx) => {
-            showFlowSuccess(
-              trx?.invoice_number
-                ? `Transaksi berhasil. Invoice ${trx.invoice_number}.`
-                : 'Transaksi berhasil diproses.'
-            );
+          onSuccess={() => {
             setCheckoutData(null);
             setResumePin(false);
             setSelectedProduct(null);
-            fetchWallet();
+            void syncAuthoritativeBalance();
           }}
         />
       )}

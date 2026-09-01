@@ -4,7 +4,9 @@ import { Notification } from '../types';
 import { useTransactionStore } from './transaction.store';
 import { useWalletStore } from './wallet.store';
 import { enqueueNotificationToast } from '../utils/notificationToast';
-import { CacheTTL, cachedFetch, getCachedStale } from '../utils/queryCache';
+import { CacheTTL, cachedFetch, getCachedStale, invalidateCache } from '../utils/queryCache';
+
+let notificationsHydrated = false;
 
 interface NotificationState {
   notifications: Notification[];
@@ -86,6 +88,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
       const unread = list.filter((n: any) => !n.isRead && !n.is_read).length;
       const prevUnread = get().unreadCount;
+      const prevIds = new Set(get().notifications.map((n) => String(n.id)));
       const hasSettlement = list.some(looksLikeSettlementNotification);
 
       set({
@@ -95,13 +98,20 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         lastFetchedAt: Date.now(),
       });
 
-      for (const n of list) {
-        enqueueNotificationToast(n as any);
+      // Only surface popups for genuinely new notifications — never re-toast the full unread backlog.
+      if (notificationsHydrated) {
+        const fresh = list.filter((n) => !prevIds.has(String(n.id)));
+        for (const n of fresh) {
+          enqueueNotificationToast(n as any);
+        }
+      } else {
+        notificationsHydrated = true;
       }
 
       if (hasSettlement || unread > prevUnread) {
+        invalidateCache('transactions:list');
         void useTransactionStore.getState().fetchTransactions();
-        void useWalletStore.getState().fetchWallet();
+        void useWalletStore.getState().syncAuthoritativeBalance();
       }
     } catch (err: any) {
       if (get().notifications.length === 0) {

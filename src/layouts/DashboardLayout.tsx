@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { LazyRoute } from '../components/ui/LazyRoute';
 import { LazyImage } from '../components/ui/LazyImage';
@@ -76,7 +76,7 @@ export const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { wallet, fetchWallet } = useWalletStore();
+  const { wallet, fetchWallet, applyRealtimeBalance, syncAuthoritativeBalance } = useWalletStore();
   const { settings, fetchSettings } = useWebsiteStore();
   useCmsLiveSync(true);
 
@@ -101,19 +101,37 @@ export const DashboardLayout = () => {
     fetchSettings();
   }, [fetchWallet, fetchNotifications, fetchSettings]);
 
+  const getToken = useCallback(() => storageService.getToken(), []);
+  const walletChannel = authUser?.id ? [`wallet.${authUser.id}`] : [];
+
+  useRealtimeChannel(
+    !!authUser?.id,
+    walletChannel,
+    (evt) => {
+      if (evt.event !== 'balance_updated') return;
+      const bal = Number(evt.payload?.balance);
+      if (Number.isFinite(bal)) {
+        applyRealtimeBalance(bal);
+      }
+      void syncAuthoritativeBalance();
+    },
+    getToken,
+    RefreshPolicy.walletBalance
+  );
+
   const notificationChannel = authUser?.id ? [`user.notifications.${authUser.id}`] : [];
   useRealtimeChannel(
     !!authUser?.id,
     notificationChannel,
     () => {
-      void fetchNotifications();
+      void fetchNotifications({ force: true });
     },
     () => storageService.getToken(),
     RefreshPolicy.notification
   );
 
   useSoftRefresh(!!authUser?.id, RefreshPolicy.notification * 6, () => {
-    void fetchNotifications();
+    void fetchNotifications({ force: true });
   });
 
   // SRS 8.1 — staff Sanctum tokens idle-timeout after 30 minutes (TokenPolicy.php), slid

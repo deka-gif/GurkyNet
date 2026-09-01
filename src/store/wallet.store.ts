@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { walletService } from '../services/wallet/wallet.service';
 import { Wallet, WalletOverviewSummary, WalletLedgerEntry } from '../types';
 import { CacheTTL, cachedFetch, getCachedStale, invalidateCache } from '../utils/queryCache';
+import { useAuthStore } from './auth.store';
 
 interface WalletState {
   wallet: Wallet | null;
@@ -11,6 +12,11 @@ interface WalletState {
   error: string | null;
   /** Sprint 11 — force=true bypasses 10-minute cache after settlement. */
   fetchWallet: (opts?: { force?: boolean }) => Promise<void>;
+  /**
+   * Authoritative balance sync after wallet mutations (purchase, refund, transfer).
+   * Always bypasses cache and mirrors balance into auth.user.wallet for header consumers.
+   */
+  syncAuthoritativeBalance: () => Promise<void>;
   fetchHistory: (params?: Record<string, any>) => Promise<void>;
   updateWallet: (data: Partial<Wallet>) => Promise<boolean>;
   /** Apply balance from SSE balance_updated (notification only; then force-sync). */
@@ -148,6 +154,30 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({
       wallet: { ...current, balance: next },
     });
+    const user = useAuthStore.getState().user;
+    if (user?.wallet) {
+      useAuthStore.getState().patchUser({
+        wallet: { ...user.wallet, balance: next },
+      });
+    }
+  },
+
+  syncAuthoritativeBalance: async () => {
+    invalidateCache('wallet:overview');
+    await get().fetchWallet({ force: true });
+    const w = get().wallet;
+    const user = useAuthStore.getState().user;
+    if (w && user) {
+      useAuthStore.getState().patchUser({
+        wallet: {
+          ...(user.wallet || {}),
+          id: user.wallet?.id ?? w.id,
+          balance: w.balance,
+          walletNo: user.wallet?.walletNo ?? w.walletNo,
+          currency: user.wallet?.currency ?? w.currency,
+        },
+      });
+    }
   },
 
   fetchHistory: async (params) => {
@@ -219,7 +249,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const response = await walletService.transfer(recipient_wallet_number, amount, pin, idempotencyKey);
       if (response.success && response.data) {
         set({ loading: false });
-        await get().fetchWallet();
+        await get().syncAuthoritativeBalance();
         return response.data;
       } else {
         set({ error: response.message, loading: false });
@@ -237,7 +267,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const response = await walletService.withdraw({ ...payload, idempotency_key: idempotencyKey });
       if (response.success && response.data) {
         set({ loading: false });
-        await get().fetchWallet();
+        await get().syncAuthoritativeBalance();
         return response.data;
       }
       set({ error: response.message, loading: false });
@@ -269,12 +299,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   addBalance: async (_amount: number) => {
-    await get().fetchWallet();
+    await get().syncAuthoritativeBalance();
     return true;
   },
 
   deductBalance: async (_amount: number) => {
-    await get().fetchWallet();
+    await get().syncAuthoritativeBalance();
     return true;
   },
 }));

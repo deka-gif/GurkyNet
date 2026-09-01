@@ -53,7 +53,7 @@ interface CheckoutSummaryProps {
 type CheckoutStep = 'SUMMARY' | 'CONFIRM' | 'PIN' | 'LOADING' | 'RESULT';
 
 export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose, onSuccess, initialStep = 'SUMMARY' }) => {
-  const { wallet, deductBalance, fetchWallet } = useWalletStore();
+  const { wallet, syncAuthoritativeBalance } = useWalletStore();
   const { createTransaction, fetchTransactions, upsertTransaction } = useTransactionStore();
   const { user, fetchUser } = useAuth();
   const { fetchNotifications } = useNotificationStore();
@@ -121,9 +121,9 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
       // ignore receipt race while still pending
     }
 
-    fetchWallet();
+    void syncAuthoritativeBalance();
     void fetchTransactions();
-    void fetchNotifications();
+    void fetchNotifications({ force: true });
   };
 
   /** Poll backend until VIP status sync settles SUCCESS/FAILED (aligned with 60s timeout ladder). */
@@ -257,7 +257,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
       if (onSuccess) {
         onSuccess(trx);
       }
-      fetchWallet();
+      void syncAuthoritativeBalance();
       submittingRef.current = false;
       idempotencyKeyRef.current = null;
       return;

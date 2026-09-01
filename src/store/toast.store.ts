@@ -34,7 +34,7 @@ const DEDUPE_WINDOW_MS = 3_000;
 const recentFingerprints: { fp: string; at: number }[] = [];
 
 export function defaultToastDurationMs(_type: ToastType): number {
-  return 8_000;
+  return 5_000;
 }
 
 export function toastFingerprint(title: string, description?: string): string {
