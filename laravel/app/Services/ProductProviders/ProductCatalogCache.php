@@ -53,4 +53,9 @@ class ProductCatalogCache
     {
         return 'products_active_all_v'.self::version();
     }
+
+    public static function providerSummaryKey(string $category): string
+    {
+        return 'products_provider_summary_v'.self::version().'_'.md5($category);
+    }
 }

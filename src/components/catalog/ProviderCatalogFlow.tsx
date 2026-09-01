@@ -753,9 +753,13 @@ export function ProviderCatalogFlow({
           </div>
 
           {categoryProvidersLoading ? (
-            <div className="py-16 text-center space-y-2">
-              <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
-              <p className="text-xs text-gray-400 font-bold">Memuat katalog dari server...</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="p-4 rounded-3xl border border-gray-100 bg-white animate-pulse space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 mx-auto" />
+                  <div className="h-3 bg-gray-100 rounded w-3/4 mx-auto" />
+                </div>
+              ))}
             </div>
           ) : filteredProviders.length === 0 ? (
             <div className="py-16 text-center border border-dashed border-gray-200 rounded-2xl">
@@ -907,9 +911,13 @@ export function ProviderCatalogFlow({
                           : 'Daftar Produk'}
                   </h5>
                   {productsLoading && providerProducts.length === 0 ? (
-                    <div className="py-16 text-center space-y-2">
-                      <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
-                      <p className="text-xs text-gray-400 font-bold">Memuat produk...</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="p-4 rounded-2xl border border-gray-100 bg-gray-50/80 animate-pulse space-y-3">
+                          <div className="h-4 bg-gray-200 rounded w-2/3" />
+                          <div className="h-5 bg-gray-200 rounded w-1/3" />
+                        </div>
+                      ))}
                     </div>
                   ) : providerProducts.length === 0 ? (
                     <div className="py-10 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">

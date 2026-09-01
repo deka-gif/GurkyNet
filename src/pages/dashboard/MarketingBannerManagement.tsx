@@ -658,8 +658,8 @@ export const MarketingBannerManagement: React.FC = () => {
           {previewMode === 'desktop' && (
             <div className="w-full max-w-4xl space-y-3">
               <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between">
-                <span>[ Desktop Header Banner Carousel - Aspect Ratio 4.57:1 / Ultra-wide ]</span>
-                <span className="text-pink-400 font-bold">Resolution: 1920 x 420 px</span>
+                <span>[ Desktop Header Banner Carousel - Aspect Ratio 3.2:1 ]</span>
+                <span className="text-pink-400 font-bold">Resolution: 1920 x 600 px</span>
               </div>
               <div className="w-full rounded-2xl p-8 bg-gradient-to-r from-purple-900 via-pink-900 to-rose-950 border border-pink-500/30 shadow-2xl relative overflow-hidden space-y-4">
                 <span className="px-3 py-1 rounded-full text-[10px] font-black bg-pink-500/30 text-pink-200 border border-pink-400/40 inline-block uppercase">
@@ -958,7 +958,7 @@ export const MarketingBannerManagement: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[9px] font-extrabold text-gray-500 uppercase tracking-wider">Banner Image</label>
-                    <p className="text-[9px] text-gray-400 -mt-0.5">Rekomendasi: 1920 × 420 px (rasio ultra-wide)</p>
+                    <p className="text-[9px] text-gray-400 -mt-0.5">Rekomendasi: 1920 × 600 px</p>
                     {formState.image_url ? (
                       <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
                         <img
@@ -1009,7 +1009,7 @@ export const MarketingBannerManagement: React.FC = () => {
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-extrabold text-gray-500 uppercase tracking-wider">Mobile Banner Image</label>
-                    <p className="text-[9px] text-gray-400 -mt-0.5">Rekomendasi: 750 × 350 px</p>
+                    <p className="text-[9px] text-gray-400 -mt-0.5">Rekomendasi: 1080 × 1200 px (potret)</p>
                     {formState.mobile_image_url ? (
                       <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
                         <img

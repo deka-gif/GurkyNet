@@ -150,7 +150,7 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
 
   return (
     <div
-      className="relative h-[168px] max-h-[300px] w-full overflow-hidden bg-slate-100 aspect-[16/7] sm:h-[200px] lg:aspect-auto lg:h-[280px]"
+      className="relative w-full overflow-hidden bg-slate-100 aspect-[1080/1200] max-h-[480px] lg:aspect-auto lg:h-[280px] lg:max-h-none"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={onTouchStart}

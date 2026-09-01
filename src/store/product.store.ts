@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { productService, ProductFilters, CategoryProviderSummary } from '../services/product/product.service';
 import { Product, Pagination } from '../types';
+import { cachedFetch, CacheTTL } from '../utils/queryCache';
+
+let categoryProvidersRequestSeq = 0;
+let productsRequestSeq = 0;
 
 interface ProductState {
   products: Product[];
@@ -32,15 +36,24 @@ export const useProductStore = create<ProductState>((set, get) => ({
   error: null,
 
   fetchCategoryProviders: async (category) => {
+    const requestId = ++categoryProvidersRequestSeq;
     set({ categoryProvidersLoading: true, error: null });
     try {
-      const response = await productService.getCategoryProviders(category);
-      if (response.success) {
-        set({ categoryProviders: response.data, categoryProvidersLoading: false });
-      } else {
-        set({ categoryProviders: [], error: response.message, categoryProvidersLoading: false });
-      }
+      const data = await cachedFetch<CategoryProviderSummary[]>({
+        key: `products:providers:${category}`,
+        ttlMs: CacheTTL.CATEGORY,
+        fetcher: async () => {
+          const response = await productService.getCategoryProviders(category);
+          if (!response.success) {
+            throw new Error(response.message || 'Gagal memuat daftar provider.');
+          }
+          return response.data;
+        },
+      });
+      if (categoryProvidersRequestSeq !== requestId) return;
+      set({ categoryProviders: data, categoryProvidersLoading: false });
     } catch (err: any) {
+      if (categoryProvidersRequestSeq !== requestId) return;
       set({
         categoryProviders: [],
         error: err.message || 'Gagal memuat daftar provider.',
@@ -50,15 +63,24 @@ export const useProductStore = create<ProductState>((set, get) => ({
   },
 
   fetchProducts: async (filters) => {
+    const requestId = ++productsRequestSeq;
     set({ loading: true, error: null });
     try {
-      const response = await productService.getProducts(filters);
-      if (response.success) {
-        set({ products: response.data, pagination: response.pagination || null, loading: false });
-      } else {
-        set({ error: response.message, loading: false });
-      }
+      const data = await cachedFetch<{ items: Product[]; pagination: Pagination | null }>({
+        key: `products:list:${JSON.stringify(filters || {})}`,
+        ttlMs: CacheTTL.PRODUCTS,
+        fetcher: async () => {
+          const response = await productService.getProducts(filters);
+          if (!response.success) {
+            throw new Error(response.message || 'Gagal memuat daftar produk.');
+          }
+          return { items: response.data, pagination: response.pagination || null };
+        },
+      });
+      if (productsRequestSeq !== requestId) return;
+      set({ products: data.items, pagination: data.pagination, loading: false });
     } catch (err: any) {
+      if (productsRequestSeq !== requestId) return;
       set({ error: err.message || 'Gagal memuat daftar produk.', loading: false });
     }
   },

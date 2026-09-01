@@ -178,7 +178,7 @@ export const MediaChooserModal = ({
                           onSelect(resolveMediaUrl(media.url), media);
                           onClose();
                         }}
-                        className={`group relative aspect-square border-2 rounded-2xl overflow-hidden bg-gray-50 text-left transition-all outline-none ${isSelected ? 'border-primary-500 ring-4 ring-primary-500/10 scale-[0.98]' : 'border-gray-200 hover:border-gray-300'}`}
+                        className={`group relative aspect-square border-2 rounded-2xl overflow-hidden bg-[length:16px_16px] bg-[position:0_0,8px_8px] [background-image:linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] text-left transition-all outline-none ${isSelected ? 'border-primary-500 ring-4 ring-primary-500/10 scale-[0.98]' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <img
                           src={resolveMediaUrl(media.url)}
@@ -275,7 +275,7 @@ export const MediaChooserModal = ({
                 <div className="space-y-4">
                   <h4 className="font-extrabold text-xs text-gray-900 uppercase tracking-wider">Detail Terpilih</h4>
                   
-                  <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border border-gray-200">
+                  <div className="aspect-video bg-[length:16px_16px] bg-[position:0_0,8px_8px] [background-image:linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] rounded-xl overflow-hidden border border-gray-200">
                     <img
                       src={selectedItem.url}
                       alt={selectedItem.altText}

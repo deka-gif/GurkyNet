@@ -35,6 +35,8 @@ export function TransactionDetailPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [receiptCode, setReceiptCode] = useState<{ label: string; code: string; url?: string | null } | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const fromStore = useMemo(() => {
     return (
@@ -85,6 +87,37 @@ export function TransactionDetailPage() {
 
   const tx = fromStore || remote;
 
+  useEffect(() => {
+    if (!tx) {
+      setReceiptCode(null);
+      return;
+    }
+    let cancelled = false;
+    const key = tx.id || tx.invoice_number || tx.transactionCode;
+    if (!key) return;
+    transactionService
+      .getReceipt(String(key))
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        const d = res.data.transaction_details || {};
+        if (d.voucher_code) {
+          setReceiptCode({ label: 'Kode Voucher', code: d.voucher_code, url: d.voucher_url });
+        } else if (d.activation_code) {
+          setReceiptCode({ label: 'Kode Aktivasi', code: d.activation_code, url: d.activation_url });
+        } else if (d.voucher_internet_code) {
+          setReceiptCode({ label: 'Kode Voucher Internet', code: d.voucher_internet_code, url: d.voucher_internet_url });
+        } else {
+          setReceiptCode(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setReceiptCode(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tx]);
+
   const copyInvoice = async () => {
     const code = tx?.transactionCode || tx?.invoice_number || '';
     if (!code) return;
@@ -92,6 +125,17 @@ export function TransactionDetailPage() {
       await navigator.clipboard.writeText(code);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
+  const copyReceiptCode = async () => {
+    if (!receiptCode) return;
+    try {
+      await navigator.clipboard.writeText(receiptCode.code);
+      setCopiedCode(true);
+      window.setTimeout(() => setCopiedCode(false), 2000);
     } catch {
       // ignore
     }
@@ -197,6 +241,27 @@ export function TransactionDetailPage() {
             <Row label="Total Bayar" value={formatIDR(tx.totalPayment)} bold />
           ) : null}
           {tx.paymentMethod ? <Row label="Metode" value={String(tx.paymentMethod)} /> : null}
+          {receiptCode && (
+            <div className="rounded-2xl border border-primary-100 bg-primary-50/50 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-primary-700 font-bold">{receiptCode.label}</span>
+                <button
+                  type="button"
+                  onClick={() => void copyReceiptCode()}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-primary-700 border border-primary-200 hover:bg-primary-100"
+                >
+                  {copiedCode ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                  {copiedCode ? 'Tersalin' : 'Salin'}
+                </button>
+              </div>
+              <p className="font-mono text-sm font-black text-slate-900 break-all">{receiptCode.code}</p>
+              {receiptCode.url && (
+                <a href={receiptCode.url} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-primary-600 underline break-all block">
+                  Buka Link Voucher
+                </a>
+              )}
+            </div>
+          )}
           {tx.notes || tx.note ? (
             <Row label="Catatan" value={String(tx.notes || tx.note)} />
           ) : null}

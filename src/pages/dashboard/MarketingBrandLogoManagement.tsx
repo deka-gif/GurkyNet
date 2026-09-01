@@ -401,7 +401,7 @@ export const MarketingBrandLogoManagement: React.FC = () => {
           {selectedHub !== 'lainnya' && currentHubIcons && (
             <>
               <div className="rounded-2xl border border-gray-100 bg-white p-5 flex flex-col sm:flex-row items-center gap-4">
-                <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-gray-50 border border-gray-100">
+                <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-[length:16px_16px] bg-[position:0_0,8px_8px] [background-image:linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] border border-gray-100">
                   {renderIconPreview(
                     currentHubIcons.hubIconPath,
                     hubMeta(selectedHub)?.icon ?? LayoutGrid,
@@ -452,7 +452,7 @@ export const MarketingBrandLogoManagement: React.FC = () => {
                           key={child.key}
                           className="rounded-2xl border border-gray-100 bg-white p-4 flex flex-col items-center gap-2"
                         >
-                          <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-gray-50">
+                          <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-[length:16px_16px] bg-[position:0_0,8px_8px] [background-image:linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)]">
                             {renderIconPreview(child.iconPath, FallbackIcon, child.label, 'w-10 h-10')}
                           </div>
                           <span className="text-[11px] font-extrabold text-gray-900 text-center">

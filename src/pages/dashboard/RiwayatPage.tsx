@@ -45,6 +45,7 @@ export const RiwayatPage = () => {
 
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [receiptCode, setReceiptCode] = useState<{ label: string; code: string; url?: string | null } | null>(null);
 
   useEffect(() => {
     console.log('HISTORY RENDER — mount fetch');
@@ -103,6 +104,37 @@ export const RiwayatPage = () => {
       setSelectedTx(fresh);
     }
   }, [transactions, selectedTx]);
+
+  useEffect(() => {
+    if (!selectedTx) {
+      setReceiptCode(null);
+      return;
+    }
+    let cancelled = false;
+    const key = selectedTx.id || selectedTx.invoice_number || selectedTx.transactionCode;
+    if (!key) return;
+    transactionService
+      .getReceipt(String(key))
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        const d = res.data.transaction_details || {};
+        if (d.voucher_code) {
+          setReceiptCode({ label: 'Kode Voucher', code: d.voucher_code, url: d.voucher_url });
+        } else if (d.activation_code) {
+          setReceiptCode({ label: 'Kode Aktivasi', code: d.activation_code, url: d.activation_url });
+        } else if (d.voucher_internet_code) {
+          setReceiptCode({ label: 'Kode Voucher Internet', code: d.voucher_internet_code, url: d.voucher_internet_url });
+        } else {
+          setReceiptCode(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setReceiptCode(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTx]);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -460,6 +492,33 @@ export const RiwayatPage = () => {
                       {transactionStatusLabel(selectedTx.status)}
                     </span>
                   </div>
+
+                  {receiptCode && (
+                    <div className="border-t border-gray-50 pt-3 flex flex-col gap-2">
+                      <span className="text-[10px] text-gray-400 uppercase">{receiptCode.label}</span>
+                      <div className="flex items-center gap-2">
+                        <p className="flex-1 text-gray-900 text-sm leading-relaxed break-all bg-primary-50/50 p-3 rounded-2xl border border-primary-100 font-mono font-black tracking-wide">
+                          {receiptCode.code}
+                        </p>
+                        <button
+                          onClick={() => handleCopyCode(receiptCode.code)}
+                          className="p-3 rounded-2xl border border-primary-100 bg-primary-50 hover:bg-primary-100 text-primary-700 transition-all shrink-0"
+                        >
+                          {copiedId === receiptCode.code ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {receiptCode.url && (
+                        <a
+                          href={receiptCode.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-bold text-primary-600 underline break-all"
+                        >
+                          Buka Link Voucher
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   <div className="border-t border-gray-50 pt-3 flex flex-col gap-1">
                     <span className="text-[10px] text-gray-400 uppercase">Keterangan / Serial Number</span>
