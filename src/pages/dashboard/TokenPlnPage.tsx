@@ -336,7 +336,6 @@ export const TokenPlnPage = () => {
             setInquiry(null);
             setInquiredFor(null);
             setSelectedProduct(null);
-            setCheckoutData(null);
             setResumePin(false);
             fetchWallet();
           }}

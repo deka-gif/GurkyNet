@@ -418,7 +418,6 @@ export const VoucherInternetPage = () => {
             setResumePin(false);
           }}
           onSuccess={() => {
-            setCheckoutData(null);
             setResumePin(false);
             fetchWallet();
             setSuccessMsg('Transaksi voucher internet berhasil.');

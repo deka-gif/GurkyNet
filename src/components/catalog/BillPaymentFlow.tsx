@@ -437,7 +437,6 @@ export function BillPaymentFlow({
               setResumePin(false);
             }}
             onSuccess={(trx) => {
-              setCheckoutData(null);
               setResumePin(false);
               setSuccessMsg(
                 `Tagihan ${trx?.invoice_number || ''} diproses. Cek struk digital di riwayat transaksi.`

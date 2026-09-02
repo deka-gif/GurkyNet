@@ -299,7 +299,6 @@ export const VoucherElektronikZonaPage = () => {
             setResumePin(false);
           }}
           onSuccess={(trx: any) => {
-            setCheckoutData(null);
             setResumePin(false);
             fetchWallet();
             const code = trx?.notes || trx?.note || trx?.sn || trx?.serial_number || trx?.transactionCode || null;

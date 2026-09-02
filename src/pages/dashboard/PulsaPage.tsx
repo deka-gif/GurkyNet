@@ -302,7 +302,6 @@ export const PulsaPage = () => {
           onSuccess={() => {
             setPhoneNo('');
             setSelectedProduct(null);
-            setCheckoutData(null);
             setResumePin(false);
           }}
         />

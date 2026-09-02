@@ -433,7 +433,6 @@ export const PaketDataPage = () => {
             setSuccessMsg('Pembelian paket data berhasil diproses.');
             setSelectedProduct(null);
             setShowCheckoutPanel(false);
-            setCheckoutData(null);
             setResumePin(false);
             fetchWallet();
           }}

@@ -257,7 +257,6 @@ export const VoucherPage = () => {
             setResumePin(false);
           }}
           onSuccess={() => {
-            setCheckoutData(null);
             setResumePin(false);
           }}
         />
