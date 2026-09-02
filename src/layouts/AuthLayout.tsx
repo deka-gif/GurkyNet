@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle, Shield } from 'lucide-react';
+import { CheckCircle, Shield, Smartphone, Zap, Wifi, Wallet } from 'lucide-react';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
 import { useWebsiteStore } from '../store/website.store';
 import { resolveMediaSrc } from '../utils/mediaUrl';
@@ -11,6 +11,13 @@ const TRUST_POINTS = [
   'Keamanan Enkripsi Tingkat Tinggi',
   'Proses Transaksi Real-time',
   'Layanan Customer Support 24/7',
+] as const;
+
+const SERVICE_BADGES = [
+  { icon: Smartphone, label: 'Pulsa' },
+  { icon: Zap, label: 'Token PLN' },
+  { icon: Wifi, label: 'Paket Data' },
+  { icon: Wallet, label: 'E-Wallet' },
 ] as const;
 
 export const AuthLayout = () => {
@@ -68,10 +75,18 @@ export const AuthLayout = () => {
       </header>
 
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 md:p-8">
-        <div className="w-full max-w-5xl bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-primary-900/10 border border-white ring-1 ring-primary-100/60 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-0 lg:min-h-[580px]">
+        <div className="w-full max-w-5xl bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl shadow-primary-900/10 shadow-[0_25px_70px_-20px_rgba(15,106,77,0.35)] border border-white ring-1 ring-primary-100/60 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-0 lg:min-h-[580px]">
 
           {/* Desktop branding panel */}
           <div className="hidden lg:flex lg:col-span-5 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950 p-10 text-white flex-col justify-between relative overflow-hidden">
+            <div
+              className="absolute inset-0 opacity-40 pointer-events-none"
+              style={{
+                backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+              }}
+              aria-hidden
+            />
             <div className="brand-glow-primary -top-16 -left-16 w-64 h-64 opacity-50" />
             <div className="brand-glow-accent -bottom-16 -right-16 w-56 h-56 opacity-40" />
             {logoSrc && (
@@ -100,6 +115,18 @@ export const AuthLayout = () => {
                   <span>{point}</span>
                 </div>
               ))}
+
+              <div className="grid grid-cols-2 gap-2.5 pt-2">
+                {SERVICE_BADGES.map(({ icon: Icon, label }) => (
+                  <div
+                    key={label}
+                    className="bg-white/10 border border-white/15 rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-semibold text-primary-100"
+                  >
+                    <Icon className="w-4 h-4 text-accent-400 shrink-0" />
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="relative z-10 text-xs text-primary-300/80">

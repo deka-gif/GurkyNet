@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { profileService } from '../../../services/profile/profile.service';
 import { AccountShell, AccountCard } from './AccountShell';
+import { PinInput } from '../../../components/auth/PinInput';
 
 type Mode = 'create' | 'change' | 'forgot';
 
@@ -112,7 +113,8 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
         <form onSubmit={submit} className="space-y-3">
           {mode === 'change' && (
             <>
-              <input inputMode="numeric" maxLength={6} placeholder="PIN lama" value={oldPin} onChange={(e) => setOldPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold tracking-widest" required />
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">PIN Lama</label>
+              <PinInput value={oldPin} onChange={setOldPin} disabled={busy} />
               {step === 'request' && (
                 <div className="text-right -mt-1">
                   <Link to={`/dashboard/account/pin/forgot?returnTo=${encodeURIComponent(returnTo)}`} className="text-xs font-bold text-primary-700 underline underline-offset-2">
@@ -133,8 +135,10 @@ export const AccountPinPage: React.FC<{ mode: Mode }> = ({ mode }) => {
               </div>
             </>
           )}
-          <input inputMode="numeric" maxLength={6} placeholder="PIN baru (6 digit)" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold tracking-widest" required />
-          <input inputMode="numeric" maxLength={6} placeholder="Konfirmasi PIN baru" value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold tracking-widest" required />
+          <label className="block text-xs font-bold text-gray-700 mb-1.5">PIN Baru (6 digit)</label>
+          <PinInput value={pin} onChange={setPin} disabled={busy} error={!!err} />
+          <label className="block text-xs font-bold text-gray-700 mb-1.5">Konfirmasi PIN Baru</label>
+          <PinInput value={confirm} onChange={setConfirm} disabled={busy} error={!!err} />
           <button disabled={busy || pin.length !== 6} type="submit" className="w-full px-4 py-2.5 rounded-xl bg-primary-600 text-white text-sm font-bold hover:bg-primary-700 disabled:opacity-50">
             Simpan PIN
           </button>

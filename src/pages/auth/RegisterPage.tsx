@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, KeyRound, Ticket, MessageCircle } from 'lucide-react';
+import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, Ticket, MessageCircle } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
@@ -11,6 +11,7 @@ import { getRedirectPathForRole } from '../../constants/auth';
 import { Button } from '../../components/ui/Button';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import { AuthDivider, GoogleAuthButton } from '../../components/auth/GoogleAuthButton';
+import { PinInput } from '../../components/auth/PinInput';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Nama lengkap minimal 3 karakter').max(255, 'Nama lengkap maksimal 255 karakter'),
@@ -325,13 +326,13 @@ export const RegisterPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4" /> Kembali ke Verifikasi OTP
           </button>
           <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-700">Buat PIN transaksi 6 digit. Hindari PIN umum seperti <code className="text-primary-700 font-mono text-xs">123456</code>, <code className="text-primary-700 font-mono text-xs">111111</code>, atau pola berulang lain.</div>
-          <div className="auth-input-icon-wrap">
-            <div className="auth-input-icon"><KeyRound className="w-4 h-4" /></div>
-            <input inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="auth-input pl-10 tracking-[0.35em] font-black" placeholder="PIN baru" />
+          <div>
+            <label className="auth-label">PIN Baru</label>
+            <PinInput value={pin} onChange={setPin} disabled={busy} autoFocus />
           </div>
-          <div className="auth-input-icon-wrap">
-            <div className="auth-input-icon"><KeyRound className="w-4 h-4" /></div>
-            <input inputMode="numeric" maxLength={6} value={pinConfirmation} onChange={(e) => setPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))} className="auth-input pl-10 tracking-[0.35em] font-black" placeholder="Konfirmasi PIN" />
+          <div>
+            <label className="auth-label">Konfirmasi PIN</label>
+            <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} />
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />

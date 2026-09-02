@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Phone, KeyRound, Ticket } from 'lucide-react';
+import { Phone, Ticket } from 'lucide-react';
 import { authService } from '../../services/auth/auth.service';
 import { storageService } from '../../services/storage.service';
 import { useAuthStore } from '../../store/auth.store';
 import { getRedirectPathForRole } from '../../constants/auth';
 import { Button } from '../../components/ui/Button';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { PinInput } from '../../components/auth/PinInput';
 
 const weakPins = new Set(['123456', '111111', '121212', '112233', '987654', '654321']);
 
@@ -120,29 +121,13 @@ export const GoogleCompleteRegistrationPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="auth-input-icon-wrap">
-          <div className="auth-input-icon"><KeyRound className="w-4 h-4" /></div>
-          <input
-            inputMode="numeric"
-            maxLength={6}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="auth-input pl-10 tracking-[0.35em] font-black"
-            placeholder="PIN baru (6 digit)"
-            disabled={busy}
-          />
+        <div>
+          <label className="auth-label">PIN Baru</label>
+          <PinInput value={pin} onChange={setPin} disabled={busy} autoFocus />
         </div>
-        <div className="auth-input-icon-wrap">
-          <div className="auth-input-icon"><KeyRound className="w-4 h-4" /></div>
-          <input
-            inputMode="numeric"
-            maxLength={6}
-            value={pinConfirmation}
-            onChange={(e) => setPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="auth-input pl-10 tracking-[0.35em] font-black"
-            placeholder="Konfirmasi PIN"
-            disabled={busy}
-          />
+        <div>
+          <label className="auth-label">Konfirmasi PIN</label>
+          <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} />
         </div>
 
         {!showReferralField ? (
