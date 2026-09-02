@@ -2,12 +2,13 @@
 
 namespace App\Jobs;
 
-use App\Models\Transaction;
-use App\Models\MidtransTransaction;
-use App\Models\Wallet;
-use App\Models\PaymentHistory;
-use App\Models\WalletMutation;
 use App\Enums\TransactionStatus;
+use App\Models\MidtransTransaction;
+use App\Models\PaymentHistory;
+use App\Models\Transaction;
+use App\Models\Wallet;
+use App\Models\WalletMutation;
+use App\Services\Finance\Reconciliation\ReconciliationIncidentService;
 use App\Services\Wallet\WalletLedgerService;
 use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Bus\Queueable;
@@ -31,9 +32,6 @@ class ProcessMidtransCallback implements ShouldQueue
 
     public int $timeout = 60;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct(array $payload)
     {
         $this->payload = $payload;
@@ -45,39 +43,35 @@ class ProcessMidtransCallback implements ShouldQueue
      */
     public function handle(?WalletLedgerService $ledgerService = null): void
     {
-        $ledgerService ??= app(WalletLedgerService::class);        $orderId = $this->payload['order_id'] ?? null;
+        $ledgerService ??= app(WalletLedgerService::class);
+
+        $orderId = $this->payload['order_id'] ?? null;
         $midtransStatus = $this->payload['transaction_status'] ?? null;
         $paymentType = $this->payload['payment_type'] ?? null;
         $grossAmount = $this->payload['gross_amount'] ?? 0.00;
 
         if (!$orderId || !$midtransStatus) {
-            Log::error("ProcessMidtransCallback: Invalid payload structure", ['payload' => $this->payload]);
+            Log::error('ProcessMidtransCallback: Invalid payload structure', ['payload' => $this->payload]);
+
             return;
         }
 
-        Log::info("Processing Midtrans callback queue job", [
+        Log::info('Processing Midtrans callback queue job', [
             'order_id' => $orderId,
             'status' => $midtransStatus,
             'gross_amount' => $grossAmount,
         ]);
 
-        // Locate or create MidtransTransaction record for traceability
         $midtransTx = MidtransTransaction::where('order_id', $orderId)->first();
-
-        // If not found, look for general transaction by invoice number
-        $transaction = null;
-        if ($midtransTx) {
-            $transaction = $midtransTx->transaction;
-        } else {
-            $transaction = Transaction::where('invoice_number', $orderId)->first();
-        }
+        $transaction = $midtransTx?->transaction
+            ?? Transaction::where('invoice_number', $orderId)->first();
 
         if (!$transaction) {
             Log::warning("ProcessMidtransCallback: Transaction with invoice/order_id '{$orderId}' not found in database.");
+
             return;
         }
 
-        // Initialize midtrans_transactions table entry if it wasn't pre-populated
         if (!$midtransTx) {
             $midtransTx = MidtransTransaction::create([
                 'transaction_id' => $transaction->id,
@@ -88,7 +82,6 @@ class ProcessMidtransCallback implements ShouldQueue
                 'raw_notification' => $this->payload,
             ]);
         } else {
-            // Update tracking values
             $midtransTx->update([
                 'payment_type' => $paymentType,
                 'transaction_status' => $midtransStatus,
@@ -96,160 +89,394 @@ class ProcessMidtransCallback implements ShouldQueue
             ]);
         }
 
-        // REPLAY & IDEMPOTENCY PROTECTION
-        // If transaction is already marked successful, skip processing to prevent duplicate wallet credits
-        if (TransactionStatusMapper::isSuccess($transaction->status)) {
-            Log::info("ProcessMidtransCallback: Transaction '{$orderId}' is already successful. Skipping.", [
-                'transaction_id' => $transaction->id,
-            ]);
-            return;
-        }
-
-        // Map status
         $localStatus = $this->mapStatus($midtransStatus, $this->payload['fraud_status'] ?? null);
+        $isRefundSignal = in_array(strtolower((string) $midtransStatus), ['refund', 'partial_refund'], true);
 
-        DB::transaction(function () use ($transaction, $midtransTx, $localStatus, $midtransStatus, $grossAmount, $ledgerService) {
-            // Apply lock on the transaction to prevent concurrent updates
-            $transaction = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
-
-            // Double check inside lock
-            if (TransactionStatusMapper::isSuccess($transaction->status)) {
+        DB::transaction(function () use (
+            $transaction,
+            $midtransTx,
+            $localStatus,
+            $midtransStatus,
+            $grossAmount,
+            $ledgerService,
+            $isRefundSignal
+        ) {
+            /** @var Transaction|null $locked */
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+            if (!$locked) {
                 return;
             }
 
-            // Sprint 3 (SRS 16.5 / locked decision #8) — never blindly credit on a settlement
-            // signal without validating the webhook amount against the authoritative local
-            // amount (total_payment already includes admin fee, matching what TopUpWalletAction
-            // used to build the Midtrans checkout). Tolerance matches the rounding tolerance
-            // already used elsewhere in the repository (CreateTransactionAction pasca reconciliation).
+            $isTopUp = TransactionStatusMapper::isWalletTopUp($locked);
+            $alreadyCredited = $isTopUp && $this->topUpCreditExists($locked);
+
+            if ($isRefundSignal && $isTopUp) {
+                $this->processTopUpRefundSignal($locked, $midtransStatus);
+
+                return;
+            }
+
+            if ($alreadyCredited || TransactionStatusMapper::isSuccess($locked->status)) {
+                Log::info('ProcessMidtransCallback: settlement already applied — idempotent skip', [
+                    'transaction_id' => $locked->id,
+                    'invoice' => $locked->invoice_number,
+                    'already_credited' => $alreadyCredited,
+                ]);
+                $this->recordMidtransMetric($locked, $localStatus, $midtransStatus, $grossAmount);
+
+                return;
+            }
+
             if ($localStatus === TransactionStatus::SUCCESS->value) {
-                $expected = (float) $transaction->total_payment;
-                $received = (float) $grossAmount;
+                $this->processSettlement($locked, $midtransStatus, $grossAmount, $ledgerService, $isTopUp);
 
-                if (abs($received - $expected) > 0.01) {
-                    Log::critical('ProcessMidtransCallback: gross_amount mismatch — refusing to credit wallet', [
-                        'transaction_id' => $transaction->id,
-                        'invoice_number' => $transaction->invoice_number,
-                        'expected_total_payment' => $expected,
-                        'webhook_gross_amount' => $received,
-                    ]);
+                return;
+            }
 
-                    \App\Models\ActivityLog::create([
-                        'user_id' => $transaction->user_id,
-                        'activity' => 'MIDTRANS_AMOUNT_MISMATCH',
-                        'payload' => [
-                            'transaction_id' => $transaction->id,
-                            'invoice_number' => $transaction->invoice_number,
-                            'expected_total_payment' => $expected,
-                            'webhook_gross_amount' => $received,
-                            'midtrans_status' => $midtransStatus,
-                        ],
-                    ]);
+            if ($this->isTerminalLocalStatus($localStatus)) {
+                if (TransactionStatusMapper::isTerminalFailureRaw($locked->status)) {
+                    $this->recordMidtransMetric($locked, $localStatus, $midtransStatus, $grossAmount);
 
-                    // Leave the transaction in-flight (do not silently credit, do not mark
-                    // FAILED either — money may genuinely have arrived) so the existing
-                    // reconciliation/timeout ladder surfaces this for manual review.
                     return;
                 }
 
-                // If it is a wallet top-up, execute the wallet credit
-                if (strtolower($transaction->service_name) === 'top up saldo' || strtolower($transaction->service_name) === 'top up') {
-                    $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
-                    if ($wallet) {
-                        $wallet->balance += $transaction->amount;
-                        $wallet->save();
-
-                        $desc = 'Top Up Saldo - Invoice: ' . $transaction->invoice_number;
-                        // SRS 14.2 — dual-write via ledger (type=topup)
-                        $ledgerService->record(
-                            $wallet,
-                            WalletMutation::TYPE_TOPUP,
-                            (float) $transaction->amount,
-                            'credit',
-                            $desc,
-                            $transaction->id
-                        );
-
-                        Log::info("Wallet credited successfully from Midtrans Settlement", [
-                            'user_id' => $transaction->user_id,
-                            'amount' => $transaction->amount,
-                        ]);
-
-                        event(new \App\Events\WalletCredited($wallet, $transaction->amount, $desc, $transaction->id));
-                    }
-                }
-
-                $transaction->update([
-                    'status' => TransactionStatus::SUCCESS->value,
-                    'notes' => 'Pembayaran berhasil dikonfirmasi oleh Midtrans.',
-                ]);
-
-                PaymentHistory::recordFor(
-                    $transaction,
-                    'midtrans',
-                    $midtransStatus === 'capture' ? 'capture' : 'settlement',
-                    $this->payload,
-                    $this->payload,
-                    $transaction->invoice_number
-                );
-
-                event(new \App\Events\PaymentSettled($transaction, $this->payload));
-                event(new \App\Events\TransactionSuccess($transaction));
-
-            } elseif ($localStatus === TransactionStatus::FAILED->value || $localStatus === TransactionStatus::CANCELED->value || $localStatus === TransactionStatus::EXPIRED->value) {
-                $transaction->update([
+                $locked->update([
                     'status' => $localStatus,
                     'notes' => 'Transaksi dibatalkan atau kedaluwarsa dari Midtrans. Status: ' . $midtransStatus,
                 ]);
 
-                event(new \App\Events\TransactionFailed($transaction));
-            } else {
-                // Pending/Processing
-                $transaction->update([
+                event(new \App\Events\TransactionFailed($locked->fresh()));
+                $this->recordMidtransMetric($locked, $localStatus, $midtransStatus, $grossAmount);
+
+                return;
+            }
+
+            // Pending / challenge — never mark as payment_failed.
+            if (!TransactionStatusMapper::isSuccess($locked->status)
+                && !TransactionStatusMapper::isTerminalFailureRaw($locked->status)) {
+                $locked->update([
                     'status' => TransactionStatus::PROCESSING->value,
                     'notes' => 'Menunggu penyelesaian pembayaran di Midtrans.',
                 ]);
             }
 
-            // MONITORING & METRIC RECORDING
-            $settlementTime = now()->diffInSeconds($transaction->created_at);
-            
-            $callbackDelay = 0;
-            if (isset($this->payload['transaction_time'])) {
-                try {
-                    $txTime = \Carbon\Carbon::parse($this->payload['transaction_time']);
-                    $callbackDelay = now()->diffInSeconds($txTime);
-                } catch (\Exception $e) {
-                    $callbackDelay = 0;
-                }
-            }
+            $this->recordMidtransMetric($locked, $localStatus, $midtransStatus, $grossAmount);
+        });
+    }
 
-            $metricType = ($localStatus === TransactionStatus::SUCCESS->value) ? 'payment_success' : 'payment_failed';
+    protected function processSettlement(
+        Transaction $transaction,
+        string $midtransStatus,
+        mixed $grossAmount,
+        WalletLedgerService $ledgerService,
+        bool $isTopUp
+    ): void {
+        if (TransactionStatusMapper::isTerminalFailureRaw($transaction->status)) {
+            $this->recordLateSettlementOnTerminal($transaction, $midtransStatus, (float) $grossAmount);
 
-            // Save metrics to Activity Log
-            \App\Models\ActivityLog::create([
-                'user_id' => $transaction->user_id,
-                'activity' => 'midtrans_callback_metric',
-                'payload' => [
-                    'order_id' => $transaction->invoice_number,
-                    'metric_type' => $metricType,
-                    'local_status' => $localStatus,
-                    'midtrans_status' => $midtransStatus,
-                    'settlement_time_seconds' => $settlementTime,
-                    'callback_delay_seconds' => $callbackDelay,
-                    'gross_amount' => (float) $grossAmount,
-                ]
+            return;
+        }
+
+        $expected = (float) $transaction->total_payment;
+        $received = (float) $grossAmount;
+
+        if (abs($received - $expected) > 0.01) {
+            Log::critical('ProcessMidtransCallback: gross_amount mismatch — refusing to credit wallet', [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'expected_total_payment' => $expected,
+                'webhook_gross_amount' => $received,
             ]);
 
-            // Structured logging of metrics for easy analysis by log aggregators
-            Log::info("[METRIC] Midtrans Callback processed", [
-                'metric_type' => $metricType,
+            \App\Models\ActivityLog::create([
+                'user_id' => $transaction->user_id,
+                'activity' => 'MIDTRANS_AMOUNT_MISMATCH',
+                'payload' => [
+                    'transaction_id' => $transaction->id,
+                    'invoice_number' => $transaction->invoice_number,
+                    'expected_total_payment' => $expected,
+                    'webhook_gross_amount' => $received,
+                    'midtrans_status' => $midtransStatus,
+                ],
+            ]);
+
+            $this->recordMidtransMetric($transaction, TransactionStatus::PENDING->value, $midtransStatus, $grossAmount);
+
+            return;
+        }
+
+        if ($isTopUp) {
+            $wallet = Wallet::where('user_id', $transaction->user_id)->lockForUpdate()->first();
+            if (!$wallet) {
+                Log::critical('ProcessMidtransCallback: wallet missing — refusing SUCCESS without credit', [
+                    'transaction_id' => $transaction->id,
+                    'user_id' => $transaction->user_id,
+                ]);
+
+                throw new \RuntimeException('Wallet tidak ditemukan untuk Top Up Midtrans.');
+            }
+
+            if ($this->topUpCreditExists($transaction, (int) $wallet->id)) {
+                $this->recordMidtransMetric($transaction, TransactionStatus::SUCCESS->value, $midtransStatus, $grossAmount);
+
+                return;
+            }
+
+            $wallet->balance += (float) $transaction->amount;
+            $wallet->save();
+
+            $desc = 'Top Up Saldo - Invoice: ' . $transaction->invoice_number;
+            $ledgerService->record(
+                $wallet,
+                WalletMutation::TYPE_TOPUP,
+                (float) $transaction->amount,
+                'credit',
+                $desc,
+                $transaction->id
+            );
+
+            Log::info('Wallet credited successfully from Midtrans Settlement', [
+                'user_id' => $transaction->user_id,
+                'amount' => $transaction->amount,
+            ]);
+
+            event(new \App\Events\WalletCredited($wallet, (float) $transaction->amount, $desc, $transaction->id));
+        }
+
+        $transaction->update([
+            'status' => TransactionStatus::SUCCESS->value,
+            'notes' => 'Pembayaran berhasil dikonfirmasi oleh Midtrans.',
+        ]);
+
+        PaymentHistory::recordFor(
+            $transaction,
+            'midtrans',
+            $midtransStatus === 'capture' ? 'capture' : 'settlement',
+            $this->payload,
+            $this->payload,
+            $transaction->invoice_number
+        );
+
+        event(new \App\Events\PaymentSettled($transaction->fresh(), $this->payload));
+        event(new \App\Events\TransactionSuccess($transaction->fresh()));
+
+        $this->recordMidtransMetric($transaction, TransactionStatus::SUCCESS->value, $midtransStatus, $grossAmount);
+    }
+
+    protected function processTopUpRefundSignal(Transaction $transaction, string $midtransStatus): void
+    {
+        if ($this->topUpCreditExists($transaction)) {
+            Log::critical('ProcessMidtransCallback: Midtrans refund on credited Top Up — manual reconciliation required', [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'midtrans_status' => $midtransStatus,
+            ]);
+
+            \App\Models\ActivityLog::create([
+                'user_id' => $transaction->user_id,
+                'activity' => 'MIDTRANS_TOPUP_REFUND_REQUIRES_MANUAL',
+                'payload' => [
+                    'transaction_id' => $transaction->id,
+                    'invoice_number' => $transaction->invoice_number,
+                    'midtrans_status' => $midtransStatus,
+                    'message' => 'Top Up was credited locally; Midtrans refund requires manual financial review.',
+                ],
+            ]);
+
+            try {
+                app(ReconciliationIncidentService::class)->openOrRefresh([
+                    'fingerprint' => 'midtrans_topup_refund:'.$transaction->id,
+                    'type' => \App\Models\ReconciliationIncident::TYPE_MIDTRANS_SETTLEMENT,
+                    'source' => 'midtrans',
+                    'user_id' => $transaction->user_id,
+                    'expected_amount' => (float) $transaction->amount,
+                    'actual_amount' => 0,
+                    'variance' => (float) $transaction->amount,
+                    'threshold' => 0,
+                    'freeze_withdraw' => false,
+                    'restrict_purchase' => false,
+                    'system_wide_freeze' => false,
+                    'notes' => 'Midtrans refund/partial_refund on credited Top Up — manual reversal required.',
+                    'meta' => [
+                        'transaction_id' => $transaction->id,
+                        'invoice_number' => $transaction->invoice_number,
+                        'midtrans_status' => $midtransStatus,
+                    ],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('ProcessMidtransCallback: failed to open refund incident', [
+                    'transaction_id' => $transaction->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            $transaction->update([
+                'notes' => trim((string) $transaction->notes.' | Midtrans '.$midtransStatus.' — requires manual reconciliation.'),
+            ]);
+
+            $this->recordMidtransMetric($transaction, TransactionStatus::FAILED->value, $midtransStatus, $this->payload['gross_amount'] ?? 0);
+
+            return;
+        }
+
+        if (!TransactionStatusMapper::isTerminalFailureRaw($transaction->status)) {
+            $transaction->update([
+                'status' => TransactionStatus::FAILED->value,
+                'notes' => 'Pembayaran Top Up ditolak/direfund oleh Midtrans. Status: '.$midtransStatus,
+            ]);
+            event(new \App\Events\TransactionFailed($transaction->fresh()));
+        }
+
+        $this->recordMidtransMetric($transaction, TransactionStatus::FAILED->value, $midtransStatus, $this->payload['gross_amount'] ?? 0);
+    }
+
+    protected function recordLateSettlementOnTerminal(Transaction $transaction, string $midtransStatus, float $grossAmount): void
+    {
+        Log::critical('ProcessMidtransCallback: late settlement on terminal Top Up — refusing auto credit', [
+            'transaction_id' => $transaction->id,
+            'invoice_number' => $transaction->invoice_number,
+            'local_status' => $transaction->status,
+            'midtrans_status' => $midtransStatus,
+        ]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $transaction->user_id,
+            'activity' => 'MIDTRANS_LATE_SETTLEMENT_ON_TERMINAL',
+            'payload' => [
+                'transaction_id' => $transaction->id,
+                'invoice_number' => $transaction->invoice_number,
+                'local_status' => $transaction->status,
+                'midtrans_status' => $midtransStatus,
+                'gross_amount' => $grossAmount,
+            ],
+        ]);
+
+        try {
+            app(ReconciliationIncidentService::class)->openOrRefresh([
+                'fingerprint' => 'midtrans_late_settlement:'.$transaction->id,
+                'type' => \App\Models\ReconciliationIncident::TYPE_MIDTRANS_SETTLEMENT,
+                'source' => 'midtrans',
+                'user_id' => $transaction->user_id,
+                'expected_amount' => 0,
+                'actual_amount' => $grossAmount,
+                'variance' => $grossAmount,
+                'threshold' => 0,
+                'freeze_withdraw' => false,
+                'restrict_purchase' => false,
+                'system_wide_freeze' => false,
+                'notes' => 'Late Midtrans settlement received after local terminal failure state.',
+                'meta' => [
+                    'transaction_id' => $transaction->id,
+                    'invoice_number' => $transaction->invoice_number,
+                    'local_status' => $transaction->status,
+                    'midtrans_status' => $midtransStatus,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ProcessMidtransCallback: failed to open late-settlement incident', [
+                'transaction_id' => $transaction->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        $this->recordMidtransMetric($transaction, TransactionStatus::PENDING->value, $midtransStatus, $grossAmount);
+    }
+
+    protected function topUpCreditExists(Transaction $transaction, ?int $walletId = null): bool
+    {
+        $query = WalletMutation::query()
+            ->where('reference_id', (string) $transaction->id)
+            ->where('type', WalletMutation::TYPE_TOPUP);
+
+        if ($walletId !== null) {
+            $query->where('wallet_id', $walletId);
+        }
+
+        return $query->exists();
+    }
+
+    protected function isTerminalLocalStatus(string $localStatus): bool
+    {
+        return in_array($localStatus, [
+            TransactionStatus::FAILED->value,
+            TransactionStatus::CANCELED->value,
+            TransactionStatus::EXPIRED->value,
+        ], true);
+    }
+
+    protected function metricTypeFor(string $localStatus, string $midtransStatus): string
+    {
+        if ($localStatus === TransactionStatus::SUCCESS->value) {
+            return 'payment_success';
+        }
+
+        if (in_array($localStatus, [
+            TransactionStatus::PENDING->value,
+            TransactionStatus::PROCESSING->value,
+        ], true)) {
+            return 'payment_pending';
+        }
+
+        if ($localStatus === TransactionStatus::EXPIRED->value) {
+            return 'payment_expired';
+        }
+
+        if ($localStatus === TransactionStatus::CANCELED->value) {
+            return 'payment_canceled';
+        }
+
+        if ($localStatus === TransactionStatus::FAILED->value) {
+            return 'payment_failed';
+        }
+
+        if (in_array(strtolower($midtransStatus), ['pending', 'challenge'], true)) {
+            return 'payment_pending';
+        }
+
+        return 'payment_pending';
+    }
+
+    protected function recordMidtransMetric(
+        Transaction $transaction,
+        string $localStatus,
+        string $midtransStatus,
+        mixed $grossAmount
+    ): void {
+        $settlementTime = now()->diffInSeconds($transaction->created_at);
+
+        $callbackDelay = 0;
+        if (isset($this->payload['transaction_time'])) {
+            try {
+                $txTime = \Carbon\Carbon::parse($this->payload['transaction_time']);
+                $callbackDelay = now()->diffInSeconds($txTime);
+            } catch (\Exception $e) {
+                $callbackDelay = 0;
+            }
+        }
+
+        $metricType = $this->metricTypeFor($localStatus, $midtransStatus);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $transaction->user_id,
+            'activity' => 'midtrans_callback_metric',
+            'payload' => [
                 'order_id' => $transaction->invoice_number,
+                'metric_type' => $metricType,
+                'local_status' => $localStatus,
+                'midtrans_status' => $midtransStatus,
                 'settlement_time_seconds' => $settlementTime,
                 'callback_delay_seconds' => $callbackDelay,
                 'gross_amount' => (float) $grossAmount,
-            ]);
-        });
+            ],
+        ]);
+
+        Log::info('[METRIC] Midtrans Callback processed', [
+            'metric_type' => $metricType,
+            'order_id' => $transaction->invoice_number,
+            'settlement_time_seconds' => $settlementTime,
+            'callback_delay_seconds' => $callbackDelay,
+            'gross_amount' => (float) $grossAmount,
+        ]);
     }
 
     /**
@@ -266,7 +493,6 @@ class ProcessMidtransCallback implements ShouldQueue
                 if (strtolower((string) $fraudStatus) === 'accept') {
                     return TransactionStatus::SUCCESS->value;
                 }
-                // challenge / deny on capture — never SUCCESS (Sprint 11 / SRS 16)
                 if (strtolower((string) $fraudStatus) === 'deny') {
                     return TransactionStatus::FAILED->value;
                 }
@@ -278,7 +504,6 @@ class ProcessMidtransCallback implements ShouldQueue
             case 'pending':
                 return TransactionStatus::PENDING->value;
             case 'challenge':
-                // Explicit safe mapping: await fraud review, never credit.
                 return TransactionStatus::PENDING->value;
             case 'expire':
                 return TransactionStatus::EXPIRED->value;
@@ -286,7 +511,6 @@ class ProcessMidtransCallback implements ShouldQueue
                 return TransactionStatus::CANCELED->value;
             case 'deny':
             case 'failure':
-                // Explicit failure mapping — never SUCCESS.
                 return TransactionStatus::FAILED->value;
             case 'refund':
             case 'partial_refund':

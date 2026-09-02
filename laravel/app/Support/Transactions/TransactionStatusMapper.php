@@ -116,6 +116,22 @@ final class TransactionStatusMapper
     }
 
     /**
+     * Terminal failure states for Midtrans Top Up — late settlement must not auto-revive.
+     */
+    public static function isTerminalFailureRaw(?string $raw): bool
+    {
+        $value = strtolower(trim((string) $raw));
+
+        return in_array($value, [
+            TransactionStatus::FAILED->value,
+            TransactionStatus::EXPIRED->value,
+            TransactionStatus::CANCELED->value,
+            TransactionStatus::GAGAL->value,
+            'cancelled',
+        ], true);
+    }
+
+    /**
      * Values that mean "already settled successfully" for refund refusal / SUCCESS→REFUNDED.
      *
      * @return list<string>
