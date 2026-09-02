@@ -63,7 +63,12 @@ class AccountSecurityController extends Controller
             'email' => 'required|email',
         ]);
 
-        $user = User::query()->where('email', $data['email'])->firstOrFail();
+        $user = User::query()->where('email', $data['email'])->first();
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['Email tidak ditemukan di sistem kami.'],
+            ]);
+        }
         $otp = $this->otpService->issue($user->email, 'forgot_password', 'email', $user);
 
         return $this->successResponse('OTP reset password telah dikirim.', $this->otpPayload($otp));
@@ -77,7 +82,12 @@ class AccountSecurityController extends Controller
             'new_password' => 'required|string|min:8|confirmed',
         ]);
 
-        $user = User::query()->where('email', $data['email'])->firstOrFail();
+        $user = User::query()->where('email', $data['email'])->first();
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['Email tidak ditemukan di sistem kami.'],
+            ]);
+        }
         $this->otpService->verify($user->email, $data['otp_code'], 'forgot_password', 'email', $user->id);
 
         $user->forceFill(['password' => Hash::make($data['new_password'])])->save();
@@ -129,7 +139,12 @@ class AccountSecurityController extends Controller
     public function requestForgotPin(Request $request): JsonResponse
     {
         $data = $request->validate(['email' => 'required|email']);
-        $user = User::query()->where('email', $data['email'])->firstOrFail();
+        $user = User::query()->where('email', $data['email'])->first();
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['Email tidak ditemukan di sistem kami.'],
+            ]);
+        }
         $otp = $this->otpService->issue($user->email, 'forgot_pin', 'email', $user);
 
         return $this->successResponse('OTP reset PIN telah dikirim.', $this->otpPayload($otp));
@@ -143,7 +158,12 @@ class AccountSecurityController extends Controller
             'pin' => 'required|string|size:6|confirmed',
         ]);
 
-        $user = User::query()->where('email', $data['email'])->firstOrFail();
+        $user = User::query()->where('email', $data['email'])->first();
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['Email tidak ditemukan di sistem kami.'],
+            ]);
+        }
         $this->assertStrongPin($data['pin']);
         $this->otpService->verify($user->email, $data['otp_code'], 'forgot_pin', 'email', $user->id);
         $user->forceFill([

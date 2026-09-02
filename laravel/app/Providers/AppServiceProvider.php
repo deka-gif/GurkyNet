@@ -280,19 +280,44 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by(
                 strtolower((string) ($request->input('phone_or_email') ?: $request->ip()))
-            );
+            )->response(function (\Illuminate\Http\Request $request, array $headers) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak percobaan login. Silakan coba lagi dalam beberapa menit.',
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => null,
+                ], 429, $headers);
+            });
         });
 
         \Illuminate\Support\Facades\RateLimiter::for('otp', function (\Illuminate\Http\Request $request) {
             $id = (string) ($request->input('email') ?: $request->input('phone_number') ?: $request->ip());
 
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by(strtolower($id));
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by(strtolower($id))
+                ->response(function (\Illuminate\Http\Request $request, array $headers) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Terlalu banyak permintaan kode OTP. Silakan coba lagi dalam beberapa menit.',
+                        'data' => null,
+                        'meta' => null,
+                        'errors' => null,
+                    ], 429, $headers);
+                });
         });
 
         \Illuminate\Support\Facades\RateLimiter::for('password-reset', function (\Illuminate\Http\Request $request) {
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by(
                 strtolower((string) ($request->input('email') ?: $request->ip()))
-            );
+            )->response(function (\Illuminate\Http\Request $request, array $headers) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak percobaan reset password. Silakan coba lagi dalam beberapa menit.',
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => null,
+                ], 429, $headers);
+            });
         });
 
         \Illuminate\Support\Facades\RateLimiter::for('financial', function (\Illuminate\Http\Request $request) {

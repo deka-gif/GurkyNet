@@ -26,6 +26,11 @@ export const GoogleCompleteRegistrationPage: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinConfirmationError, setPinConfirmationError] = useState<string | null>(null);
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [termsError, setTermsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
@@ -47,24 +52,30 @@ export const GoogleCompleteRegistrationPage: React.FC = () => {
   }
 
   const submit = async () => {
+    setPhoneError(null);
+    setPinError(null);
+    setPinConfirmationError(null);
+    setReferralError(null);
+    setTermsError(null);
+
     if (!/^08[0-9]{8,11}$/.test(phone)) {
-      setErrorMsg('Nomor HP harus diawali 08 dan hanya berisi angka (10-13 digit).');
+      setPhoneError('Nomor HP harus diawali 08 dan hanya berisi angka (10-13 digit).');
       return;
     }
     if (pin !== pinConfirmation) {
-      setErrorMsg('Konfirmasi PIN tidak cocok.');
+      setPinConfirmationError('Konfirmasi PIN tidak cocok.');
       return;
     }
     if (weakPins.has(pin)) {
-      setErrorMsg('PIN terlalu lemah. Gunakan kombinasi lain.');
+      setPinError('PIN terlalu lemah. Gunakan kombinasi lain.');
       return;
     }
     if (referralCode && !/^[A-Za-z0-9]{6,20}$/.test(referralCode)) {
-      setErrorMsg('Kode referral 6-20 karakter huruf/angka.');
+      setReferralError('Kode referral 6-20 karakter huruf/angka.');
       return;
     }
     if (!agreeTerms) {
-      setErrorMsg('Anda wajib menyetujui syarat & ketentuan.');
+      setTermsError('Anda harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi terlebih dahulu.');
       return;
     }
 
@@ -116,18 +127,21 @@ export const GoogleCompleteRegistrationPage: React.FC = () => {
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 13))}
               disabled={busy}
-              className="auth-input pl-9 py-2.5"
+              className={`auth-input pl-9 py-2.5 ${phoneError ? 'auth-input-error' : ''}`}
             />
           </div>
+          {phoneError && <p className="mt-1.5 text-xs font-semibold text-red-600">{phoneError}</p>}
         </div>
 
         <div>
           <label className="auth-label">PIN Baru</label>
-          <PinInput value={pin} onChange={setPin} disabled={busy} autoFocus />
+          <PinInput value={pin} onChange={setPin} disabled={busy} autoFocus error={!!pinError} />
+          {pinError && <p className="mt-1.5 text-xs font-semibold text-red-600">{pinError}</p>}
         </div>
         <div>
           <label className="auth-label">Konfirmasi PIN</label>
-          <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} />
+          <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} error={!!pinConfirmationError} />
+          {pinConfirmationError && <p className="mt-1.5 text-xs font-semibold text-red-600">{pinConfirmationError}</p>}
         </div>
 
         {!showReferralField ? (
@@ -141,38 +155,50 @@ export const GoogleCompleteRegistrationPage: React.FC = () => {
             </span>
           </button>
         ) : (
-          <div className="flex gap-2 items-center">
-            <input
-              className="auth-input flex-1 uppercase"
-              value={referralCode}
-              onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20))}
-              maxLength={20}
-              placeholder="Kode referral (opsional)"
-              disabled={busy}
-            />
-            <button
-              type="button"
-              onClick={() => { setShowReferralField(false); setReferralCode(''); }}
-              className="text-xs font-bold text-gray-500 hover:text-primary-600 shrink-0"
-            >
-              Lewati
-            </button>
+          <div>
+            <div className="flex gap-2 items-center">
+              <input
+                className={`auth-input flex-1 uppercase ${referralError ? 'auth-input-error' : ''}`}
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20))}
+                maxLength={20}
+                placeholder="Kode referral (opsional)"
+                disabled={busy}
+              />
+              <button
+                type="button"
+                onClick={() => { setShowReferralField(false); setReferralCode(''); setReferralError(null); }}
+                className="text-xs font-bold text-gray-500 hover:text-primary-600 shrink-0"
+              >
+                Lewati
+              </button>
+            </div>
+            {referralError && <p className="mt-1.5 text-xs font-semibold text-red-600">{referralError}</p>}
           </div>
         )}
 
-        <label className="flex items-start gap-3 rounded-2xl border border-primary-100 bg-primary-50/40 px-4 py-3 cursor-pointer hover:bg-primary-50/70 transition-colors">
-          <input
-            type="checkbox"
-            checked={agreeTerms}
-            onChange={(e) => setAgreeTerms(e.target.checked)}
-            disabled={busy}
-            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-          />
-          <span className="text-xs text-gray-600 leading-relaxed">
-            Saya menyetujui <Link to="/legal/terms-conditions" className="auth-link">Syarat & Ketentuan</Link> dan{' '}
-            <Link to="/legal/privacy-policy" className="auth-link">Kebijakan Privasi</Link>.
-          </span>
-        </label>
+        <div>
+          <label
+            className={`flex items-start gap-3 rounded-2xl border px-4 py-3 cursor-pointer hover:bg-primary-50/70 transition-colors ${
+              termsError
+                ? 'border-red-300 bg-red-50/40'
+                : 'border-primary-100 bg-primary-50/40'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={agreeTerms}
+              onChange={(e) => setAgreeTerms(e.target.checked)}
+              disabled={busy}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-xs text-gray-600 leading-relaxed">
+              Saya menyetujui <Link to="/legal/terms-conditions" className="auth-link">Syarat & Ketentuan</Link> dan{' '}
+              <Link to="/legal/privacy-policy" className="auth-link">Kebijakan Privasi</Link>.
+            </span>
+          </label>
+          {termsError && <p className="mt-1.5 text-xs font-semibold text-red-600">{termsError}</p>}
+        </div>
 
         <Button
           type="button"
