@@ -240,6 +240,10 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\WalletDebited::class,
             \App\Listeners\BroadcastEvent::class
         );
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\WalletDebited::class,
+            \App\Listeners\PublishWalletBalanceUpdated::class
+        );
 
         \Illuminate\Support\Facades\Event::listen(
             \App\Events\WalletCredited::class,

@@ -2,7 +2,7 @@
 # GurkyNet production deploy helper (Azure VPS / Ubuntu)
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/gurkynet}"
+APP_DIR="${APP_DIR:-/var/www/GurkyNet}"
 PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 
@@ -23,8 +23,8 @@ echo "==> Migrations"
 $PHP_BIN artisan migrate --force
 
 echo "==> Storage permissions (PHP-FPM must own writable dirs)"
-sudo chown -R www-data:www-data laravel/storage laravel/bootstrap/cache
-sudo chmod -R ug+rwx laravel/storage laravel/bootstrap/cache
+sudo chown -R www-data:www-data "$APP_DIR/laravel/storage" "$APP_DIR/laravel/bootstrap/cache"
+sudo chmod -R ug+rwx "$APP_DIR/laravel/storage" "$APP_DIR/laravel/bootstrap/cache"
 
 echo "==> Optimize"
 $PHP_BIN artisan optimize

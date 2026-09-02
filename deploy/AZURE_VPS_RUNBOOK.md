@@ -10,7 +10,7 @@
 - Domain: `https://gurkynet.my.id`
 
 ## One-time setup
-1. Clone repo to `/var/www/gurkynet`
+1. Clone repo to `/var/www/GurkyNet`
 2. Copy `laravel/.env.example` → `laravel/.env`, fill production secrets
 3. `cd laravel && composer install --no-dev && php artisan key:generate`
 4. `php artisan migrate --force && php artisan storage:link && php artisan optimize`

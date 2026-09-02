@@ -8,7 +8,7 @@
 return [
     'purchase_enabled' => filter_var(env('PURCHASE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
     /** FR-KYC-01 — when true, Tier 1 (phone + email verified) required before wallet purchase. */
-    'purchase_kyc_required' => filter_var(env('PURCHASE_KYC_REQUIRED', true), FILTER_VALIDATE_BOOLEAN),
+    'purchase_kyc_required' => filter_var(env('PURCHASE_KYC_REQUIRED', false), FILTER_VALIDATE_BOOLEAN),
     'withdraw_enabled' => filter_var(env('WITHDRAW_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
     /** Recurring/automatic top-up scheduler only — NOT user-initiated Midtrans top-up. */
     'auto_topup_enabled' => filter_var(env('AUTO_TOPUP_ENABLED', false), FILTER_VALIDATE_BOOLEAN),

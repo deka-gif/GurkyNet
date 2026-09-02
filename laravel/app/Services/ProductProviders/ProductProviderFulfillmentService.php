@@ -16,6 +16,7 @@ use App\Services\DigiflazzService;
 use App\Services\NotificationService;
 use App\Services\WalletRefundService;
 use App\Support\Transactions\TransactionStatusMapper;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -346,99 +347,184 @@ class ProductProviderFulfillmentService
 
     protected function markSuccess(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
     {
-        $transaction->loadMissing('user');
+        DB::transaction(function () use ($transaction, $provider, $result) {
+            /** @var Transaction $locked */
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
 
-        Log::info('UPDATE TRANSACTION', [
-            'transaction_id' => $transaction->id,
-            'action' => 'SET SUCCESS',
-            'provider_code' => $provider->code,
-            'provider_ref' => $transaction->provider_ref,
-            'sn' => $result->sn,
-        ]);
-        Log::info('SET SUCCESS', [
-            'transaction_id' => $transaction->id,
-            'provider_ref' => $transaction->provider_ref,
-        ]);
+            if (!$this->assertCanWriteFulfillmentStatus($locked, 'SET SUCCESS')) {
+                return;
+            }
 
-        $transaction->update([
-            'status' => TransactionStatus::SUCCESS->value,
-            'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
-            'provider_last_status' => 'success',
-            'provider_checked_at' => now(),
-            'completed_at' => now(),
-            'provider_response' => is_array($result->raw) ? $result->raw : $transaction->provider_response,
-        ]);
+            Log::info('UPDATE TRANSACTION', [
+                'transaction_id' => $locked->id,
+                'action' => 'SET SUCCESS',
+                'provider_code' => $provider->code,
+                'provider_ref' => $locked->provider_ref,
+                'sn' => $result->sn,
+            ]);
+            Log::info('SET SUCCESS', [
+                'transaction_id' => $locked->id,
+                'provider_ref' => $locked->provider_ref,
+            ]);
 
-        if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
-            DigiflazzTransaction::where('transaction_id', $transaction->id)->update(
-                DigiflazzService::digiflazzTransactionAttributesFromResponse(
-                    'success',
-                    is_array($result->raw) ? $result->raw : [],
-                    $result->sn
-                )
+            $locked->update([
+                'status' => TransactionStatus::SUCCESS->value,
+                'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
+                'provider_last_status' => 'success',
+                'provider_checked_at' => now(),
+                'completed_at' => now(),
+                'provider_response' => is_array($result->raw) ? $result->raw : $locked->provider_response,
+            ]);
+
+            if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
+                DigiflazzTransaction::where('transaction_id', $locked->id)->update(
+                    DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                        'success',
+                        is_array($result->raw) ? $result->raw : [],
+                        $result->sn
+                    )
+                );
+            }
+
+            PaymentHistory::recordFor(
+                $locked,
+                $provider->code,
+                'success',
+                $result->raw,
+                $result->raw,
+                $locked->invoice_number
             );
-        }
 
-        PaymentHistory::recordFor(
-            $transaction,
-            $provider->code,
-            'success',
-            $result->raw,
-            $result->raw,
-            $transaction->invoice_number
-        );
+            Log::info('WRITE WALLET HISTORY — debit already finalized (no refund)', [
+                'transaction_id' => $locked->id,
+                'total_payment' => $locked->total_payment,
+            ]);
 
-        Log::info('WRITE WALLET HISTORY — debit already finalized (no refund)', [
-            'transaction_id' => $transaction->id,
-            'total_payment' => $transaction->total_payment,
-        ]);
-
-        // Listeners: SendNotification ("Pembayaran Berhasil"), BroadcastEvent, WriteAuditLog, AnalyticsCollector
-        Log::info('BROADCAST EVENT — dispatch TransactionSuccess + PaymentSettled', [
-            'transaction_id' => $transaction->id,
-        ]);
-        event(new \App\Events\TransactionSuccess($transaction->fresh(['user']) ?? $transaction));
-        event(new \App\Events\PaymentSettled($transaction->fresh(['user']) ?? $transaction, $result->raw));
+            Log::info('BROADCAST EVENT — dispatch TransactionSuccess + PaymentSettled', [
+                'transaction_id' => $locked->id,
+            ]);
+            event(new \App\Events\TransactionSuccess($locked->fresh(['user']) ?? $locked));
+            event(new \App\Events\PaymentSettled($locked->fresh(['user']) ?? $locked, $result->raw));
+        });
     }
 
     protected function markPending(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
     {
-        // SRS 14.3 — unclear / awaiting supplier → PENDING_SUPPLIER (saldo tetap ter-hold).
-        $transaction->update([
-            'status' => TransactionStatus::PENDING_SUPPLIER->value,
-            'notes' => 'Sedang diproses oleh operator.',
-            'provider_last_status' => 'pending',
-            'provider_checked_at' => now(),
-            'provider_response' => is_array($result->raw) ? $result->raw : $transaction->provider_response,
-        ]);
+        $applied = false;
+        $fresh = null;
 
-        if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
-            DigiflazzTransaction::where('transaction_id', $transaction->id)->update(
-                DigiflazzService::digiflazzTransactionAttributesFromResponse(
-                    'pending',
-                    is_array($result->raw) ? $result->raw : [],
-                    $result->sn
-                )
-            );
+        DB::transaction(function () use ($transaction, $provider, $result, &$applied, &$fresh) {
+            /** @var Transaction $locked */
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
+
+            if (!$this->assertCanWriteFulfillmentStatus($locked, 'SET PENDING')) {
+                return;
+            }
+
+            // SRS 14.3 — unclear / awaiting supplier → PENDING_SUPPLIER (saldo tetap ter-hold).
+            $locked->update([
+                'status' => TransactionStatus::PENDING_SUPPLIER->value,
+                'notes' => 'Sedang diproses oleh operator.',
+                'provider_last_status' => 'pending',
+                'provider_checked_at' => now(),
+                'provider_response' => is_array($result->raw) ? $result->raw : $locked->provider_response,
+            ]);
+
+            if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
+                DigiflazzTransaction::where('transaction_id', $locked->id)->update(
+                    DigiflazzService::digiflazzTransactionAttributesFromResponse(
+                        'pending',
+                        is_array($result->raw) ? $result->raw : [],
+                        $result->sn
+                    )
+                );
+            }
+
+            $applied = true;
+            $fresh = $locked->fresh();
+        });
+
+        if (!$applied || !$fresh) {
+            return;
         }
 
         Log::info('UPDATE TRANSACTION', [
-            'transaction_id' => $transaction->id,
+            'transaction_id' => $fresh->id,
             'action' => 'SET PENDING (awaiting provider final status)',
             'provider_code' => $provider->code,
-            'provider_ref' => $transaction->fresh()?->provider_ref,
+            'provider_ref' => $fresh->provider_ref,
         ]);
 
-        // Ensure an early status poll runs soon after order acceptance (provider_ref must already be saved).
         try {
             app(\App\Services\Transactions\TransactionTimeoutService::class)
-                ->scheduleEarlyStatusPoll($transaction->fresh() ?? $transaction);
+                ->scheduleEarlyStatusPoll($fresh);
         } catch (\Throwable $e) {
             Log::warning('Failed to schedule early status poll', [
-                'transaction_id' => $transaction->id,
+                'transaction_id' => $fresh->id,
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * SRS 14.3 / 14.4 — same in-flight definition as TransactionTimeoutService.
+     */
+    protected function isInFlight(Transaction $transaction): bool
+    {
+        return TransactionStatusMapper::isFulfillOpen($transaction->status)
+            || $transaction->status === TransactionStatus::DRAFT->value;
+    }
+
+    /**
+     * Guard late provider callbacks from overwriting terminal/refunded rows (P0-1).
+     */
+    protected function assertCanWriteFulfillmentStatus(Transaction $locked, string $attemptedAction): bool
+    {
+        if (!$this->isInFlight($locked)) {
+            Log::warning('PRODUCT ROUTING — skip status write; not in-flight', [
+                'transaction_id' => $locked->id,
+                'current_status' => $locked->status,
+                'attempted_action' => $attemptedAction,
+            ]);
+
+            return false;
+        }
+
+        if ($locked->refunded_at || $this->refundService->hasExistingRefund($locked)) {
+            Log::warning('PRODUCT ROUTING — skip status write; already refunded', [
+                'transaction_id' => $locked->id,
+                'current_status' => $locked->status,
+                'attempted_action' => $attemptedAction,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Row-locked transition to PENDING_SUPPLIER for ambiguous/retry deferral paths.
+     */
+    protected function transitionToPendingSupplier(Transaction $transaction, string $attemptedAction): void
+    {
+        DB::transaction(function () use ($transaction, $attemptedAction) {
+            /** @var Transaction $locked */
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->status === TransactionStatus::PENDING_SUPPLIER->value) {
+                return;
+            }
+
+            if (!$this->assertCanWriteFulfillmentStatus($locked, $attemptedAction)) {
+                return;
+            }
+
+            $locked->update([
+                'status' => TransactionStatus::PENDING_SUPPLIER->value,
+                'notes' => 'Sedang diproses oleh operator.',
+            ]);
+        });
     }
 
     protected function rememberFulfillmentContext(
@@ -536,12 +622,7 @@ class ProductProviderFulfillmentService
         string $refId
     ): void {
         if (! $this->registry->has($provider->code)) {
-            if ($transaction->status !== TransactionStatus::PENDING_SUPPLIER->value) {
-                $transaction->update([
-                    'status' => TransactionStatus::PENDING_SUPPLIER->value,
-                    'notes' => 'Sedang diproses oleh operator.',
-                ]);
-            }
+            $this->transitionToPendingSupplier($transaction, 'SET PENDING_SUPPLIER (adapter missing)');
 
             return;
         }
@@ -589,12 +670,7 @@ class ProductProviderFulfillmentService
             return;
         }
 
-        if ($transaction->status !== TransactionStatus::PENDING_SUPPLIER->value) {
-            $transaction->update([
-                'status' => TransactionStatus::PENDING_SUPPLIER->value,
-                'notes' => 'Sedang diproses oleh operator.',
-            ]);
-        }
+        $this->transitionToPendingSupplier($transaction, 'SET PENDING_SUPPLIER (post-dispatch inconclusive)');
 
         Log::warning('PRODUCT ROUTING — post-dispatch check inconclusive, deferring to reconciliation', [
             'transaction_id' => $transaction->id,
@@ -703,12 +779,7 @@ class ProductProviderFulfillmentService
         // C. UNKNOWN / TIMEOUT / UNABLE TO DETERMINE — status='error', or a local/ambiguous
         // guard reason. Never resend, never refund here; leave in-flight as PENDING_SUPPLIER
         // for the existing TransactionTimeoutService ladder / transactions:reconcile-pending.
-        if ($transaction->status !== TransactionStatus::PENDING_SUPPLIER->value) {
-            $transaction->update([
-                'status' => TransactionStatus::PENDING_SUPPLIER->value,
-                'notes' => 'Sedang diproses oleh operator.',
-            ]);
-        }
+        $this->transitionToPendingSupplier($transaction, 'SET PENDING_SUPPLIER (dispatch retry inconclusive)');
 
         Log::warning('PRODUCT ROUTING — dispatch retry inconclusive, deferring to reconciliation', [
             'transaction_id' => $transaction->id,

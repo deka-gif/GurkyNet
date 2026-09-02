@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Contracts\Realtime\RealtimeTransport;
 use App\Events\WalletCredited;
+use App\Events\WalletDebited;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -14,7 +15,7 @@ class PublishWalletBalanceUpdated
 {
     public function __construct(protected RealtimeTransport $realtime) {}
 
-    public function handle(WalletCredited $event): void
+    public function handle(WalletCredited|WalletDebited $event): void
     {
         $wallet = $event->wallet->fresh() ?? $event->wallet;
         $userId = (int) $wallet->user_id;
