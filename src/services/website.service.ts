@@ -252,6 +252,11 @@ export const websiteService = {
     return res.data;
   },
 
+  async getDashboardAnnouncements(params?: Record<string, any>): Promise<ApiResponse<any>> {
+    const res = await apiClient.get<ApiResponse<any>>('/announcements', { params });
+    return res.data;
+  },
+
   async getPublicNews(): Promise<ApiResponse<any>> {
     const res = await apiClient.get<ApiResponse<any>>('/public/news');
     return res.data;

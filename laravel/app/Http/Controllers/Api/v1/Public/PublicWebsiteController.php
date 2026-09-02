@@ -380,8 +380,28 @@ class PublicWebsiteController extends Controller
 
     /**
      * GET /api/v1/public/announcements
+     * Public-only feed: announcement type only (broadcast / "Segmen Khusus" requires login).
      */
     public function announcements(Request $request): JsonResponse
+    {
+        $items = Notification::with('coverMedia')
+            ->where('type', 'announcement')
+            ->where('is_active', true)
+            ->latest()
+            ->paginate((int) $request->query('per_page', 20));
+
+        return $this->paginatedResponse(
+            'Daftar pengumuman berhasil dimuat.',
+            AnnouncementResource::collection($items->items()),
+            $items
+        );
+    }
+
+    /**
+     * GET /api/v1/announcements (auth:sanctum)
+     * Dashboard feed: public announcements plus broadcast / "Segmen Khusus" for logged-in users.
+     */
+    public function authenticatedAnnouncements(Request $request): JsonResponse
     {
         $items = Notification::with('coverMedia')
             ->whereIn('type', ['announcement', 'broadcast'])
@@ -403,7 +423,7 @@ class PublicWebsiteController extends Controller
     public function news(Request $request): JsonResponse
     {
         $announcements = Notification::with('coverMedia')
-            ->whereIn('type', ['announcement', 'broadcast'])
+            ->where('type', 'announcement')
             ->where('is_active', true)
             ->latest()
             ->take(50)

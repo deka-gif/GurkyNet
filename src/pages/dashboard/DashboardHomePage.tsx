@@ -49,7 +49,7 @@ export const DashboardHomePage = () => {
     fetchNotifications();
     hydrateFavorites();
     websiteService
-      .getPublicAnnouncements({ per_page: 10 })
+      .getDashboardAnnouncements({ per_page: 10 })
       .then((res: any) => {
         const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res?.data?.data) ? res.data.data : [];
         setAnnouncements(rows);

@@ -178,6 +178,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         
         // Session and Profile Management
         Route::get('/auth/me', [AuthController::class, 'me']);
+        Route::get('/announcements', [PublicWebsiteController::class, 'authenticatedAnnouncements']);
         Route::post('/auth/refresh', [AuthController::class, 'refresh']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/session', [AuthController::class, 'session']);
