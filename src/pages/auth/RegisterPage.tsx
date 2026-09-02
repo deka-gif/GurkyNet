@@ -78,6 +78,9 @@ export const RegisterPage: React.FC = () => {
   const [rememberDevice, setRememberDevice] = useState(true);
   const [showReferralField, setShowReferralField] = useState(false);
   const [busyWhatsapp, setBusyWhatsapp] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinConfirmationError, setPinConfirmationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
@@ -110,11 +113,14 @@ export const RegisterPage: React.FC = () => {
         setErrorMsg(response.message || 'Gagal memulai registrasi.');
       }
     } catch (err: any) {
-      if (err.errors?.email) setError('email', { message: err.errors.email[0] });
-      if (err.errors?.phone_number) setError('phone', { message: err.errors.phone_number[0] });
-      if (err.errors?.name) setError('fullName', { message: err.errors.name[0] });
-      if (err.errors?.password) setError('password', { message: err.errors.password[0] });
-      setErrorMsg(err.message || 'Terjadi kendala saat registrasi.');
+      let mapped = false;
+      if (err.errors?.email) { setError('email', { message: err.errors.email[0] }); mapped = true; }
+      if (err.errors?.phone_number) { setError('phone', { message: err.errors.phone_number[0] }); mapped = true; }
+      if (err.errors?.name) { setError('fullName', { message: err.errors.name[0] }); mapped = true; }
+      if (err.errors?.password) { setError('password', { message: err.errors.password[0] }); mapped = true; }
+      if (!mapped) {
+        setErrorMsg(err.message || 'Terjadi kendala saat registrasi.');
+      }
     } finally {
       setBusy(false);
     }
@@ -124,16 +130,22 @@ export const RegisterPage: React.FC = () => {
     if (!onboardingId) return;
     setBusy(true);
     setErrorMsg(null);
+    setOtpError(null);
     try {
       const response = await authService.verifyOnboardingOtp({ onboarding_id: onboardingId, code: otpCode });
       if (response.success) {
         setStep('pin');
         setSuccessMsg('Email berhasil diverifikasi. Lanjutkan dengan membuat PIN transaksi 6 digit.');
       } else {
-        setErrorMsg(response.message || 'OTP tidak valid.');
+        setOtpError(response.message || 'OTP tidak valid.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Verifikasi OTP gagal.');
+      const otpMsg = err.errors?.otp?.[0] || err.errors?.otp_code?.[0];
+      if (otpMsg) {
+        setOtpError(otpMsg);
+      } else {
+        setErrorMsg(err.message || 'Verifikasi OTP gagal.');
+      }
     } finally {
       setBusy(false);
     }
@@ -159,12 +171,14 @@ export const RegisterPage: React.FC = () => {
 
   const submitPin = async () => {
     if (!onboardingId) return;
+    setPinError(null);
+    setPinConfirmationError(null);
     if (pin !== pinConfirmation) {
-      setErrorMsg('Konfirmasi PIN tidak cocok.');
+      setPinConfirmationError('Konfirmasi PIN tidak cocok.');
       return;
     }
     if (weakPins.has(pin)) {
-      setErrorMsg('PIN terlalu lemah. Gunakan kombinasi lain.');
+      setPinError('PIN terlalu lemah. Gunakan kombinasi lain.');
       return;
     }
     setBusy(true);
@@ -188,7 +202,12 @@ export const RegisterPage: React.FC = () => {
         setErrorMsg(response.message || 'Gagal menyelesaikan onboarding.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Gagal membuat PIN.');
+      let mapped = false;
+      if (err.errors?.pin) { setPinError(err.errors.pin[0]); mapped = true; }
+      if (err.errors?.pin_confirmation) { setPinConfirmationError(err.errors.pin_confirmation[0]); mapped = true; }
+      if (!mapped) {
+        setErrorMsg(err.message || 'Gagal membuat PIN.');
+      }
     } finally {
       setBusy(false);
     }
@@ -302,11 +321,12 @@ export const RegisterPage: React.FC = () => {
 
       {step === 'verify' && (
         <div className="space-y-4">
-          <button type="button" onClick={() => { setStep('register'); setErrorMsg(null); setSuccessMsg(null); setOtpCode(''); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+          <button type="button" onClick={() => { setStep('register'); setErrorMsg(null); setSuccessMsg(null); setOtpCode(''); setOtpError(null); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
             <ArrowLeft className="w-4 h-4" /> Ubah Data Akun
           </button>
           <div className="auth-info-box">Kode OTP dikirim ke <strong>{registeredEmail}</strong>. Masukkan 6 digit OTP untuk melanjutkan.</div>
-          <input inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className="auth-otp-input" placeholder="000000" />
+          <input inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className={`auth-otp-input ${otpError ? 'auth-input-error' : ''}`} placeholder="000000" />
+          {otpError && <p className="mt-1.5 text-xs font-semibold text-red-600">{otpError}</p>}
           <button
             type="button"
             disabled={busyWhatsapp || !onboardingId}
@@ -322,17 +342,19 @@ export const RegisterPage: React.FC = () => {
 
       {step === 'pin' && (
         <div className="space-y-4">
-          <button type="button" onClick={() => { setStep('verify'); setErrorMsg(null); setSuccessMsg(null); setPin(''); setPinConfirmation(''); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+          <button type="button" onClick={() => { setStep('verify'); setErrorMsg(null); setSuccessMsg(null); setPin(''); setPinConfirmation(''); setPinError(null); setPinConfirmationError(null); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
             <ArrowLeft className="w-4 h-4" /> Kembali ke Verifikasi OTP
           </button>
           <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-700">Buat PIN transaksi 6 digit. Hindari PIN umum seperti <code className="text-primary-700 font-mono text-xs">123456</code>, <code className="text-primary-700 font-mono text-xs">111111</code>, atau pola berulang lain.</div>
           <div>
             <label className="auth-label">PIN Baru</label>
-            <PinInput value={pin} onChange={setPin} disabled={busy} autoFocus />
+            <PinInput value={pin} onChange={setPin} disabled={busy} autoFocus error={!!pinError} />
+            {pinError && <p className="mt-1.5 text-xs font-semibold text-red-600">{pinError}</p>}
           </div>
           <div>
             <label className="auth-label">Konfirmasi PIN</label>
-            <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} />
+            <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} error={!!pinConfirmationError} />
+            {pinConfirmationError && <p className="mt-1.5 text-xs font-semibold text-red-600">{pinConfirmationError}</p>}
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />

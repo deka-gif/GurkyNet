@@ -26,6 +26,7 @@ export const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   useEffect(() => {
     if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
@@ -101,12 +102,19 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg(null);
+    setOtpError(null);
     try {
       const ok = await verifyLogin2fa(otpCode.trim());
       if (ok) {
         await finishLogin();
       } else {
-        setErrorMsg(useAuthStore.getState().error || 'Kode 2FA tidak valid.');
+        const validationErrs = useAuthStore.getState().validationErrors;
+        const otpMsg = validationErrs?.otp?.[0];
+        if (otpMsg) {
+          setOtpError(otpMsg);
+        } else {
+          setErrorMsg(useAuthStore.getState().error || 'Kode 2FA tidak valid.');
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Gagal verifikasi 2FA.');
@@ -134,11 +142,12 @@ export const LoginPage: React.FC = () => {
                 inputMode="numeric"
                 autoFocus
                 maxLength={6}
-                className="auth-input pl-10 tracking-widest text-center"
+                className={`auth-input pl-10 tracking-widest text-center ${otpError ? 'auth-input-error' : ''}`}
                 placeholder="••••••"
                 disabled={isLoading}
               />
             </div>
+            {otpError && <p className="mt-1.5 text-xs font-semibold text-red-600">{otpError}</p>}
           </div>
           <Button type="submit" variant="primary" disabled={isLoading || otpCode.length !== 6} className="w-full disabled:opacity-60">
             {isLoading ? 'Memverifikasi…' : 'Verifikasi & Masuk'}
@@ -150,6 +159,7 @@ export const LoginPage: React.FC = () => {
             onClick={() => {
               clearTwoFactorChallenge();
               setOtpCode('');
+              setOtpError(null);
               setErrorMsg(null);
               setSuccessMsg(null);
             }}

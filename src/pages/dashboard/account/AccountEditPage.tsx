@@ -16,6 +16,9 @@ export const AccountEditPage: React.FC = () => {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oldPasswordError, setOldPasswordError] = useState<string | null>(null);
+  const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -44,8 +47,11 @@ export const AccountEditPage: React.FC = () => {
 
   const savePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOldPasswordError(null);
+    setNewPasswordError(null);
+    setConfirmPasswordError(null);
     if (newPassword !== confirmPassword) {
-      setErr('Konfirmasi password tidak cocok.');
+      setConfirmPasswordError('Konfirmasi password tidak cocok.');
       return;
     }
     setBusy(true);
@@ -62,9 +68,19 @@ export const AccountEditPage: React.FC = () => {
         setOldPassword('');
         setNewPassword('');
         setConfirmPassword('');
-      } else setErr(res.message);
+      } else {
+        const errors = (res as any).errors;
+        let mapped = false;
+        if (errors?.current_password) { setOldPasswordError(errors.current_password[0]); mapped = true; }
+        if (errors?.new_password) { setNewPasswordError(errors.new_password[0]); mapped = true; }
+        if (!mapped) setErr(res.message);
+      }
     } catch (e: any) {
-      setErr(e?.message || 'Gagal mengganti password');
+      const errors = e?.response?.data?.errors || e?.errors;
+      let mapped = false;
+      if (errors?.current_password) { setOldPasswordError(errors.current_password[0]); mapped = true; }
+      if (errors?.new_password) { setNewPasswordError(errors.new_password[0]); mapped = true; }
+      if (!mapped) setErr(e?.message || 'Gagal mengganti password');
     } finally {
       setBusy(false);
     }
@@ -147,9 +163,18 @@ export const AccountEditPage: React.FC = () => {
       <AccountCard id="password">
         <form onSubmit={savePassword} className="space-y-3">
           <h3 className="text-sm font-extrabold text-gray-900">Ganti Password</h3>
-          <input type="password" placeholder="Password lama" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" required />
-          <input type="password" placeholder="Password baru" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" required />
-          <input type="password" placeholder="Konfirmasi password baru" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" required />
+          <div>
+            <input type="password" placeholder="Password lama" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className={`w-full rounded-xl border px-3 py-2 text-sm ${oldPasswordError ? 'border-red-400' : 'border-gray-200'}`} required />
+            {oldPasswordError && <p className="mt-1 text-xs font-semibold text-rose-600">{oldPasswordError}</p>}
+          </div>
+          <div>
+            <input type="password" placeholder="Password baru" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`w-full rounded-xl border px-3 py-2 text-sm ${newPasswordError ? 'border-red-400' : 'border-gray-200'}`} required />
+            {newPasswordError && <p className="mt-1 text-xs font-semibold text-rose-600">{newPasswordError}</p>}
+          </div>
+          <div>
+            <input type="password" placeholder="Konfirmasi password baru" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={`w-full rounded-xl border px-3 py-2 text-sm ${confirmPasswordError ? 'border-red-400' : 'border-gray-200'}`} required />
+            {confirmPasswordError && <p className="mt-1 text-xs font-semibold text-rose-600">{confirmPasswordError}</p>}
+          </div>
           <button disabled={busy} type="submit" className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50">
             Simpan Password
           </button>

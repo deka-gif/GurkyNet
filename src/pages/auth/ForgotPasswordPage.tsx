@@ -44,11 +44,11 @@ export const ForgotPasswordPage: React.FC = () => {
     if (successMsg) toastSuccess('Berhasil', successMsg);
   }, [successMsg]);
 
-  const { register: registerStep1, handleSubmit: handleSubmitStep1, formState: { errors: errorsStep1 } } = useForm<Step1Fields>({
+  const { register: registerStep1, handleSubmit: handleSubmitStep1, setError: setErrorStep1, formState: { errors: errorsStep1 } } = useForm<Step1Fields>({
     resolver: zodResolver(step1Schema),
     defaultValues: { email: '' },
   });
-  const { register: registerStep2, handleSubmit: handleSubmitStep2, setValue: setValueStep2, formState: { errors: errorsStep2 } } = useForm<Step2Fields>({
+  const { register: registerStep2, handleSubmit: handleSubmitStep2, setValue: setValueStep2, setError: setErrorStep2, formState: { errors: errorsStep2 } } = useForm<Step2Fields>({
     resolver: zodResolver(step2Schema),
     defaultValues: { otpCode: '', password: '', passwordConfirmation: '' },
   });
@@ -79,7 +79,11 @@ export const ForgotPasswordPage: React.FC = () => {
         setErrorMsg(response.message || 'Gagal mengirimkan kode OTP.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Gagal mengirim kode OTP.');
+      if (err.errors?.email) {
+        setErrorStep1('email', { message: err.errors.email[0] });
+      } else {
+        setErrorMsg(err.message || 'Gagal mengirim kode OTP.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -125,7 +129,14 @@ export const ForgotPasswordPage: React.FC = () => {
         setErrorMsg(response.message || 'Gagal memperbarui password.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Terjadi kesalahan saat mereset password.');
+      let mapped = false;
+      const otpMsg = err.errors?.otp?.[0] || err.errors?.otp_code?.[0];
+      if (otpMsg) { setErrorStep2('otpCode', { message: otpMsg }); mapped = true; }
+      if (err.errors?.new_password) { setErrorStep2('password', { message: err.errors.new_password[0] }); mapped = true; }
+      if (err.errors?.email) { setErrorMsg(err.errors.email[0]); mapped = true; }
+      if (!mapped) {
+        setErrorMsg(err.message || 'Terjadi kesalahan saat mereset password.');
+      }
     } finally {
       setIsLoading(false);
     }

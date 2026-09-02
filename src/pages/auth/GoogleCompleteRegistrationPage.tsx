@@ -99,7 +99,15 @@ export const GoogleCompleteRegistrationPage: React.FC = () => {
         setErrorMsg(response.message || 'Gagal menyelesaikan registrasi.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Gagal menyelesaikan registrasi Google.');
+      let mapped = false;
+      if (err.errors?.phone_number) { setPhoneError(err.errors.phone_number[0]); mapped = true; }
+      if (err.errors?.pin) { setPinError(err.errors.pin[0]); mapped = true; }
+      if (err.errors?.pin_confirmation) { setPinConfirmationError(err.errors.pin_confirmation[0]); mapped = true; }
+      if (err.errors?.referral_code) { setReferralError(err.errors.referral_code[0]); mapped = true; }
+      if (err.errors?.accept_policies) { setTermsError(err.errors.accept_policies[0]); mapped = true; }
+      if (!mapped) {
+        setErrorMsg(err.message || 'Gagal menyelesaikan registrasi Google.');
+      }
     } finally {
       setBusy(false);
     }
