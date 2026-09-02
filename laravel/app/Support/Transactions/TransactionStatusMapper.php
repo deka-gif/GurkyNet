@@ -99,6 +99,23 @@ final class TransactionStatusMapper
     }
 
     /**
+     * FR-TOPUP-FIX-01 — a Midtrans wallet Top Up never debits the wallet on create
+     * (credit only happens on confirmed Midtrans settlement), unlike a PPOB product
+     * purchase which debits up front. The PPOB timeout/refund ladder
+     * (TransactionTimeoutService) must never treat a Top Up as "in flight" for its
+     * own purposes — Top Up reconciliation is MidtransReconciliationService only.
+     */
+    public static function isWalletTopUp(\App\Models\Transaction $transaction): bool
+    {
+        $paymentMethod = strtolower((string) ($transaction->payment_method ?? ''));
+        $serviceName = strtolower((string) ($transaction->service_name ?? ''));
+
+        return $paymentMethod === 'midtrans'
+            || $serviceName === 'top up saldo'
+            || $serviceName === 'top up';
+    }
+
+    /**
      * Values that mean "already settled successfully" for refund refusal / SUCCESS→REFUNDED.
      *
      * @return list<string>

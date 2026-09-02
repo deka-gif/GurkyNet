@@ -9,6 +9,7 @@ use App\Models\Notification;
 use App\Models\UserNotification;
 use App\Events\TransactionCreated;
 use App\Events\TransactionSuccess;
+use App\Events\TransactionFailed;
 use App\Events\WalletCredited;
 use App\Listeners\SendNotification;
 use App\Listeners\WriteAuditLog;
@@ -166,6 +167,85 @@ class ObservabilityAndNotificationTest extends TestCase
             'digiflazz_success_rate_percent',
             'midtrans_success_rate_percent',
             'timestamp',
+        ]);
+    }
+
+    public function test_top_up_success_notification_uses_top_up_berhasil_without_refund_wording(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-TOPUP-NOTIF-001',
+            'service_name' => 'Top Up Saldo',
+            'target_number' => $this->wallet->wallet_number,
+            'amount' => 25000,
+            'total_payment' => 25000,
+            'payment_method' => 'midtrans',
+            'status' => 'success',
+        ]);
+        $transaction->load('user');
+
+        resolve(SendNotification::class)->handle(new TransactionSuccess($transaction));
+
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Top Up Berhasil',
+        ]);
+
+        $notification = Notification::where('title', 'Top Up Berhasil')->first();
+        $this->assertNotNull($notification);
+        $this->assertStringNotContainsString('refund', strtolower((string) $notification->message));
+    }
+
+    public function test_wallet_credited_for_top_up_settlement_does_not_create_second_notification(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-TOPUP-NOTIF-002',
+            'service_name' => 'Top Up Saldo',
+            'target_number' => $this->wallet->wallet_number,
+            'amount' => 25000,
+            'total_payment' => 25000,
+            'payment_method' => 'midtrans',
+            'status' => 'success',
+        ]);
+
+        $before = Notification::count();
+
+        $this->wallet->load('user');
+        resolve(SendNotification::class)->handle(new WalletCredited(
+            $this->wallet,
+            25000,
+            'Top Up settlement',
+            $transaction->id
+        ));
+
+        $this->assertSame($before, Notification::count());
+        $this->assertDatabaseMissing('notifications', [
+            'title' => 'Saldo Bertambah',
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'title' => 'Refund Berhasil',
+        ]);
+    }
+
+    public function test_top_up_expired_notification_uses_pembayaran_kedaluwarsa(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-TOPUP-NOTIF-003',
+            'service_name' => 'Top Up Saldo',
+            'target_number' => $this->wallet->wallet_number,
+            'amount' => 25000,
+            'total_payment' => 25000,
+            'payment_method' => 'midtrans',
+            'status' => \App\Enums\TransactionStatus::EXPIRED->value,
+            'notes' => 'Pembayaran kedaluwarsa',
+        ]);
+        $transaction->load('user');
+
+        resolve(SendNotification::class)->handle(new TransactionFailed($transaction));
+
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Pembayaran Kedaluwarsa',
         ]);
     }
 }

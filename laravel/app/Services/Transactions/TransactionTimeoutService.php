@@ -255,7 +255,11 @@ class TransactionTimeoutService
      */
     public function reconcileOverdue(int $limit = 100): int
     {
-        $ids = Transaction::query()
+        // FR-TOPUP-FIX-01 — fetch headroom (2x limit) because Top Up rows are filtered
+        // out below via the canonical isWalletTopUp() helper (single source of truth,
+        // shared with isInFlight() above), so the final id list can be shorter than
+        // the raw query match count.
+        $candidates = Transaction::query()
             ->whereIn('status', TransactionStatusMapper::reconcileOpenStatuses())
             ->where(function ($q) {
                 $q->whereNotNull('timeout_at')->where('timeout_at', '<=', now())
@@ -265,7 +269,12 @@ class TransactionTimeoutService
                     });
             })
             ->orderBy('id')
-            ->limit($limit)
+            ->limit($limit * 2)
+            ->get(['id', 'payment_method', 'service_name']);
+
+        $ids = $candidates
+            ->reject(fn (Transaction $t) => TransactionStatusMapper::isWalletTopUp($t))
+            ->take($limit)
             ->pluck('id');
 
         foreach ($ids as $id) {
@@ -277,6 +286,13 @@ class TransactionTimeoutService
 
     protected function isInFlight(Transaction $transaction): bool
     {
+        // FR-TOPUP-FIX-01 — Top Up (Midtrans) never debits on create; the PPOB
+        // timeout/refund ladder must never treat it as in-flight. Reconciled solely
+        // by MidtransReconciliationService::pollPendingDeposits().
+        if (TransactionStatusMapper::isWalletTopUp($transaction)) {
+            return false;
+        }
+
         // SRS 14.3 / 14.4 — LOCKED / SENT_TO_SUPPLIER / PENDING_SUPPLIER + legacy pending
         return TransactionStatusMapper::isFulfillOpen($transaction->status)
             || $transaction->status === TransactionStatus::DRAFT->value;
