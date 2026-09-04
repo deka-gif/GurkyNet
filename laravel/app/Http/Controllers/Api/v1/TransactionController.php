@@ -142,7 +142,8 @@ class TransactionController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Detail transaksi berhasil diambil.',
-            'data' => new TransactionResource($transaction),
+            // resolve() avoids JsonResource nesting quirks when embedded in a custom envelope.
+            'data' => (new TransactionResource($transaction))->resolve(),
         ]);
     }
 

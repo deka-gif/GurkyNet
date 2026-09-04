@@ -32,6 +32,12 @@ class TransactionResource extends JsonResource
             $normalizedStatus = 'pending';
         }
 
+        $isTopUp = TransactionStatusMapper::isWalletTopUp($this->resource);
+        $notes = (string) ($this->notes ?? '');
+        if ($isTopUp) {
+            $notes = $this->customerFacingTopUpNotes($notes, $normalizedStatus);
+        }
+
         $payload = [
             'id' => $this->id,
             'transactionCode' => $this->invoice_number,
@@ -46,7 +52,7 @@ class TransactionResource extends JsonResource
             'status' => $normalizedStatus,
             'statusRaw' => $rawStatus,
             'status_srs' => TransactionStatusMapper::toSrs($rawStatus),
-            'notes' => $this->notes,
+            'notes' => $notes,
             'items' => TransactionItemResource::collection($this->whenLoaded('items')),
             'date' => $this->created_at?->toIso8601String(),
             'createdAt' => $this->created_at?->toIso8601String(),
@@ -58,12 +64,31 @@ class TransactionResource extends JsonResource
             $payload['providerName'] = $this->fulfillment_provider_code;
         }
 
-        // FR-TOPUP-UX-01 — payment resume only for authenticated owner on detail payloads.
+        // FR-TOPUP-UX-01 — snap_token only when midtrans relation is loaded (detail), never on list.
         if ($this->shouldExposePaymentResume($request)) {
             $payload['paymentResume'] = $this->buildPaymentResume();
         }
 
         return $payload;
+    }
+
+    /**
+     * Customer-facing Top Up notes — never expose Midtrans/provider/routing wording.
+     */
+    protected function customerFacingTopUpNotes(string $notes, string $normalizedStatus): string
+    {
+        if (in_array($normalizedStatus, ['success'], true)) {
+            return 'Top Up berhasil. Saldo Anda telah ditambahkan.';
+        }
+        if (in_array($normalizedStatus, ['expired'], true)) {
+            return 'Pembayaran Top Up sudah melewati batas waktu. Silakan buat Top Up baru.';
+        }
+        if (in_array($normalizedStatus, ['failed', 'cancelled'], true)) {
+            return 'Pembayaran Top Up tidak berhasil. Saldo Anda tidak berubah.';
+        }
+
+        // pending / processing / unpaid
+        return 'Menunggu pembayaran. Selesaikan pembayaran untuk menambah saldo Anda.';
     }
 
     protected function exposesInternalFulfillment(Request $request): bool
@@ -82,36 +107,38 @@ class TransactionResource extends JsonResource
 
     protected function shouldExposePaymentResume(Request $request): bool
     {
-        if (! ($this->resource->expose_payment_resume ?? false)) {
-            return false;
-        }
-
         $user = $request->user();
         if ($user === null) {
             return false;
         }
 
-        return (int) $this->user_id === (int) $user->id;
+        if ((int) $this->user_id !== (int) $user->id) {
+            return false;
+        }
+
+        // List collection must not load/expose snap tokens. Detail sets relation + flag.
+        if ($this->resource->expose_payment_resume ?? false) {
+            return true;
+        }
+
+        return $this->relationLoaded('midtransTransaction');
     }
 
     /**
-     * @return array{
-     *   canResume: bool,
-     *   snapToken: ?string,
-     *   orderId: ?string,
-     *   midtransStatus: ?string,
-     *   reason: ?string
-     * }
+     * Customer-facing resume payload — only canResume + snapToken (no processor internals).
+     *
+     * @return array{canResume: bool, snapToken: ?string}
      */
     protected function buildPaymentResume(): array
     {
+        $deny = ['canResume' => false, 'snapToken' => null];
+
         $isTopUp = TransactionStatusMapper::isWalletTopUp($this->resource);
         $raw = strtolower(trim((string) $this->status));
         $mt = $this->relationLoaded('midtransTransaction')
             ? $this->midtransTransaction
             : $this->midtransTransaction()->first();
 
-        $orderId = $mt?->order_id ?? $this->invoice_number;
         $mtStatus = strtolower(trim((string) ($mt?->transaction_status ?? '')));
         $snapToken = $mt?->snap_token ? (string) $mt->snap_token : null;
 
@@ -119,6 +146,8 @@ class TransactionResource extends JsonResource
             'success', 'sukses', 'failed', 'gagal', 'expired', 'canceled', 'cancelled', 'refunded',
         ], true);
 
+        // Snap docs: newly created Snap orders may have no Core API transaction_status yet
+        // until the customer picks a payment method. Empty / unknown ≠ terminal.
         $mtTerminal = in_array($mtStatus, [
             'settlement', 'capture', 'expire', 'cancel', 'deny', 'failure', 'failed',
             'refund', 'partial_refund',
@@ -127,51 +156,24 @@ class TransactionResource extends JsonResource
         $localOpen = in_array($raw, ['pending', 'processing'], true);
 
         if (! $isTopUp) {
-            return [
-                'canResume' => false,
-                'snapToken' => null,
-                'orderId' => $orderId,
-                'midtransStatus' => $mtStatus !== '' ? $mtStatus : null,
-                'reason' => 'not_topup',
-            ];
+            return $deny;
         }
 
         if ($raw === 'expired' || $mtStatus === 'expire') {
-            return [
-                'canResume' => false,
-                'snapToken' => null,
-                'orderId' => $orderId,
-                'midtransStatus' => $mtStatus !== '' ? $mtStatus : null,
-                'reason' => 'expired',
-            ];
+            return $deny;
         }
 
         if ($localTerminal || $mtTerminal) {
-            return [
-                'canResume' => false,
-                'snapToken' => null,
-                'orderId' => $orderId,
-                'midtransStatus' => $mtStatus !== '' ? $mtStatus : null,
-                'reason' => 'terminal',
-            ];
+            return $deny;
         }
 
         if (! $localOpen || ! $snapToken) {
-            return [
-                'canResume' => false,
-                'snapToken' => null,
-                'orderId' => $orderId,
-                'midtransStatus' => $mtStatus !== '' ? $mtStatus : null,
-                'reason' => 'unavailable',
-            ];
+            return $deny;
         }
 
         return [
             'canResume' => true,
             'snapToken' => $snapToken,
-            'orderId' => $orderId,
-            'midtransStatus' => $mtStatus !== '' ? $mtStatus : 'pending',
-            'reason' => null,
         ];
     }
 }

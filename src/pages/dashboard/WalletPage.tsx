@@ -321,7 +321,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
           const extra = extractMidtransPaymentDetails(result);
           setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending' }));
           void fetchWallet({ force: true });
-          setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi Midtrans.');
+          setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi di jendela pembayaran.');
         },
         onError: function () {
           setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));

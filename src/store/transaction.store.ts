@@ -18,6 +18,14 @@ function normalizeTransactionRow(row: any): Transaction {
     row?.provider ||
     null;
 
+  const paymentResumeRaw = row?.paymentResume || row?.payment_resume || null;
+  const paymentResume = paymentResumeRaw
+    ? {
+        canResume: Boolean(paymentResumeRaw.canResume ?? paymentResumeRaw.can_resume),
+        snapToken: paymentResumeRaw.snapToken ?? paymentResumeRaw.snap_token ?? null,
+      }
+    : undefined;
+
   return {
     ...row,
     id: row?.id,
@@ -34,6 +42,7 @@ function normalizeTransactionRow(row: any): Transaction {
     amount: Number(row?.amount ?? 0),
     date: row?.date || row?.createdAt || row?.created_at || '',
     status: status as Transaction['status'],
+    statusRaw: row?.statusRaw || row?.status_raw || row?.status || status,
     note: row?.note || row?.notes || '',
     notes: row?.notes || row?.note || '',
     providerCode,
@@ -41,6 +50,7 @@ function normalizeTransactionRow(row: any): Transaction {
     adminFee: row?.adminFee != null ? Number(row.adminFee) : undefined,
     totalPayment: row?.totalPayment != null ? Number(row.totalPayment) : undefined,
     paymentMethod: row?.paymentMethod || row?.payment_method || null,
+    paymentResume,
   };
 }
 

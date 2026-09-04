@@ -27,10 +27,21 @@ export type SrsTransactionStatus =
   | 'FAILED'
   | 'REFUNDED';
 
-export function isWalletTopUpService(serviceName?: string | null, paymentMethod?: string | null): boolean {
+export function isWalletTopUpService(
+  serviceName?: string | null,
+  paymentMethod?: string | null,
+  invoiceOrCode?: string | null
+): boolean {
   const service = String(serviceName || '').toLowerCase();
   const method = String(paymentMethod || '').toLowerCase();
-  return method === 'midtrans' || service.includes('top up') || service.includes('topup');
+  const invoice = String(invoiceOrCode || '').toUpperCase();
+
+  return (
+    method === 'midtrans' ||
+    service.includes('top up') ||
+    service.includes('topup') ||
+    invoice.startsWith('TRX-TOPUP-')
+  );
 }
 
 export function normalizeTransactionStatus(raw: unknown): CanonicalTransactionStatus {
@@ -138,21 +149,32 @@ export function isExpiredStatus(raw: unknown): boolean {
 }
 
 /**
- * Human-readable status. For Top Up, avoid PPOB labels like "Dikirim ke provider".
+ * Human-readable status. For Top Up, never use PPOB labels like "Dikirim ke provider".
+ * Unpaid Top Up (pending|processing) → "Menunggu Pembayaran".
  */
 export function transactionStatusLabel(
   raw: unknown,
-  opts?: { serviceName?: string | null; paymentMethod?: string | null; statusRaw?: string | null }
+  opts?: {
+    serviceName?: string | null;
+    paymentMethod?: string | null;
+    statusRaw?: string | null;
+    invoiceNumber?: string | null;
+    transactionCode?: string | null;
+  }
 ): string {
-  const topUp = isWalletTopUpService(opts?.serviceName, opts?.paymentMethod);
+  const topUp = isWalletTopUpService(
+    opts?.serviceName,
+    opts?.paymentMethod,
+    opts?.invoiceNumber || opts?.transactionCode
+  );
   const canonical = normalizeTransactionStatus(opts?.statusRaw ?? raw);
 
   if (topUp) {
     switch (canonical) {
       case 'pending':
-        return 'Menunggu Pembayaran';
       case 'processing':
-        return 'Pembayaran Diproses';
+        // Customer-facing unpaid Top Up is always "Menunggu Pembayaran".
+        return 'Menunggu Pembayaran';
       case 'success':
         return 'Sukses';
       case 'expired':
@@ -188,4 +210,39 @@ export function transactionStatusLabel(
     default:
       return 'Pending';
   }
+}
+
+/** Strip internal provider / payment-processor wording from customer notes. */
+export function customerFacingTransactionNotes(
+  notes: string | null | undefined,
+  opts?: {
+    serviceName?: string | null;
+    paymentMethod?: string | null;
+    invoiceNumber?: string | null;
+    transactionCode?: string | null;
+    status?: string | null;
+  }
+): string {
+  const raw = String(notes || '').trim();
+  const topUp = isWalletTopUpService(
+    opts?.serviceName,
+    opts?.paymentMethod,
+    opts?.invoiceNumber || opts?.transactionCode
+  );
+  if (!topUp) return raw;
+
+  const status = normalizeTransactionStatus(opts?.status);
+  if (status === 'success') return 'Top Up berhasil. Saldo Anda telah ditambahkan.';
+  if (status === 'expired') {
+    return 'Pembayaran Top Up sudah melewati batas waktu. Silakan buat Top Up baru.';
+  }
+  if (status === 'failed' || status === 'cancelled') {
+    return 'Pembayaran Top Up tidak berhasil. Saldo Anda tidak berubah.';
+  }
+
+  if (!raw || /midtrans|provider|webhook|snap/i.test(raw)) {
+    return 'Menunggu pembayaran. Selesaikan pembayaran untuk menambah saldo Anda.';
+  }
+
+  return raw;
 }

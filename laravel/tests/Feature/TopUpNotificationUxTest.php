@@ -228,7 +228,10 @@ class TopUpNotificationUxTest extends TestCase
 
     public function test_m_pending_topup_detail_exposes_resume_snap_token(): void
     {
-        $tx = $this->makeTopUp();
+        $tx = $this->makeTopUp([
+            'status' => TransactionStatus::PROCESSING->value,
+            'notes' => 'Menunggu penyelesaian pembayaran di Midtrans.',
+        ]);
         Sanctum::actingAs($this->user);
 
         $res = $this->getJson('/api/v1/transactions/'.$tx->id);
@@ -236,7 +239,32 @@ class TopUpNotificationUxTest extends TestCase
         $res->assertOk();
         $res->assertJsonPath('data.paymentResume.canResume', true);
         $res->assertJsonPath('data.paymentResume.snapToken', 'snap-ux-token');
-        $this->assertSame('pending', $res->json('data.status'));
+        $this->assertSame('processing', $res->json('data.status'));
+        $notes = (string) $res->json('data.notes');
+        $this->assertStringNotContainsStringIgnoringCase('midtrans', $notes);
+        $this->assertStringNotContainsStringIgnoringCase('provider', $notes);
+        $this->assertStringContainsString('Menunggu pembayaran', $notes);
+        $resume = $res->json('data.paymentResume');
+        $this->assertSame(['canResume', 'snapToken'], array_keys($resume));
+        $this->assertArrayNotHasKey('orderId', $resume);
+        $this->assertArrayNotHasKey('midtransStatus', $resume);
+        $this->assertArrayNotHasKey('reason', $resume);
+    }
+
+    public function test_m2_empty_midtrans_status_still_resumable(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::PENDING->value]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update([
+            'transaction_status' => '',
+        ]);
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions/'.$tx->id);
+        $res->assertOk();
+        $res->assertJsonPath('data.paymentResume.canResume', true);
+        $res->assertJsonPath('data.paymentResume.snapToken', 'snap-ux-token');
+        $resume = $res->json('data.paymentResume');
+        $this->assertSame(['canResume', 'snapToken'], array_keys($resume));
     }
 
     public function test_n_expired_topup_cannot_resume(): void
@@ -250,8 +278,12 @@ class TopUpNotificationUxTest extends TestCase
         $res->assertOk();
         $res->assertJsonPath('data.paymentResume.canResume', false);
         $res->assertJsonPath('data.paymentResume.snapToken', null);
-        $res->assertJsonPath('data.paymentResume.reason', 'expired');
         $this->assertSame('expired', $res->json('data.status'));
+        $resume = $res->json('data.paymentResume');
+        $this->assertSame(['canResume', 'snapToken'], array_keys($resume));
+        $this->assertArrayNotHasKey('orderId', $resume);
+        $this->assertArrayNotHasKey('midtransStatus', $resume);
+        $this->assertArrayNotHasKey('reason', $resume);
     }
 
     public function test_o_success_topup_cannot_resume(): void
@@ -265,6 +297,11 @@ class TopUpNotificationUxTest extends TestCase
         $res->assertOk();
         $res->assertJsonPath('data.paymentResume.canResume', false);
         $res->assertJsonPath('data.paymentResume.snapToken', null);
+        $resume = $res->json('data.paymentResume');
+        $this->assertSame(['canResume', 'snapToken'], array_keys($resume));
+        $this->assertArrayNotHasKey('orderId', $resume);
+        $this->assertArrayNotHasKey('midtransStatus', $resume);
+        $this->assertArrayNotHasKey('reason', $resume);
     }
 
     public function test_p_other_user_cannot_resume_or_view_token(): void

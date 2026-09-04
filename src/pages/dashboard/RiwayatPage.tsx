@@ -25,6 +25,7 @@ import {
   isSuccessStatus,
   normalizeTransactionStatus,
   transactionStatusLabel,
+  customerFacingTransactionNotes,
 } from '../../utils/transactionStatus';
 import {
   formatTransactionDateTime,
@@ -91,6 +92,8 @@ export const RiwayatPage = () => {
           serviceName: t.serviceName,
           paymentMethod: t.paymentMethod,
           statusRaw: t.statusRaw,
+          invoiceNumber: t.invoice_number,
+          transactionCode: t.transactionCode,
         }),
       })),
     });
@@ -354,6 +357,8 @@ export const RiwayatPage = () => {
               serviceName: tx.serviceName,
               paymentMethod: tx.paymentMethod,
               statusRaw: tx.statusRaw,
+              invoiceNumber: tx.invoice_number,
+              transactionCode: tx.transactionCode,
             });
 
             return (
@@ -515,6 +520,8 @@ export const RiwayatPage = () => {
                         serviceName: selectedTx.serviceName,
                         paymentMethod: selectedTx.paymentMethod,
                         statusRaw: selectedTx.statusRaw,
+                        invoiceNumber: selectedTx.invoice_number,
+                        transactionCode: selectedTx.transactionCode,
                       })}
                     </span>
                   </div>
@@ -549,9 +556,13 @@ export const RiwayatPage = () => {
                   <div className="border-t border-gray-50 pt-3 flex flex-col gap-1">
                     <span className="text-[10px] text-gray-400 uppercase">Keterangan / Serial Number</span>
                     <p className="text-gray-900 text-[11px] leading-relaxed break-all bg-gray-50 p-3 rounded-2xl border border-gray-100 font-mono tracking-tight font-medium">
-                      {selectedTx.note ||
-                        selectedTx.notes ||
-                        'Transaksi diproses dengan sukses oleh mitra provider.'}
+                      {customerFacingTransactionNotes(selectedTx.note || selectedTx.notes, {
+                        serviceName: selectedTx.serviceName,
+                        paymentMethod: selectedTx.paymentMethod,
+                        invoiceNumber: selectedTx.invoice_number,
+                        transactionCode: selectedTx.transactionCode,
+                        status: selectedTx.statusRaw || selectedTx.status,
+                      }) || 'Tidak ada keterangan tambahan.'}
                     </p>
                   </div>
                 </div>

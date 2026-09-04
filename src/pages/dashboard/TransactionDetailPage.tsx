@@ -14,6 +14,7 @@ import { transactionService } from '../../services/transaction/transaction.servi
 import { walletService } from '../../services/wallet/wallet.service';
 import { formatIDR } from '../../utils/currency';
 import {
+  customerFacingTransactionNotes,
   isExpiredStatus,
   isPendingStatus,
   isSuccessStatus,
@@ -28,7 +29,37 @@ import {
   resolveTargetLabel,
 } from '../../utils/transactionDisplay';
 import { ensureMidtransSnap } from '../../utils/midtransSnap';
-import type { Transaction } from '../../types';
+import type { PaymentResumeInfo, Transaction } from '../../types';
+
+function normalizeDetailTransaction(row: any): Transaction {
+  const paymentResumeRaw = row?.paymentResume || row?.payment_resume || null;
+  const paymentResume: PaymentResumeInfo | undefined = paymentResumeRaw
+    ? {
+        canResume: Boolean(paymentResumeRaw.canResume ?? paymentResumeRaw.can_resume),
+        snapToken: paymentResumeRaw.snapToken ?? paymentResumeRaw.snap_token ?? null,
+      }
+    : undefined;
+
+  return {
+    ...row,
+    id: row?.id,
+    transactionCode: row?.transactionCode || row?.invoice_number || row?.transaction_code || '',
+    invoice_number: row?.invoice_number || row?.transactionCode || row?.transaction_code,
+    serviceName: row?.serviceName || row?.service_name || '',
+    productName: row?.productName || row?.product_name || row?.serviceName || row?.service_name || '',
+    targetNo: row?.targetNo || row?.target_number || '',
+    amount: Number(row?.amount ?? 0),
+    date: row?.date || row?.createdAt || row?.created_at || '',
+    status: row?.status,
+    statusRaw: row?.statusRaw || row?.status_raw || row?.status,
+    notes: row?.notes || row?.note || '',
+    note: row?.note || row?.notes || '',
+    paymentMethod: row?.paymentMethod || row?.payment_method || null,
+    totalPayment: row?.totalPayment != null ? Number(row.totalPayment) : undefined,
+    adminFee: row?.adminFee != null ? Number(row.adminFee) : undefined,
+    paymentResume,
+  };
+}
 
 /**
  * Transaction detail page — uses cached store + optional GET /transactions/:id.
@@ -78,10 +109,11 @@ export function TransactionDetailPage() {
       setError(null);
       try {
         // Always hit detail API for owner-only paymentResume (snap_token).
+        // Depend only on `id` — list store refreshes must not cancel this fetch.
         const res = await transactionService.getById(id);
         if (cancelled) return;
         if (res.success && res.data) {
-          setRemote(res.data as Transaction);
+          setRemote(normalizeDetailTransaction(res.data));
         } else if (!fromStore) {
           setError(res.message || 'Transaksi tidak ditemukan.');
         }
@@ -97,8 +129,10 @@ export function TransactionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, fromStore]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fromStore is fallback display only
+  }, [id]);
 
+  // Prefer detail payload (has paymentResume); fall back to list row while loading.
   const tx = remote || fromStore;
 
   useEffect(() => {
@@ -182,14 +216,14 @@ export function TransactionDetailPage() {
       }
       window.snap.pay(resume.snapToken, {
         onSuccess: () => {
-          setResumeMsg('Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah settlement Midtrans.');
+          setResumeMsg('Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah pembayaran dikonfirmasi.');
           void fetchTransactions();
           void transactionService.getById(id).then((res) => {
-            if (res.success && res.data) setRemote(res.data as Transaction);
+            if (res.success && res.data) setRemote(normalizeDetailTransaction(res.data));
           });
         },
         onPending: () => {
-          setResumeMsg('Menunggu Pembayaran. Selesaikan sesuai instruksi Midtrans.');
+          setResumeMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi di jendela pembayaran.');
         },
         onError: () => {
           setResumeMsg('Pembayaran belum berhasil. Anda dapat mencoba lagi selama masih menunggu pembayaran.');
@@ -265,13 +299,26 @@ export function TransactionDetailPage() {
     serviceName: tx.serviceName,
     paymentMethod: tx.paymentMethod,
     statusRaw: tx.statusRaw,
+    invoiceNumber: tx.invoice_number,
+    transactionCode: tx.transactionCode,
   });
 
-  const isTopUp = isWalletTopUpService(tx.serviceName, tx.paymentMethod);
+  const notesDisplay = customerFacingTransactionNotes(tx.notes || tx.note, {
+    serviceName: tx.serviceName,
+    paymentMethod: tx.paymentMethod,
+    invoiceNumber: tx.invoice_number,
+    transactionCode: tx.transactionCode,
+    status: tx.statusRaw || tx.status,
+  });
+
+  const isTopUp = isWalletTopUpService(
+    tx.serviceName,
+    tx.paymentMethod,
+    tx.invoice_number || tx.transactionCode
+  );
   const resume = tx.paymentResume;
   const showResume = Boolean(resume?.canResume && resume.snapToken);
-  const showExpiredBlock =
-    isTopUp && (isExpiredStatus(tx.status) || resume?.reason === 'expired');
+  const showExpiredBlock = isTopUp && isExpiredStatus(tx.statusRaw || tx.status);
 
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-10">
@@ -344,8 +391,8 @@ export function TransactionDetailPage() {
               )}
             </div>
           )}
-          {tx.notes || tx.note ? (
-            <Row label="Catatan" value={String(tx.notes || tx.note)} />
+          {notesDisplay ? (
+            <Row label="Catatan" value={notesDisplay} />
           ) : null}
 
           {showExpiredBlock && (

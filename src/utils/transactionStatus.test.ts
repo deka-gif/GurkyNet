@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  customerFacingTransactionNotes,
   isFailedStatus,
   isPendingStatus,
   isSuccessStatus,
@@ -47,11 +48,34 @@ assert.equal(
 );
 assert.equal(
   transactionStatusLabel('processing', { serviceName: 'Top Up Saldo' }),
-  'Pembayaran Diproses'
+  'Menunggu Pembayaran'
+);
+assert.equal(
+  transactionStatusLabel('pending', {
+    invoiceNumber: 'TRX-TOPUP-20260904160000-1111',
+  }),
+  'Menunggu Pembayaran'
 );
 assert.equal(
   transactionStatusLabel('expired', { serviceName: 'Top Up Saldo' }),
   'Pembayaran Kedaluwarsa'
+);
+
+assert.equal(
+  customerFacingTransactionNotes('Menunggu penyelesaian pembayaran di Midtrans.', {
+    serviceName: 'Top Up Saldo',
+    paymentMethod: 'midtrans',
+    status: 'processing',
+  }),
+  'Menunggu pembayaran. Selesaikan pembayaran untuk menambah saldo Anda.'
+);
+assert.ok(
+  !/midtrans|provider/i.test(
+    customerFacingTransactionNotes('Top up saldo via Midtrans (qris/qris)', {
+      invoiceNumber: 'TRX-TOPUP-20260904160000-1111',
+      status: 'pending',
+    })
+  )
 );
 
 console.log('transactionStatus tests passed');

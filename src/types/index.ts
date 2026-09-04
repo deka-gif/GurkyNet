@@ -115,9 +115,6 @@ export interface Product {
 export interface PaymentResumeInfo {
   canResume: boolean;
   snapToken?: string | null;
-  orderId?: string | null;
-  midtransStatus?: string | null;
-  reason?: string | null;
 }
 
 export interface Transaction {
