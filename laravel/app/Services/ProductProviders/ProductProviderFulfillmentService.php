@@ -96,6 +96,12 @@ class ProductProviderFulfillmentService
                 fn (ProductProviderSku $o) => $o->productProvider?->code === ProductProvider::CODE_DIGIFLAZZ
             )->values();
         }
+        // Digiflazz Development Test SKU (xld10) — Digiflazz-only; never VIP failover.
+        if (app(DigiflazzDevTestSkuSupport::class)->isAllowlisted($internalSku)) {
+            $candidates = $candidates->filter(
+                fn (ProductProviderSku $o) => $o->productProvider?->code === ProductProvider::CODE_DIGIFLAZZ
+            )->values();
+        }
         if ($candidates->isEmpty()) {
             Log::warning('PRODUCT ROUTING — no enabled providers', [
                 'transaction_id' => $transaction->id,

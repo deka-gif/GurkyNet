@@ -138,10 +138,16 @@ class CreateTransactionAction
 
             // 2. Validate Product (findBySku already applies Control Center visibility)
             $product = $this->productRepository->findBySku($skuCode);
+            $devTestSku = app(\App\Services\ProductProviders\DigiflazzDevTestSkuSupport::class);
             if (!$product) {
-                throw ValidationException::withMessages([
-                    'product_code' => ['Produk tidak ditemukan.'],
-                ]);
+                // Digiflazz Development Test SKU (xld10): virtual product only when DIGIFLAZZ_TESTING is on.
+                if (! $devTestSku->isActiveForSku($skuCode)) {
+                    throw ValidationException::withMessages([
+                        'product_code' => ['Produk tidak ditemukan.'],
+                    ]);
+                }
+                $devTestPrice = $devTestSku->requireCustomerPrice();
+                $product = $devTestSku->makeVirtualProduct($skuCode, $devTestPrice);
             }
 
             // Re-validate Ops Product + Provider status at checkout (never trust client).
@@ -197,6 +203,17 @@ class CreateTransactionAction
                 }
                 $pricingDetails = [
                     'base_price' => (float) ($inquirySession['provider_price'] ?? $sellPrice),
+                    'margin' => 0,
+                    'sell_price' => $sellPrice,
+                    'admin_fee' => $adminFee,
+                ];
+            } elseif ($devTestSku->isUnsavedVirtualProduct($product)) {
+                // Digiflazz Development Test SKU — ops-configured customer price only (no catalog invent).
+                $sellPrice = $devTestSku->requireCustomerPrice();
+                $adminFee = 0.0;
+                $totalPayment = $sellPrice;
+                $pricingDetails = [
+                    'base_price' => $sellPrice,
                     'margin' => 0,
                     'sell_price' => $sellPrice,
                     'admin_fee' => $adminFee,

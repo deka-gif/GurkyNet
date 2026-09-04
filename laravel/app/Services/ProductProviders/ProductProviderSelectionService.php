@@ -34,7 +34,12 @@ class ProductProviderSelectionService
      */
     public function findProductByInternalSku(string $internalSku): ?Product
     {
-        return Product::query()->where('sku_code', $internalSku)->first();
+        $product = Product::query()->where('sku_code', $internalSku)->first();
+        if ($product) {
+            return $product;
+        }
+
+        return app(DigiflazzDevTestSkuSupport::class)->resolveVirtualProduct($internalSku);
     }
 
     public function logSelection(
