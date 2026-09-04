@@ -135,6 +135,10 @@ class TransactionController extends Controller
             ], 404);
         }
 
+        // FR-TOPUP-UX-01 — owner-only payment resume (snap_token) on detail, never on list.
+        $transaction->loadMissing('midtransTransaction');
+        $transaction->expose_payment_resume = true;
+
         return response()->json([
             'success' => true,
             'message' => 'Detail transaksi berhasil diambil.',

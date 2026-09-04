@@ -15,6 +15,8 @@ class Notification extends Model
         'title',
         'message',
         'type',
+        'payload',
+        'dedupe_key',
         'cover_media_id',
         'is_active',
     ];
@@ -22,6 +24,7 @@ class Notification extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'cover_media_id' => 'integer',
+        'payload' => 'array',
     ];
 
     public function coverMedia()

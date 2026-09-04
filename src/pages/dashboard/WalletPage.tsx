@@ -306,11 +306,14 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         return;
       }
       window.snap.pay(res.snap_token, {
+        // Snap UI callbacks are NOT wallet settlement. Final status comes from webhook/backend.
         onSuccess: function (result: unknown) {
           const extra = extractMidtransPaymentDetails(result);
-          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'success' }));
+          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending' }));
           void fetchWallet({ force: true });
-          setSuccessMsg(`Pembayaran diterima. Saldo akan bertambah setelah konfirmasi Midtrans sebesar ${formatIDR(amount)}.`);
+          setSuccessMsg(
+            `Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah Midtrans settlement sebesar ${formatIDR(amount)}.`
+          );
           setTopupAmount('');
           topupIdemRef.current = null;
         },
@@ -321,11 +324,14 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
           setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi Midtrans.');
         },
         onError: function () {
-          setPendingPayment((prev) => (prev ? { ...prev, status: 'failed' } : prev));
-          setErrorMsg('Pembayaran gagal. Saldo tidak ditambahkan.');
+          setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));
+          setErrorMsg('Pembayaran belum berhasil. Cek Riwayat atau lanjutkan pembayaran dari detail transaksi.');
         },
         onClose: function () {
-          setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran dari instruksi yang tampil, atau buka ulang jika belum bayar.');
+          setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));
+          setSuccessMsg(
+            'Menunggu Pembayaran. Transaksi tetap tersimpan di Riwayat — Anda dapat melanjutkan pembayaran dari detail transaksi.'
+          );
         }
       });
     } else if (res) {
@@ -672,7 +678,13 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                   <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <h5 className="font-extrabold text-amber-900 text-sm">
-                        {pendingPayment.status === 'success' ? 'Pembayaran Diterima' : pendingPayment.status === 'failed' ? 'Pembayaran Gagal' : 'Menunggu Pembayaran'}
+                        {pendingPayment.status === 'success'
+                          ? 'Top Up Berhasil'
+                          : pendingPayment.status === 'failed'
+                            ? 'Top Up Gagal'
+                            : pendingPayment.status === 'expired'
+                              ? 'Pembayaran Kedaluwarsa'
+                              : 'Menunggu Pembayaran'}
                       </h5>
                       <button
                         type="button"
@@ -707,7 +719,13 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                       </div>
                     )}
                     <p className="text-[11px] text-amber-800">
-                      Selesaikan pembayaran di jendela Midtrans. Saldo hanya bertambah setelah webhook settlement.
+                      {pendingPayment.status === 'success'
+                        ? 'Top Up berhasil dikonfirmasi. Saldo Anda sudah diperbarui.'
+                        : pendingPayment.status === 'failed'
+                          ? 'Pembayaran tidak berhasil. Saldo Anda tidak berubah.'
+                          : pendingPayment.status === 'expired'
+                            ? 'Pembayaran sudah kedaluwarsa. Silakan buat Top Up baru.'
+                            : 'Menunggu konfirmasi pembayaran. Saldo hanya bertambah setelah settlement Midtrans. Jika jendela ditutup, lanjutkan dari Riwayat.'}
                     </p>
                   </div>
                 )}

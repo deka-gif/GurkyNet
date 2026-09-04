@@ -227,6 +227,27 @@ class ObservabilityAndNotificationTest extends TestCase
         ]);
     }
 
+    public function test_top_up_created_and_processing_do_not_create_inbox_notifications(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-TOPUP-NOTIF-003',
+            'service_name' => 'Top Up Saldo',
+            'target_number' => $this->wallet->wallet_number,
+            'amount' => 25000,
+            'total_payment' => 25000,
+            'payment_method' => 'midtrans',
+            'status' => 'pending',
+        ]);
+        $transaction->load('user');
+        $before = Notification::count();
+
+        resolve(SendNotification::class)->handle(new \App\Events\TransactionCreated($transaction));
+        resolve(SendNotification::class)->handle(new \App\Events\TransactionProcessing($transaction));
+
+        $this->assertSame($before, Notification::count());
+    }
+
     public function test_top_up_expired_notification_uses_pembayaran_kedaluwarsa(): void
     {
         $transaction = Transaction::create([

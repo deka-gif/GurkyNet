@@ -36,6 +36,23 @@ class SendNotification implements ShouldQueue
     }
 
     /**
+     * @return array{transaction_id:int|string,invoice_number:string,dedupe_key:string}
+     */
+    private function topUpPayload(\App\Models\Transaction $tx, string $kind): array
+    {
+        return [
+            'transaction_id' => $tx->id,
+            'invoice_number' => (string) $tx->invoice_number,
+            'dedupe_key' => 'topup_'.$kind.':'.$tx->id,
+        ];
+    }
+
+    private function formatIdr(float $amount): string
+    {
+        return 'Rp'.number_format($amount, 0, ',', '.');
+    }
+
+    /**
      * Handle the event.
      */
     public function handle(mixed $event): void
@@ -46,33 +63,28 @@ class SendNotification implements ShouldQueue
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
+                // FR-TOPUP-UX-01 — Top Up intermediate statuses live in Riwayat only.
                 if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    $this->notificationService->send(
-                        $user,
-                        'Menunggu Pembayaran',
-                        'Top Up Rp' . number_format((float) $tx->amount, 0, ',', '.') . ' belum dibayar. Selesaikan pembayaran sebelum batas waktunya berakhir.',
-                        'info',
-                        $this->channelsFor($user, ['database'])
-                    );
-                } else {
-                    $this->notificationService->send($user, 'Transaksi Dibuat', "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . " telah dibuat.", 'info', $this->channelsFor($user, ['database']));
+                    Log::info('SEND NOTIFICATION — skipped TransactionCreated for Top Up (history-only intermediate)', [
+                        'transaction_id' => $tx->id,
+                    ]);
+
+                    return;
                 }
+                $this->notificationService->send($user, 'Transaksi Dibuat', "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . " telah dibuat.", 'info', $this->channelsFor($user, ['database']));
             }
         } elseif ($event instanceof TransactionProcessing) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
                 if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    $this->notificationService->send(
-                        $user,
-                        'Pembayaran Diproses',
-                        'Pembayaran Rp' . number_format((float) $tx->amount, 0, ',', '.') . ' masih diproses. Saldo akan bertambah setelah pembayaran berhasil dikonfirmasi.',
-                        'info',
-                        $this->channelsFor($user, ['database'])
-                    );
-                } else {
-                    $this->notificationService->send($user, 'Transaksi Diproses', "Transaksi #{$tx->invoice_number} sedang diproses.", 'info', $this->channelsFor($user, ['database']));
+                    Log::info('SEND NOTIFICATION — skipped TransactionProcessing for Top Up (history-only intermediate)', [
+                        'transaction_id' => $tx->id,
+                    ]);
+
+                    return;
                 }
+                $this->notificationService->send($user, 'Transaksi Diproses', "Transaksi #{$tx->invoice_number} sedang diproses.", 'info', $this->channelsFor($user, ['database']));
             }
         } elseif ($event instanceof TransactionSuccess) {
             $tx = $event->transaction;
@@ -80,7 +92,7 @@ class SendNotification implements ShouldQueue
             if ($user) {
                 if (TransactionStatusMapper::isWalletTopUp($tx)) {
                     $wallet = \App\Models\Wallet::where('user_id', $user->id)->first();
-                    $balanceText = $wallet ? ' Saldo Anda sekarang Rp' . number_format((float) $wallet->balance, 0, ',', '.') . '.' : '';
+                    $balanceText = $wallet ? ' Saldo Anda sekarang '.$this->formatIdr((float) $wallet->balance).'.' : '';
                     Log::info('SEND NOTIFICATION — Top Up Berhasil', [
                         'transaction_id' => $tx->id,
                         'user_id' => $user->id,
@@ -89,9 +101,10 @@ class SendNotification implements ShouldQueue
                     $this->notificationService->send(
                         $user,
                         'Top Up Berhasil',
-                        'Top Up Rp' . number_format((float) $tx->amount, 0, ',', '.') . ' berhasil.' . $balanceText,
+                        'Top Up '.$this->formatIdr((float) $tx->amount).' berhasil.'.$balanceText,
                         'transaction_success',
-                        $this->channelsFor($user, ['database', 'push'])
+                        $this->channelsFor($user, ['database', 'push']),
+                        $this->topUpPayload($tx, 'success')
                     );
                 } else {
                     Log::info('SEND NOTIFICATION — Pembayaran Berhasil', [
@@ -102,9 +115,14 @@ class SendNotification implements ShouldQueue
                     $this->notificationService->send(
                         $user,
                         'Pembayaran Berhasil',
-                        "Transaksi #{$tx->invoice_number} senilai Rp" . number_format((float) $tx->amount, 0, ',', '.') . ' telah berhasil diselesaikan.',
+                        "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . ' telah berhasil diselesaikan.',
                         'transaction_success',
-                        $this->channelsFor($user, ['database', 'push'])
+                        $this->channelsFor($user, ['database', 'push']),
+                        [
+                            'transaction_id' => $tx->id,
+                            'invoice_number' => (string) $tx->invoice_number,
+                            'dedupe_key' => 'tx_success:'.$tx->id,
+                        ]
                     );
                 }
             }
@@ -116,29 +134,39 @@ class SendNotification implements ShouldQueue
                     || str_contains(strtolower((string) ($tx->notes ?? '')), 'timeout');
 
                 if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    $amountText = 'Rp' . number_format((float) $tx->amount, 0, ',', '.');
+                    $amountText = $this->formatIdr((float) $tx->amount);
                     $rawStatus = strtolower((string) $tx->status);
 
                     if ($rawStatus === \App\Enums\TransactionStatus::EXPIRED->value) {
                         $title = 'Pembayaran Kedaluwarsa';
                         $message = "Pembayaran Top Up {$amountText} telah kedaluwarsa. Saldo Anda tidak berubah.";
                         $type = 'transaction_failed';
+                        $kind = 'expired';
                     } elseif ($isTimeout) {
                         // Belum ada bukti pasti dari Midtrans — jangan klaim gagal secara definitif.
                         $title = 'Status Pembayaran Belum Dapat Dikonfirmasi';
                         $message = "Status pembayaran Top Up {$amountText} belum dapat dikonfirmasi. Silakan cek kembali beberapa saat lagi. Saldo Anda tidak berubah.";
                         $type = 'transaction_timeout';
+                        $kind = 'timeout';
                     } else {
-                        $title = 'Pembayaran Gagal';
-                        $message = "Pembayaran Top Up {$amountText} tidak berhasil. Saldo Anda tidak berubah. Silakan coba lagi.";
+                        $title = 'Top Up Gagal';
+                        $message = "Pembayaran Top Up {$amountText} tidak berhasil. Saldo Anda tidak berubah.";
                         $type = 'transaction_failed';
+                        $kind = 'failed';
                     }
 
                     Log::info('SEND NOTIFICATION — ' . $title . ' (Top Up)', [
                         'transaction_id' => $tx->id,
                         'user_id' => $user->id,
                     ]);
-                    $this->notificationService->send($user, $title, $message, $type, $this->channelsFor($user, ['database', 'push']));
+                    $this->notificationService->send(
+                        $user,
+                        $title,
+                        $message,
+                        $type,
+                        $this->channelsFor($user, ['database', 'push']),
+                        $this->topUpPayload($tx, $kind)
+                    );
                 } else {
                     $title = $isTimeout ? 'Transaksi Timeout' : 'Transaksi Gagal';
                     $message = $isTimeout
@@ -153,7 +181,12 @@ class SendNotification implements ShouldQueue
                         $title,
                         $message,
                         $isTimeout ? 'transaction_timeout' : 'transaction_failed',
-                        $this->channelsFor($user, ['database', 'push'])
+                        $this->channelsFor($user, ['database', 'push']),
+                        [
+                            'transaction_id' => $tx->id,
+                            'invoice_number' => (string) $tx->invoice_number,
+                            'dedupe_key' => ($isTimeout ? 'tx_timeout:' : 'tx_failed:').$tx->id,
+                        ]
                     );
                 }
             }

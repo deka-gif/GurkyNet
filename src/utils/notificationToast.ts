@@ -6,12 +6,15 @@ export const CUSTOMER_TOAST_DURATION_MS = 5_000;
 
 /**
  * Internal ledger / lifecycle events kept in notification history but not shown as popups.
- * User sees one toast per meaningful transaction phase instead.
+ * Top Up intermediate statuses are history-only (FR-TOPUP-UX-01).
  */
 const SUPPRESSED_POPUP_TITLES = new Set([
   'transaksi dibuat',
   'saldo berkurang',
   'saldo bertambah',
+  'menunggu pembayaran',
+  'pembayaran diproses',
+  'transaksi diproses',
 ]);
 
 /** Backend / UI notification shapes that should surface as dashboard toasts. */
@@ -23,7 +26,8 @@ export function mapNotificationToToastType(rawType: unknown, title?: string): To
     type.includes('transaction_success') ||
     type === 'success' ||
     t.includes('pembayaran berhasil') ||
-    t.includes('transaksi berhasil')
+    t.includes('transaksi berhasil') ||
+    t.includes('top up berhasil')
   ) {
     return 'success';
   }
@@ -34,6 +38,8 @@ export function mapNotificationToToastType(rawType: unknown, title?: string): To
     type === 'error' ||
     t.includes('transaksi gagal') ||
     t.includes('pembayaran gagal') ||
+    t.includes('top up gagal') ||
+    t.includes('pembayaran kedaluwarsa') ||
     t.includes('transaksi timeout')
   ) {
     return 'error';
@@ -48,6 +54,7 @@ export function mapNotificationToToastType(rawType: unknown, title?: string): To
     t.includes('menunggu') ||
     t.includes('diproses')
   ) {
+    // Intermediate Top Up / PPOB phases — suppressed via shouldSuppressTransactionPopup.
     return 'warning';
   }
 
@@ -60,17 +67,24 @@ export function mapNotificationToToastType(rawType: unknown, title?: string): To
 
 export function extractTransactionInvoice(title?: string, message?: string): string | null {
   const hay = `${title ?? ''} ${message ?? ''}`;
-  const match = hay.match(/#?(GRK-\d{8}-\d{6})/i);
+  const match = hay.match(/#?(GRK-\d{8}-\d{6}|TRX-TOPUP-\d{14}-\d{4})/i);
   return match ? match[1].toUpperCase() : null;
 }
 
 /**
  * Collapse transaction notifications to one popup phase per invoice:
- * processing → success | failed (refund folded into failed copy).
+ * success | failed (processing/pending suppressed for Top Up UX).
  */
 export function transactionToastPhase(title?: string, type?: string): 'processing' | 'success' | 'failed' | null {
   const t = String(title || '').toLowerCase();
   const rawType = String(type || '').toLowerCase();
+
+  if (
+    t.includes('menunggu pembayaran') ||
+    t.includes('pembayaran diproses')
+  ) {
+    return null;
+  }
 
   if (t.includes('diproses') || t.includes('menunggu')) {
     return 'processing';
@@ -78,6 +92,7 @@ export function transactionToastPhase(title?: string, type?: string): 'processin
   if (
     t.includes('pembayaran berhasil') ||
     t.includes('transaksi berhasil') ||
+    t.includes('top up berhasil') ||
     rawType.includes('transaction_success')
   ) {
     return 'success';
@@ -85,6 +100,9 @@ export function transactionToastPhase(title?: string, type?: string): 'processin
   if (
     t.includes('transaksi gagal') ||
     t.includes('transaksi timeout') ||
+    t.includes('top up gagal') ||
+    t.includes('pembayaran kedaluwarsa') ||
+    t.includes('pembayaran gagal') ||
     t.includes('refund berhasil') ||
     rawType.includes('transaction_failed') ||
     rawType.includes('transaction_timeout')
@@ -111,6 +129,18 @@ export function normalizeTransactionToastCopy(
   message?: string,
   phase?: 'processing' | 'success' | 'failed' | null
 ): { title: string; description?: string } {
+  const lower = title.toLowerCase();
+
+  if (lower.includes('top up berhasil')) {
+    return { title: 'Top Up Berhasil', description: message };
+  }
+  if (lower.includes('top up gagal')) {
+    return { title: 'Top Up Gagal', description: message };
+  }
+  if (lower.includes('pembayaran kedaluwarsa')) {
+    return { title: 'Pembayaran Kedaluwarsa', description: message };
+  }
+
   if (phase === 'processing') {
     const invoice = extractTransactionInvoice(title, message);
     return {
@@ -146,8 +176,11 @@ export function enqueueNotificationToast(n: {
   title?: string;
   message?: string;
   type?: string;
+  rawType?: string;
   isRead?: boolean;
   is_read?: boolean;
+  transactionId?: string | number | null;
+  invoiceNumber?: string | null;
 }): boolean {
   const isRead = Boolean(n.isRead ?? n.is_read);
   if (isRead) return false;
@@ -157,16 +190,21 @@ export function enqueueNotificationToast(n: {
     return false;
   }
 
-  const phase = transactionToastPhase(title, n.type);
-  const toastType = mapNotificationToToastType(n.type, title);
+  const typeForMap = n.rawType || n.type;
+  const phase = transactionToastPhase(title, typeForMap);
+  const toastType = mapNotificationToToastType(typeForMap, title);
   if (!toastType && !phase) return false;
 
-  const invoice = extractTransactionInvoice(title, n.message);
+  const invoice =
+    (n.invoiceNumber ? String(n.invoiceNumber) : null) ||
+    extractTransactionInvoice(title, n.message);
   const sourceId = invoice && phase
     ? buildTransactionToastSourceId(invoice, phase)
-    : n.id != null
-      ? `notification:${n.id}`
-      : undefined;
+    : n.transactionId != null && phase
+      ? `tx-toast:id:${n.transactionId}:${phase}`
+      : n.id != null
+        ? `notification:${n.id}`
+        : undefined;
 
   const copy = normalizeTransactionToastCopy(title, n.message, phase);
 

@@ -21,10 +21,13 @@ interface NotificationState {
 
 function looksLikeSettlementNotification(n: any): boolean {
   const title = String(n?.title || '').toLowerCase();
-  const type = String(n?.type || '').toLowerCase();
+  const type = String(n?.rawType || n?.type || '').toLowerCase();
   return (
     title.includes('pembayaran berhasil') ||
     title.includes('transaksi berhasil') ||
+    title.includes('top up berhasil') ||
+    title.includes('top up gagal') ||
+    title.includes('pembayaran kedaluwarsa') ||
     title.includes('transaksi gagal') ||
     title.includes('transaksi timeout') ||
     type.includes('transaction_success') ||

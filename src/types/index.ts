@@ -112,6 +112,14 @@ export interface Product {
   requiresRegion?: boolean;
 }
 
+export interface PaymentResumeInfo {
+  canResume: boolean;
+  snapToken?: string | null;
+  orderId?: string | null;
+  midtransStatus?: string | null;
+  reason?: string | null;
+}
+
 export interface Transaction {
   id: string;
   transactionCode: string;
@@ -121,7 +129,8 @@ export interface Transaction {
   targetNo: string;
   amount: number;
   date: string;
-  status: 'sukses' | 'success' | 'pending' | 'gagal' | 'failed' | 'cancelled';
+  status: 'sukses' | 'success' | 'pending' | 'processing' | 'gagal' | 'failed' | 'cancelled' | 'expired' | 'refunded';
+  statusRaw?: string;
   note?: string;
   notes?: string;
   /** Fulfillment provider code from API when present (e.g. digiflazz, vip). */
@@ -130,6 +139,8 @@ export interface Transaction {
   adminFee?: number;
   totalPayment?: number;
   paymentMethod?: string | null;
+  /** Owner-only Top Up Midtrans resume payload (detail endpoint). */
+  paymentResume?: PaymentResumeInfo | null;
 }
 
 export interface Notification {
@@ -137,8 +148,11 @@ export interface Notification {
   title: string;
   message: string;
   type: 'info' | 'promo' | 'transaksi';
+  rawType?: string;
   isRead: boolean;
   createdAt: string;
+  transactionId?: string | null;
+  invoiceNumber?: string | null;
 }
 
 export interface Profile {

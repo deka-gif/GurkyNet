@@ -1,0 +1,295 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\TransactionStatus;
+use App\Enums\UserRole;
+use App\Events\TransactionCreated;
+use App\Events\TransactionFailed;
+use App\Events\TransactionProcessing;
+use App\Events\TransactionSuccess;
+use App\Http\Resources\NotificationResource;
+use App\Listeners\SendNotification;
+use App\Models\MidtransTransaction;
+use App\Models\Notification;
+use App\Models\Transaction;
+use App\Models\User;
+use App\Models\UserNotification;
+use App\Models\Wallet;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
+
+/**
+ * FR-TOPUP-UX-01 — Top Up notification + payment resume UX (no financial credit changes).
+ */
+class TopUpNotificationUxTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected User $user;
+
+    protected Wallet $wallet;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->user = User::create([
+            'name' => 'TopUp UX User',
+            'email' => 'topup-ux@gurkynet.test',
+            'phone_number' => '081299990301',
+            'password' => Hash::make('password123'),
+            'role' => UserRole::USER,
+            'transaction_pin' => Hash::make('123456'),
+        ]);
+
+        $this->wallet = Wallet::create([
+            'user_id' => $this->user->id,
+            'wallet_number' => 'W90301',
+            'balance' => 100000,
+            'status' => 'active',
+        ]);
+    }
+
+    protected function makeTopUp(array $overrides = []): Transaction
+    {
+        $tx = Transaction::create(array_merge([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'TRX-TOPUP-'.now()->format('YmdHis').'-9999',
+            'service_name' => 'Top Up Saldo',
+            'target_number' => $this->wallet->wallet_number,
+            'amount' => 10000,
+            'admin_fee' => 0,
+            'total_payment' => 10000,
+            'payment_method' => 'midtrans',
+            'status' => TransactionStatus::PENDING->value,
+        ], $overrides));
+
+        MidtransTransaction::create([
+            'transaction_id' => $tx->id,
+            'order_id' => $tx->invoice_number,
+            'snap_token' => 'snap-ux-token',
+            'gross_amount' => $tx->total_payment,
+            'transaction_status' => 'pending',
+        ]);
+
+        return $tx->fresh(['user', 'midtransTransaction']);
+    }
+
+    public function test_a_created_does_not_create_notification(): void
+    {
+        $tx = $this->makeTopUp();
+        $before = Notification::count();
+
+        resolve(SendNotification::class)->handle(new TransactionCreated($tx));
+
+        $this->assertSame($before, Notification::count());
+        $this->assertDatabaseMissing('notifications', ['title' => 'Menunggu Pembayaran']);
+    }
+
+    public function test_b_processing_does_not_create_notification(): void
+    {
+        $tx = $this->makeTopUp();
+        $before = Notification::count();
+
+        resolve(SendNotification::class)->handle(new TransactionProcessing($tx));
+
+        $this->assertSame($before, Notification::count());
+        $this->assertDatabaseMissing('notifications', ['title' => 'Pembayaran Diproses']);
+    }
+
+    public function test_c_success_creates_exactly_one_notification(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value]);
+        $this->wallet->balance = 1820000;
+        $this->wallet->save();
+
+        resolve(SendNotification::class)->handle(new TransactionSuccess($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('title', 'Top Up Berhasil')->count());
+        $notif = Notification::where('title', 'Top Up Berhasil')->first();
+        $this->assertNotNull($notif);
+        $this->assertStringContainsString('Rp10.000', $notif->message);
+        $this->assertStringContainsString('Rp1.820.000', $notif->message);
+        $this->assertSame($tx->id, $notif->payload['transaction_id'] ?? null);
+        $this->assertSame($tx->invoice_number, $notif->payload['invoice_number'] ?? null);
+        $this->assertSame('topup_success:'.$tx->id, $notif->dedupe_key);
+        $this->assertSame('topup_success:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+    }
+
+    public function test_d_duplicate_success_stays_one_notification(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value]);
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionSuccess($tx->fresh(['user'])));
+        $listener->handle(new TransactionSuccess($tx->fresh(['user'])));
+        $listener->handle(new TransactionSuccess($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('title', 'Top Up Berhasil')->count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$tx->id)->count());
+        $this->assertSame(1, UserNotification::where('user_id', $this->user->id)->count());
+    }
+
+    public function test_d2_service_level_retry_same_dedupe_key_is_idempotent(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value]);
+        $payload = [
+            'transaction_id' => $tx->id,
+            'invoice_number' => $tx->invoice_number,
+            'dedupe_key' => 'topup_success:'.$tx->id,
+        ];
+        $svc = resolve(\App\Services\NotificationService::class);
+
+        $svc->send($this->user, 'Top Up Berhasil', 'Top Up Rp10.000 berhasil.', 'transaction_success', ['database'], $payload);
+        $svc->send($this->user, 'Top Up Berhasil', 'Top Up Rp10.000 berhasil.', 'transaction_success', ['database'], $payload);
+        $svc->send($this->user, 'Top Up Berhasil', 'Top Up Rp10.000 berhasil. retry', 'transaction_success', ['database'], $payload);
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$tx->id)->count());
+        $this->assertSame(1, UserNotification::where('user_id', $this->user->id)->count());
+    }
+
+    public function test_d3_different_transactions_get_separate_notifications(): void
+    {
+        $a = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value, 'invoice_number' => 'TRX-TOPUP-20260904160000-1111']);
+        $b = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value, 'invoice_number' => 'TRX-TOPUP-20260904160000-2222']);
+
+        resolve(SendNotification::class)->handle(new TransactionSuccess($a->fresh(['user'])));
+        resolve(SendNotification::class)->handle(new TransactionSuccess($b->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$a->id)->count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$b->id)->count());
+        $this->assertSame(2, Notification::where('title', 'Top Up Berhasil')->count());
+    }
+
+    public function test_d4_without_dedupe_key_still_creates_each_time(): void
+    {
+        $svc = resolve(\App\Services\NotificationService::class);
+        $svc->send($this->user, 'Info Biasa', 'Pesan satu', 'info', ['database']);
+        $svc->send($this->user, 'Info Biasa', 'Pesan dua', 'info', ['database']);
+
+        $this->assertSame(2, Notification::where('title', 'Info Biasa')->whereNull('dedupe_key')->count());
+        $this->assertSame(2, UserNotification::where('user_id', $this->user->id)->count());
+    }
+
+    public function test_d5_unique_constraint_rejects_raw_duplicate_insert(): void
+    {
+        Notification::create([
+            'title' => 'Top Up Berhasil',
+            'message' => 'first',
+            'type' => 'transaction_success',
+            'dedupe_key' => 'topup_success:lock-test',
+            'payload' => ['dedupe_key' => 'topup_success:lock-test'],
+        ]);
+
+        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
+        Notification::create([
+            'title' => 'Top Up Berhasil',
+            'message' => 'second',
+            'type' => 'transaction_success',
+            'dedupe_key' => 'topup_success:lock-test',
+            'payload' => ['dedupe_key' => 'topup_success:lock-test'],
+        ]);
+    }
+
+    public function test_e_failed_creates_one_final_notification(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::FAILED->value]);
+        resolve(SendNotification::class)->handle(new TransactionFailed($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('title', 'Top Up Gagal')->count());
+        $notif = Notification::where('title', 'Top Up Gagal')->first();
+        $this->assertSame('topup_failed:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+    }
+
+    public function test_f_expired_creates_kedaluwarsa_notification(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::EXPIRED->value]);
+        resolve(SendNotification::class)->handle(new TransactionFailed($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('title', 'Pembayaran Kedaluwarsa')->count());
+        $notif = Notification::where('title', 'Pembayaran Kedaluwarsa')->first();
+        $this->assertSame('topup_expired:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+    }
+
+    public function test_g_notification_resource_exposes_transaction_reference(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value]);
+        resolve(SendNotification::class)->handle(new TransactionSuccess($tx->fresh(['user'])));
+
+        $userNotif = UserNotification::where('user_id', $this->user->id)->with('notification')->first();
+        $arr = (new NotificationResource($userNotif))->resolve();
+
+        $this->assertSame((string) $tx->id, $arr['transactionId']);
+        $this->assertSame($tx->invoice_number, $arr['invoiceNumber']);
+        $this->assertSame('transaction_success', $arr['rawType']);
+    }
+
+    public function test_m_pending_topup_detail_exposes_resume_snap_token(): void
+    {
+        $tx = $this->makeTopUp();
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions/'.$tx->id);
+
+        $res->assertOk();
+        $res->assertJsonPath('data.paymentResume.canResume', true);
+        $res->assertJsonPath('data.paymentResume.snapToken', 'snap-ux-token');
+        $this->assertSame('pending', $res->json('data.status'));
+    }
+
+    public function test_n_expired_topup_cannot_resume(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::EXPIRED->value]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update(['transaction_status' => 'expire']);
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions/'.$tx->id);
+
+        $res->assertOk();
+        $res->assertJsonPath('data.paymentResume.canResume', false);
+        $res->assertJsonPath('data.paymentResume.snapToken', null);
+        $res->assertJsonPath('data.paymentResume.reason', 'expired');
+        $this->assertSame('expired', $res->json('data.status'));
+    }
+
+    public function test_o_success_topup_cannot_resume(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::SUCCESS->value]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update(['transaction_status' => 'settlement']);
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions/'.$tx->id);
+
+        $res->assertOk();
+        $res->assertJsonPath('data.paymentResume.canResume', false);
+        $res->assertJsonPath('data.paymentResume.snapToken', null);
+    }
+
+    public function test_p_other_user_cannot_resume_or_view_token(): void
+    {
+        $tx = $this->makeTopUp();
+        $other = User::create([
+            'name' => 'Other',
+            'email' => 'other-ux@gurkynet.test',
+            'phone_number' => '081299990302',
+            'password' => Hash::make('password123'),
+            'role' => UserRole::USER,
+        ]);
+        Sanctum::actingAs($other);
+
+        $this->getJson('/api/v1/transactions/'.$tx->id)->assertStatus(404);
+    }
+
+    public function test_list_does_not_expose_payment_resume(): void
+    {
+        $this->makeTopUp();
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions');
+        $res->assertOk();
+        $first = $res->json('data.0');
+        $this->assertArrayNotHasKey('paymentResume', $first ?? []);
+    }
+}

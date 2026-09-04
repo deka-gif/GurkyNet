@@ -87,7 +87,11 @@ export const RiwayatPage = () => {
       statuses: transactions.slice(0, 5).map((t) => ({
         code: t.transactionCode,
         status: t.status,
-        label: transactionStatusLabel(t.status),
+        label: transactionStatusLabel(t.status, {
+          serviceName: t.serviceName,
+          paymentMethod: t.paymentMethod,
+          statusRaw: t.statusRaw,
+        }),
       })),
     });
   }, [transactions]);
@@ -346,7 +350,11 @@ export const RiwayatPage = () => {
             const success = isSuccessStatus(tx.status);
             const pending = isPendingStatus(tx.status);
             const failed = isFailedStatus(tx.status);
-            const label = transactionStatusLabel(tx.status);
+            const label = transactionStatusLabel(tx.status, {
+              serviceName: tx.serviceName,
+              paymentMethod: tx.paymentMethod,
+              statusRaw: tx.statusRaw,
+            });
 
             return (
               <div
@@ -503,7 +511,11 @@ export const RiwayatPage = () => {
                   <div className="flex justify-between">
                     <span>Status Transaksi</span>
                     <span className="text-gray-900 font-extrabold uppercase text-[10px] tracking-wide">
-                      {transactionStatusLabel(selectedTx.status)}
+                      {transactionStatusLabel(selectedTx.status, {
+                        serviceName: selectedTx.serviceName,
+                        paymentMethod: selectedTx.paymentMethod,
+                        statusRaw: selectedTx.statusRaw,
+                      })}
                     </span>
                   </div>
 

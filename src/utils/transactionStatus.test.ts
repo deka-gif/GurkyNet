@@ -14,8 +14,9 @@ assert.equal(normalizeTransactionStatus('SUCCESS'), 'success');
 assert.equal(normalizeTransactionStatus('failed'), 'failed');
 assert.equal(normalizeTransactionStatus('gagal'), 'failed');
 assert.equal(normalizeTransactionStatus('pending'), 'pending');
-assert.equal(normalizeTransactionStatus('processing'), 'pending');
+assert.equal(normalizeTransactionStatus('processing'), 'processing');
 assert.equal(normalizeTransactionStatus('waiting'), 'pending');
+assert.equal(normalizeTransactionStatus('expired'), 'expired');
 assert.equal(normalizeTransactionStatus('refunded'), 'refunded');
 assert.equal(normalizeTransactionStatus('REFUNDED'), 'refunded');
 
@@ -28,6 +29,7 @@ assert.equal(isPendingStatus('LOCKED'), true);
 assert.equal(isPendingStatus('INITIATED'), true);
 assert.equal(isFailedStatus('gagal'), true);
 assert.equal(isFailedStatus('cancelled'), true);
+assert.equal(isFailedStatus('expired'), true);
 
 assert.equal(toSrsTransactionStatus('sukses'), 'SUCCESS');
 assert.equal(toSrsTransactionStatus('LOCKED'), 'LOCKED');
@@ -39,5 +41,17 @@ assert.equal(transactionStatusLabel('failed'), 'Gagal');
 assert.equal(transactionStatusLabel('LOCKED'), 'Saldo dikunci');
 assert.equal(transactionStatusLabel('REFUNDED'), 'Direfund');
 assert.equal(transactionStatusLabel('pending'), 'Dikirim ke provider');
+assert.equal(
+  transactionStatusLabel('pending', { serviceName: 'Top Up Saldo', paymentMethod: 'midtrans' }),
+  'Menunggu Pembayaran'
+);
+assert.equal(
+  transactionStatusLabel('processing', { serviceName: 'Top Up Saldo' }),
+  'Pembayaran Diproses'
+);
+assert.equal(
+  transactionStatusLabel('expired', { serviceName: 'Top Up Saldo' }),
+  'Pembayaran Kedaluwarsa'
+);
 
 console.log('transactionStatus tests passed');

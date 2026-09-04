@@ -2,7 +2,7 @@
  * Canonical transaction status helpers.
  *
  * Backend TransactionResource normalizes DB values to:
- *   success | pending | failed | cancelled | refunded
+ *   success | pending | processing | failed | cancelled | refunded | expired
  * and exposes SRS 14.3 vocabulary on status_srs:
  *   INITIATED | LOCKED | SENT_TO_SUPPLIER | PENDING_SUPPLIER | SUCCESS | FAILED | REFUNDED
  *
@@ -12,9 +12,11 @@
 export type CanonicalTransactionStatus =
   | 'success'
   | 'pending'
+  | 'processing'
   | 'failed'
   | 'cancelled'
-  | 'refunded';
+  | 'refunded'
+  | 'expired';
 
 export type SrsTransactionStatus =
   | 'INITIATED'
@@ -24,6 +26,12 @@ export type SrsTransactionStatus =
   | 'SUCCESS'
   | 'FAILED'
   | 'REFUNDED';
+
+export function isWalletTopUpService(serviceName?: string | null, paymentMethod?: string | null): boolean {
+  const service = String(serviceName || '').toLowerCase();
+  const method = String(paymentMethod || '').toLowerCase();
+  return method === 'midtrans' || service.includes('top up') || service.includes('topup');
+}
 
 export function normalizeTransactionStatus(raw: unknown): CanonicalTransactionStatus {
   const status = String(raw ?? '')
@@ -43,11 +51,14 @@ export function normalizeTransactionStatus(raw: unknown): CanonicalTransactionSt
     return 'refunded';
   }
 
+  if (status === 'expired') {
+    return 'expired';
+  }
+
   if (
     status === 'failed' ||
     status === 'gagal' ||
     status === 'error' ||
-    status === 'expired' ||
     status === 'fail'
   ) {
     return 'failed';
@@ -62,7 +73,11 @@ export function normalizeTransactionStatus(raw: unknown): CanonicalTransactionSt
     return 'cancelled';
   }
 
-  // pending | processing | draft | INITIATED | LOCKED | SENT_TO_SUPPLIER | PENDING_SUPPLIER | waiting | empty
+  if (status === 'processing') {
+    return 'processing';
+  }
+
+  // pending | draft | INITIATED | LOCKED | SENT_TO_SUPPLIER | PENDING_SUPPLIER | waiting | empty
   return 'pending';
 }
 
@@ -91,7 +106,7 @@ export function toSrsTransactionStatus(raw: unknown): SrsTransactionStatus {
 
   const canonical = normalizeTransactionStatus(raw);
   if (canonical === 'success') return 'SUCCESS';
-  if (canonical === 'failed') return 'FAILED';
+  if (canonical === 'failed' || canonical === 'expired') return 'FAILED';
   if (canonical === 'cancelled') return 'FAILED';
   if (canonical === 'refunded') return 'REFUNDED';
   return 'SENT_TO_SUPPLIER';
@@ -102,9 +117,10 @@ export function isSuccessStatus(raw: unknown): boolean {
 }
 
 export function isPendingStatus(raw: unknown): boolean {
+  const canonical = normalizeTransactionStatus(raw);
+  if (canonical === 'pending' || canonical === 'processing') return true;
   const srs = toSrsTransactionStatus(raw);
   return (
-    normalizeTransactionStatus(raw) === 'pending' ||
     srs === 'INITIATED' ||
     srs === 'LOCKED' ||
     srs === 'SENT_TO_SUPPLIER' ||
@@ -114,10 +130,44 @@ export function isPendingStatus(raw: unknown): boolean {
 
 export function isFailedStatus(raw: unknown): boolean {
   const s = normalizeTransactionStatus(raw);
-  return s === 'failed' || s === 'cancelled';
+  return s === 'failed' || s === 'cancelled' || s === 'expired';
 }
 
-export function transactionStatusLabel(raw: unknown): string {
+export function isExpiredStatus(raw: unknown): boolean {
+  return normalizeTransactionStatus(raw) === 'expired';
+}
+
+/**
+ * Human-readable status. For Top Up, avoid PPOB labels like "Dikirim ke provider".
+ */
+export function transactionStatusLabel(
+  raw: unknown,
+  opts?: { serviceName?: string | null; paymentMethod?: string | null; statusRaw?: string | null }
+): string {
+  const topUp = isWalletTopUpService(opts?.serviceName, opts?.paymentMethod);
+  const canonical = normalizeTransactionStatus(opts?.statusRaw ?? raw);
+
+  if (topUp) {
+    switch (canonical) {
+      case 'pending':
+        return 'Menunggu Pembayaran';
+      case 'processing':
+        return 'Pembayaran Diproses';
+      case 'success':
+        return 'Sukses';
+      case 'expired':
+        return 'Pembayaran Kedaluwarsa';
+      case 'cancelled':
+        return 'Dibatalkan';
+      case 'failed':
+        return 'Gagal';
+      case 'refunded':
+        return 'Direfund';
+      default:
+        return 'Menunggu Pembayaran';
+    }
+  }
+
   const srs = toSrsTransactionStatus(raw);
   switch (srs) {
     case 'INITIATED':
@@ -131,7 +181,8 @@ export function transactionStatusLabel(raw: unknown): string {
     case 'SUCCESS':
       return 'Sukses';
     case 'FAILED':
-      return normalizeTransactionStatus(raw) === 'cancelled' ? 'Dibatalkan' : 'Gagal';
+      if (canonical === 'expired') return 'Pembayaran Kedaluwarsa';
+      return canonical === 'cancelled' ? 'Dibatalkan' : 'Gagal';
     case 'REFUNDED':
       return 'Direfund';
     default:

@@ -7,14 +7,17 @@ import {
   Copy,
   Check,
   XCircle,
+  CreditCard,
 } from 'lucide-react';
 import { useTransactionStore } from '../../store/transaction.store';
 import { transactionService } from '../../services/transaction/transaction.service';
+import { walletService } from '../../services/wallet/wallet.service';
 import { formatIDR } from '../../utils/currency';
 import {
-  isFailedStatus,
+  isExpiredStatus,
   isPendingStatus,
   isSuccessStatus,
+  isWalletTopUpService,
   transactionStatusLabel,
 } from '../../utils/transactionStatus';
 import {
@@ -24,10 +27,12 @@ import {
   maskTargetNumber,
   resolveTargetLabel,
 } from '../../utils/transactionDisplay';
+import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import type { Transaction } from '../../types';
 
 /**
  * Transaction detail page — uses cached store + optional GET /transactions/:id.
+ * FR-TOPUP-UX-01 — Top Up Midtrans resume via stored snap_token (no new order).
  */
 export function TransactionDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -37,6 +42,8 @@ export function TransactionDetailPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [resumeBusy, setResumeBusy] = useState(false);
+  const [resumeMsg, setResumeMsg] = useState<string | null>(null);
   const [receiptCode, setReceiptCode] = useState<{ label: string; code: string; url?: string | null } | null>(null);
   const [receiptMeta, setReceiptMeta] = useState<{
     langgananTargetDisplay?: string | null;
@@ -60,7 +67,7 @@ export function TransactionDetailPage() {
   }, [id, transactions.length, fetchTransactions]);
 
   useEffect(() => {
-    if (!id || fromStore) {
+    if (!id) {
       setRemote(null);
       return;
     }
@@ -70,15 +77,16 @@ export function TransactionDetailPage() {
       setLoading(true);
       setError(null);
       try {
+        // Always hit detail API for owner-only paymentResume (snap_token).
         const res = await transactionService.getById(id);
         if (cancelled) return;
         if (res.success && res.data) {
           setRemote(res.data as Transaction);
-        } else {
+        } else if (!fromStore) {
           setError(res.message || 'Transaksi tidak ditemukan.');
         }
       } catch (err: any) {
-        if (!cancelled) {
+        if (!cancelled && !fromStore) {
           setError(err?.message || 'Gagal memuat detail transaksi.');
         }
       } finally {
@@ -91,7 +99,7 @@ export function TransactionDetailPage() {
     };
   }, [id, fromStore]);
 
-  const tx = fromStore || remote;
+  const tx = remote || fromStore;
 
   useEffect(() => {
     if (!tx) {
@@ -155,6 +163,48 @@ export function TransactionDetailPage() {
     }
   };
 
+  const resumePayment = async () => {
+    const resume = tx?.paymentResume;
+    if (!resume?.canResume || !resume.snapToken) {
+      setResumeMsg('Pembayaran tidak dapat dilanjutkan.');
+      return;
+    }
+    setResumeBusy(true);
+    setResumeMsg(null);
+    try {
+      const cfgRes = await walletService.getPaymentConfig();
+      const snapReady = cfgRes?.data
+        ? await ensureMidtransSnap(cfgRes.data as any)
+        : typeof window.snap?.pay === 'function';
+      if (!snapReady || typeof window.snap?.pay !== 'function') {
+        setResumeMsg('SDK pembayaran belum siap. Silakan muat ulang halaman.');
+        return;
+      }
+      window.snap.pay(resume.snapToken, {
+        onSuccess: () => {
+          setResumeMsg('Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah settlement Midtrans.');
+          void fetchTransactions();
+          void transactionService.getById(id).then((res) => {
+            if (res.success && res.data) setRemote(res.data as Transaction);
+          });
+        },
+        onPending: () => {
+          setResumeMsg('Menunggu Pembayaran. Selesaikan sesuai instruksi Midtrans.');
+        },
+        onError: () => {
+          setResumeMsg('Pembayaran belum berhasil. Anda dapat mencoba lagi selama masih menunggu pembayaran.');
+        },
+        onClose: () => {
+          setResumeMsg('Jendela ditutup. Transaksi tetap menunggu pembayaran — bukan dibatalkan.');
+        },
+      });
+    } catch (err: any) {
+      setResumeMsg(err?.message || 'Gagal membuka pembayaran.');
+    } finally {
+      setResumeBusy(false);
+    }
+  };
+
   if (loading && !tx) {
     return (
       <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-8">
@@ -211,6 +261,18 @@ export function TransactionDetailPage() {
     return formatHistoryTarget(tx.targetNo, { serviceName: tx.serviceName });
   })();
 
+  const statusLabel = transactionStatusLabel(tx.status, {
+    serviceName: tx.serviceName,
+    paymentMethod: tx.paymentMethod,
+    statusRaw: tx.statusRaw,
+  });
+
+  const isTopUp = isWalletTopUpService(tx.serviceName, tx.paymentMethod);
+  const resume = tx.paymentResume;
+  const showResume = Boolean(resume?.canResume && resume.snapToken);
+  const showExpiredBlock =
+    isTopUp && (isExpiredStatus(tx.status) || resume?.reason === 'expired');
+
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-10">
       <button
@@ -234,17 +296,17 @@ export function TransactionDetailPage() {
             {isSuccessStatus(tx.status) ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {transactionStatusLabel(tx.status)}
+                {statusLabel}
               </span>
             ) : isPendingStatus(tx.status) ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
                 <Clock className="h-3.5 w-3.5" />
-                {transactionStatusLabel(tx.status)}
+                {statusLabel}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700">
                 <XCircle className="h-3.5 w-3.5" />
-                {transactionStatusLabel(tx.status)}
+                {statusLabel}
               </span>
             )}
           </div>
@@ -285,6 +347,39 @@ export function TransactionDetailPage() {
           {tx.notes || tx.note ? (
             <Row label="Catatan" value={String(tx.notes || tx.note)} />
           ) : null}
+
+          {showExpiredBlock && (
+            <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 space-y-1">
+              <p className="text-sm font-extrabold text-rose-800">Pembayaran Kedaluwarsa</p>
+              <p className="text-xs text-rose-700 leading-relaxed">
+                Pembayaran Top Up ini sudah melewati batas waktu pembayaran.
+              </p>
+              <p className="text-xs font-bold text-rose-800">
+                Tidak dapat dilanjutkan. Silakan buat Top Up baru.
+              </p>
+            </div>
+          )}
+
+          {showResume && (
+            <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 space-y-2">
+              <p className="text-xs text-amber-900 leading-relaxed">
+                Pembayaran masih menunggu. Menutup jendela QR tidak membatalkan transaksi.
+              </p>
+              <button
+                type="button"
+                disabled={resumeBusy}
+                onClick={() => void resumePayment()}
+                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-xs font-bold text-white hover:bg-primary-700 disabled:opacity-60"
+              >
+                <CreditCard className="h-4 w-4" />
+                {resumeBusy ? 'Membuka…' : 'Lanjutkan Pembayaran'}
+              </button>
+            </div>
+          )}
+
+          {resumeMsg && (
+            <p className="text-xs font-semibold text-slate-600">{resumeMsg}</p>
+          )}
         </div>
 
         <div className="flex gap-2 border-t border-slate-100 px-5 py-4">

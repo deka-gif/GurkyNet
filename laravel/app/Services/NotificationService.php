@@ -6,17 +6,22 @@ use App\Models\Notification;
 use App\Models\UserNotification;
 use App\Models\User;
 use App\Models\UserDevice;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 
 class NotificationService
 {
     /**
      * Send notification to multiple channels.
      * Default: database (in-app). Push is attempted when devices exist + FCM is configured.
+     *
+     * @param  array<string, mixed>|null  $payload  Optional structured meta (e.g. transaction_id, invoice_number, dedupe_key).
      */
-    public function send(User $user, string $title, string $message, string $type = 'info', array $channels = ['database']): array
+    public function send(User $user, string $title, string $message, string $type = 'info', array $channels = ['database'], ?array $payload = null): array
     {
         $results = [];
 
@@ -25,7 +30,7 @@ class NotificationService
                 $channel = strtolower($channel);
                 switch ($channel) {
                     case 'database':
-                        $results['database'] = $this->sendDatabase($user, $title, $message, $type);
+                        $results['database'] = $this->sendDatabase($user, $title, $message, $type, $payload);
                         break;
                     case 'email':
                         $results['email'] = $this->sendEmail($user, $title, $message);
@@ -83,21 +88,99 @@ class NotificationService
         return $notification;
     }
 
-    protected function sendDatabase(User $user, string $title, string $message, string $type): bool
+    /**
+     * Persist an in-app notification.
+     *
+     * When payload.dedupe_key is set and notifications.dedupe_key exists, insert is
+     * protected by a UNIQUE constraint — concurrent/retry finals cannot create duplicates.
+     *
+     * @param  array<string, mixed>|null  $payload
+     */
+    protected function sendDatabase(User $user, string $title, string $message, string $type, ?array $payload = null): bool
     {
-        $notification = Notification::create([
-            'title' => $title,
-            'message' => $message,
-            'type' => $type,
-        ]);
+        $dedupeKey = (is_array($payload) && ! empty($payload['dedupe_key']))
+            ? (string) $payload['dedupe_key']
+            : null;
 
-        UserNotification::create([
-            'user_id' => $user->id,
-            'notification_id' => $notification->id,
-            'is_read' => false,
-        ]);
+        $hasPayloadCol = Schema::hasColumn('notifications', 'payload');
+        $hasDedupeCol = Schema::hasColumn('notifications', 'dedupe_key');
 
-        return true;
+        // Non-keyed path (broadcast-style / legacy): unchanged create-always behavior.
+        if ($dedupeKey === null || ! $hasDedupeCol) {
+            $attrs = [
+                'title' => $title,
+                'message' => $message,
+                'type' => $type,
+            ];
+            if (is_array($payload) && $hasPayloadCol) {
+                $attrs['payload'] = $payload;
+            }
+
+            $notification = Notification::create($attrs);
+
+            UserNotification::create([
+                'user_id' => $user->id,
+                'notification_id' => $notification->id,
+                'is_read' => false,
+            ]);
+
+            return true;
+        }
+
+        // FR-TOPUP-UX-01 — atomic insert-or-reuse via UNIQUE(dedupe_key).
+        try {
+            DB::transaction(function () use ($user, $title, $message, $type, $payload, $dedupeKey, $hasPayloadCol) {
+                $attrs = [
+                    'title' => $title,
+                    'message' => $message,
+                    'type' => $type,
+                    'dedupe_key' => $dedupeKey,
+                ];
+                if ($hasPayloadCol) {
+                    $attrs['payload'] = $payload;
+                }
+
+                $notification = Notification::create($attrs);
+
+                UserNotification::create([
+                    'user_id' => $user->id,
+                    'notification_id' => $notification->id,
+                    'is_read' => false,
+                ]);
+            });
+
+            return true;
+        } catch (UniqueConstraintViolationException $e) {
+            $existing = Notification::query()
+                ->where('dedupe_key', $dedupeKey)
+                ->first();
+
+            if (! $existing) {
+                Log::warning('NotificationService: unique violation without existing dedupe_key row', [
+                    'user_id' => $user->id,
+                    'dedupe_key' => $dedupeKey,
+                    'error' => $e->getMessage(),
+                ]);
+
+                throw $e;
+            }
+
+            UserNotification::firstOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'notification_id' => $existing->id,
+                ],
+                ['is_read' => false]
+            );
+
+            Log::info('NotificationService: skipped duplicate database notification (unique dedupe_key)', [
+                'user_id' => $user->id,
+                'dedupe_key' => $dedupeKey,
+                'notification_id' => $existing->id,
+            ]);
+
+            return true;
+        }
     }
 
     protected function sendEmail(User $user, string $title, string $message): bool

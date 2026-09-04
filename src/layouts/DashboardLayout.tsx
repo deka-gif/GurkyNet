@@ -666,7 +666,15 @@ export const DashboardLayout = () => {
                         notifications.slice(0, 6).map((item) => (
                           <div 
                             key={item.id} 
-                            onClick={() => !item.isRead && markAsRead(item.id)}
+                            onClick={() => {
+                              if (!item.isRead) void markAsRead(item.id);
+                              const target = item.transactionId || item.invoiceNumber;
+                              if (target) {
+                                navigate(`/dashboard/riwayat/${encodeURIComponent(String(target))}`);
+                              } else {
+                                navigate('/dashboard/notifikasi');
+                              }
+                            }}
                             className={`p-3 rounded-2xl transition-all cursor-pointer border ${item.isRead ? 'bg-white border-gray-100 hover:bg-gray-50' : 'bg-primary-50/40 border-primary-100/60 hover:bg-primary-50/70'}`}
                           >
                             <div className="flex items-start gap-2.5">
