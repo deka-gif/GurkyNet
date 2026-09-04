@@ -29,6 +29,7 @@ import {
   resolveTargetLabel,
 } from '../../utils/transactionDisplay';
 import { ensureMidtransSnap } from '../../utils/midtransSnap';
+import { customerFacingPaymentMethodLabel } from '../../utils/paymentMethodLabel';
 import type { PaymentResumeInfo, Transaction } from '../../types';
 
 function normalizeDetailTransaction(row: any): Transaction {
@@ -39,6 +40,11 @@ function normalizeDetailTransaction(row: any): Transaction {
         snapToken: paymentResumeRaw.snapToken ?? paymentResumeRaw.snap_token ?? null,
       }
     : undefined;
+
+  const paymentMethodLabel = customerFacingPaymentMethodLabel(
+    row?.paymentMethod ?? row?.payment_method,
+    row?.paymentMethodLabel ?? row?.payment_method_label
+  );
 
   return {
     ...row,
@@ -54,7 +60,8 @@ function normalizeDetailTransaction(row: any): Transaction {
     statusRaw: row?.statusRaw || row?.status_raw || row?.status,
     notes: row?.notes || row?.note || '',
     note: row?.note || row?.notes || '',
-    paymentMethod: row?.paymentMethod || row?.payment_method || null,
+    paymentMethod: paymentMethodLabel,
+    paymentMethodLabel,
     totalPayment: row?.totalPayment != null ? Number(row.totalPayment) : undefined,
     adminFee: row?.adminFee != null ? Number(row.adminFee) : undefined,
     paymentResume,
@@ -435,7 +442,9 @@ export function TransactionDetailPage() {
           {tx.totalPayment != null ? (
             <Row label="Total Bayar" value={formatIDR(tx.totalPayment)} bold />
           ) : null}
-          {tx.paymentMethod ? <Row label="Metode" value={String(tx.paymentMethod)} /> : null}
+          {tx.paymentMethodLabel || tx.paymentMethod ? (
+            <Row label="Metode" value={String(tx.paymentMethodLabel || tx.paymentMethod)} />
+          ) : null}
           {receiptCode && (
             <div className="rounded-2xl border border-primary-100 bg-primary-50/50 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">

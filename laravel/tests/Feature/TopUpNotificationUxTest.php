@@ -69,6 +69,7 @@ class TopUpNotificationUxTest extends TestCase
             'total_payment' => 10000,
             'payment_method' => 'midtrans',
             'status' => TransactionStatus::PENDING->value,
+            'notes' => 'Top up saldo via Midtrans (qris/qris)',
         ], $overrides));
 
         MidtransTransaction::create([
@@ -77,6 +78,7 @@ class TopUpNotificationUxTest extends TestCase
             'snap_token' => 'snap-ux-token',
             'gross_amount' => $tx->total_payment,
             'transaction_status' => 'pending',
+            'payment_type' => 'qris',
         ]);
 
         return $tx->fresh(['user', 'midtransTransaction']);
@@ -247,6 +249,9 @@ class TopUpNotificationUxTest extends TestCase
         $res->assertJsonPath('data.paymentResume.canResume', true);
         $res->assertJsonPath('data.paymentResume.snapToken', 'snap-ux-token');
         $this->assertSame('processing', $res->json('data.status'));
+        $this->assertSame('QRIS', $res->json('data.paymentMethod'));
+        $this->assertSame('QRIS', $res->json('data.paymentMethodLabel'));
+        $this->assertNotEquals('midtrans', strtolower((string) $res->json('data.paymentMethod')));
         $notes = (string) $res->json('data.notes');
         $this->assertStringNotContainsStringIgnoringCase('midtrans', $notes);
         $this->assertStringNotContainsStringIgnoringCase('provider', $notes);
@@ -480,5 +485,101 @@ class TopUpNotificationUxTest extends TestCase
                 && ! str_contains((string) $finish, 'snap_token')
                 && ! str_contains((string) $finish, 'server_key');
         });
+    }
+
+    public function test_payment_method_label_qris(): void
+    {
+        $tx = $this->makeTopUp(['notes' => 'Top up saldo via Midtrans (qris/qris)']);
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions/'.$tx->id);
+        $res->assertOk();
+        $this->assertSame('QRIS', $res->json('data.paymentMethod'));
+        $this->assertSame('QRIS', $res->json('data.paymentMethodLabel'));
+        $this->assertStringNotContainsStringIgnoringCase('midtrans', (string) $res->json('data.paymentMethod'));
+    }
+
+    public function test_payment_method_label_va_bri_and_bca(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $bri = $this->makeTopUp([
+            'invoice_number' => 'TRX-TOPUP-BRI-LABEL-1',
+            'notes' => 'Top up saldo via Midtrans (va/bri_va)',
+        ]);
+        MidtransTransaction::where('transaction_id', $bri->id)->update(['payment_type' => 'bri_va']);
+        $this->getJson('/api/v1/transactions/'.$bri->id)
+            ->assertOk()
+            ->assertJsonPath('data.paymentMethod', 'Virtual Account BRI')
+            ->assertJsonPath('data.paymentMethodLabel', 'Virtual Account BRI');
+
+        $bca = $this->makeTopUp([
+            'invoice_number' => 'TRX-TOPUP-BCA-LABEL-1',
+            'notes' => 'Top up saldo via Midtrans (va/bca_va)',
+        ]);
+        MidtransTransaction::where('transaction_id', $bca->id)->update(['payment_type' => 'bca_va']);
+        $this->getJson('/api/v1/transactions/'.$bca->id)
+            ->assertOk()
+            ->assertJsonPath('data.paymentMethod', 'Virtual Account BCA')
+            ->assertJsonPath('data.paymentMethodLabel', 'Virtual Account BCA');
+    }
+
+    public function test_payment_method_label_indomaret_and_gopay_from_midtrans_payload(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $indo = $this->makeTopUp([
+            'invoice_number' => 'TRX-TOPUP-INDO-LABEL-1',
+            'notes' => 'legacy topup without channel note',
+        ]);
+        MidtransTransaction::where('transaction_id', $indo->id)->update([
+            'payment_type' => 'cstore',
+            'raw_notification' => [
+                'payment_type' => 'cstore',
+                'store' => 'indomaret',
+                'transaction_status' => 'pending',
+            ],
+        ]);
+        $this->getJson('/api/v1/transactions/'.$indo->id)
+            ->assertOk()
+            ->assertJsonPath('data.paymentMethod', 'Indomaret');
+
+        $gopay = $this->makeTopUp([
+            'invoice_number' => 'TRX-TOPUP-GOPAY-LABEL-1',
+            'notes' => 'legacy topup without channel note',
+        ]);
+        MidtransTransaction::where('transaction_id', $gopay->id)->update([
+            'payment_type' => 'gopay',
+            'raw_notification' => [
+                'payment_type' => 'gopay',
+                'transaction_status' => 'settlement',
+            ],
+        ]);
+        $this->getJson('/api/v1/transactions/'.$gopay->id)
+            ->assertOk()
+            ->assertJsonPath('data.paymentMethod', 'GoPay')
+            ->assertJsonPath('data.paymentMethodLabel', 'GoPay');
+    }
+
+    public function test_payment_method_never_exposes_midtrans_gateway_name(): void
+    {
+        $tx = $this->makeTopUp([
+            'notes' => null,
+        ]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update([
+            'payment_type' => null,
+            'raw_notification' => null,
+        ]);
+        Sanctum::actingAs($this->user);
+
+        $res = $this->getJson('/api/v1/transactions/'.$tx->id);
+        $res->assertOk();
+        $method = strtolower((string) $res->json('data.paymentMethod'));
+        $label = strtolower((string) $res->json('data.paymentMethodLabel'));
+        $this->assertNotEquals('midtrans', $method);
+        $this->assertNotEquals('midtrans', $label);
+        $this->assertSame('Pembayaran', $res->json('data.paymentMethod'));
+        // Resume still works for pending with snap token.
+        $res->assertJsonPath('data.paymentResume.canResume', true);
     }
 }

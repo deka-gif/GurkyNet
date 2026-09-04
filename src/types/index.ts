@@ -136,6 +136,8 @@ export interface Transaction {
   adminFee?: number;
   totalPayment?: number;
   paymentMethod?: string | null;
+  /** Customer-facing payment channel label (never gateway names like midtrans). */
+  paymentMethodLabel?: string | null;
   /** Owner-only Top Up Midtrans resume payload (detail endpoint). */
   paymentResume?: PaymentResumeInfo | null;
 }

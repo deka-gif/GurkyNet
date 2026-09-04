@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\UserRole;
+use App\Support\Payments\CustomerFacingPaymentMethod;
 use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -38,6 +39,9 @@ class TransactionResource extends JsonResource
             $notes = $this->customerFacingTopUpNotes($notes, $normalizedStatus, (float) $this->amount);
         }
 
+        // FR-TOPUP-UX-03 — never expose gateway name "midtrans" as Metode.
+        $paymentMethodLabel = CustomerFacingPaymentMethod::labelFor($this->resource);
+
         $payload = [
             'id' => $this->id,
             'transactionCode' => $this->invoice_number,
@@ -47,7 +51,8 @@ class TransactionResource extends JsonResource
             'amount' => (float) $this->amount,
             'adminFee' => (float) $this->admin_fee,
             'totalPayment' => (float) $this->total_payment,
-            'paymentMethod' => $this->payment_method,
+            'paymentMethod' => $paymentMethodLabel,
+            'paymentMethodLabel' => $paymentMethodLabel,
             // Keep legacy UI-normalized status; expose SRS vocabulary separately (14.3).
             'status' => $normalizedStatus,
             'statusRaw' => $rawStatus,
