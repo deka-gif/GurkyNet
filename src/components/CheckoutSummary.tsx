@@ -1,21 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  CheckCircle2, 
-  AlertCircle, 
-  Clock, 
-  Download, 
-  Share2, 
-  Printer, 
-  X, 
-  ArrowRight, 
-  Lock, 
-  RefreshCw, 
-  Check, 
+import {
+  AlertCircle,
+  X,
+  ArrowRight,
+  Lock,
   AlertTriangle,
-  QrCode,
-  Copy
 } from 'lucide-react';
 import { useWalletStore } from '../store/wallet.store';
 import { useTransactionStore } from '../store/transaction.store';
@@ -26,8 +17,10 @@ import { buildCreatePinUrl, savePendingCheckout } from '../utils/pinGate';
 import { isFailedStatus, isSuccessStatus } from '../utils/transactionStatus';
 import { formatIDR } from '../utils/currency';
 import { getOrCreateIdempotencyKey } from '../utils/idempotency';
-import { extractPlnToken, formatPlnTokenGrouped } from '../utils/plnToken';
 import { useFeatureFlags } from '../hooks/useFeatureFlags';
+import { customerFacingPaymentMethodLabel } from '../utils/paymentMethodLabel';
+import { resolveReceiptFields } from '../utils/receiptDeliverable';
+import { TransactionReceipt } from './TransactionReceipt';
 
 // Dynamic transaction properties
 export interface CheckoutData {
@@ -75,7 +68,6 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
   const [loadingStatus, setLoadingStatus] = useState<string>('Memproses Transaksi...');
   const [finalStatus, setFinalStatus] = useState<'sukses' | 'success' | 'pending' | 'gagal'>('sukses');
   const [createdTrx, setCreatedTrx] = useState<any | null>(null);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<any | null>(null);
 
   const totalPayment = data.amount + data.adminFee;
@@ -300,160 +292,33 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     }
   };
 
-  
+  // FR-RECEIPT-UI-01 — single classification pass shared with RiwayatPage's receipt view.
+  const receiptFields = resolveReceiptFields({
+    receiptData,
+    serviceName: data.serviceName,
+    isSuccess: finalStatus === 'sukses' || finalStatus === 'success',
+    customDetails: data.customDetails,
+  });
 
-  const handleShare = () => {
-    const shareText = `Struk Pembayaran GurkyPay\nInvoice: ${createdTrx?.invoice_number || 'N/A'}\nProduk: ${data.productName}\nNominal: ${formatIDR(totalPayment)}\nStatus: ${finalStatus.toUpperCase()}`;
-    if (navigator.share) {
-      navigator.share({
-        title: 'Struk GurkyPay',
-        text: shareText,
-        url: window.location.href
-      }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(shareText);
-      setCopiedText('Detail struk disalin ke papan klip!');
-      setTimeout(() => setCopiedText(null), 3000);
-    }
-  };
+  const receiptPaymentMethodLabel = customerFacingPaymentMethodLabel(
+    receiptData?.transaction_details?.payment_method
+  );
 
-  const plnCustomerName =
-    (receiptData?.transaction_details?.customer_name as string | undefined) ||
-    (typeof data.customDetails?.['Atas Nama'] === 'string' ? data.customDetails['Atas Nama'] : undefined);
-  const plnSegmentPower =
-    (receiptData?.transaction_details?.segment_power as string | undefined) ||
-    (typeof data.customDetails?.['Tarif / Daya'] === 'string' ? data.customDetails['Tarif / Daya'] : undefined);
-  const plnTokenDigits =
-    (receiptData?.transaction_details?.token_code as string | undefined) ||
-    extractPlnToken(receiptData?.transaction_details?.serial_number);
-  const plnTokenGrouped =
-    (receiptData?.transaction_details?.token_code_grouped as string | undefined) ||
-    (plnTokenDigits ? formatPlnTokenGrouped(plnTokenDigits) : null);
-  const isPlnTokenReceipt =
-    String(data.serviceName ?? '').toLowerCase().includes('token pln') ||
-    !!receiptData?.transaction_details?.is_pln_token ||
-    !!plnTokenDigits;
+  const receiptStatus: 'success' | 'pending' | 'failed' =
+    finalStatus === 'sukses' || finalStatus === 'success' ? 'success' : finalStatus === 'pending' ? 'pending' : 'failed';
+  // Spinner covers the field list only while the receipt is still loading; a synthetic
+  // client-side failure (no transaction ever created) never gets a receipt, so don't spin forever.
+  const loadingReceipt = !receiptData && finalStatus !== 'gagal';
 
-  const isPajakReceipt =
-    !!receiptData?.transaction_details?.is_pajak_negara ||
-    String(data.serviceName ?? '').toLowerCase() === 'pbb' ||
-    String(data.serviceName ?? '').toLowerCase() === 'samsat';
-  const isEwalletReceipt =
-    !!receiptData?.transaction_details?.is_ewallet ||
-    String(data.serviceName ?? '').toLowerCase() === 'e-wallet' ||
-    (!!data.inquiryRefId && typeof data.customDetails?.['Nama Akun'] === 'string');
-  const ewalletAccountName =
-    (receiptData?.transaction_details?.customer_name as string | undefined) ||
-    (typeof data.customDetails?.['Nama Akun'] === 'string' ? data.customDetails['Nama Akun'] : undefined);
-  const isGameReceipt =
-    !!receiptData?.transaction_details?.is_game ||
-    String(data.serviceName ?? '').toLowerCase() === 'game' ||
-    typeof data.customDetails?.Nickname === 'string';
-  const gameNickname =
-    (receiptData?.transaction_details?.nickname as string | undefined) ||
-    (receiptData?.transaction_details?.customer_name as string | undefined) ||
-    (typeof data.customDetails?.Nickname === 'string' ? data.customDetails.Nickname : undefined);
-  const gameBrand =
-    (receiptData?.transaction_details?.game_brand as string | undefined) ||
-    (typeof data.customDetails?.Game === 'string' ? data.customDetails.Game : undefined);
-  const gameUserId =
-    (receiptData?.transaction_details?.game_user_id as string | undefined) ||
-    (typeof data.customDetails?.['User ID'] === 'string' ? data.customDetails['User ID'] : undefined);
-  const gameZoneId =
-    (receiptData?.transaction_details?.game_zone_id as string | undefined) ||
-    (typeof data.customDetails?.['Zone ID'] === 'string' ? data.customDetails['Zone ID'] : undefined);
-  const isVoucherReceipt =
-    !!receiptData?.transaction_details?.is_voucher ||
-    String(data.serviceName ?? '').toLowerCase() === 'voucher digital';
-  const voucherCode =
-    (receiptData?.transaction_details?.voucher_code as string | undefined) ||
-    (isVoucherReceipt
-      ? (receiptData?.transaction_details?.serial_number as string | undefined)
-      : undefined);
-  const voucherUrl = receiptData?.transaction_details?.voucher_url as string | undefined;
-  const voucherBarcode = receiptData?.transaction_details?.voucher_barcode as string | undefined;
-  const voucherCopyValue = voucherCode || voucherUrl || voucherBarcode || '';
-  const isLanggananReceipt =
-    !!receiptData?.transaction_details?.is_langganan ||
-    String(data.serviceName ?? '').toLowerCase() === 'langganan digital';
-  const activationCode =
-    (receiptData?.transaction_details?.activation_code as string | undefined) ||
-    (isLanggananReceipt
-      ? (receiptData?.transaction_details?.serial_number as string | undefined)
-      : undefined);
-  const activationUrl = receiptData?.transaction_details?.activation_url as string | undefined;
-  const activationCopyValue = activationCode || activationUrl || '';
-  const isVoucherInternetReceipt =
-    !!receiptData?.transaction_details?.is_voucher_internet ||
-    String(data.serviceName ?? '').toLowerCase() === 'voucher internet';
-  const voucherInternetCode =
-    (receiptData?.transaction_details?.voucher_internet_code as string | undefined) ||
-    (isVoucherInternetReceipt
-      ? (receiptData?.transaction_details?.serial_number as string | undefined)
-      : undefined);
-  const voucherInternetUrl = receiptData?.transaction_details?.voucher_internet_url as string | undefined;
-  const voucherInternetCopyValue = voucherInternetCode || voucherInternetUrl || '';
-  const pajakTaxDetails = (receiptData?.transaction_details?.tax_details || {}) as Record<string, string>;
-  const pajakOwner =
-    (receiptData?.transaction_details?.customer_name as string | undefined) ||
-    (typeof data.customDetails?.['Nama Pemilik'] === 'string' ? data.customDetails['Nama Pemilik'] : undefined);
-  const pajakObjectId =
-    pajakTaxDetails.nop ||
-    pajakTaxDetails.nomor_polisi ||
-    (typeof data.customDetails?.['Nomor Objek Pajak'] === 'string'
-      ? data.customDetails['Nomor Objek Pajak']
-      : undefined) ||
-    (typeof data.customDetails?.['Nomor Polisi'] === 'string' ? data.customDetails['Nomor Polisi'] : undefined) ||
-    data.targetNo;
-  const pajakNtpn =
-    (receiptData?.transaction_details?.ntpn as string | undefined) ||
-    pajakTaxDetails.ntpn ||
-    undefined;
-  const pajakPengesahan =
-    (receiptData?.transaction_details?.nomor_pengesahan as string | undefined) ||
-    (receiptData?.transaction_details?.serial_number as string | undefined) ||
-    undefined;
-
-  const handleCopyPlnToken = () => {
-    if (!plnTokenDigits) return;
-    void navigator.clipboard.writeText(plnTokenDigits).then(() => {
-      setCopiedText('Kode token disalin ke clipboard!');
-      setTimeout(() => setCopiedText(null), 3000);
-    });
-  };
-
-  const handleCopyVoucherCode = () => {
-    if (!voucherCopyValue) return;
-    void navigator.clipboard.writeText(voucherCopyValue).then(() => {
-      setCopiedText('Kode voucher disalin ke clipboard!');
-      setTimeout(() => setCopiedText(null), 3000);
-    });
-  };
-
-  const handleCopyActivationCode = () => {
-    if (!activationCopyValue) return;
-    void navigator.clipboard.writeText(activationCopyValue).then(() => {
-      setCopiedText('Kode aktivasi disalin ke clipboard!');
-      setTimeout(() => setCopiedText(null), 3000);
-    });
-  };
-
-  const handleCopyVoucherInternetCode = () => {
-    if (!voucherInternetCopyValue) return;
-    void navigator.clipboard.writeText(voucherInternetCopyValue).then(() => {
-      setCopiedText('Kode voucher internet disalin ke clipboard!');
-      setTimeout(() => setCopiedText(null), 3000);
-    });
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  // Browsers offer "Save as PDF" from the print dialog; the receipt is print-styled.
-  const handleDownloadPdf = () => {
-    window.print();
-  };
+  // Real backend-generated PDF (Sprint 8 / FR-USR04) — only available once a real
+  // transaction row exists (createdTrx.id). Pre-validation failures never reach the server.
+  const handleDownloadPdf = createdTrx?.id
+    ? () => {
+        void transactionService.downloadReceiptPdf(String(createdTrx.id)).catch(() => {
+          alert('Gagal mengunduh struk PDF.');
+        });
+      }
+    : undefined;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
@@ -468,28 +333,17 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
           animation: shake 0.5s ease-in-out;
         }
         @media print {
-          /* Hide everything in the page except printable-receipt */
-          body > * {
-            display: none !important;
-          }
-          #printable-receipt-root {
-            display: block !important;
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            background: white !important;
-            z-index: 999999 !important;
-            padding: 20px !important;
-          }
-          .no-print {
-            display: none !important;
-          }
+          .no-print { display: none !important; }
         }
       `}</style>
 
-      <div id="printable-receipt-root" className="bg-white w-full max-w-lg rounded-3xl border border-gray-100 shadow-2xl overflow-hidden relative">
+      <div
+        className={
+          step === 'RESULT'
+            ? 'w-full max-w-[400px]'
+            : 'bg-white w-full max-w-lg rounded-3xl border border-gray-100 shadow-2xl overflow-hidden relative'
+        }
+      >
         
         {/* PROGRESS / STEP HEADER (Except during printable view or results) */}
         {step !== 'RESULT' && (
@@ -780,614 +634,31 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
           </div>
         )}
 
-        {/* STEP 5: RESULT PAGE & RECEIPT */}
+        {/* STEP 5: RESULT PAGE & RECEIPT — reusable paper receipt (FR-RECEIPT-UI-01) */}
         {step === 'RESULT' && (
-          <div className="relative">
-            
-            {/* SUCCESS / PENDING / FAILED HERO SECTION */}
-            <div className="p-6 text-center space-y-4 bg-gray-50/50 border-b border-gray-100 no-print">
-              
-              <div className="flex justify-end absolute top-4 right-4 no-print">
-                <button 
-                  onClick={onClose}
-                  className="p-1.5 rounded-full bg-white border border-gray-150 hover:bg-gray-50 text-gray-400 hover:text-gray-600 transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {(finalStatus === 'sukses' || finalStatus === 'success') && (
-                <div className="space-y-3">
-                  <div className="w-14 h-14 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                    <Check className="w-7 h-7 stroke-[3]" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-extrabold text-emerald-950">Transaksi Berhasil!</h3>
-                    <p className="text-xs text-emerald-700 font-medium">Pembayaran Anda telah sukses diverifikasi oleh provider.</p>
-                  </div>
-                </div>
-              )}
-
-              {finalStatus === 'pending' && (
-                <div className="space-y-3">
-                  <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                    <Clock className="w-7 h-7 stroke-[3]" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-extrabold text-amber-950">Transaksi Tertunda (Pending)</h3>
-                    <p className="text-xs text-amber-700 font-medium">Transaksi Anda sedang diantrekan oleh operator terkait.</p>
-                  </div>
-                </div>
-              )}
-
-              {finalStatus === 'gagal' && (
-                <div className="space-y-3">
-                  <div className="w-14 h-14 bg-red-100 text-red-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                    <AlertTriangle className="w-7 h-7 stroke-[3]" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-extrabold text-red-950">Transaksi Gagal</h3>
-                    <p className="text-xs text-red-700 font-medium">
-                      {failureMessage || createdTrx?.note || 'Transaksi gagal diproses.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-                        {/* PREMIUM RECEIPT COMPONENT */}
-            <div id="printable-receipt" className="p-6 space-y-6">
-              {receiptData ? (
-                <>
-                  <div className="flex justify-between items-start border-b border-dashed border-gray-200 pb-5">
-                    <div>
-                      <h4 className="text-lg font-black text-gray-900 tracking-tight">{receiptData.header?.company_name || 'GURKYPAY'}</h4>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wide mt-0.5">Bukti Pembayaran Resmi</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
-                        receiptData.transaction_details?.status === 'success' || receiptData.transaction_details?.status === 'sukses' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                        receiptData.transaction_details?.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                        'bg-red-50 text-red-700 border border-red-100'
-                      }`}>
-                        {receiptData.transaction_details?.status || finalStatus}
-                      </span>
-                    </div>
-                  </div>
-
-                  {isPlnTokenReceipt && (finalStatus === 'sukses' || finalStatus === 'success') && (
-                    <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4 space-y-3 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
-                        <span className="font-black text-emerald-700 uppercase">Transaksi Sukses</span>
-                      </div>
-                      {plnCustomerName ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nama Pelanggan</span>
-                          <span className="font-black text-gray-900 uppercase text-right">{plnCustomerName}</span>
-                        </div>
-                      ) : null}
-                      {plnSegmentPower ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Tarif / Daya</span>
-                          <span className="font-black text-gray-900 text-right">{plnSegmentPower}</span>
-                        </div>
-                      ) : null}
-                      {plnTokenGrouped ? (
-                        <div className="pt-2 border-t border-dashed border-amber-200 space-y-3">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800">Kode Token</p>
-                          <p className="text-xl sm:text-2xl font-black text-gray-950 tracking-wide text-center leading-snug break-words">
-                            {plnTokenGrouped}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleCopyPlnToken}
-                            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 no-print"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            SALIN KODE
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-amber-800 font-medium">
-                          Kode token menunggu response provider. Struk akan diperbarui otomatis.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {isEwalletReceipt && !isPajakReceipt && !isPlnTokenReceipt && !isGameReceipt && (
-                    <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4 space-y-2.5 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
-                        <span className="font-black text-emerald-700 uppercase">Transaksi Berhasil</span>
-                      </div>
-                      {ewalletAccountName ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nama Akun</span>
-                          <span className="font-black text-gray-900 uppercase text-right">{ewalletAccountName}</span>
-                        </div>
-                      ) : null}
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nomor Tujuan</span>
-                        <span className="font-black text-gray-900 text-right tracking-wide">
-                          {receiptData.transaction_details?.target_number || data.targetNo}
-                        </span>
-                      </div>
-                      {(receiptData.transaction_details?.serial_number ||
-                        receiptData.transaction_details?.provider_ref) && (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                            Nomor Referensi / SN
-                          </span>
-                          <span className="font-black text-gray-800 text-right break-all">
-                            {receiptData.transaction_details?.serial_number ||
-                              receiptData.transaction_details?.provider_ref}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {isGameReceipt &&
-                    !isPajakReceipt &&
-                    !isPlnTokenReceipt &&
-                    !isVoucherReceipt &&
-                    !isLanggananReceipt &&
-                    !isVoucherInternetReceipt && (
-                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-2.5 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
-                        <span className="font-black text-emerald-700 uppercase">Transaksi Berhasil</span>
-                      </div>
-                      {gameBrand ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Game</span>
-                          <span className="font-black text-gray-900 uppercase text-right">{gameBrand}</span>
-                        </div>
-                      ) : null}
-                      {gameNickname ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nickname</span>
-                          <span className="font-black text-gray-900 uppercase text-right">{gameNickname}</span>
-                        </div>
-                      ) : null}
-                      {gameUserId ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">User ID</span>
-                          <span className="font-black text-gray-900 text-right tracking-wide">{gameUserId}</span>
-                        </div>
-                      ) : null}
-                      {gameZoneId ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Zone ID</span>
-                          <span className="font-black text-gray-900 text-right tracking-wide">{gameZoneId}</span>
-                        </div>
-                      ) : null}
-                      {(receiptData.transaction_details?.serial_number ||
-                        receiptData.transaction_details?.provider_ref) && (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                            Nomor Referensi / SN
-                          </span>
-                          <span className="font-black text-gray-800 text-right break-all">
-                            {receiptData.transaction_details?.serial_number ||
-                              receiptData.transaction_details?.provider_ref}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {isLanggananReceipt &&
-                    !isPajakReceipt &&
-                    !isPlnTokenReceipt &&
-                    !isVoucherReceipt &&
-                    !isVoucherInternetReceipt && (
-                    <div className="rounded-2xl border border-teal-100 bg-teal-50/40 p-4 space-y-3 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
-                        <span className="font-black text-emerald-700 uppercase">Transaksi Berhasil</span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Produk</span>
-                        <span className="font-black text-gray-900 text-right">
-                          {receiptData.items?.[0]?.name || data.productName}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Tanggal</span>
-                        <span className="font-black text-gray-900 text-right">
-                          {receiptData.transaction_details?.date
-                            ? new Date(receiptData.transaction_details.date).toLocaleString('id-ID', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'Asia/Jakarta',
-                              }) + ' WIB'
-                            : '-'}
-                        </span>
-                      </div>
-                      {activationCode ? (
-                        <div className="pt-2 border-t border-dashed border-teal-200 space-y-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-teal-800">
-                            Kode Voucher / Redeem / Premium / Activation
-                          </p>
-                          <p className="text-lg sm:text-xl font-black text-gray-950 tracking-wide text-center break-all">
-                            {activationCode}
-                          </p>
-                        </div>
-                      ) : null}
-                      {activationUrl ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                            Link Aktivasi
-                          </span>
-                          <a
-                            href={activationUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-black text-primary-700 text-right break-all underline"
-                          >
-                            {activationUrl}
-                          </a>
-                        </div>
-                      ) : null}
-                      {!activationCode && !activationUrl && (
-                        <p className="text-[11px] text-teal-800 font-medium">
-                          Kode aktivasi menunggu response provider. Struk akan diperbarui otomatis.
-                        </p>
-                      )}
-                      {activationCopyValue ? (
-                        <button
-                          type="button"
-                          onClick={handleCopyActivationCode}
-                          className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 no-print"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          SALIN KODE
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-
-                  {isVoucherReceipt && !isPajakReceipt && !isPlnTokenReceipt && !isVoucherInternetReceipt && (
-                    <div className="rounded-2xl border border-rose-100 bg-rose-50/40 p-4 space-y-3 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
-                        <span className="font-black text-emerald-700 uppercase">Transaksi Berhasil</span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Produk</span>
-                        <span className="font-black text-gray-900 text-right">
-                          {receiptData.items?.[0]?.name || data.productName}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Tanggal</span>
-                        <span className="font-black text-gray-900 text-right">
-                          {receiptData.transaction_details?.date
-                            ? new Date(receiptData.transaction_details.date).toLocaleString('id-ID', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'Asia/Jakarta',
-                              }) + ' WIB'
-                            : '-'}
-                        </span>
-                      </div>
-                      {voucherCode ? (
-                        <div className="pt-2 border-t border-dashed border-rose-200 space-y-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-rose-800">
-                            Kode Voucher / PIN Voucher
-                          </p>
-                          <p className="text-lg sm:text-xl font-black text-gray-950 tracking-wide text-center break-all">
-                            {voucherCode}
-                          </p>
-                        </div>
-                      ) : null}
-                      {voucherUrl ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                            URL Voucher
-                          </span>
-                          <a
-                            href={voucherUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-black text-primary-700 text-right break-all underline"
-                          >
-                            {voucherUrl}
-                          </a>
-                        </div>
-                      ) : null}
-                      {voucherBarcode && voucherBarcode !== voucherCode ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Barcode</span>
-                          <span className="font-black text-gray-900 text-right break-all">{voucherBarcode}</span>
-                        </div>
-                      ) : null}
-                      {!voucherCode && !voucherUrl && (
-                        <p className="text-[11px] text-rose-800 font-medium">
-                          Kode voucher menunggu response provider. Struk akan diperbarui otomatis.
-                        </p>
-                      )}
-                      {voucherCopyValue ? (
-                        <button
-                          type="button"
-                          onClick={handleCopyVoucherCode}
-                          className="w-full py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 no-print"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          SALIN KODE VOUCHER
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-
-                  {isVoucherInternetReceipt && !isPajakReceipt && !isPlnTokenReceipt && voucherInternetCopyValue && (
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/40 p-4 space-y-3 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status</span>
-                        <span className="font-black text-emerald-700 uppercase">Transaksi Berhasil</span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Produk</span>
-                        <span className="font-black text-gray-900 text-right">
-                          {receiptData.items?.[0]?.name || data.productName}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Tanggal</span>
-                        <span className="font-black text-gray-900 text-right">
-                          {receiptData.transaction_details?.date
-                            ? new Date(receiptData.transaction_details.date).toLocaleString('id-ID', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'Asia/Jakarta',
-                              }) + ' WIB'
-                            : '-'}
-                        </span>
-                      </div>
-                      {voucherInternetCode ? (
-                        <div className="pt-2 border-t border-dashed border-sky-200 space-y-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-sky-800">Kode Voucher</p>
-                          <p className="text-lg sm:text-xl font-black text-gray-950 tracking-wide text-center break-all">
-                            {voucherInternetCode}
-                          </p>
-                        </div>
-                      ) : null}
-                      {voucherInternetUrl ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                            URL Voucher
-                          </span>
-                          <a
-                            href={voucherInternetUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-black text-primary-700 text-right break-all underline"
-                          >
-                            {voucherInternetUrl}
-                          </a>
-                        </div>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={handleCopyVoucherInternetCode}
-                        className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 no-print"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        SALIN KODE VOUCHER
-                      </button>
-                    </div>
-                  )}
-
-                  {isPajakReceipt && (
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4 space-y-2.5 mb-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Status Transaksi</span>
-                        <span className="font-black text-emerald-700 uppercase">
-                          {receiptData.transaction_details?.status || finalStatus}
-                        </span>
-                      </div>
-                      {pajakOwner ? (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nama Pemilik</span>
-                          <span className="font-black text-gray-900 uppercase text-right">{pajakOwner}</span>
-                        </div>
-                      ) : null}
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                          {receiptData.transaction_details?.pajak_jenis === 'samsat' || String(data.serviceName ?? '').toLowerCase() === 'samsat'
-                            ? 'Nomor Polisi'
-                            : 'Nomor Objek Pajak'}
-                        </span>
-                        <span className="font-black text-gray-900 text-right tracking-wide">{pajakObjectId || '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nominal Pajak</span>
-                        <span className="font-black text-gray-900">
-                          {formatIDR(
-                            Number(
-                              receiptData.payment_summary?.subtotal ??
-                                receiptData.transaction_details?.bill_amount ??
-                                data.amount
-                            )
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Biaya Admin</span>
-                        <span className="font-black text-gray-900">
-                          {formatIDR(Number(receiptData.payment_summary?.admin_fee ?? data.adminFee))}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Total Pembayaran</span>
-                        <span className="font-black text-primary-700">
-                          {formatIDR(Number(receiptData.payment_summary?.total_payment ?? totalPayment))}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Ref. Provider</span>
-                        <span className="font-black text-gray-800 text-right break-all">
-                          {receiptData.transaction_details?.provider_ref ||
-                            receiptData.transaction_details?.serial_number ||
-                            '-'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-start gap-3 text-xs">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Ref. GurkyNet</span>
-                        <span className="font-black text-gray-800 text-right">
-                          {receiptData.transaction_details?.invoice_number || '-'}
-                        </span>
-                      </div>
-                      {(pajakNtpn || pajakPengesahan) && (
-                        <div className="flex justify-between items-start gap-3 text-xs">
-                          <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">
-                            {pajakNtpn ? 'NTPN' : 'No. Pengesahan'}
-                          </span>
-                          <span className="font-black text-gray-800 text-right break-all">
-                            {pajakNtpn || pajakPengesahan}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-3.5">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nomor Invoice</span>
-                      <span className="font-black text-gray-800 tracking-wide">{receiptData.transaction_details?.invoice_number}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Tanggal</span>
-                      <span className="font-black text-gray-800">
-                        {receiptData.transaction_details?.date 
-                          ? new Date(receiptData.transaction_details.date).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
-                          : '-'}
-                      </span>
-                    </div>
-                    {receiptData.transaction_details?.serial_number && !plnTokenDigits && (
-                      <div className="flex justify-between items-center text-xs bg-emerald-50/50 p-2 rounded border border-emerald-100">
-                        <span className="font-bold text-emerald-600 uppercase tracking-wider text-[10px]">Serial Number (SN)</span>
-                        <span className="font-black text-emerald-700 tracking-wide">{receiptData.transaction_details.serial_number}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Kategori</span>
-                      <span className="font-black text-gray-800">{receiptData.transaction_details?.service_name}</span>
-                    </div>
-                    
-                    {receiptData.items?.map((item: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-start text-xs gap-4">
-                        <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Produk</span>
-                        <span className="font-black text-gray-800 text-right">{item.name}</span>
-                      </div>
-                    ))}
-
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Nomor Target</span>
-                      <span className="font-black text-gray-800 tracking-wider">{receiptData.transaction_details?.target_number}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px]">Metode Pembayaran</span>
-                      <span className="font-black text-primary-600">{receiptData.transaction_details?.payment_method}</span>
-                    </div>
-
-                    <div className="border-t border-dashed border-gray-200 pt-3.5 space-y-2.5">
-                      <div className="flex justify-between items-center text-xs font-bold text-gray-500">
-                        <span>Harga</span>
-                        <span className="text-gray-900">{formatIDR(receiptData.payment_summary?.subtotal || 0)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs font-bold text-gray-500">
-                        <span>Admin</span>
-                        <span className="text-gray-900">{formatIDR(receiptData.payment_summary?.admin_fee || 0)}</span>
-                      </div>
-                      <div className="border-t border-dashed border-gray-100 pt-2.5 flex justify-between items-center">
-                        <span className="text-xs font-black text-gray-900 uppercase">Total Bayar</span>
-                        <span className="text-lg font-black text-primary-600">{formatIDR(receiptData.payment_summary?.total_payment || 0)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-dashed border-gray-200 pt-5 flex flex-col items-center text-center space-y-2.5">
-                    <div className="p-2 bg-white border border-gray-150 rounded-xl">
-                      <div className="w-20 h-20 bg-gray-50 flex items-center justify-center text-gray-400 relative">
-                        <QrCode className="w-14 h-14" />
-                        <span className="absolute bottom-1 text-[7px] text-gray-300 font-extrabold tracking-widest uppercase">GURKYPAY QR</span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-gray-400 font-bold max-w-xs leading-normal">
-                      {receiptData.footer?.note || 'Terima kasih telah menggunakan GurkyPay.'}
-                    </p>
-                  </div>
-                </>
-              ) : finalStatus === 'gagal' ? (
-                <div className="flex flex-col items-center justify-center p-6 text-center min-h-[200px] space-y-2">
-                  <AlertCircle className="w-8 h-8 text-red-500 mb-1" />
-                  <span className="text-xs font-bold text-red-700">
-                    {failureMessage || createdTrx?.note || 'Transaksi gagal diproses.'}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center p-6 text-gray-400 min-h-[300px]">
-                  <RefreshCw className="w-8 h-8 animate-spin mb-3 text-primary-500" />
-                  <span className="text-xs font-bold">Membuat struk resmi...</span>
-                </div>
-              )}
-            </div>
-
-            {/* ACTIONS FOOTER */}
-            <div className="p-6 bg-gray-50 border-t border-gray-150 flex flex-col gap-3 no-print">
-              
-              {copiedText && (
-                <div className="text-xs text-center font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl animate-bounce">
-                  {copiedText}
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                <button 
-                  onClick={handleDownloadPdf}
-                  className="py-3 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 font-bold text-xs rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all shadow-sm"
-                >
-                  <Download className="w-4 h-4 text-gray-500" />
-                  <span>Download PDF</span>
-                </button>
-                <button 
-                  onClick={handleShare}
-                  className="py-3 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 font-bold text-xs rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all shadow-sm"
-                >
-                  <Share2 className="w-4 h-4 text-gray-500" />
-                  <span>Bagikan</span>
-                </button>
-                <button 
-                  onClick={handlePrint}
-                  className="py-3 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 font-bold text-xs rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all shadow-sm"
-                >
-                  <Printer className="w-4 h-4 text-gray-500" />
-                  <span>Cetak</span>
-                </button>
-              </div>
-
-              <button 
-                onClick={onClose}
-                className="w-full mt-1.5 py-3 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-primary-600/10"
-              >
-                Selesai & Kembali
-              </button>
-            </div>
-
-          </div>
+          <TransactionReceipt
+            status={receiptStatus}
+            failureMessage={failureMessage || createdTrx?.note || createdTrx?.notes}
+            invoiceNumber={receiptData?.transaction_details?.invoice_number}
+            date={receiptData?.transaction_details?.date}
+            serialNumber={receiptFields.serialNumber}
+            category={receiptData?.transaction_details?.service_name || data.serviceName}
+            productName={receiptData?.items?.[0]?.name || data.productName}
+            targetLabel={receiptFields.targetLabel || undefined}
+            targetValue={receiptFields.targetValue || receiptData?.transaction_details?.target_number || data.targetNo}
+            paymentMethodLabel={receiptPaymentMethodLabel || undefined}
+            price={receiptData?.payment_summary?.subtotal ?? data.amount}
+            adminFee={receiptData?.payment_summary?.admin_fee ?? data.adminFee}
+            totalPayment={receiptData?.payment_summary?.total_payment ?? totalPayment}
+            extraRows={receiptFields.extraRows}
+            deliverable={receiptFields.deliverable}
+            deliverablePendingLabel={receiptFields.deliverablePendingLabel}
+            loading={loadingReceipt}
+            onDownloadPdf={handleDownloadPdf}
+            onClose={onClose}
+            onDone={onClose}
+            className="py-5"
+          />
         )}
 
       </div>

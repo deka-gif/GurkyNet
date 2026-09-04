@@ -1,35 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Clock,
-  Copy,
-  Check,
-  XCircle,
-  CreditCard,
-} from 'lucide-react';
+import { ArrowLeft, CreditCard, MessageCircle } from 'lucide-react';
 import { useTransactionStore } from '../../store/transaction.store';
 import { transactionService } from '../../services/transaction/transaction.service';
 import { walletService } from '../../services/wallet/wallet.service';
-import { formatIDR } from '../../utils/currency';
 import {
   customerFacingTransactionNotes,
   isExpiredStatus,
   isPendingStatus,
   isSuccessStatus,
   isWalletTopUpService,
-  transactionStatusLabel,
 } from '../../utils/transactionStatus';
-import {
-  formatTransactionDateTime,
-  formatHistoryTarget,
-  maskEmail,
-  maskTargetNumber,
-  resolveTargetLabel,
-} from '../../utils/transactionDisplay';
 import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import { customerFacingPaymentMethodLabel } from '../../utils/paymentMethodLabel';
+import { resolveReceiptFields } from '../../utils/receiptDeliverable';
+import { TransactionReceipt } from '../../components/TransactionReceipt';
 import type { PaymentResumeInfo, Transaction } from '../../types';
 
 function normalizeDetailTransaction(row: any): Transaction {
@@ -79,15 +64,10 @@ export function TransactionDetailPage() {
   const [remote, setRemote] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [resumeMsg, setResumeMsg] = useState<string | null>(null);
-  const [receiptCode, setReceiptCode] = useState<{ label: string; code: string; url?: string | null } | null>(null);
-  const [receiptMeta, setReceiptMeta] = useState<{
-    langgananTargetDisplay?: string | null;
-    langgananDelivery?: string | null;
-  } | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [receiptData, setReceiptData] = useState<any | null>(null);
+  const [loadingReceipt, setLoadingReceipt] = useState(true);
 
   const fromStore = useMemo(() => {
     return (
@@ -163,65 +143,33 @@ export function TransactionDetailPage() {
 
   useEffect(() => {
     if (!tx) {
-      setReceiptCode(null);
-      setReceiptMeta(null);
+      setReceiptData(null);
+      setLoadingReceipt(false);
       return;
     }
     let cancelled = false;
     const key = tx.id || tx.invoice_number || tx.transactionCode;
-    if (!key) return;
+    if (!key) {
+      setLoadingReceipt(false);
+      return;
+    }
+    setLoadingReceipt(true);
     transactionService
       .getReceipt(String(key))
       .then((res) => {
         if (cancelled || !res.success || !res.data) return;
-        const d = res.data.transaction_details || {};
-        setReceiptMeta({
-          langgananTargetDisplay: d.langganan_target_display ?? null,
-          langgananDelivery: d.langganan_delivery ?? null,
-        });
-        if (d.voucher_code) {
-          setReceiptCode({ label: 'Kode Voucher', code: d.voucher_code, url: d.voucher_url });
-        } else if (d.activation_code) {
-          setReceiptCode({ label: 'Kode Aktivasi', code: d.activation_code, url: d.activation_url });
-        } else if (d.voucher_internet_code) {
-          setReceiptCode({ label: 'Kode Voucher Internet', code: d.voucher_internet_code, url: d.voucher_internet_url });
-        } else {
-          setReceiptCode(null);
-        }
+        setReceiptData(res.data);
       })
       .catch(() => {
-        if (!cancelled) {
-          setReceiptCode(null);
-          setReceiptMeta(null);
-        }
+        if (!cancelled) setReceiptData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingReceipt(false);
       });
     return () => {
       cancelled = true;
     };
   }, [tx]);
-
-  const copyInvoice = async () => {
-    const code = tx?.transactionCode || tx?.invoice_number || '';
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
-    }
-  };
-
-  const copyReceiptCode = async () => {
-    if (!receiptCode) return;
-    try {
-      await navigator.clipboard.writeText(receiptCode.code);
-      setCopiedCode(true);
-      window.setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      // ignore
-    }
-  };
 
   const refreshAfterPaymentSignal = async (opts?: { assumeClosed?: boolean }) => {
     try {
@@ -354,26 +302,23 @@ export function TransactionDetailPage() {
     );
   }
 
-  const targetLabel = resolveTargetLabel(
-    tx.serviceName,
-    tx.targetNo,
-    receiptMeta?.langgananDelivery
-  );
-  const targetValue = (() => {
-    const display = String(receiptMeta?.langgananTargetDisplay || '').trim();
-    if (display) {
-      return display.includes('@') ? maskEmail(display) : maskTargetNumber(display);
-    }
-    return formatHistoryTarget(tx.targetNo, { serviceName: tx.serviceName });
-  })();
-
-  const statusLabel = transactionStatusLabel(tx.status, {
+  // FR-RECEIPT-UI-01 — single classification pass shared with CheckoutSummary's receipt view.
+  const receiptFields = resolveReceiptFields({
+    receiptData,
     serviceName: tx.serviceName,
-    paymentMethod: tx.paymentMethod,
-    statusRaw: tx.statusRaw,
-    invoiceNumber: tx.invoice_number,
-    transactionCode: tx.transactionCode,
+    isSuccess: isSuccessStatus(tx.statusRaw || tx.status),
   });
+
+  const receiptPaymentMethodLabel = customerFacingPaymentMethodLabel(
+    receiptData?.transaction_details?.payment_method,
+    tx.paymentMethodLabel || tx.paymentMethod
+  );
+
+  const receiptStatus: 'success' | 'pending' | 'failed' = isSuccessStatus(tx.statusRaw || tx.status)
+    ? 'success'
+    : isPendingStatus(tx.statusRaw || tx.status)
+    ? 'pending'
+    : 'failed';
 
   const notesDisplay = customerFacingTransactionNotes(tx.notes || tx.note, {
     serviceName: tx.serviceName,
@@ -393,6 +338,16 @@ export function TransactionDetailPage() {
   const showResume = Boolean(resume?.canResume && resume.snapToken);
   const showExpiredBlock = isTopUp && isExpiredStatus(tx.statusRaw || tx.status);
 
+  // Real backend-generated PDF (Sprint 8 / FR-USR04) — only meaningful once a real
+  // transaction row exists.
+  const handleDownloadPdf = tx.id
+    ? () => {
+        void transactionService.downloadReceiptPdf(String(tx.id)).catch(() => {
+          alert('Gagal mengunduh struk PDF.');
+        });
+      }
+    : undefined;
+
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-10">
       <button
@@ -404,148 +359,71 @@ export function TransactionDetailPage() {
         Kembali
       </button>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-xl shadow-slate-200/40">
-        <div className="border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white px-5 py-5">
-          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-            Detail Transaksi
-          </div>
-          <h1 className="mt-1 text-lg font-bold text-slate-900">
-            {tx.productName || tx.serviceName || 'Transaksi PPOB'}
-          </h1>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {isSuccessStatus(tx.status) ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {statusLabel}
-              </span>
-            ) : isPendingStatus(tx.status) ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
-                <Clock className="h-3.5 w-3.5" />
-                {statusLabel}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700">
-                <XCircle className="h-3.5 w-3.5" />
-                {statusLabel}
-              </span>
-            )}
-          </div>
+      {/* Reusable paper receipt (FR-RECEIPT-UI-01) — same component CheckoutSummary uses. */}
+      <TransactionReceipt
+        status={receiptStatus}
+        failureMessage={receiptStatus === 'failed' ? notesDisplay : null}
+        pendingMessage={receiptStatus === 'pending' ? notesDisplay : null}
+        invoiceNumber={receiptData?.transaction_details?.invoice_number || tx.transactionCode || tx.invoice_number}
+        date={receiptData?.transaction_details?.date || tx.date}
+        serialNumber={receiptFields.serialNumber}
+        category={receiptData?.transaction_details?.service_name || tx.serviceName}
+        productName={receiptData?.items?.[0]?.name || tx.productName}
+        targetLabel={receiptFields.targetLabel || undefined}
+        targetValue={receiptFields.targetValue || receiptData?.transaction_details?.target_number || tx.targetNo}
+        paymentMethodLabel={receiptPaymentMethodLabel || undefined}
+        price={receiptData?.payment_summary?.subtotal ?? undefined}
+        adminFee={receiptData?.payment_summary?.admin_fee ?? tx.adminFee}
+        totalPayment={receiptData?.payment_summary?.total_payment ?? tx.totalPayment}
+        extraRows={receiptFields.extraRows}
+        deliverable={receiptFields.deliverable}
+        deliverablePendingLabel={receiptFields.deliverablePendingLabel}
+        loading={loadingReceipt}
+        onDownloadPdf={handleDownloadPdf}
+        onDone={() => navigate(-1)}
+        doneLabel="Kembali ke Riwayat"
+      />
+
+      {showExpiredBlock && (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 space-y-1">
+          <p className="text-sm font-extrabold text-rose-800">Pembayaran Kedaluwarsa</p>
+          <p className="text-xs text-rose-700 leading-relaxed">
+            Pembayaran Top Up ini sudah melewati batas waktu pembayaran.
+          </p>
+          <p className="text-xs font-bold text-rose-800">
+            Tidak dapat dilanjutkan. Silakan buat Top Up baru.
+          </p>
         </div>
+      )}
 
-        <div className="space-y-3 px-5 py-5 text-sm">
-          <Row label="Invoice" value={tx.transactionCode || tx.invoice_number || '—'} mono />
-          <Row label="Layanan" value={tx.serviceName || '—'} />
-          <Row label="Produk" value={tx.productName || '—'} />
-          <Row label={targetLabel} value={targetValue} />
-          <Row label="Tanggal" value={formatTransactionDateTime(tx.date)} />
-          <Row label="Nominal" value={formatIDR(tx.amount || 0)} bold />
-          {tx.totalPayment != null ? (
-            <Row label="Total Bayar" value={formatIDR(tx.totalPayment)} bold />
-          ) : null}
-          {tx.paymentMethodLabel || tx.paymentMethod ? (
-            <Row label="Metode" value={String(tx.paymentMethodLabel || tx.paymentMethod)} />
-          ) : null}
-          {receiptCode && (
-            <div className="rounded-2xl border border-primary-100 bg-primary-50/50 p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-primary-700 font-bold">{receiptCode.label}</span>
-                <button
-                  type="button"
-                  onClick={() => void copyReceiptCode()}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-primary-700 border border-primary-200 hover:bg-primary-100"
-                >
-                  {copiedCode ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                  {copiedCode ? 'Tersalin' : 'Salin'}
-                </button>
-              </div>
-              <p className="font-mono text-sm font-black text-slate-900 break-all">{receiptCode.code}</p>
-              {receiptCode.url && (
-                <a href={receiptCode.url} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-primary-600 underline break-all block">
-                  Buka Link Voucher
-                </a>
-              )}
-            </div>
-          )}
-          {notesDisplay ? (
-            <Row label="Catatan" value={notesDisplay} />
-          ) : null}
-
-          {showExpiredBlock && (
-            <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 space-y-1">
-              <p className="text-sm font-extrabold text-rose-800">Pembayaran Kedaluwarsa</p>
-              <p className="text-xs text-rose-700 leading-relaxed">
-                Pembayaran Top Up ini sudah melewati batas waktu pembayaran.
-              </p>
-              <p className="text-xs font-bold text-rose-800">
-                Tidak dapat dilanjutkan. Silakan buat Top Up baru.
-              </p>
-            </div>
-          )}
-
-          {showResume && (
-            <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 space-y-2">
-              <p className="text-xs text-amber-900 leading-relaxed">
-                Pembayaran masih menunggu. Menutup jendela QR tidak membatalkan transaksi.
-              </p>
-              <button
-                type="button"
-                disabled={resumeBusy}
-                onClick={() => void resumePayment()}
-                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-xs font-bold text-white hover:bg-primary-700 disabled:opacity-60"
-              >
-                <CreditCard className="h-4 w-4" />
-                {resumeBusy ? 'Membuka…' : 'Lanjutkan Pembayaran'}
-              </button>
-            </div>
-          )}
-
-          {resumeMsg && (
-            <p className="text-xs font-semibold text-slate-600">{resumeMsg}</p>
-          )}
-        </div>
-
-        <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+      {showResume && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 space-y-2">
+          <p className="text-xs text-amber-900 leading-relaxed">
+            Pembayaran masih menunggu. Menutup jendela QR tidak membatalkan transaksi.
+          </p>
           <button
             type="button"
-            onClick={() => void copyInvoice()}
-            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+            disabled={resumeBusy}
+            onClick={() => void resumePayment()}
+            className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-xs font-bold text-white hover:bg-primary-700 disabled:opacity-60"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? 'Tersalin' : 'Salin Invoice'}
+            <CreditCard className="h-4 w-4" />
+            {resumeBusy ? 'Membuka…' : 'Lanjutkan Pembayaran'}
           </button>
-          <Link
-            to={`/dashboard/help?tab=chat${tx?.id ? `&transactionId=${tx.id}` : ''}`}
-            className="flex flex-1 items-center justify-center rounded-xl bg-primary-600 py-2.5 text-xs font-bold text-white hover:bg-primary-700"
-          >
-            Chat CS
-          </Link>
         </div>
-      </div>
-    </div>
-  );
-}
+      )}
 
-function Row({
-  label,
-  value,
-  mono,
-  bold,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  bold?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="shrink-0 text-xs text-slate-400">{label}</span>
-      <span
-        className={`text-right text-slate-900 ${mono ? 'font-mono text-xs' : 'text-sm'} ${
-          bold ? 'font-black' : 'font-semibold'
-        }`}
+      {resumeMsg && (
+        <p className="text-center text-xs font-semibold text-slate-600">{resumeMsg}</p>
+      )}
+
+      <Link
+        to={`/dashboard/help?tab=chat${tx?.id ? `&transactionId=${tx.id}` : ''}`}
+        className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-600 py-2.5 text-xs font-bold text-white hover:bg-primary-700"
       >
-        {value}
-      </span>
+        <MessageCircle className="h-3.5 w-3.5" />
+        Chat CS
+      </Link>
     </div>
   );
 }
