@@ -115,6 +115,15 @@ class MidtransService
             $payload['expiry'] = $options['expiry'];
         }
 
+        // Snap "Return to merchant’s page" — must be GurkyNet, never Midtrans dashboard default (example.com).
+        // FR-TOPUP-UX-02 — finish URL is customer transaction detail only (no tokens/credentials).
+        $finishUrl = $options['finish_redirect_url'] ?? null;
+        if (is_string($finishUrl) && $finishUrl !== '') {
+            $payload['callbacks'] = [
+                'finish' => $finishUrl,
+            ];
+        }
+
         // Clean out nulls
         $payload = array_filter($payload);
 

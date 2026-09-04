@@ -35,7 +35,7 @@ class TransactionResource extends JsonResource
         $isTopUp = TransactionStatusMapper::isWalletTopUp($this->resource);
         $notes = (string) ($this->notes ?? '');
         if ($isTopUp) {
-            $notes = $this->customerFacingTopUpNotes($notes, $normalizedStatus);
+            $notes = $this->customerFacingTopUpNotes($notes, $normalizedStatus, (float) $this->amount);
         }
 
         $payload = [
@@ -74,14 +74,17 @@ class TransactionResource extends JsonResource
 
     /**
      * Customer-facing Top Up notes — never expose Midtrans/provider/routing wording.
+     * FR-TOPUP-UX-02
      */
-    protected function customerFacingTopUpNotes(string $notes, string $normalizedStatus): string
+    protected function customerFacingTopUpNotes(string $notes, string $normalizedStatus, float $amount = 0): string
     {
         if (in_array($normalizedStatus, ['success'], true)) {
             return 'Top Up berhasil. Saldo Anda telah ditambahkan.';
         }
         if (in_array($normalizedStatus, ['expired'], true)) {
-            return 'Pembayaran Top Up sudah melewati batas waktu. Silakan buat Top Up baru.';
+            $amountText = 'Rp'.number_format($amount, 0, ',', '.');
+
+            return "Pembayaran {$amountText} telah kedaluwarsa.";
         }
         if (in_array($normalizedStatus, ['failed', 'cancelled'], true)) {
             return 'Pembayaran Top Up tidak berhasil. Saldo Anda tidak berubah.';

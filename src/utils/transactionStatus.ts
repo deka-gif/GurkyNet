@@ -221,6 +221,7 @@ export function customerFacingTransactionNotes(
     invoiceNumber?: string | null;
     transactionCode?: string | null;
     status?: string | null;
+    amount?: number | null;
   }
 ): string {
   const raw = String(notes || '').trim();
@@ -234,7 +235,11 @@ export function customerFacingTransactionNotes(
   const status = normalizeTransactionStatus(opts?.status);
   if (status === 'success') return 'Top Up berhasil. Saldo Anda telah ditambahkan.';
   if (status === 'expired') {
-    return 'Pembayaran Top Up sudah melewati batas waktu. Silakan buat Top Up baru.';
+    const amount = Number(opts?.amount ?? 0);
+    if (Number.isFinite(amount) && amount > 0) {
+      return `Pembayaran ${formatIdrAmount(amount)} telah kedaluwarsa.`;
+    }
+    return 'Pembayaran telah kedaluwarsa.';
   }
   if (status === 'failed' || status === 'cancelled') {
     return 'Pembayaran Top Up tidak berhasil. Saldo Anda tidak berubah.';
@@ -245,4 +250,8 @@ export function customerFacingTransactionNotes(
   }
 
   return raw;
+}
+
+function formatIdrAmount(amount: number): string {
+  return `Rp${Math.round(amount).toLocaleString('id-ID')}`;
 }

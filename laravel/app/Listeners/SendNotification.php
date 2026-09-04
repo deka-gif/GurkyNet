@@ -139,7 +139,7 @@ class SendNotification implements ShouldQueue
 
                     if ($rawStatus === \App\Enums\TransactionStatus::EXPIRED->value) {
                         $title = 'Pembayaran Kedaluwarsa';
-                        $message = "Pembayaran Top Up {$amountText} telah kedaluwarsa. Saldo Anda tidak berubah.";
+                        $message = "Pembayaran {$amountText} telah kedaluwarsa.";
                         $type = 'transaction_failed';
                         $kind = 'expired';
                     } elseif ($isTimeout) {

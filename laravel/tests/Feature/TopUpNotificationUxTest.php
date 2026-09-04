@@ -16,9 +16,13 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Models\Wallet;
+use App\Models\WalletMutation;
+use App\Services\MidtransService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -211,6 +215,9 @@ class TopUpNotificationUxTest extends TestCase
         $this->assertSame(1, Notification::where('title', 'Pembayaran Kedaluwarsa')->count());
         $notif = Notification::where('title', 'Pembayaran Kedaluwarsa')->first();
         $this->assertSame('topup_expired:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+        $this->assertSame('Pembayaran Rp10.000 telah kedaluwarsa.', $notif->message);
+        $this->assertStringNotContainsStringIgnoringCase('saldo Anda tidak berubah', $notif->message);
+        $this->assertStringNotContainsStringIgnoringCase('midtrans', $notif->message);
     }
 
     public function test_g_notification_resource_exposes_transaction_reference(): void
@@ -328,5 +335,150 @@ class TopUpNotificationUxTest extends TestCase
         $res->assertOk();
         $first = $res->json('data.0');
         $this->assertArrayNotHasKey('paymentResume', $first ?? []);
+    }
+
+    public function test_sync_payment_pending_stays_pending_and_resumable(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::PENDING->value, 'amount' => 15000, 'total_payment' => 15000]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update(['gross_amount' => 15000]);
+        Sanctum::actingAs($this->user);
+
+        // Override TestCase Midtrans HTTP default (settlement) with authoritative pending.
+        $midtrans = Mockery::mock(MidtransService::class)->makePartial();
+        $midtrans->shouldReceive('isConfigured')->andReturn(true);
+        $midtrans->shouldReceive('checkStatus')
+            ->once()
+            ->with($tx->invoice_number)
+            ->andReturn([
+                'order_id' => $tx->invoice_number,
+                'status_code' => '201',
+                'gross_amount' => '15000.00',
+                'transaction_status' => 'pending',
+            ]);
+        $this->app->instance(MidtransService::class, $midtrans);
+
+        $res = $this->postJson('/api/v1/transactions/'.$tx->id.'/sync-payment');
+        $res->assertOk();
+        $this->assertContains($res->json('data.status'), ['pending', 'processing']);
+        $res->assertJsonPath('data.paymentResume.canResume', true);
+        $res->assertJsonPath('data.paymentResume.snapToken', 'snap-ux-token');
+        $resume = $res->json('data.paymentResume');
+        $this->assertSame(['canResume', 'snapToken'], array_keys($resume));
+        $this->assertArrayNotHasKey('orderId', $resume);
+        $this->assertArrayNotHasKey('midtransStatus', $resume);
+        $this->assertArrayNotHasKey('reason', $resume);
+        $this->assertEquals(100000.0, (float) $this->wallet->fresh()->balance);
+        $this->assertSame(0, WalletMutation::where('wallet_id', $this->wallet->id)->count());
+    }
+
+    public function test_sync_payment_expire_becomes_expired_no_credit_one_notification(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::PENDING->value, 'amount' => 15000, 'total_payment' => 15000]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update(['gross_amount' => 15000]);
+        Sanctum::actingAs($this->user);
+
+        $midtrans = Mockery::mock(MidtransService::class)->makePartial();
+        $midtrans->shouldReceive('isConfigured')->andReturn(true);
+        $midtrans->shouldReceive('checkStatus')
+            ->once()
+            ->with($tx->invoice_number)
+            ->andReturn([
+                'order_id' => $tx->invoice_number,
+                'status_code' => '407',
+                'gross_amount' => '15000.00',
+                'transaction_status' => 'expire',
+            ]);
+        $this->app->instance(MidtransService::class, $midtrans);
+
+        $res = $this->postJson('/api/v1/transactions/'.$tx->id.'/sync-payment');
+        $res->assertOk();
+        $this->assertSame('expired', $res->json('data.status'));
+        $res->assertJsonPath('data.paymentResume.canResume', false);
+        $res->assertJsonPath('data.paymentResume.snapToken', null);
+        $notes = (string) $res->json('data.notes');
+        $this->assertSame('Pembayaran Rp15.000 telah kedaluwarsa.', $notes);
+        $this->assertStringNotContainsStringIgnoringCase('midtrans', $notes);
+        $this->assertStringNotContainsStringIgnoringCase('provider', $notes);
+        $this->assertStringNotContainsStringIgnoringCase('saldo Anda tidak berubah', $notes);
+        $this->assertStringNotContainsString('Menunggu pembayaran', $notes);
+
+        $this->assertEquals(100000.0, (float) $this->wallet->fresh()->balance);
+        $this->assertSame(0, WalletMutation::where('wallet_id', $this->wallet->id)->count());
+        $this->assertSame(1, Notification::where('title', 'Pembayaran Kedaluwarsa')->count());
+        $notif = Notification::where('title', 'Pembayaran Kedaluwarsa')->first();
+        $this->assertSame('Pembayaran Rp15.000 telah kedaluwarsa.', $notif->message);
+
+        // Duplicate expire sync — terminal skip (no second Midtrans call), no second notification.
+        $res2 = $this->postJson('/api/v1/transactions/'.$tx->id.'/sync-payment');
+        $res2->assertOk();
+        $this->assertSame('expired', $res2->json('data.status'));
+        $this->assertSame(1, Notification::where('title', 'Pembayaran Kedaluwarsa')->count());
+        $this->assertEquals(100000.0, (float) $this->wallet->fresh()->balance);
+    }
+
+    public function test_sync_payment_settlement_becomes_success(): void
+    {
+        $tx = $this->makeTopUp(['status' => TransactionStatus::PENDING->value, 'amount' => 15000, 'total_payment' => 15000]);
+        MidtransTransaction::where('transaction_id', $tx->id)->update(['gross_amount' => 15000]);
+        Sanctum::actingAs($this->user);
+
+        $midtrans = Mockery::mock(MidtransService::class)->makePartial();
+        $midtrans->shouldReceive('isConfigured')->andReturn(true);
+        $midtrans->shouldReceive('checkStatus')
+            ->once()
+            ->with($tx->invoice_number)
+            ->andReturn([
+                'order_id' => $tx->invoice_number,
+                'status_code' => '200',
+                'gross_amount' => '15000.00',
+                'transaction_status' => 'settlement',
+            ]);
+        $this->app->instance(MidtransService::class, $midtrans);
+
+        $res = $this->postJson('/api/v1/transactions/'.$tx->id.'/sync-payment');
+        $res->assertOk();
+        $this->assertSame('success', $res->json('data.status'));
+        $res->assertJsonPath('data.paymentResume.canResume', false);
+        $this->assertEquals(115000.0, (float) $this->wallet->fresh()->balance);
+        $this->assertSame(1, WalletMutation::where('wallet_id', $this->wallet->id)->where('type', WalletMutation::TYPE_TOPUP)->count());
+    }
+
+    public function test_snap_create_includes_gurkynet_finish_callback_not_example_domain(): void
+    {
+        config(['services.frontend_url' => 'https://gurkynet.my.id']);
+
+        Http::fake([
+            'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response([
+                'token' => 'snap-finish-url-token',
+                'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-finish-url-token',
+            ], 201),
+            'https://app.sandbox.midtrans.com/*' => Http::response([
+                'token' => 'snap-finish-url-token',
+                'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/snap-finish-url-token',
+            ], 201),
+        ]);
+
+        $finishUrl = 'https://gurkynet.my.id/dashboard/riwayat/42';
+        app(MidtransService::class)->createSnapTransaction(
+            'TRX-TOPUP-FINISH-URL-1',
+            15000,
+            ['first_name' => 'Test'],
+            [],
+            ['finish_redirect_url' => $finishUrl, 'enabled_payments' => ['qris']]
+        );
+
+        Http::assertSent(function ($request) use ($finishUrl) {
+            if (! str_contains($request->url(), '/snap/v1/transactions')) {
+                return false;
+            }
+            $data = $request->data();
+            $finish = $data['callbacks']['finish'] ?? null;
+            $serialized = json_encode($data);
+
+            return $finish === $finishUrl
+                && ! str_contains((string) $serialized, 'example.com')
+                && ! str_contains((string) $finish, 'snap_token')
+                && ! str_contains((string) $finish, 'server_key');
+        });
     }
 }

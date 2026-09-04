@@ -148,6 +148,72 @@ class TransactionController extends Controller
     }
 
     /**
+     * FR-TOPUP-UX-02 — sync Top Up Midtrans status from Midtrans (authoritative).
+     * Uses MidtransReconciliationService::reconcileOrder → ProcessMidtransCallback.
+     * Does not create a new Snap token / Top Up order. Does not invent expiry from UI close.
+     */
+    public function syncPayment(
+        string $idOrInvoice,
+        GetTransactionAction $getAction,
+        Request $request,
+        \App\Services\Finance\Reconciliation\MidtransReconciliationService $midtransRecon
+    ): JsonResponse {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
+        $transaction = is_numeric($idOrInvoice)
+            ? $getAction->execute((int) $idOrInvoice)
+            : $getAction->executeByInvoice($idOrInvoice);
+
+        if (! $transaction || $transaction->user_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaksi tidak ditemukan.',
+            ], 404);
+        }
+
+        $transaction->loadMissing('midtransTransaction');
+
+        if (! TransactionStatusMapper::isWalletTopUp($transaction)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sinkronisasi pembayaran tidak tersedia untuk transaksi ini.',
+            ], 422);
+        }
+
+        $mt = $transaction->midtransTransaction;
+        if (! $mt || ! $mt->order_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data pembayaran tidak ditemukan.',
+            ], 422);
+        }
+
+        $rawStatus = (string) $transaction->status;
+        $alreadyTerminal = TransactionStatusMapper::isSuccess($rawStatus)
+            || TransactionStatusMapper::isTerminalFailureRaw($rawStatus);
+
+        // Only call Midtrans when still non-terminal; otherwise return authoritative local state.
+        if (! $alreadyTerminal) {
+            $midtransRecon->reconcileOrder((string) $mt->order_id);
+            $transaction = $transaction->fresh(['midtransTransaction']);
+        }
+
+        $transaction->expose_payment_resume = true;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status pembayaran diperbarui.',
+            'data' => (new TransactionResource($transaction))->resolve(),
+        ]);
+    }
+
+    /**
      * Cancel a transaction.
      */
     public function cancel(string $idOrInvoice, GetTransactionAction $getAction, CancelTransactionAction $cancelAction, Request $request): JsonResponse

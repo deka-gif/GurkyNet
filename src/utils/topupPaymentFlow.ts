@@ -45,6 +45,8 @@ export type MidtransPaymentDetails = {
   channel?: string;
   channel_label?: string;
   order_id?: string;
+  /** GurkyNet transaction id — used to sync Midtrans status after Snap signals. */
+  transaction_id?: string | number;
   amount?: number;
   va_number?: string | null;
   payment_code?: string | null;

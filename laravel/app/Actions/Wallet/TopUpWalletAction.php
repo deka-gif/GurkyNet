@@ -102,6 +102,12 @@ class TopUpWalletAction
             $transaction = $claim['transaction'];
 
             try {
+                // FR-TOPUP-UX-02 — Snap finish URL → existing riwayat detail (FRONTEND_URL), not example.com.
+                $frontendBase = rtrim((string) config('services.frontend_url', ''), '/');
+                $finishRedirectUrl = $frontendBase !== ''
+                    ? $frontendBase.'/dashboard/riwayat/'.$transaction->id
+                    : null;
+
                 $checkout = $gateway->createCheckout([
                     'order_id' => $invoiceNumber,
                     'gross_amount' => $amount + $adminFee,
@@ -111,6 +117,7 @@ class TopUpWalletAction
                         'phone' => $user->phone_number,
                     ],
                     'enabled_payments' => $resolved['enabled_payments'],
+                    'finish_redirect_url' => $finishRedirectUrl,
                 ]);
 
                 $snapToken = $checkout['token'] ?? null;

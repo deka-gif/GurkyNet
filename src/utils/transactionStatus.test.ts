@@ -69,6 +69,23 @@ assert.equal(
   }),
   'Menunggu pembayaran. Selesaikan pembayaran untuk menambah saldo Anda.'
 );
+assert.equal(
+  customerFacingTransactionNotes('ignored', {
+    serviceName: 'Top Up Saldo',
+    status: 'expired',
+    amount: 15000,
+  }),
+  'Pembayaran Rp15.000 telah kedaluwarsa.'
+);
+assert.ok(
+  !/midtrans|provider|saldo Anda tidak berubah/i.test(
+    customerFacingTransactionNotes('x', {
+      serviceName: 'Top Up Saldo',
+      status: 'expired',
+      amount: 15000,
+    })
+  )
+);
 assert.ok(
   !/midtrans|provider/i.test(
     customerFacingTransactionNotes('Top up saldo via Midtrans (qris/qris)', {

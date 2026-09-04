@@ -122,6 +122,47 @@ class MidtransReconciliationService
     }
 
     /**
+     * Check Midtrans status for one order and apply via ProcessMidtransCallback
+     * (same path as webhook / pending poll — lock + idempotent, no new Snap token).
+     * FR-TOPUP-UX-02 / SRS 16.4.
+     *
+     * @return array{ok:bool,status:?string,error:?string}
+     */
+    public function reconcileOrder(string $orderId): array
+    {
+        if (! $this->midtrans->isConfigured()) {
+            return ['ok' => false, 'status' => null, 'error' => 'not_configured'];
+        }
+
+        try {
+            $status = $this->midtrans->checkStatus($orderId);
+            $txStatus = $status['transaction_status'] ?? $status['status'] ?? null;
+            if (! $txStatus) {
+                return ['ok' => false, 'status' => null, 'error' => 'empty_status'];
+            }
+
+            $mt = MidtransTransaction::query()->where('order_id', $orderId)->first();
+            $payload = array_merge(is_array($status) ? $status : [], [
+                'order_id' => $orderId,
+                'transaction_status' => $txStatus,
+                'gross_amount' => $status['gross_amount'] ?? $mt?->gross_amount,
+                'payment_type' => $status['payment_type'] ?? $mt?->payment_type,
+            ]);
+
+            ProcessMidtransCallback::dispatchSync($payload);
+
+            return ['ok' => true, 'status' => (string) $txStatus, 'error' => null];
+        } catch (\Throwable $e) {
+            Log::warning('Midtrans reconcileOrder failed', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['ok' => false, 'status' => null, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * SRS 16.4 — poll pending Midtrans deposits older than 5 minutes.
      * Dispatches existing ProcessMidtransCallback (idempotent credit).
      *
@@ -150,28 +191,9 @@ class MidtransReconciliationService
             if (! $this->midtrans->isConfigured()) {
                 break;
             }
-            try {
-                $status = $this->midtrans->checkStatus((string) $mt->order_id);
-                $txStatus = $status['transaction_status'] ?? $status['status'] ?? null;
-                if (! $txStatus) {
-                    continue;
-                }
-
-                $payload = array_merge(is_array($status) ? $status : [], [
-                    'order_id' => $mt->order_id,
-                    'transaction_status' => $txStatus,
-                    'gross_amount' => $status['gross_amount'] ?? $mt->gross_amount,
-                    'payment_type' => $status['payment_type'] ?? $mt->payment_type,
-                ]);
-
-                // Reuse webhook processor — duplicate-safe credit.
-                ProcessMidtransCallback::dispatchSync($payload);
+            $result = $this->reconcileOrder((string) $mt->order_id);
+            if ($result['ok']) {
                 $dispatched++;
-            } catch (\Throwable $e) {
-                Log::warning('Midtrans pending poll failed', [
-                    'order_id' => $mt->order_id,
-                    'error' => $e->getMessage(),
-                ]);
             }
         }
 

@@ -318,6 +318,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::middleware('throttle:30,1')->group(function () {
             Route::get('/transactions', [TransactionController::class, 'index']);
             Route::get('/transactions/{id_or_invoice}', [TransactionController::class, 'show']);
+            Route::post('/transactions/{id_or_invoice}/sync-payment', [TransactionController::class, 'syncPayment']);
             Route::post('/transactions/{id_or_invoice}/cancel', [TransactionController::class, 'cancel']);
             Route::get('/transactions/{id_or_invoice}/receipt', [TransactionController::class, 'receipt']);
             Route::get('/transactions/{id_or_invoice}/receipt.pdf', [TransactionController::class, 'receiptPdf']);

@@ -17,6 +17,15 @@ export const transactionService = {
     return response.data;
   },
 
+  /**
+   * FR-TOPUP-UX-02 — ask backend to reconcile Midtrans status for this Top Up
+   * (authoritative expire/settlement). Does not create a new order or Snap token.
+   */
+  syncPayment: async (id: string): Promise<ApiResponse<Transaction>> => {
+    const response = await apiClient.post<ApiResponse<Transaction>>(`/transactions/${id}/sync-payment`);
+    return response.data;
+  },
+
   create: async (data: any): Promise<ApiResponse<Transaction>> => {
     const response = await apiClient.post<ApiResponse<Transaction>>('/transactions', data);
     return response.data;

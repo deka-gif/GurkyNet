@@ -29,6 +29,7 @@ import { useRealtimeChannel } from '../../hooks/useRealtimeChannel';
 import { RefreshPolicy } from '../../lib/refreshPolicy';
 import { ensureMidtransSnap } from '../../utils/midtransSnap';
 import { walletService } from '../../services/wallet/wallet.service';
+import { transactionService } from '../../services/transaction/transaction.service';
 import { useCallback } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useToastStore } from '../../store/toast.store';
@@ -283,18 +284,52 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
     }
 
     const payment = (res?.payment || {}) as MidtransPaymentDetails;
+    const topUpTxId = res?.transaction?.id;
     setPendingPayment({
       status: 'pending',
       method: topupMethod,
       channel: channel || payment.channel || topupMethod,
       channel_label: payment.channel_label,
       order_id: payment.order_id || res?.transaction?.invoice_number,
+      transaction_id: topUpTxId,
       amount,
       va_number: payment.va_number ?? null,
       payment_code: payment.payment_code ?? null,
       store: payment.store ?? null,
       expiry_time: payment.expiry_time ?? null,
     });
+
+    const syncTopUpStatus = async (txId: string | number | undefined) => {
+      if (txId == null || txId === '') return null;
+      try {
+        const synced = await transactionService.syncPayment(String(txId));
+        if (synced.success && synced.data) {
+          const st = String(synced.data.status || '').toLowerCase();
+          setPendingPayment((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status:
+                    st === 'expired'
+                      ? 'expired'
+                      : st === 'success' || st === 'sukses'
+                        ? 'success'
+                        : st === 'failed' || st === 'gagal' || st === 'cancelled' || st === 'canceled'
+                          ? 'failed'
+                          : 'pending',
+                }
+              : prev
+          );
+          if (st === 'success' || st === 'sukses') {
+            void fetchWallet({ force: true });
+          }
+          return synced.data;
+        }
+      } catch {
+        // Keep local pending card; webhook/poll remains authoritative later.
+      }
+      return null;
+    };
 
     if (res && res.snap_token) {
       const midtransCfg = res.midtrans || (await walletService.getPaymentConfig()).data;
@@ -309,29 +344,47 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         // Snap UI callbacks are NOT wallet settlement. Final status comes from webhook/backend.
         onSuccess: function (result: unknown) {
           const extra = extractMidtransPaymentDetails(result);
-          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending' }));
+          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending', transaction_id: topUpTxId }));
+          void syncTopUpStatus(topUpTxId);
           void fetchWallet({ force: true });
           setSuccessMsg(
-            `Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah Midtrans settlement sebesar ${formatIDR(amount)}.`
+            `Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah pembayaran dikonfirmasi sebesar ${formatIDR(amount)}.`
           );
           setTopupAmount('');
           topupIdemRef.current = null;
         },
         onPending: function (result: unknown) {
           const extra = extractMidtransPaymentDetails(result);
-          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending' }));
+          setPendingPayment((prev) => ({ ...(prev || {}), ...extra, status: 'pending', transaction_id: topUpTxId }));
           void fetchWallet({ force: true });
           setSuccessMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi di jendela pembayaran.');
         },
         onError: function () {
-          setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));
-          setErrorMsg('Pembayaran belum berhasil. Cek Riwayat atau lanjutkan pembayaran dari detail transaksi.');
+          // May indicate Midtrans expire — reconcile; do not invent expiry from UI alone.
+          void syncTopUpStatus(topUpTxId).then((data) => {
+            const st = String(data?.status || '').toLowerCase();
+            if (st === 'expired') {
+              setErrorMsg(null);
+              setSuccessMsg(null);
+              return;
+            }
+            setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));
+            setErrorMsg('Pembayaran belum berhasil. Cek Riwayat atau lanjutkan pembayaran dari detail transaksi.');
+          });
         },
         onClose: function () {
-          setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));
-          setSuccessMsg(
-            'Menunggu Pembayaran. Transaksi tetap tersimpan di Riwayat — Anda dapat melanjutkan pembayaran dari detail transaksi.'
-          );
+          // Close ≠ expired. Still reconcile in case Midtrans already expired/settled.
+          void syncTopUpStatus(topUpTxId).then((data) => {
+            const st = String(data?.status || '').toLowerCase();
+            if (st === 'expired' || st === 'success' || st === 'sukses') {
+              setSuccessMsg(null);
+              return;
+            }
+            setPendingPayment((prev) => (prev ? { ...prev, status: 'pending' } : prev));
+            setSuccessMsg(
+              'Menunggu Pembayaran. Transaksi tetap tersimpan di Riwayat — Anda dapat melanjutkan pembayaran dari detail transaksi.'
+            );
+          });
         }
       });
     } else if (res) {
@@ -671,7 +724,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
               >
                 <div>
                   <h4 className="font-extrabold text-gray-900 text-lg">Top Up Saldo GurkyPay</h4>
-                  <p className="text-xs text-gray-500 mt-1">Pilih nominal, lalu metode pembayaran. Saldo bertambah setelah Midtrans mengonfirmasi pembayaran.</p>
+                  <p className="text-xs text-gray-500 mt-1">Pilih nominal, lalu metode pembayaran. Saldo bertambah setelah pembayaran dikonfirmasi.</p>
                 </div>
 
                 {pendingPayment && (
@@ -724,8 +777,8 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                         : pendingPayment.status === 'failed'
                           ? 'Pembayaran tidak berhasil. Saldo Anda tidak berubah.'
                           : pendingPayment.status === 'expired'
-                            ? 'Pembayaran sudah kedaluwarsa. Silakan buat Top Up baru.'
-                            : 'Menunggu konfirmasi pembayaran. Saldo hanya bertambah setelah settlement Midtrans. Jika jendela ditutup, lanjutkan dari Riwayat.'}
+                            ? `Pembayaran ${formatIDR(pendingPayment.amount || 0)} telah kedaluwarsa.`
+                            : 'Menunggu konfirmasi pembayaran. Saldo hanya bertambah setelah pembayaran dikonfirmasi. Jika jendela ditutup, lanjutkan dari Riwayat.'}
                     </p>
                   </div>
                 )}

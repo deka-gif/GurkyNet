@@ -42,6 +42,9 @@ class MidtransPaymentGateway implements PaymentGatewayInterface
         if (! empty($payload['expiry']) && is_array($payload['expiry'])) {
             $options['expiry'] = $payload['expiry'];
         }
+        if (! empty($payload['finish_redirect_url']) && is_string($payload['finish_redirect_url'])) {
+            $options['finish_redirect_url'] = $payload['finish_redirect_url'];
+        }
 
         $response = $this->midtrans->createSnapTransaction(
             (string) $payload['order_id'],

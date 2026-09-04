@@ -113,7 +113,26 @@ export function TransactionDetailPage() {
         const res = await transactionService.getById(id);
         if (cancelled) return;
         if (res.success && res.data) {
-          setRemote(normalizeDetailTransaction(res.data));
+          let detail = normalizeDetailTransaction(res.data);
+          // FR-TOPUP-UX-02 — if still waiting, reconcile Midtrans (authoritative expire/settlement).
+          // Do not invent expiry from UI timers or Snap close.
+          const pendingTopUp =
+            isWalletTopUpService(
+              detail.serviceName,
+              detail.paymentMethod,
+              detail.invoice_number || detail.transactionCode
+            ) && isPendingStatus(detail.statusRaw || detail.status);
+          if (pendingTopUp) {
+            try {
+              const synced = await transactionService.syncPayment(String(detail.id || id));
+              if (!cancelled && synced.success && synced.data) {
+                detail = normalizeDetailTransaction(synced.data);
+              }
+            } catch {
+              // Keep detail from GET; Midtrans may be temporarily unreachable.
+            }
+          }
+          if (!cancelled) setRemote(detail);
         } else if (!fromStore) {
           setError(res.message || 'Transaksi tidak ditemukan.');
         }
@@ -197,15 +216,62 @@ export function TransactionDetailPage() {
     }
   };
 
-  const resumePayment = async () => {
-    const resume = tx?.paymentResume;
-    if (!resume?.canResume || !resume.snapToken) {
-      setResumeMsg('Pembayaran tidak dapat dilanjutkan.');
-      return;
+  const refreshAfterPaymentSignal = async (opts?: { assumeClosed?: boolean }) => {
+    try {
+      const synced = await transactionService.syncPayment(id);
+      if (synced.success && synced.data) {
+        const detail = normalizeDetailTransaction(synced.data);
+        setRemote(detail);
+        void fetchTransactions();
+        if (isExpiredStatus(detail.statusRaw || detail.status)) {
+          setResumeMsg(null);
+          return;
+        }
+        if (isSuccessStatus(detail.statusRaw || detail.status)) {
+          setResumeMsg('Pembayaran dikonfirmasi. Saldo Anda telah ditambahkan.');
+          return;
+        }
+        if (opts?.assumeClosed) {
+          setResumeMsg('Jendela ditutup. Transaksi tetap menunggu pembayaran — bukan dibatalkan.');
+        }
+        return;
+      }
+    } catch {
+      // fall through
     }
+    void transactionService.getById(id).then((res) => {
+      if (res.success && res.data) setRemote(normalizeDetailTransaction(res.data));
+    });
+    void fetchTransactions();
+  };
+
+  const resumePayment = async () => {
     setResumeBusy(true);
     setResumeMsg(null);
     try {
+      // Authoritative check before opening Snap — may already be expire/settlement.
+      const synced = await transactionService.syncPayment(id);
+      if (synced.success && synced.data) {
+        const detail = normalizeDetailTransaction(synced.data);
+        setRemote(detail);
+        if (isExpiredStatus(detail.statusRaw || detail.status)) {
+          setResumeMsg(null);
+          return;
+        }
+        if (!detail.paymentResume?.canResume || !detail.paymentResume.snapToken) {
+          setResumeMsg('Pembayaran tidak dapat dilanjutkan.');
+          return;
+        }
+      }
+
+      const resume = (synced.success && synced.data
+        ? normalizeDetailTransaction(synced.data).paymentResume
+        : tx?.paymentResume) as PaymentResumeInfo | undefined;
+      if (!resume?.canResume || !resume.snapToken) {
+        setResumeMsg('Pembayaran tidak dapat dilanjutkan.');
+        return;
+      }
+
       const cfgRes = await walletService.getPaymentConfig();
       const snapReady = cfgRes?.data
         ? await ensureMidtransSnap(cfgRes.data as any)
@@ -217,19 +283,18 @@ export function TransactionDetailPage() {
       window.snap.pay(resume.snapToken, {
         onSuccess: () => {
           setResumeMsg('Menunggu Konfirmasi Pembayaran. Saldo bertambah setelah pembayaran dikonfirmasi.');
-          void fetchTransactions();
-          void transactionService.getById(id).then((res) => {
-            if (res.success && res.data) setRemote(normalizeDetailTransaction(res.data));
-          });
+          void refreshAfterPaymentSignal();
         },
         onPending: () => {
           setResumeMsg('Menunggu Pembayaran. Selesaikan pembayaran sesuai instruksi di jendela pembayaran.');
         },
         onError: () => {
-          setResumeMsg('Pembayaran belum berhasil. Anda dapat mencoba lagi selama masih menunggu pembayaran.');
+          // May be Midtrans expire — reconcile; do not assume from UI alone.
+          void refreshAfterPaymentSignal();
         },
         onClose: () => {
-          setResumeMsg('Jendela ditutup. Transaksi tetap menunggu pembayaran — bukan dibatalkan.');
+          // Close ≠ expired. Still reconcile in case Midtrans already expired/settled.
+          void refreshAfterPaymentSignal({ assumeClosed: true });
         },
       });
     } catch (err: any) {
@@ -309,6 +374,7 @@ export function TransactionDetailPage() {
     invoiceNumber: tx.invoice_number,
     transactionCode: tx.transactionCode,
     status: tx.statusRaw || tx.status,
+    amount: tx.amount,
   });
 
   const isTopUp = isWalletTopUpService(
