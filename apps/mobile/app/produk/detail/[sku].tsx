@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../../src/store/catalog.store';
+import { useCheckoutStore } from '../../../src/store/checkout.store';
 import { ScreenContainer, Card, Button, LoadingState, ErrorState } from '../../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../../src/theme';
 import { formatIDR } from '../../../src/utils/currency';
@@ -11,6 +12,8 @@ export default function ProductDetailScreen() {
   const sku = typeof params.sku === 'string' ? params.sku : '';
   const { productDetail, productDetailLoading, productDetailError, fetchProductDetail, clearProductDetail } =
     useCatalogStore();
+  const router = useRouter();
+  const startCheckout = useCheckoutStore((s) => s.startCheckout);
 
   useEffect(() => {
     if (sku) fetchProductDetail(sku);
@@ -73,8 +76,14 @@ export default function ProductDetailScreen() {
             )}
           </Card>
 
-          <Button label="Beli Sekarang" onPress={() => {}} disabled />
-          <Text style={styles.comingSoon}>Checkout akan hadir pada Fase 3B.</Text>
+          <Button
+            label="Beli Sekarang"
+            onPress={() => {
+              startCheckout(productDetail);
+              router.push({ pathname: '/checkout/[sku]', params: { sku: productDetail.code } });
+            }}
+            disabled={!!unavailable}
+          />
         </>
       )}
     </ScreenContainer>
@@ -115,5 +124,4 @@ const styles = StyleSheet.create({
   statusMaintenance: { backgroundColor: colors.status.pendingBg },
   statusGangguan: { backgroundColor: colors.status.failedBg },
   statusText: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.gray[700] },
-  comingSoon: { fontSize: typography.size.xs, color: colors.gray[400], textAlign: 'center' },
 });

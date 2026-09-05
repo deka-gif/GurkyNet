@@ -29,6 +29,11 @@ export interface Product {
   validity: string | null;
   badge: string | null;
   price: number;
+  /** Separate customer-facing admin surcharge, when the product has one — a real
+   * component of what the customer pays, unlike the internal fields above. Shown as
+   * its own line at checkout; never summed client-side with `price` (the backend's
+   * own `totalPayment` on the created transaction is the only authoritative total). */
+  adminFee: number;
   status: 'tersedia' | 'maintenance' | 'gangguan';
   isPurchasable: boolean;
   category: string;
