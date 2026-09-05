@@ -26,7 +26,8 @@ class ProfileRepository implements ProfileRepositoryInterface
             'address' => $user->address,
             'role' => $user->role instanceof \App\Enums\UserRole ? $user->role->value : $user->role,
             'wallet' => $user->wallet ? [
-                'wallet_number' => $user->wallet->wallet_number,
+                'wallet_number' => $user->gurky_pay_id ?: $user->wallet->wallet_number,
+                'gurky_pay_id' => $user->gurky_pay_id ?: $user->wallet->wallet_number,
                 'balance' => (float) $user->wallet->balance,
                 'status' => $user->wallet->status,
             ] : null,

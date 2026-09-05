@@ -26,10 +26,12 @@ class FinanceWalletQueryService
         if ($q !== '') {
             $query->where(function ($builder) use ($q) {
                 $builder->where('wallet_number', 'like', "%{$q}%")
+                    ->orWhere('previous_wallet_number', 'like', "%{$q}%")
                     ->orWhereHas('user', function ($u) use ($q) {
                         $u->where('name', 'like', "%{$q}%")
                             ->orWhere('email', 'like', "%{$q}%")
-                            ->orWhere('phone_number', 'like', "%{$q}%");
+                            ->orWhere('phone_number', 'like', "%{$q}%")
+                            ->orWhere('gurky_pay_id', 'like', "%{$q}%");
                     });
             });
         }
@@ -43,6 +45,8 @@ class FinanceWalletQueryService
                 'id' => $wallet->id,
                 'user_id' => $wallet->user_id,
                 'wallet_number' => $wallet->wallet_number,
+                'previous_wallet_number' => $wallet->previous_wallet_number,
+                'gurky_pay_id' => $wallet->user?->gurky_pay_id,
                 'balance' => (float) $wallet->balance,
                 'status' => $wallet->status,
                 'user' => $wallet->user ? [

@@ -5,6 +5,7 @@ namespace App\Actions\Auth;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Repositories\Contracts\UserRepositoryInterface;
+use App\Services\Identity\GurkyPayIdService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -35,18 +36,12 @@ class RegisterUserAction
                 ])->save();
             }
 
-            // Generate unique wallet number: 1042 + random numbers
-            $walletNumber = '1042' . mt_rand(1000000000, 9999999999);
+            // Unified customer-facing account: YYYY3128NNN = gurky_pay_id = wallet_number
+            $accountNumber = app(GurkyPayIdService::class)->ensureForUser($user->fresh());
 
-            // Double check uniqueness of wallet number
-            while (Wallet::where('wallet_number', $walletNumber)->exists()) {
-                $walletNumber = '1042' . mt_rand(1000000000, 9999999999);
-            }
-
-            // Create associated wallet
             Wallet::create([
                 'user_id' => $user->id,
-                'wallet_number' => $walletNumber,
+                'wallet_number' => $accountNumber,
                 'balance' => 0.00,
                 'status' => 'active',
             ]);
@@ -70,7 +65,7 @@ class RegisterUserAction
                 app(\App\Services\Legal\PolicyAcceptanceService::class)->acceptCurrentPublished($user);
             }
 
-            return $user;
+            return $user->fresh(['wallet']);
         });
     }
 }

@@ -41,12 +41,20 @@ class WalletSummaryService
 
         $transactionsById = $this->loadReferencedTransactions($recentRows);
 
+        $wallet->loadMissing('user');
+
+        $accountNumber = (string) ($wallet->user?->gurky_pay_id ?: $wallet->wallet_number);
+
         return [
             'wallet' => [
                 'id' => $wallet->id,
                 'balance' => (float) $wallet->balance,
-                'wallet_id' => (string) $wallet->wallet_number,
-                'walletNo' => (string) $wallet->wallet_number,
+                /** Unified GurkyPay account number (YYYY3128NNN) — same as wallet_number. */
+                'wallet_id' => $accountNumber,
+                'walletNo' => $accountNumber,
+                'wallet_number' => $accountNumber,
+                'gurkyPayId' => $accountNumber,
+                'gurky_pay_id' => $accountNumber,
                 'reward_points' => (int) ($wallet->points ?? 0),
                 'points' => (int) ($wallet->points ?? 0),
                 'currency' => $wallet->currency ?? 'IDR',

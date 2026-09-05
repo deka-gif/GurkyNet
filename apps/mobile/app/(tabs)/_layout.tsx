@@ -6,9 +6,8 @@ import { useAuthStore } from '../../src/store/auth.store';
 import { colors } from '../../src/theme';
 
 /**
- * Bottom navigation: Home / Riwayat / Help / Akun (exactly 4).
- * Transaksi & Notifikasi screens remain in the app (reachable via Home → Lainnya
- * and future entry points) but are hidden from the tab bar.
+ * Bottom navigation: Home | Riwayat | Wallet | Help | Akun (exactly 5).
+ * Transaksi & Notifikasi stay registered for deep links / Home → Lainnya but are hidden.
  */
 export default function TabsLayout() {
   const router = useRouter();
@@ -52,6 +51,13 @@ export default function TabsLayout() {
         options={{
           title: 'Riwayat',
           tabBarIcon: ({ color, size }) => <Ionicons name="time" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: 'Wallet',
+          tabBarIcon: ({ color, size }) => <Ionicons name="wallet" color={color} size={size} />,
         }}
       />
       <Tabs.Screen

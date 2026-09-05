@@ -38,12 +38,16 @@ class ProfileResource extends JsonResource
             'notify_transactions' => (bool) ($this->notify_transactions ?? true),
             'wallet' => $this->wallet ? [
                 'id' => $this->wallet->id,
-                'walletNo' => $this->wallet->wallet_number,
-                'wallet_number' => $this->wallet->wallet_number,
+                'walletNo' => $this->gurky_pay_id ?: $this->wallet->wallet_number,
+                'wallet_number' => $this->gurky_pay_id ?: $this->wallet->wallet_number,
+                'gurkyPayId' => $this->gurky_pay_id ?: $this->wallet->wallet_number,
+                'gurky_pay_id' => $this->gurky_pay_id ?: $this->wallet->wallet_number,
                 'balance' => (float) $this->wallet->balance,
                 'status' => $this->wallet->status,
                 'lastUpdated' => $this->wallet->updated_at?->toIso8601String(),
             ] : null,
+            'gurkyPayId' => $this->gurky_pay_id,
+            'gurky_pay_id' => $this->gurky_pay_id,
             'createdAt' => $this->created_at?->toIso8601String(),
             'user' => [
                 'id' => $this->id,

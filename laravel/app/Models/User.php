@@ -32,6 +32,7 @@ class User extends Authenticatable
         'pin_updated_at',
         'email_verified_at',
         'phone_verified_at',
+        // gurky_pay_id intentionally omitted — only GurkyPayIdService may assign it (forceFill).
     ];
 
     protected $hidden = [
