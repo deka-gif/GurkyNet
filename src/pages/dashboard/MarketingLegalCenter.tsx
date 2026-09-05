@@ -241,7 +241,7 @@ export const MarketingLegalCenter: React.FC = () => {
     <div className="space-y-6 pb-16">
       <CmsPageHeader
         title="Legal Center"
-        subtitle="Kelola Privacy Policy, Terms & Conditions, dan Refund Policy — draft, preview, publish, dan version history."
+        subtitle="Kelola dokumen Privacy Policy, Terms, Refund, dan dokumen legal lainnya."
         icon={Shield}
       />
 

@@ -349,10 +349,10 @@ export const MarketingPromotionManagement: React.FC = () => {
               GurkyNet Marketing Promotion Management
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Promotion Campaign Management
+              Promotion
             </h1>
             <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed max-w-2xl">
-              Pengaturan skema kampanye promosi, diskon persentase, cashback saldo e-wallet, bebas biaya admin PPOB, dan insentif produk bundling.
+              Kelola campaign promosi dan diskon.
             </p>
           </div>
 

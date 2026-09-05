@@ -176,7 +176,7 @@ export const MarketingWebsiteSettings: React.FC = () => {
     <div className="space-y-6 pb-12" id="website-settings-container">
       <CmsPageHeader
         title="Website Settings"
-        subtitle="Kelola konfigurasi branding, informasi kontak, media sosial, dan status pemeliharaan portal utama."
+        subtitle="Kelola identitas dan konfigurasi utama website GurkyNet — termasuk logo platform, favicon, kontak, SEO, dan status pemeliharaan."
         icon={Settings}
       />
 

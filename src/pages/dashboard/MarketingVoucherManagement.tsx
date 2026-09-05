@@ -350,10 +350,10 @@ export const MarketingVoucherManagement: React.FC = () => {
               GurkyNet Marketing Voucher & Coupon Center
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Voucher Management Center
+              Voucher
             </h1>
             <p className="text-xs sm:text-sm text-indigo-100/90 leading-relaxed max-w-2xl">
-              Pengelolaan kode kupon diskon, batas kuota penggunaan, pengaturan batas minimum transaksi, dan aktivasi klaim otomatis pelanggan.
+              Kelola voucher promosi / kode promo Marketing. Bukan produk katalog Voucher Digital.
             </p>
           </div>
 

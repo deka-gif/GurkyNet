@@ -335,10 +335,10 @@ export const MarketingAnnouncementCenter: React.FC = () => {
               GurkyNet Marketing Announcement Center
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Announcement & Broadcast Center
+              Announcement
             </h1>
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed max-w-2xl">
-              Pengelolaan siaran informasi sistem, pemberitahuan publikasi promo, pemeliharaan server, dan komunikasi segmen pengguna aplikasi GurkyNet secara live.
+              Kelola pengumuman dan komunikasi kepada pengguna.
             </p>
           </div>
 

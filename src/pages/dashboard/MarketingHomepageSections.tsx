@@ -308,8 +308,8 @@ export const MarketingHomepageSections: React.FC = () => {
   return (
     <div className="space-y-6 pb-12" id="homepage-sections-container">
       <CmsPageHeader
-        title="Homepage Sections"
-        subtitle="Atur tata letak, komponen utama, urutan baris, dan visibilitas di halaman depan website."
+        title="Edit Live Homepage"
+        subtitle="Edit langsung section homepage yang sedang aktif. Gunakan dengan hati-hati — perubahan dapat langsung terlihat di website."
         icon={Layers}
         action={
           !isOwnerReadOnly

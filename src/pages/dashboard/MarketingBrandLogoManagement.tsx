@@ -271,7 +271,8 @@ export const MarketingBrandLogoManagement: React.FC = () => {
                 Logo Brand
               </h1>
               <p className="text-sm text-gray-500 mt-0.5">
-                Kelola logo brand & icon kategori — dikelompokkan sesuai 7 menu utama customer.
+                Kelola logo brand/operator dan icon kategori yang digunakan pada katalog dan tampilan layanan.
+                Logo GurkyNet (platform) dikelola di Website → Website Settings.
               </p>
             </div>
           </div>

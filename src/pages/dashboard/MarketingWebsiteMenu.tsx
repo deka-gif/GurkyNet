@@ -311,7 +311,7 @@ export const MarketingWebsiteMenu: React.FC = () => {
     <div className="space-y-6 pb-12" id="website-menu-container">
       <CmsPageHeader
         title="Website Menu"
-        subtitle="Kelola link navigasi utama, hierarki submenu, urutan, ikon, serta sasaran target halaman portal."
+        subtitle="Kelola navigasi/menu pada website."
         icon={Menu}
         action={
           !isOwnerReadOnly

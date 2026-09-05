@@ -497,7 +497,7 @@ export const MarketingFeedbackQueue: React.FC = () => (
   <WorkflowQueuePage
     division="marketing"
     title="Feedback Queue"
-    subtitle="Content back office — draft FAQ / Knowledge / Announcement. Tanpa auto-publish homepage."
+    subtitle="Antrian kerja / feedback Marketing — draft FAQ, Knowledge, Announcement. Bukan editor publishing konten langsung."
   />
 );
 

@@ -287,7 +287,7 @@ export const MarketingHomepageBuilder: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-slate-500 gap-2">
-        <Loader2 className="w-5 h-5 animate-spin" /> Memuat Homepage Builder…
+        <Loader2 className="w-5 h-5 animate-spin" /> Memuat Homepage…
       </div>
     );
   }
@@ -295,8 +295,8 @@ export const MarketingHomepageBuilder: React.FC = () => {
   return (
     <div className="space-y-6 pb-16">
       <CmsPageHeader
-        title="Homepage Builder"
-        subtitle="Atur urutan, status, dan isi seluruh section Homepage tanpa mengubah source code. Publish untuk menerapkan ke production."
+        title="Homepage"
+        subtitle="Editor utama untuk mengatur dan menerbitkan tampilan halaman utama website. Publish untuk menerapkan ke production."
         icon={Layers3}
       />
 

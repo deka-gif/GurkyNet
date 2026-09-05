@@ -230,25 +230,28 @@ export const DashboardLayout = () => {
 
       case 'Marketing':
         return [
-          { section: 'Utama' },
           { path: '/dashboard/marketing', label: 'Dashboard', icon: Megaphone },
-          { path: '/dashboard/marketing/banners', label: 'Banner', icon: ImageIcon },
+          { section: 'Promosi & Iklan' },
+          { path: '/dashboard/marketing/banners', label: 'Banner Promotion', icon: ImageIcon },
           { path: '/dashboard/marketing/promotions', label: 'Promotion', icon: Tag },
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/marketing/announcements', label: 'Announcement', icon: Bell },
-          { path: '/dashboard/marketing/feedback-queue', label: 'Feedback Queue', icon: MessageSquare },
           { section: 'Katalog & Brand' },
           { path: '/dashboard/marketing/brand-logos', label: 'Logo Brand', icon: Palette, isNew: true },
           { section: 'Website' },
           { path: '/dashboard/marketing/website/settings', label: 'Website Settings', icon: Settings },
-          { path: '/dashboard/marketing/website/homepage-builder', label: 'Homepage Builder', icon: Layers },
-          { path: '/dashboard/marketing/website/homepage-sections', label: 'Homepage Sections', icon: Layers },
+          { path: '/dashboard/marketing/website/homepage-builder', label: 'Homepage', icon: Layers },
+          { path: '/dashboard/marketing/website/homepage-sections', label: 'Edit Live Homepage', icon: Layers },
           { path: '/dashboard/marketing/website/menus', label: 'Website Menu', icon: Menu },
           { path: '/dashboard/marketing/website/static-pages', label: 'Static Pages', icon: FileText },
           { path: '/dashboard/marketing/website/legal-center', label: 'Legal Center', icon: FileText },
+          { section: 'Asset & Media' },
           { path: '/dashboard/marketing/website/media-library', label: 'Media Library', icon: ImageIcon },
-          { path: '/dashboard/account', label: 'Akun', icon: User },
+          { section: 'Feedback' },
+          { path: '/dashboard/marketing/feedback-queue', label: 'Feedback Queue', icon: MessageSquare },
+          { section: 'Sistem' },
           { path: '/dashboard/notifikasi', label: 'Notifications', icon: Bell, badge: unreadCount },
+          { path: '/dashboard/account', label: 'Akun', icon: User },
         ];
 
       case 'Customer Support':
@@ -349,7 +352,7 @@ export const DashboardLayout = () => {
       case 'Marketing':
         return [
           { path: '/dashboard/marketing', label: 'Dashboard', icon: Megaphone },
-          { path: '/dashboard/marketing/banners', label: 'Banner', icon: ImageIcon },
+          { path: '/dashboard/marketing/banners', label: 'Banner Promo', icon: ImageIcon },
           { path: '/dashboard/marketing/feedback-queue', label: 'Feedback', icon: MessageSquare },
           { path: '/dashboard/marketing/vouchers', label: 'Voucher', icon: Ticket },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },

@@ -231,7 +231,7 @@ export const MarketingStaticPages: React.FC = () => {
     <div className="space-y-6 pb-12" id="static-pages-container">
       <CmsPageHeader
         title="Static Pages"
-        subtitle="Kelola konten informasi statis seperti Tentang Kami, Kebijakan Privasi, Ketentuan Layanan, FAQ, dan SEO Meta tags."
+        subtitle="Kelola halaman statis seperti Tentang Kami dan halaman informasi lainnya."
         icon={FileText}
         action={
           !isOwnerReadOnly

@@ -205,8 +205,8 @@ export const MarketingMediaLibrary = () => {
   return (
     <div className="space-y-6">
       <DashboardHeader 
-        title="Media Library & File Management" 
-        subtitle="Kelola semua aset gambar, logo, favicon, dan banner promosi website secara terpusat."
+        title="Media Library"
+        subtitle="Kelola aset gambar bersama untuk Website, Banner Promotion, Logo Brand, dan konten Marketing lainnya."
       />
 
       {/* Role Authorization Guard Warning UI */}

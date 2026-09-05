@@ -29,6 +29,36 @@ import { MediaChooserModal } from '../../components/common/MediaChooserModal';
 import { Media } from '../../types';
 import { useOwnerReadOnly } from '../../hooks/useOwnerReadOnly';
 
+/** Recommended canvas sizes for Marketing dual-asset banners (soft guidance only). */
+const DESKTOP_BANNER_RECOMMENDED = { w: 1920, h: 420, label: '1920 × 420 px' };
+const MOBILE_BANNER_RECOMMENDED = { w: 1080, h: 450, label: '1080 × 450 px' };
+const DESKTOP_BANNER_RATIO = DESKTOP_BANNER_RECOMMENDED.w / DESKTOP_BANNER_RECOMMENDED.h; // ~4.57
+const MOBILE_BANNER_RATIO = MOBILE_BANNER_RECOMMENDED.w / MOBILE_BANNER_RECOMMENDED.h; // 2.4
+
+const SIZE_MISMATCH_HINT =
+  'Ukuran gambar tidak sesuai rekomendasi. Banner tetap dapat digunakan, tetapi hasil tampilan mungkin kurang optimal.';
+
+function softSizeMismatch(
+  width?: number | null,
+  height?: number | null,
+  expectedRatio?: number,
+  tolerance = 0.12
+): string | null {
+  if (!width || !height || !expectedRatio) return null;
+  const ratio = width / height;
+  const drift = Math.abs(ratio - expectedRatio) / expectedRatio;
+  return drift > tolerance ? SIZE_MISMATCH_HINT : null;
+}
+
+function bannerHasDedicatedMobileAsset(banner: any): boolean {
+  return Boolean(
+    banner?.mobileImageMediaId ||
+      banner?.mobile_image_media_id ||
+      banner?.mobileImageMedia ||
+      banner?.mobile_image_media
+  );
+}
+
 export const MarketingBannerManagement: React.FC = () => {
   // Sprint 2 Revision — Frontend Alignment: Owner read-only pada modul Marketing.
   const isOwnerReadOnly = useOwnerReadOnly();
@@ -62,6 +92,8 @@ export const MarketingBannerManagement: React.FC = () => {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [desktopSizeWarning, setDesktopSizeWarning] = useState<string | null>(null);
+  const [mobileSizeWarning, setMobileSizeWarning] = useState<string | null>(null);
 
   const [formState, setFormState] = useState<{
     title: string;
@@ -118,6 +150,8 @@ export const MarketingBannerManagement: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingBannerId(null);
+    setDesktopSizeWarning(null);
+    setMobileSizeWarning(null);
     setFormState({
       title: '',
       slug: '',
@@ -143,6 +177,15 @@ export const MarketingBannerManagement: React.FC = () => {
 
   const handleOpenEdit = (banner: any) => {
     setEditingBannerId(banner.id);
+    const desktopMedia = banner.image_media || banner.imageMedia;
+    const mobileMedia = banner.mobile_image_media || banner.mobileImageMedia;
+    const hasMobile = bannerHasDedicatedMobileAsset(banner);
+    setDesktopSizeWarning(
+      softSizeMismatch(desktopMedia?.width, desktopMedia?.height, DESKTOP_BANNER_RATIO)
+    );
+    setMobileSizeWarning(
+      hasMobile ? softSizeMismatch(mobileMedia?.width, mobileMedia?.height, MOBILE_BANNER_RATIO) : null
+    );
     setFormState({
       title: banner.title || banner.name || '',
       slug: banner.slug || '',
@@ -157,14 +200,18 @@ export const MarketingBannerManagement: React.FC = () => {
       sort_order: Number(banner.sort_order ?? banner.sortOrder ?? 0),
       is_active: banner.is_active ?? banner.isActive ?? true,
       image_media_id: banner.image_media_id || banner.imageMediaId,
-      mobile_image_media_id: banner.mobile_image_media_id || banner.mobileImageMediaId,
-      image_media: banner.image_media || banner.imageMedia,
-      mobile_image_media: banner.mobile_image_media || banner.mobileImageMedia,
-      image_url: banner.image_url || banner.image || '',
-      mobile_image_url:
-        typeof banner.mobileImage === 'string'
+      mobile_image_media_id: hasMobile
+        ? banner.mobile_image_media_id || banner.mobileImageMediaId
+        : undefined,
+      image_media: desktopMedia,
+      mobile_image_media: hasMobile ? mobileMedia : undefined,
+      image_url: banner.image_url || banner.image || banner.imageUrl || '',
+      // Do not copy API fallback mobileImageUrl (== desktop) into the mobile field.
+      mobile_image_url: hasMobile
+        ? typeof banner.mobileImage === 'string'
           ? banner.mobileImage
-          : banner.mobile_image_url || banner.mobileImageUrl || '',
+          : banner.mobile_image_url || banner.mobileImageUrl || mobileMedia?.url || ''
+        : '',
     });
     setIsFormModalOpen(true);
   };
@@ -176,6 +223,9 @@ export const MarketingBannerManagement: React.FC = () => {
 
   const handleMediaSelect = (url: string, mediaItem?: Media) => {
     if (chooserKey === 'image') {
+      setDesktopSizeWarning(
+        softSizeMismatch(mediaItem?.width, mediaItem?.height, DESKTOP_BANNER_RATIO)
+      );
       setFormState((prev) => ({
         ...prev,
         image_media_id: mediaItem?.id,
@@ -183,6 +233,9 @@ export const MarketingBannerManagement: React.FC = () => {
         image_url: url,
       }));
     } else if (chooserKey === 'mobileImage') {
+      setMobileSizeWarning(
+        softSizeMismatch(mediaItem?.width, mediaItem?.height, MOBILE_BANNER_RATIO)
+      );
       setFormState((prev) => ({
         ...prev,
         mobile_image_media_id: mediaItem?.id,
@@ -194,6 +247,7 @@ export const MarketingBannerManagement: React.FC = () => {
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Explicit null clears media FK independently (undefined is omitted from JSON).
     const payload = {
       title: formState.title,
       slug: formState.slug || undefined,
@@ -207,9 +261,9 @@ export const MarketingBannerManagement: React.FC = () => {
       priority: formState.priority,
       sort_order: formState.sort_order,
       is_active: formState.is_active,
-      image_media_id: formState.image_media_id,
-      mobile_image_media_id: formState.mobile_image_media_id,
-      image_url: formState.image_url || undefined,
+      image_media_id: formState.image_media_id ?? null,
+      mobile_image_media_id: formState.mobile_image_media_id ?? null,
+      image_url: formState.image_url || null,
     };
 
     let result;
@@ -326,10 +380,10 @@ export const MarketingBannerManagement: React.FC = () => {
               GurkyNet Marketing CMS
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Homepage Banner Management
+              Banner Promotion
             </h1>
             <p className="text-xs sm:text-sm text-pink-100/90 leading-relaxed max-w-2xl">
-              Pengelolaan spanduk promosi visual, banner carousel homepage, header kategori, dan popup modal pemberitahuan pada aplikasi publik GurkyNet.
+              Kelola iklan/banner untuk Web dan aplikasi dalam satu campaign. Setiap campaign memiliki Banner Web/Desktop dan Banner Aplikasi/Mobile.
             </p>
           </div>
 
@@ -498,6 +552,7 @@ export const MarketingBannerManagement: React.FC = () => {
             <thead>
               <tr className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-100 uppercase tracking-wider text-[10px]">
                 <th className="py-3.5 px-4">Banner Name</th>
+                <th className="py-3.5 px-4">Asset</th>
                 <th className="py-3.5 px-4">Slug</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Start Date</th>
@@ -509,14 +564,14 @@ export const MarketingBannerManagement: React.FC = () => {
             <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
               {bannersLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-pink-500" />
                     Memuat data banner...
                   </td>
                 </tr>
               ) : banners.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
                     <ImageIcon className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     Tidak ada banner yang sesuai dengan pencarian atau filter.
                   </td>
@@ -527,6 +582,36 @@ export const MarketingBannerManagement: React.FC = () => {
                     <td className="py-4 px-4">
                       <div className="font-extrabold text-gray-900 max-w-xs truncate">{banner.title || banner.name}</div>
                       <div className="text-[10px] text-gray-400 font-mono mt-0.5">{banner.id}</div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border ${
+                            banner.image || banner.imageUrl || banner.image_url || banner.imageMediaId
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                              : 'bg-gray-50 text-gray-400 border-gray-100'
+                          }`}
+                          title="Banner Web / Desktop"
+                        >
+                          <Monitor className="w-3 h-3" />
+                          Web
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border ${
+                            bannerHasDedicatedMobileAsset(banner)
+                              ? 'bg-sky-50 text-sky-700 border-sky-100'
+                              : 'bg-amber-50 text-amber-700 border-amber-100'
+                          }`}
+                          title={
+                            bannerHasDedicatedMobileAsset(banner)
+                              ? 'Banner Mobile sudah diupload'
+                              : 'Banner Mobile belum diupload — aplikasi memakai fallback desktop'
+                          }
+                        >
+                          <Smartphone className="w-3 h-3" />
+                          {bannerHasDedicatedMobileAsset(banner) ? 'App' : 'App fallback'}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-[10px] inline-flex items-center gap-1 font-mono">
@@ -658,8 +743,8 @@ export const MarketingBannerManagement: React.FC = () => {
           {previewMode === 'desktop' && (
             <div className="w-full max-w-4xl space-y-3">
               <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between">
-                <span>[ Desktop Header Banner Carousel - Aspect Ratio 3.2:1 ]</span>
-                <span className="text-pink-400 font-bold">Resolution: 1920 x 600 px</span>
+                <span>[ Desktop Header Banner Carousel — rasio ~4.57:1 ]</span>
+                <span className="text-pink-400 font-bold">Rekomendasi: 1920 × 420 px</span>
               </div>
               <div className="w-full rounded-2xl p-8 bg-gradient-to-r from-purple-900 via-pink-900 to-rose-950 border border-pink-500/30 shadow-2xl relative overflow-hidden space-y-4">
                 <span className="px-3 py-1 rounded-full text-[10px] font-black bg-pink-500/30 text-pink-200 border border-pink-400/40 inline-block uppercase">
@@ -678,7 +763,7 @@ export const MarketingBannerManagement: React.FC = () => {
           {previewMode === 'mobile' && (
             <div className="w-full max-w-xs space-y-3">
               <div className="text-[10px] font-mono text-slate-400 text-center">
-                [ Mobile App Screen Card Banner ]
+                [ Mobile App Banner — rasio ~2.4:1 · rekomendasi 1080 × 450 px ]
               </div>
               <div className="w-full rounded-3xl p-5 bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 border border-purple-500/30 shadow-2xl space-y-3 text-center">
                 <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400/20 text-amber-300 border border-amber-300/30 uppercase">
@@ -733,28 +818,76 @@ export const MarketingBannerManagement: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-6 flex-1 text-xs text-gray-700">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
-                  Visual Banner Preview
+                  Asset Campaign (satu banner, dua desain)
                 </label>
-                <div className="w-full min-h-[160px] rounded-2xl p-6 text-white shadow-md bg-gradient-to-br from-purple-900 via-pink-900 to-slate-900 space-y-3 relative overflow-hidden flex flex-col justify-between">
-                  {(selectedBanner.image_url || selectedBanner.image) && (
-                    <img
-                      src={resolveMediaSrc(selectedBanner.image_url || selectedBanner.image)}
-                      alt="Banner Content"
-                      className="absolute inset-0 w-full h-full object-cover opacity-50 z-0"
-                    />
-                  )}
-                  <div className="relative z-10 space-y-1">
-                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-white/20 text-white border border-white/30 uppercase inline-block">
-                      {selectedBanner.tagline || 'PROMOTION'}
-                    </span>
-                    <h3 className="text-base font-black leading-snug">{selectedBanner.title || selectedBanner.name}</h3>
-                    <p className="text-[11px] text-white/85">{selectedBanner.description}</p>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-gray-600 uppercase tracking-wider">
+                    <Monitor className="w-3.5 h-3.5 text-pink-600" />
+                    Preview Web / Desktop
                   </div>
-                  <div className="relative z-10 pt-2 border-t border-white/10 flex justify-between items-center text-[9px] font-mono text-white/70">
-                    <span>Click Target: {selectedBanner.link_url || selectedBanner.clickUrl || '-'}</span>
+                  <div
+                    className="w-full rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 relative"
+                    style={{ aspectRatio: `${DESKTOP_BANNER_RECOMMENDED.w} / ${DESKTOP_BANNER_RECOMMENDED.h}` }}
+                  >
+                    {(selectedBanner.image_url || selectedBanner.image || selectedBanner.imageUrl) ? (
+                      <img
+                        src={resolveMediaSrc(selectedBanner.image_url || selectedBanner.image || selectedBanner.imageUrl)}
+                        alt="Banner Web/Desktop"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400 font-medium">
+                        Banner Web/Desktop belum diupload
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-gray-600 uppercase tracking-wider">
+                      <Smartphone className="w-3.5 h-3.5 text-sky-600" />
+                      Preview Aplikasi / Mobile
+                    </div>
+                    {!bannerHasDedicatedMobileAsset(selectedBanner) ? (
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-lg">
+                        Banner Mobile belum diupload
+                      </span>
+                    ) : null}
+                  </div>
+                  <div
+                    className="w-full max-w-sm rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 relative"
+                    style={{ aspectRatio: `${MOBILE_BANNER_RECOMMENDED.w} / ${MOBILE_BANNER_RECOMMENDED.h}` }}
+                  >
+                    {(selectedBanner.mobileImageUrl ||
+                      selectedBanner.mobile_image_url ||
+                      selectedBanner.image_url ||
+                      selectedBanner.image ||
+                      selectedBanner.imageUrl) ? (
+                      <img
+                        src={resolveMediaSrc(
+                          bannerHasDedicatedMobileAsset(selectedBanner)
+                            ? selectedBanner.mobileImageUrl || selectedBanner.mobile_image_url
+                            : selectedBanner.image_url || selectedBanner.image || selectedBanner.imageUrl
+                        )}
+                        alt="Banner Aplikasi/Mobile"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400 font-medium px-4 text-center">
+                        Belum ada asset — aplikasi akan memakai fallback desktop
+                      </div>
+                    )}
+                  </div>
+                  {!bannerHasDedicatedMobileAsset(selectedBanner) &&
+                  (selectedBanner.image_url || selectedBanner.image || selectedBanner.imageUrl) ? (
+                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                      Aplikasi masih memakai Banner Web/Desktop sebagai fallback. Upload Banner Mobile agar tampilan app optimal.
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -805,7 +938,7 @@ export const MarketingBannerManagement: React.FC = () => {
       {/* ADD / EDIT BANNER MODAL */}
       {isFormModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white max-w-lg w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100">
+          <div className="bg-white max-w-2xl w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center">
@@ -813,9 +946,11 @@ export const MarketingBannerManagement: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-extrabold text-gray-900 text-sm">
-                    {editingBannerId ? 'Edit Banner' : 'Tambah Banner Baru'}
+                    {editingBannerId ? 'Edit Banner Promotion' : 'Tambah Banner Promotion'}
                   </h3>
-                  <p className="text-[10px] text-gray-500 font-medium">Ubah spanduk dan pilih media dari Library.</p>
+                  <p className="text-[10px] text-gray-500 font-medium">
+                    Satu campaign — upload Banner Web/Desktop dan Banner Aplikasi/Mobile.
+                  </p>
                 </div>
               </div>
               <button
@@ -949,113 +1084,210 @@ export const MarketingBannerManagement: React.FC = () => {
                 />
               </div>
 
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
-                <div className="flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                  <ImageIcon className="w-4 h-4 text-pink-500" />
-                  <span className="text-[10px] font-extrabold text-gray-900 uppercase tracking-wider">Integrasi Media Library</span>
+              <div className="space-y-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="flex items-start gap-2 border-b border-gray-100 pb-3">
+                  <ImageIcon className="w-4 h-4 text-pink-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-[10px] font-extrabold text-gray-900 uppercase tracking-wider block">
+                      Asset Visual Campaign
+                    </span>
+                    <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+                      Gunakan desain yang sama secara visual, tetapi sesuaikan posisi teks dan elemen penting
+                      untuk masing-masing ukuran. Jangan sekadar me-resize gambar desktop ke mobile.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-extrabold text-gray-500 uppercase tracking-wider">Banner Image</label>
-                    <p className="text-[9px] text-gray-400 -mt-0.5">Rekomendasi: 1920 × 600 px</p>
-                    {formState.image_url ? (
-                      <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
-                        <img
-                          src={resolveMediaUrl(formState.image_url)}
-                          alt="Banner"
-                          className="w-full h-16 object-cover rounded-lg border border-gray-100 bg-gray-50"
-                        />
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-bold text-gray-800 truncate max-w-[80px]">
-                            {formState.image_media?.filename || 'Gambar Banner'}
-                          </span>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => openMediaChooser('image')}
-                              className="p-0.5 hover:bg-gray-100 rounded text-gray-500 hover:text-pink-600 transition"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormState((prev) => ({
-                                  ...prev,
-                                  image_url: '',
-                                  image_media_id: undefined,
-                                  image_media: undefined,
-                                }));
-                              }}
-                              className="p-0.5 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
+                {/* ——— Banner Web / Desktop ——— */}
+                <div className="rounded-2xl border border-pink-100 bg-white p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
+                        <Monitor className="w-4 h-4" />
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => openMediaChooser('image')}
-                        className="w-full h-24 border border-dashed border-gray-200 hover:border-pink-500 hover:bg-pink-50/10 rounded-xl flex flex-col items-center justify-center gap-1 transition group text-gray-400 hover:text-pink-600 cursor-pointer"
-                      >
-                        <ImageIcon className="w-4 h-4 text-gray-400 group-hover:text-pink-500 transition" />
-                        <span className="text-[9px] font-black uppercase tracking-wider">Pilih Gambar</span>
-                      </button>
-                    )}
+                      <div>
+                        <label className="text-[11px] font-extrabold text-gray-900 uppercase tracking-wider block">
+                          Banner Web / Desktop
+                        </label>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          Digunakan untuk tampilan Web GurkyNet.
+                        </p>
+                        <p className="text-[10px] font-bold text-pink-700 mt-1">
+                          Rekomendasi {DESKTOP_BANNER_RECOMMENDED.label} (rasio ~4.57:1)
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-extrabold text-gray-500 uppercase tracking-wider">Mobile Banner Image</label>
-                    <p className="text-[9px] text-gray-400 -mt-0.5">Rekomendasi: 1080 × 1200 px (potret)</p>
-                    {formState.mobile_image_url ? (
-                      <div className="relative group rounded-xl border border-gray-100 p-1.5 bg-white flex flex-col gap-1">
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] font-extrabold text-gray-400 uppercase tracking-wider">
+                      Preview Web / Desktop
+                    </span>
+                    <div
+                      className="w-full rounded-xl overflow-hidden border border-gray-100 bg-gray-50 relative"
+                      style={{ aspectRatio: `${DESKTOP_BANNER_RECOMMENDED.w} / ${DESKTOP_BANNER_RECOMMENDED.h}` }}
+                    >
+                      {formState.image_url ? (
                         <img
-                          src={resolveMediaUrl(formState.mobile_image_url)}
-                          alt="Mobile Banner"
-                          className="w-full h-16 object-cover rounded-lg border border-gray-100 bg-gray-50"
+                          src={resolveMediaUrl(formState.image_url)}
+                          alt="Preview Web/Desktop"
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onLoad={(e) => {
+                            const img = e.currentTarget;
+                            if (!formState.image_media?.width) {
+                              setDesktopSizeWarning(
+                                softSizeMismatch(img.naturalWidth, img.naturalHeight, DESKTOP_BANNER_RATIO)
+                              );
+                            }
+                          }}
                         />
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-bold text-gray-800 truncate max-w-[80px]">
-                            {formState.mobile_image_media?.filename || 'Gambar Mobile'}
-                          </span>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => openMediaChooser('mobileImage')}
-                              className="p-0.5 hover:bg-gray-100 rounded text-gray-500 hover:text-pink-600 transition"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormState((prev) => ({
-                                  ...prev,
-                                  mobile_image_url: '',
-                                  mobile_image_media_id: undefined,
-                                  mobile_image_media: undefined,
-                                }));
-                              }}
-                              className="p-0.5 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
+                          <Monitor className="w-5 h-5" />
+                          <span className="text-[9px] font-medium">Belum ada banner desktop</span>
                         </div>
-                      </div>
-                    ) : (
+                      )}
+                    </div>
+                  </div>
+
+                  {desktopSizeWarning ? (
+                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      {desktopSizeWarning}
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openMediaChooser('image')}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-[10px] font-bold transition shadow-sm"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      {formState.image_url ? 'Ganti Banner Web' : 'Upload Banner Web'}
+                    </button>
+                    {formState.image_url ? (
                       <button
                         type="button"
-                        onClick={() => openMediaChooser('mobileImage')}
-                        className="w-full h-24 border border-dashed border-gray-200 hover:border-pink-500 hover:bg-pink-50/10 rounded-xl flex flex-col items-center justify-center gap-1 transition group text-gray-400 hover:text-pink-600 cursor-pointer"
+                        onClick={() => {
+                          setDesktopSizeWarning(null);
+                          setFormState((prev) => ({
+                            ...prev,
+                            image_url: '',
+                            image_media_id: undefined,
+                            image_media: undefined,
+                          }));
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-100 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold transition"
                       >
-                        <ImageIcon className="w-4 h-4 text-gray-400 group-hover:text-pink-500 transition" />
-                        <span className="text-[9px] font-black uppercase tracking-wider">Pilih Mobile</span>
+                        <X className="w-3.5 h-3.5" />
+                        Hapus Desktop
                       </button>
-                    )}
+                    ) : null}
+                    {formState.image_media?.filename ? (
+                      <span className="self-center text-[10px] text-gray-500 font-medium truncate max-w-[180px]">
+                        {formState.image_media.filename}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* ——— Banner Aplikasi / Mobile ——— */}
+                <div className="rounded-2xl border border-sky-100 bg-white p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                      <Smartphone className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-extrabold text-gray-900 uppercase tracking-wider block">
+                        Banner Aplikasi / Mobile
+                      </label>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        Digunakan untuk aplikasi GurkyNet.
+                      </p>
+                      <p className="text-[10px] font-bold text-sky-700 mt-1">
+                        Rekomendasi {MOBILE_BANNER_RECOMMENDED.label} (rasio ~2.4:1)
+                      </p>
+                    </div>
+                  </div>
+
+                  {!formState.mobile_image_media_id && !formState.mobile_image_url ? (
+                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-1.5">
+                      <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      Banner Mobile belum diupload. Aplikasi akan memakai Banner Web/Desktop sebagai fallback.
+                    </p>
+                  ) : null}
+
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] font-extrabold text-gray-400 uppercase tracking-wider">
+                      Preview Aplikasi / Mobile
+                    </span>
+                    <div
+                      className="w-full max-w-sm rounded-xl overflow-hidden border border-gray-100 bg-gray-50 relative"
+                      style={{ aspectRatio: `${MOBILE_BANNER_RECOMMENDED.w} / ${MOBILE_BANNER_RECOMMENDED.h}` }}
+                    >
+                      {formState.mobile_image_url ? (
+                        <img
+                          src={resolveMediaUrl(formState.mobile_image_url)}
+                          alt="Preview Aplikasi/Mobile"
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onLoad={(e) => {
+                            const img = e.currentTarget;
+                            if (!formState.mobile_image_media?.width) {
+                              setMobileSizeWarning(
+                                softSizeMismatch(img.naturalWidth, img.naturalHeight, MOBILE_BANNER_RATIO)
+                              );
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400 px-4 text-center">
+                          <Smartphone className="w-5 h-5" />
+                          <span className="text-[9px] font-medium">Belum ada banner mobile</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {mobileSizeWarning ? (
+                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      {mobileSizeWarning}
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openMediaChooser('mobileImage')}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold transition shadow-sm"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      {formState.mobile_image_url ? 'Ganti Banner Mobile' : 'Upload Banner Mobile'}
+                    </button>
+                    {formState.mobile_image_url || formState.mobile_image_media_id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileSizeWarning(null);
+                          setFormState((prev) => ({
+                            ...prev,
+                            mobile_image_url: '',
+                            mobile_image_media_id: undefined,
+                            mobile_image_media: undefined,
+                          }));
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-100 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold transition"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Hapus Mobile
+                      </button>
+                    ) : null}
+                    {formState.mobile_image_media?.filename ? (
+                      <span className="self-center text-[10px] text-gray-500 font-medium truncate max-w-[180px]">
+                        {formState.mobile_image_media.filename}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
