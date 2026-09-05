@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/auth.store';
@@ -7,11 +7,11 @@ import { ScreenContainer, Card, Button } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
 const MENU_ITEMS = [
-  { key: 'security', icon: 'shield-checkmark' as const, label: 'Keamanan & PIN', phase: 'Fase 8' },
-  { key: 'kyc', icon: 'document-text' as const, label: 'Verifikasi KYC', phase: 'Fase 8' },
-  { key: 'referral', icon: 'people' as const, label: 'Referral', phase: 'Fase 8' },
-  { key: 'loyalty', icon: 'star' as const, label: 'Poin & Loyalitas', phase: 'Fase 8' },
-  { key: 'help', icon: 'help-circle' as const, label: 'Bantuan', phase: 'Fase 8' },
+  { key: 'security', icon: 'shield-checkmark' as const, label: 'Keamanan & PIN', phase: 'Fase 8', href: null as string | null },
+  { key: 'kyc', icon: 'document-text' as const, label: 'Verifikasi KYC', phase: 'Fase 8', href: null },
+  { key: 'referral', icon: 'people' as const, label: 'Referral', phase: 'Fase 8', href: null },
+  { key: 'loyalty', icon: 'star' as const, label: 'Poin & Loyalitas', phase: 'Fase 8', href: null },
+  { key: 'help', icon: 'help-circle' as const, label: 'Bantuan', phase: null, href: '/(tabs)/help' },
 ];
 
 export default function AkunScreen() {
@@ -44,13 +44,24 @@ export default function AkunScreen() {
 
       <Card style={styles.menuCard}>
         {MENU_ITEMS.map((item, index) => (
-          <View key={item.key} style={[styles.menuRow, index < MENU_ITEMS.length - 1 && styles.menuRowBorder]}>
+          <Pressable
+            key={item.key}
+            onPress={() => {
+              if (item.href) router.push(item.href as any);
+            }}
+            disabled={!item.href}
+            style={[styles.menuRow, index < MENU_ITEMS.length - 1 && styles.menuRowBorder]}
+          >
             <View style={styles.menuLeft}>
               <Ionicons name={item.icon} size={20} color={colors.gray[500]} />
               <Text style={styles.menuLabel}>{item.label}</Text>
             </View>
-            <Text style={styles.menuPhase}>{item.phase}</Text>
-          </View>
+            {item.phase ? (
+              <Text style={styles.menuPhase}>{item.phase}</Text>
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={colors.gray[400]} />
+            )}
+          </Pressable>
         ))}
       </Card>
 

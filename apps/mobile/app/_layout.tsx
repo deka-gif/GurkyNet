@@ -14,6 +14,8 @@ import { appEvents, AUTH_UNAUTHORIZED_EVENT } from '../src/utils/eventEmitter';
  * 3. Listens for the global "session expired" event fired by the API client's 401
  *    interceptor and forces the user back to the login stack — the RN equivalent of
  *    web's `window.addEventListener('auth-unauthorized', ...)` in App.tsx.
+ *
+ * Floating Chat CS is NOT global — rendered only on Help tab (help.tsx).
  */
 export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
