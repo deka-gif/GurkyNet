@@ -16,6 +16,7 @@ use App\Http\Requests\Api\v1\WithdrawRequest;
 use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Services\Wallet\WalletSummaryService;
 use App\Services\Wallet\CustomerStatementService;
+use App\Services\Marketing\WebsiteBrandLogoResolver;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +36,7 @@ class WalletController extends Controller
     protected WalletRepositoryInterface $walletRepository;
     protected WalletSummaryService $walletSummaryService;
     protected CustomerStatementService $customerStatementService;
+    protected WebsiteBrandLogoResolver $websiteBrandLogoResolver;
 
     public function __construct(
         GetWalletAction $getWalletAction,
@@ -44,7 +46,8 @@ class WalletController extends Controller
         WithdrawWalletAction $withdrawWalletAction,
         WalletRepositoryInterface $walletRepository,
         WalletSummaryService $walletSummaryService,
-        CustomerStatementService $customerStatementService
+        CustomerStatementService $customerStatementService,
+        WebsiteBrandLogoResolver $websiteBrandLogoResolver
     ) {
         $this->getWalletAction = $getWalletAction;
         $this->getWalletHistoryAction = $getWalletHistoryAction;
@@ -54,6 +57,7 @@ class WalletController extends Controller
         $this->walletRepository = $walletRepository;
         $this->walletSummaryService = $walletSummaryService;
         $this->customerStatementService = $customerStatementService;
+        $this->websiteBrandLogoResolver = $websiteBrandLogoResolver;
     }
 
     /**
@@ -183,6 +187,7 @@ class WalletController extends Controller
         return \Barryvdh\DomPDF\Facade\Pdf::loadView('statements.monthly', [
             'statement' => $statement,
             'period_label' => $this->customerStatementService->formatPeriodLabel($statement),
+            'logo_path' => $this->websiteBrandLogoResolver->absolutePathForPdf(),
         ])->download($filename);
     }
 

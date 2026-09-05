@@ -45,9 +45,10 @@ class CustomerStatementService
         'international' => 'International',
         'uang_masuk' => 'Uang Masuk',
         'refund' => 'Refund',
-        'transfer' => 'Transfer',
+        'transfer_masuk' => 'Transfer Masuk',
+        'transfer_keluar' => 'Transfer Keluar',
         'penarikan' => 'Penarikan',
-        'penyesuaian' => 'Penyesuaian',
+        'penyesuaian' => 'Penyesuaian Saldo',
         'loyalitas' => 'Loyalitas',
         'komisi_referral' => 'Komisi Referral',
         'lainnya' => 'Lainnya',
@@ -104,7 +105,22 @@ class CustomerStatementService
             $mapped[] = $this->mapMutationRow($mutation, $context);
         }
 
-        $categories = $this->aggregateCategories($mapped);
+        $incomeCategories = $this->aggregateCategoriesByDirection($mapped, 'credit');
+        $expenseCategories = $this->aggregateCategoriesByDirection($mapped, 'debit');
+
+        $incomeCatSum = round(array_sum(array_column($incomeCategories, 'amount')), 2);
+        $expenseCatSum = round(array_sum(array_column($expenseCategories, 'amount')), 2);
+        if (abs($incomeCatSum - $income) >= 0.01 || abs($expenseCatSum - $expense) >= 0.01) {
+            throw new \RuntimeException(sprintf(
+                'Statement category breakdown mismatch for wallet %d period %s: income %.2f vs cats %.2f; expense %.2f vs cats %.2f',
+                $wallet->id,
+                $periodKey,
+                $income,
+                $incomeCatSum,
+                $expense,
+                $expenseCatSum
+            ));
+        }
 
         $gurkyPayId = $user->gurky_pay_id ?: $wallet->wallet_number;
 
@@ -119,7 +135,8 @@ class CustomerStatementService
             'income' => $income,
             'expense' => $expense,
             'ending_balance' => $ending,
-            'categories' => $categories,
+            'income_categories' => $incomeCategories,
+            'expense_categories' => $expenseCategories,
             'mutations' => $mapped,
         ];
     }
@@ -339,7 +356,10 @@ class CustomerStatementService
         $direction = $amountSigned < 0 ? 'debit' : 'credit';
         $amountAbs = round(abs($amountSigned), 2);
 
-        $description = $this->resolveDescription($mutation, $context);
+        $description = $this->sanitizeCustomerDescription(
+            $mutation,
+            $this->resolveDescription($mutation, $context)
+        );
         $category = $this->resolveCategory($mutation, $context, $description);
 
         return [
@@ -354,6 +374,54 @@ class CustomerStatementService
             'reference_id' => $mutation->reference_id !== null ? (string) $mutation->reference_id : null,
             'affects_balance' => true,
         ];
+    }
+
+    /**
+     * Customer-facing description only — never mutate ledger rows.
+     */
+    protected function sanitizeCustomerDescription(WalletMutation $mutation, string $raw): string
+    {
+        if ($mutation->type === WalletMutation::TYPE_ADJUSTMENT
+            || preg_match('/^Adjustment\s*\(/i', $raw)
+            || preg_match('/^Adjustment:/i', $raw)
+        ) {
+            return 'Penyesuaian Saldo';
+        }
+
+        $clean = $raw;
+
+        // Strip common internal/provider leakage (case-insensitive).
+        $patterns = [
+            '/\bDigiflazz\b/iu',
+            '/\bVIP\s*Payment\b/iu',
+            '/\bVIPayment\b/iu',
+            '/\bVipayment\b/iu',
+            '/\bMidtrans\b/iu',
+            '/\bdummy[_\s-]?gateway\b/iu',
+            '/\bserver[_\s-]?key\b/iu',
+            '/\bprovider\s*cost\b/iu',
+            '/\bmargin\b/iu',
+        ];
+        foreach ($patterns as $pattern) {
+            $clean = preg_replace($pattern, '', $clean) ?? $clean;
+        }
+
+        $clean = preg_replace('/\s{2,}/', ' ', trim($clean)) ?? trim($clean);
+        $clean = trim($clean, " \t\n\r\0\x0B-–—|:");
+
+        if ($clean === '') {
+            return match ($mutation->type) {
+                WalletMutation::TYPE_TOPUP => 'Top Up Saldo',
+                WalletMutation::TYPE_REFUND => 'Refund',
+                WalletMutation::TYPE_HOLD => 'Pembelian',
+                WalletMutation::TYPE_WITHDRAW => 'Transfer Keluar',
+                WalletMutation::TYPE_LOYALTY_REDEEM => 'Penukaran poin',
+                WalletMutation::TYPE_REFERRAL_COMMISSION => 'Komisi referral',
+                default => 'Mutasi wallet',
+            };
+        }
+
+        return $clean;
     }
 
     /**
@@ -387,9 +455,9 @@ class CustomerStatementService
         return match ($mutation->type) {
             WalletMutation::TYPE_TOPUP => 'Top Up Saldo',
             WalletMutation::TYPE_REFUND => 'Refund',
-            WalletMutation::TYPE_HOLD => 'Hold saldo',
-            WalletMutation::TYPE_WITHDRAW => 'Transfer / penarikan',
-            WalletMutation::TYPE_ADJUSTMENT => 'Penyesuaian saldo',
+            WalletMutation::TYPE_HOLD => 'Pembelian',
+            WalletMutation::TYPE_WITHDRAW => 'Transfer Keluar',
+            WalletMutation::TYPE_ADJUSTMENT => 'Penyesuaian Saldo',
             WalletMutation::TYPE_LOYALTY_REDEEM => 'Penukaran poin',
             WalletMutation::TYPE_REFERRAL_COMMISSION => 'Komisi referral',
             default => 'Mutasi wallet',
@@ -406,7 +474,7 @@ class CustomerStatementService
 
         if ($type === WalletMutation::TYPE_TOPUP) {
             if (str_starts_with(mb_strtolower($description), 'transfer masuk')) {
-                return $this->categoryPair('transfer');
+                return $this->categoryPair('transfer_masuk');
             }
 
             return $this->categoryPair('uang_masuk');
@@ -429,7 +497,7 @@ class CustomerStatementService
         }
 
         if ($type === WalletMutation::TYPE_WITHDRAW) {
-            return $this->categoryPair('transfer');
+            return $this->categoryPair('transfer_keluar');
         }
 
         if ($type === WalletMutation::TYPE_HOLD) {
@@ -522,21 +590,29 @@ class CustomerStatementService
     }
 
     /**
-     * Expense-side category totals (absolute amounts of debit mutations), plus income-side for completeness.
-     * Statement categories list expense-oriented hubs + financial buckets with non-zero absolute flow.
+     * Split category totals by money direction — credit → income, debit → expense.
+     * A mutation never appears on both sides.
      *
      * @param  list<array<string, mixed>>  $mapped
+     * @param  'credit'|'debit'  $direction
      * @return list<array{key: string, label: string, amount: float}>
      */
-    protected function aggregateCategories(array $mapped): array
+    protected function aggregateCategoriesByDirection(array $mapped, string $direction): array
     {
         $totals = [];
+        $labels = [];
 
         foreach ($mapped as $row) {
+            if (($row['direction'] ?? '') !== $direction) {
+                continue;
+            }
             $key = (string) $row['category_key'];
             $amount = (float) $row['amount'];
             if (! isset($totals[$key])) {
                 $totals[$key] = 0.0;
+                $labels[$key] = (string) ($row['category_label']
+                    ?? self::CATEGORY_LABELS[$key]
+                    ?? self::CATEGORY_LABELS['lainnya']);
             }
             $totals[$key] = round($totals[$key] + $amount, 2);
         }
@@ -548,7 +624,7 @@ class CustomerStatementService
             }
             $out[] = [
                 'key' => $key,
-                'label' => self::CATEGORY_LABELS[$key] ?? self::CATEGORY_LABELS['lainnya'],
+                'label' => $labels[$key] ?? (self::CATEGORY_LABELS[$key] ?? self::CATEGORY_LABELS['lainnya']),
                 'amount' => $amount,
             ];
         }

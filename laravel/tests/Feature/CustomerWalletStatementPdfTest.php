@@ -11,10 +11,13 @@ use App\Models\Wallet;
 use App\Models\WalletHistory;
 use App\Models\WalletMutation;
 use App\Models\WithdrawRequest;
+use App\Models\Media;
+use App\Models\WebsiteSetting;
 use App\Services\Wallet\CustomerStatementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -148,9 +151,12 @@ class CustomerWalletStatementPdfTest extends TestCase
         $html = view('statements.monthly', [
             'statement' => $json,
             'period_label' => app(CustomerStatementService::class)->formatPeriodLabel($json),
+            'logo_path' => null,
         ])->render();
 
         $this->assertStringContainsString('PDF Owner', $html);
+        $this->assertStringContainsString('Ringkasan pemasukan', $html);
+        $this->assertStringContainsString('Ringkasan pengeluaran', $html);
         $this->assertStringContainsString('20263128101', $html);
         $this->assertStringNotContainsString('1042999910101', $html);
         $this->assertStringNotContainsString('previous_wallet', $html);
@@ -201,6 +207,7 @@ class CustomerWalletStatementPdfTest extends TestCase
                 '2026-09'
             ),
             'period_label' => 'x',
+            'logo_path' => null,
         ])->render();
         $this->assertStringNotContainsString('PDF Owner', $html);
         $this->assertStringNotContainsString('20263128101', $html);
@@ -264,6 +271,7 @@ class CustomerWalletStatementPdfTest extends TestCase
         $html = view('statements.monthly', [
             'statement' => $json,
             'period_label' => app(CustomerStatementService::class)->formatPeriodLabel($json),
+            'logo_path' => null,
         ])->render();
         $this->assertStringNotContainsString('Withdraw disetujui', $html);
         $this->assertStringContainsString('Hold withdraw', $html);
@@ -275,20 +283,123 @@ class CustomerWalletStatementPdfTest extends TestCase
         $this->addMutation(WalletMutation::TYPE_TOPUP, 50000, '2026-08-01 10:00:00', 's', null);
         $this->addMutation(WalletMutation::TYPE_WITHDRAW, -20000, '2026-09-04 10:00:00', '301', 'Transfer ke 20263128102');
         $this->addMutation(WalletMutation::TYPE_TOPUP, 15000, '2026-09-05 10:00:00', '302', 'Transfer masuk dari 999');
-        $this->addMutation(WalletMutation::TYPE_ADJUSTMENT, 5000, '2026-09-06 10:00:00', 'a1', 'Adj credit');
+        $this->addMutation(WalletMutation::TYPE_ADJUSTMENT, 5000, '2026-09-06 10:00:00', 'a1', 'Adjustment (credit): r');
+        $this->addMutation(WalletMutation::TYPE_ADJUSTMENT, -2000, '2026-09-07 10:00:00', 'a2', 'Adjustment (debit): g');
+        $this->addMutation(WalletMutation::TYPE_REFUND, 1000, '2026-09-08 10:00:00', 'rf', 'Refund Gagal');
 
         Sanctum::actingAs($this->user);
         $json = $this->getJson('/api/v1/wallet/statements/2026-09')->assertOk()->json('data');
         $html = view('statements.monthly', [
             'statement' => $json,
             'period_label' => app(CustomerStatementService::class)->formatPeriodLabel($json),
+            'logo_path' => null,
         ])->render();
+
+        $this->assertStringContainsString('Ringkasan pemasukan', $html);
+        $this->assertStringContainsString('Ringkasan pengeluaran', $html);
+        $this->assertStringNotContainsString('Ringkasan kategori', $html);
 
         $this->assertStringContainsString('Transfer ke 20263128102', $html);
         $this->assertStringContainsString('Transfer masuk dari 999', $html);
-        $this->assertStringContainsString('Adj credit', $html);
-        $this->assertStringContainsString('Transfer', $html);
-        $this->assertStringContainsString('Penyesuaian', $html);
+        $this->assertStringContainsString('Penyesuaian Saldo', $html);
+        $this->assertStringNotContainsString('Adjustment (credit): r', $html);
+        $this->assertStringNotContainsString('Adjustment (debit): g', $html);
+        $this->assertStringContainsString('Transfer Masuk', $html);
+        $this->assertStringContainsString('Transfer Keluar', $html);
+        $this->assertStringContainsString('Refund', $html);
+
+        $incomeKeys = collect($json['income_categories'])->pluck('key')->all();
+        $expenseKeys = collect($json['expense_categories'])->pluck('key')->all();
+        $this->assertContains('refund', $incomeKeys);
+        $this->assertNotContains('refund', $expenseKeys);
+        $this->assertContains('penyesuaian', $incomeKeys);
+        $this->assertContains('penyesuaian', $expenseKeys);
+    }
+
+    public function test_pdf_uses_marketing_logo_and_falls_back_without_logo(): void
+    {
+        $this->addMutation(WalletMutation::TYPE_TOPUP, 1000, '2026-09-01 10:00:00', 's', 'Top Up');
+
+        // No website settings → text fallback still generates PDF
+        Sanctum::actingAs($this->user);
+        $this->get('/api/v1/wallet/statements/2026-09/pdf')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $htmlNoLogo = view('statements.monthly', [
+            'statement' => app(CustomerStatementService::class)->build(
+                $this->user->fresh(),
+                $this->wallet->fresh(),
+                '2026-09'
+            ),
+            'period_label' => 'x',
+            'logo_path' => null,
+        ])->render();
+        $this->assertStringContainsString('GurkyNet', $htmlNoLogo);
+        $this->assertStringNotContainsString('<img', $htmlNoLogo);
+
+        // Marketing SoT: website_settings.logo_media_id → media file on public disk
+        Storage::fake('public');
+        $relative = 'logos/statement-brand.png';
+        // Minimal valid PNG (1x1)
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+        Storage::disk('public')->put($relative, $png);
+
+        $media = Media::create([
+            'filename' => 'statement-brand.png',
+            'original_name' => 'statement-brand.png',
+            'mime_type' => 'image/png',
+            'extension' => 'png',
+            'size' => strlen($png),
+            'folder' => 'logos',
+            'storage_disk' => 'public',
+            'url' => $relative,
+            'uploaded_by' => $this->user->id,
+        ]);
+        WebsiteSetting::create([
+            'website_name' => 'GurkyNet',
+            'logo_media_id' => $media->id,
+        ]);
+
+        $resolved = app(\App\Services\Marketing\WebsiteBrandLogoResolver::class)->absolutePathForPdf();
+        $this->assertNotNull($resolved);
+        $this->assertTrue(is_file($resolved));
+
+        // Change Marketing logo media → resolver follows new SoT (no PDF-specific logo store)
+        $relative2 = 'logos/statement-brand-v2.png';
+        Storage::disk('public')->put($relative2, $png);
+        $media2 = Media::create([
+            'filename' => 'statement-brand-v2.png',
+            'original_name' => 'statement-brand-v2.png',
+            'mime_type' => 'image/png',
+            'extension' => 'png',
+            'size' => strlen($png),
+            'folder' => 'logos',
+            'storage_disk' => 'public',
+            'url' => $relative2,
+            'uploaded_by' => $this->user->id,
+        ]);
+        WebsiteSetting::query()->latest('id')->first()->update(['logo_media_id' => $media2->id]);
+
+        $resolved2 = app(\App\Services\Marketing\WebsiteBrandLogoResolver::class)->absolutePathForPdf();
+        $this->assertNotNull($resolved2);
+        $this->assertStringContainsString('statement-brand-v2.png', str_replace('\\', '/', $resolved2));
+
+        $htmlWithLogo = view('statements.monthly', [
+            'statement' => app(CustomerStatementService::class)->build(
+                $this->user->fresh(),
+                $this->wallet->fresh(),
+                '2026-09'
+            ),
+            'period_label' => 'x',
+            'logo_path' => $resolved2,
+        ])->render();
+        $this->assertStringContainsString('<img', $htmlWithLogo);
+
+        // Broken path must not break PDF generation
+        $this->get('/api/v1/wallet/statements/2026-09/pdf')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
     }
 
     public function test_multipage_mutations_not_truncated_in_view(): void
@@ -311,6 +422,7 @@ class CustomerWalletStatementPdfTest extends TestCase
         $html = view('statements.monthly', [
             'statement' => $json,
             'period_label' => app(CustomerStatementService::class)->formatPeriodLabel($json),
+            'logo_path' => null,
         ])->render();
 
         $this->assertStringContainsString('MutasiUnique1', $html);

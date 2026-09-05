@@ -12,9 +12,11 @@
             margin: 0;
             padding: 0;
         }
+        .header-logo { margin: 0 0 6px; }
+        .header-logo img { height: 42px; width: auto; max-width: 180px; }
         .brand { font-size: 18px; font-weight: bold; color: #0f172a; margin: 0; }
         .subbrand { font-size: 11px; color: #475569; margin: 2px 0 0; letter-spacing: 0.4px; }
-        .doc-title { font-size: 15px; font-weight: bold; margin: 18px 0 4px; }
+        .doc-title { font-size: 15px; font-weight: bold; margin: 14px 0 4px; }
         .muted { color: #64748b; }
         .section { margin-top: 18px; }
         .section-title {
@@ -80,12 +82,26 @@
         }
     };
     $account = $statement['account'] ?? [];
-    $categories = $statement['categories'] ?? [];
+    $incomeCategories = $statement['income_categories'] ?? [];
+    $expenseCategories = $statement['expense_categories'] ?? [];
     $mutations = $statement['mutations'] ?? [];
+    $logoSrc = null;
+    if (!empty($logo_path) && is_string($logo_path) && is_file($logo_path)) {
+        $logoSrc = 'file:///' . str_replace('\\', '/', ltrim($logo_path, '/'));
+        if (preg_match('#^[A-Za-z]:#', $logo_path)) {
+            $logoSrc = 'file:///' . str_replace('\\', '/', $logo_path);
+        }
+    }
 @endphp
 
 <div>
-    <p class="brand">GurkyNet</p>
+    @if ($logoSrc)
+        <div class="header-logo">
+            <img src="{{ $logoSrc }}" alt="GurkyNet">
+        </div>
+    @else
+        <p class="brand">GurkyNet</p>
+    @endif
     <p class="subbrand">GurkyPay</p>
     <p class="doc-title">Laporan Keuangan</p>
     <p class="muted">Dokumen ringkasan mutasi saldo resmi untuk periode yang dipilih.</p>
@@ -140,9 +156,9 @@
 </div>
 
 <div class="section">
-    <div class="section-title">Ringkasan kategori</div>
-    @if (count($categories) === 0)
-        <p class="empty">Tidak ada mutasi pada periode ini.</p>
+    <div class="section-title">Ringkasan pemasukan</div>
+    @if (count($incomeCategories) === 0)
+        <p class="empty">Tidak ada pemasukan pada periode ini.</p>
     @else
         <table class="cats">
             <thead>
@@ -152,7 +168,31 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($categories as $cat)
+                @foreach ($incomeCategories as $cat)
+                    <tr>
+                        <td>{{ $cat['label'] ?? $cat['key'] ?? 'Lainnya' }}</td>
+                        <td class="amount">{{ $fmt($cat['amount'] ?? 0) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+</div>
+
+<div class="section">
+    <div class="section-title">Ringkasan pengeluaran</div>
+    @if (count($expenseCategories) === 0)
+        <p class="empty">Tidak ada pengeluaran pada periode ini.</p>
+    @else
+        <table class="cats">
+            <thead>
+                <tr>
+                    <th>Kategori</th>
+                    <th style="text-align:right;">Jumlah</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($expenseCategories as $cat)
                     <tr>
                         <td>{{ $cat['label'] ?? $cat['key'] ?? 'Lainnya' }}</td>
                         <td class="amount">{{ $fmt($cat['amount'] ?? 0) }}</td>

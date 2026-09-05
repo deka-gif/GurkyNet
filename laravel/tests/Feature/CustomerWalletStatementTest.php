@@ -366,7 +366,15 @@ class CustomerWalletStatementTest extends TestCase
         $this->assertSame(45000.0, (float) $data['ending_balance']);
 
         $keys = collect($data['mutations'])->pluck('category_key')->all();
-        $this->assertContains('transfer', $keys);
+        $this->assertContains('transfer_keluar', $keys);
+        $this->assertContains('transfer_masuk', $keys);
+
+        $incomeKeys = collect($data['income_categories'])->pluck('key')->all();
+        $expenseKeys = collect($data['expense_categories'])->pluck('key')->all();
+        $this->assertContains('transfer_masuk', $incomeKeys);
+        $this->assertContains('transfer_keluar', $expenseKeys);
+        $this->assertNotContains('transfer_keluar', $incomeKeys);
+        $this->assertNotContains('transfer_masuk', $expenseKeys);
     }
 
     public function test_adjustment_credit_and_debit(): void
@@ -474,9 +482,10 @@ class CustomerWalletStatementTest extends TestCase
         $this->assertSame('telekomunikasi', $byRef[(string) $tx->id]['category_key']);
         $this->assertSame('lainnya', $byRef[(string) $tx2->id]['category_key']);
 
-        $catKeys = collect($data['categories'])->pluck('key')->all();
-        $this->assertContains('telekomunikasi', $catKeys);
-        $this->assertContains('lainnya', $catKeys);
+        $expenseKeys = collect($data['expense_categories'])->pluck('key')->all();
+        $this->assertContains('telekomunikasi', $expenseKeys);
+        $this->assertContains('lainnya', $expenseKeys);
+        $this->assertSame([], $data['income_categories']);
     }
 
     public function test_timezone_period_boundary_half_open(): void
@@ -506,7 +515,8 @@ class CustomerWalletStatementTest extends TestCase
         $this->assertSame(0.0, (float) $data['expense']);
         $this->assertSame(77777.0, (float) $data['ending_balance']);
         $this->assertSame([], $data['mutations']);
-        $this->assertSame([], $data['categories']);
+        $this->assertSame([], $data['income_categories']);
+        $this->assertSame([], $data['expense_categories']);
     }
 
     public function test_historical_month_unchanged_after_later_transactions(): void
@@ -590,5 +600,96 @@ class CustomerWalletStatementTest extends TestCase
         $b = app(ReconciliationIncidentService::class)->expectedBalanceFromMutations((int) $this->wallet->id);
         $this->assertSame($a, $b);
         $this->assertSame(60000.0, $a);
+    }
+
+    public function test_income_expense_category_isolation_and_adjustment_labels(): void
+    {
+        $this->addMutation(
+            $this->wallet,
+            WalletMutation::TYPE_TOPUP,
+            100000,
+            '2026-09-01 10:00:00',
+            't1',
+            'Top Up Midtrans',
+            true
+        );
+        $this->addMutation(
+            $this->wallet,
+            WalletMutation::TYPE_REFUND,
+            25000,
+            '2026-09-02 10:00:00',
+            't2',
+            'Refund Gagal Transaksi',
+            true
+        );
+        $this->addMutation(
+            $this->wallet,
+            WalletMutation::TYPE_ADJUSTMENT,
+            5000,
+            '2026-09-03 10:00:00',
+            'a1',
+            'Adjustment (credit): r',
+            true
+        );
+        $this->addMutation(
+            $this->wallet,
+            WalletMutation::TYPE_HOLD,
+            -40000,
+            '2026-09-04 10:00:00',
+            'h1',
+            'Pembelian Telkomsel 10.000 - 0812',
+            true
+        );
+        $this->addMutation(
+            $this->wallet,
+            WalletMutation::TYPE_ADJUSTMENT,
+            -3000,
+            '2026-09-05 10:00:00',
+            'a2',
+            'Adjustment (debit): g',
+            true
+        );
+
+        Sanctum::actingAs($this->user);
+        $data = $this->getJson('/api/v1/wallet/statements/2026-09')->assertOk()->json('data');
+
+        $this->assertEqualsWithDelta(130000.0, (float) $data['income'], 0.01);
+        $this->assertEqualsWithDelta(43000.0, (float) $data['expense'], 0.01);
+        $this->assertEqualsWithDelta(
+            (float) $data['opening_balance'] + (float) $data['income'] - (float) $data['expense'],
+            (float) $data['ending_balance'],
+            0.01
+        );
+
+        $incomeKeys = collect($data['income_categories'])->pluck('key')->all();
+        $expenseKeys = collect($data['expense_categories'])->pluck('key')->all();
+        $this->assertContains('uang_masuk', $incomeKeys);
+        $this->assertContains('refund', $incomeKeys);
+        $this->assertContains('penyesuaian', $incomeKeys);
+        $this->assertNotContains('refund', $expenseKeys);
+        $this->assertContains('penyesuaian', $expenseKeys);
+
+        $this->assertContains('Penyesuaian Saldo', collect($data['income_categories'])->pluck('label')->all());
+        $this->assertContains('Penyesuaian Saldo', collect($data['expense_categories'])->pluck('label')->all());
+
+        $descs = collect($data['mutations'])->pluck('description')->all();
+        $this->assertContains('Penyesuaian Saldo', $descs);
+        $this->assertNotContains('Adjustment (credit): r', $descs);
+        $this->assertNotContains('Adjustment (debit): g', $descs);
+        foreach ($descs as $d) {
+            $this->assertStringNotContainsStringIgnoringCase('midtrans', (string) $d);
+            $this->assertStringNotContainsStringIgnoringCase('digiflazz', (string) $d);
+        }
+
+        $this->assertEqualsWithDelta(
+            (float) $data['income'],
+            round(collect($data['income_categories'])->sum('amount'), 2),
+            0.01
+        );
+        $this->assertEqualsWithDelta(
+            (float) $data['expense'],
+            round(collect($data['expense_categories'])->sum('amount'), 2),
+            0.01
+        );
     }
 }
