@@ -78,3 +78,12 @@ export function providerLogoFromProduct(product?: {
 } | null): string | null {
   return marketingLogoPath(product?.providerDetails?.logo);
 }
+
+/** Accept string URL/path or Media-like object from WebsiteSettingResource.logo. */
+export function resolveMediaSrc(value?: string | { url?: string | null } | null): string {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    return resolveMediaUrl(value);
+  }
+  return resolveMediaUrl(value.url);
+}

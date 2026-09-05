@@ -1,11 +1,18 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCheckoutStore } from '../../src/store/checkout.store';
+import { isPlnContextValid, useCheckoutStore } from '../../src/store/checkout.store';
+import { useFeaturesStore, selectPurchaseEnabled } from '../../src/store/features.store';
 import { transactionService } from '../../src/services/transaction.service';
 import { parseApiError } from '../../src/api/client';
-import { ScreenContainer, PinInput } from '../../src/components/ui';
+import { ScreenContainer, PinInput, PurchaseFlowNotice } from '../../src/components/ui';
 import { colors, spacing, typography } from '../../src/theme';
+import {
+  INQUIRY_FLOW_NOTICE,
+  isDirectPurchaseCategory,
+  isInquiryRequiredCategory,
+  isPlnPrepaidCategory,
+} from '../../src/utils/purchaseCategory';
 
 export default function CheckoutPinScreen() {
   const router = useRouter();
@@ -13,21 +20,50 @@ export default function CheckoutPinScreen() {
   const sku = typeof params.sku === 'string' ? params.sku : '';
 
   const skuCode = useCheckoutStore((s) => s.skuCode);
+  const categorySlug = useCheckoutStore((s) => s.categorySlug);
   const targetNumber = useCheckoutStore((s) => s.targetNumber);
+  const plnContext = useCheckoutStore((s) => s.plnContext);
+  const clearPlnContext = useCheckoutStore((s) => s.clearPlnContext);
   const idempotencyKey = useCheckoutStore((s) => s.idempotencyKey);
   const submitting = useCheckoutStore((s) => s.submitting);
   const setSubmitting = useCheckoutStore((s) => s.setSubmitting);
   const setTransaction = useCheckoutStore((s) => s.setTransaction);
   const setStatus = useCheckoutStore((s) => s.setStatus);
+  const flags = useFeaturesStore((s) => s.flags);
+  const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
 
-  // The PIN lives ONLY here, as local component state — never in the checkout store,
-  // never persisted, never logged. Cleared immediately once the request settles,
-  // whichever way it goes.
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
 
+  const inquiryBlocked = isInquiryRequiredCategory(categorySlug);
+  const plnPrepaid = isPlnPrepaidCategory(categorySlug);
+  const plnValid = isPlnContextValid(plnContext, targetNumber);
+  const categoryBlocked =
+    inquiryBlocked ||
+    (!!categorySlug && !isDirectPurchaseCategory(categorySlug) && !plnPrepaid) ||
+    (plnPrepaid && !plnValid);
+
   const handleSubmit = async (enteredPin: string) => {
     if (submitting) return;
+    if (!purchaseEnabled) {
+      setPinError(flags.messages.purchase);
+      return;
+    }
+    if (plnPrepaid && !isPlnContextValid(plnContext, targetNumber)) {
+      clearPlnContext();
+      setPinError('Sesi cek meteran tidak valid atau kedaluwarsa. Silakan cek meteran ulang.');
+      return;
+    }
+    if (categoryBlocked) {
+      setPinError(
+        inquiryBlocked
+          ? INQUIRY_FLOW_NOTICE
+          : plnPrepaid
+            ? 'Silakan cek meteran PLN terlebih dahulu.'
+            : 'Kategori ini belum didukung di checkout mobile.'
+      );
+      return;
+    }
     if (!skuCode || !idempotencyKey) {
       setPinError('Sesi checkout tidak valid. Silakan mulai ulang dari detail produk.');
       return;
@@ -37,6 +73,7 @@ export default function CheckoutPinScreen() {
     setPinError(null);
 
     try {
+      // PLN: no inquiry_ref_id — backend resolves session by user + target_number (customer_no).
       const response = await transactionService.create({
         sku_code: skuCode,
         target_number: targetNumber,
@@ -44,7 +81,6 @@ export default function CheckoutPinScreen() {
         idempotency_key: idempotencyKey,
       });
 
-      // PIN is never needed again past this point, success or not.
       setPin('');
 
       if (response.success && response.data) {
@@ -57,24 +93,57 @@ export default function CheckoutPinScreen() {
 
       setSubmitting(false);
       setPinError(response.message || 'Transaksi gagal diproses.');
-      // Deliberately no key rotation here — the same idempotency_key stays valid for
-      // an explicit retry (re-entering the PIN below fires the same request again).
     } catch (err: any) {
       setPin('');
       setSubmitting(false);
       const parsed = parseApiError(err);
       setPinError(parsed.message || 'Gagal memproses transaksi. Silakan coba lagi.');
-      // Same non-rotation guarantee applies to network timeouts / 5xx / 409 here —
-      // this catch path never touches idempotencyKey.
-      // If the error is a confirmed wrong PIN (backend validation), rotate the key
-      // so the user can retry with a fresh idempotency key.
       if (typeof parsed.message === 'string' && parsed.message.toLowerCase().includes('pin transaksi salah')) {
-        // rotateIdempotencyKey is defined in the checkout store
-        const rotate = useCheckoutStore.getState().rotateIdempotencyKey;
-        rotate();
+        useCheckoutStore.getState().rotateIdempotencyKey();
+      }
+      // Expired / missing PLN session — clear local mirror so user re-inquires.
+      if (
+        typeof parsed.message === 'string' &&
+        (parsed.message.toLowerCase().includes('cek meteran') ||
+          parsed.message.toLowerCase().includes('kedaluwarsa') ||
+          parsed.message.toLowerCase().includes('inquiry'))
+      ) {
+        clearPlnContext();
       }
     }
   };
+
+  if (!purchaseEnabled) {
+    return (
+      <ScreenContainer scroll={false}>
+        <Stack.Screen options={{ headerShown: true, title: 'Masukkan PIN', headerBackTitle: 'Kembali' }} />
+        <PurchaseFlowNotice
+          icon="time-outline"
+          title="Pembelian Belum Aktif"
+          message={flags.messages.purchase}
+        />
+      </ScreenContainer>
+    );
+  }
+
+  if (categoryBlocked) {
+    return (
+      <ScreenContainer scroll={false}>
+        <Stack.Screen options={{ headerShown: true, title: 'Masukkan PIN', headerBackTitle: 'Kembali' }} />
+        <PurchaseFlowNotice
+          icon="shield-checkmark-outline"
+          title={plnPrepaid ? 'Cek Meteran Diperlukan' : 'Validasi Diperlukan'}
+          message={
+            inquiryBlocked
+              ? INQUIRY_FLOW_NOTICE
+              : plnPrepaid
+                ? 'Sesi cek meteran tidak valid atau kedaluwarsa. Kembali ke menu PLN dan cek meteran ulang.'
+                : 'Kategori ini belum didukung di checkout mobile.'
+          }
+        />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer scroll={false}>
@@ -101,7 +170,7 @@ export default function CheckoutPinScreen() {
       </View>
     </ScreenContainer>
   );
-};
+}
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing['2xl'] },

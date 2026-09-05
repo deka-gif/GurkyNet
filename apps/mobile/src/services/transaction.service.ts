@@ -6,9 +6,9 @@ import { ApiResponse, Transaction } from '../api/types';
  * (laravel/app/Http/Requests/Api/v1/CreateTransactionRequest.php). `status`, `amount`,
  * `admin_fee`, `total_payment`, `sell_price` are stripped server-side before validation
  * even runs — this type deliberately has no room for them so nothing can be added here
- * by mistake. `inquiry_ref_id` is optional and only used by categories that require a
- * prior inquiry (PLN/Tagihan/E-wallet/Game) — out of scope for Fase 3B's generic
- * direct-purchase categories.
+ * by mistake. `inquiry_ref_id` is optional for postpaid/e-wallet/tagihan paths that
+ * require a Digiflazz pasca session ref. Token PLN does NOT send inquiry_ref_id —
+ * backend binds prepaid inquiry by user + target_number (customer_no).
  */
 export interface CreateTransactionPayload {
   sku_code: string;

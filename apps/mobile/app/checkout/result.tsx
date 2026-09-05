@@ -145,10 +145,38 @@ export default function CheckoutResultScreen() {
       {terminal && receipt && (
         <Card style={styles.receiptCard}>
           <Text style={styles.receiptTitle}>Struk Transaksi</Text>
-          {receipt.transaction_details.serial_number ? (
+          {typeof receipt.transaction_details.token_code_grouped === 'string' &&
+          receipt.transaction_details.token_code_grouped ? (
+            <View style={styles.receiptRow}>
+              <Text style={styles.receiptLabel}>Kode Token</Text>
+              <Text style={styles.receiptValue}>
+                {receipt.transaction_details.token_code_grouped}
+              </Text>
+            </View>
+          ) : typeof receipt.transaction_details.token_code === 'string' &&
+            receipt.transaction_details.token_code ? (
+            <View style={styles.receiptRow}>
+              <Text style={styles.receiptLabel}>Kode Token</Text>
+              <Text style={styles.receiptValue}>{String(receipt.transaction_details.token_code)}</Text>
+            </View>
+          ) : receipt.transaction_details.serial_number ? (
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Serial Number</Text>
               <Text style={styles.receiptValue}>{receipt.transaction_details.serial_number}</Text>
+            </View>
+          ) : null}
+          {typeof receipt.transaction_details.customer_name === 'string' &&
+          receipt.transaction_details.customer_name ? (
+            <View style={styles.receiptRow}>
+              <Text style={styles.receiptLabel}>Atas Nama</Text>
+              <Text style={styles.receiptValue}>{receipt.transaction_details.customer_name}</Text>
+            </View>
+          ) : null}
+          {typeof receipt.transaction_details.segment_power === 'string' &&
+          receipt.transaction_details.segment_power ? (
+            <View style={styles.receiptRow}>
+              <Text style={styles.receiptLabel}>Tarif / Daya</Text>
+              <Text style={styles.receiptValue}>{receipt.transaction_details.segment_power}</Text>
             </View>
           ) : null}
           {receipt.transaction_details.voucher_internet_code ? (

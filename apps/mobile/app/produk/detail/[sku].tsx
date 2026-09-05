@@ -3,9 +3,24 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../../src/store/catalog.store';
 import { useCheckoutStore } from '../../../src/store/checkout.store';
-import { ScreenContainer, Card, Button, LoadingState, ErrorState, BrandLogo } from '../../../src/components/ui';
+import { useFeaturesStore, selectPurchaseEnabled } from '../../../src/store/features.store';
+import {
+  ScreenContainer,
+  Card,
+  Button,
+  LoadingState,
+  ErrorState,
+  BrandLogo,
+  PurchaseFlowNotice,
+} from '../../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../../src/theme';
 import { formatIDR } from '../../../src/utils/currency';
+import {
+  INQUIRY_FLOW_NOTICE,
+  isDirectPurchaseCategory,
+  isInquiryRequiredCategory,
+  isPlnPrepaidCategory,
+} from '../../../src/utils/purchaseCategory';
 
 export default function ProductDetailScreen() {
   const params = useLocalSearchParams<{ sku: string }>();
@@ -14,6 +29,14 @@ export default function ProductDetailScreen() {
     useCatalogStore();
   const router = useRouter();
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const flags = useFeaturesStore((s) => s.flags);
+  const flagsLoading = useFeaturesStore((s) => s.loading);
+  const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
+  const fetchFeatures = useFeaturesStore((s) => s.fetchFeatures);
+
+  useEffect(() => {
+    void fetchFeatures();
+  }, [fetchFeatures]);
 
   useEffect(() => {
     if (sku) fetchProductDetail(sku);
@@ -22,6 +45,20 @@ export default function ProductDetailScreen() {
 
   const unavailable = productDetail && productDetail.status !== 'tersedia';
   const brandName = productDetail?.operatorName || productDetail?.providerDetails?.name || '';
+  const categorySlug = productDetail?.category;
+  const inquiryBlocked = isInquiryRequiredCategory(categorySlug);
+  const plnPrepaid = isPlnPrepaidCategory(categorySlug);
+  const directAllowed = isDirectPurchaseCategory(categorySlug);
+  // Unknown / PLN (must use inquiry flow) / inquiry-required: not generic buy.
+  const categoryBlocked = inquiryBlocked || plnPrepaid || (!!categorySlug && !directAllowed);
+
+  const canBuy = purchaseEnabled && !unavailable && !categoryBlocked && !flagsLoading;
+
+  const onBuy = () => {
+    if (!productDetail || !canBuy) return;
+    startCheckout(productDetail);
+    router.push({ pathname: '/checkout/[sku]', params: { sku: productDetail.code } });
+  };
 
   return (
     <ScreenContainer>
@@ -33,6 +70,30 @@ export default function ProductDetailScreen() {
         <ErrorState message={productDetailError} onRetry={() => sku && fetchProductDetail(sku)} />
       ) : !productDetail ? (
         <ErrorState message="Produk tidak ditemukan." />
+      ) : inquiryBlocked ? (
+        <PurchaseFlowNotice
+          icon="shield-checkmark-outline"
+          title="Validasi Diperlukan"
+          message={INQUIRY_FLOW_NOTICE}
+        />
+      ) : plnPrepaid ? (
+        <PurchaseFlowNotice
+          icon="flash-outline"
+          title="Gunakan Menu Token PLN"
+          message="Token PLN dibeli melalui Cek Meteran di menu PLN pada Home. Buka Layanan → PLN, cek meteran, lalu pilih nominal."
+        />
+      ) : !purchaseEnabled ? (
+        <PurchaseFlowNotice
+          icon="time-outline"
+          title="Pembelian Belum Aktif"
+          message={flags.messages.purchase}
+        />
+      ) : categoryBlocked ? (
+        <PurchaseFlowNotice
+          icon="information-circle-outline"
+          title="Checkout Belum Tersedia"
+          message="Kategori produk ini belum didukung pada alur pembelian mobile saat ini. Silakan gunakan Web GurkyNet atau pilih Pulsa, Paket Data, atau Voucher Internet."
+        />
       ) : (
         <>
           <Card>
@@ -86,12 +147,9 @@ export default function ProductDetailScreen() {
           </Card>
 
           <Button
-            label="Beli Sekarang"
-            onPress={() => {
-              startCheckout(productDetail);
-              router.push({ pathname: '/checkout/[sku]', params: { sku: productDetail.code } });
-            }}
-            disabled={!!unavailable}
+            label={flagsLoading ? 'Memuat...' : 'Beli Sekarang'}
+            onPress={onBuy}
+            disabled={!canBuy}
           />
         </>
       )}

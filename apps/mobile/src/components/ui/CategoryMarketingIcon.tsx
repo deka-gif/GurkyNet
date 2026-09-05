@@ -6,18 +6,24 @@ type CategoryMarketingIconProps = {
   /** Disk-relative path from GET /catalog/category-icons, or null. */
   iconPath?: string | null;
   size?: number;
+  /**
+   * Soft zoom to offset transparent canvas padding in Marketing PNGs
+   * (no backend crop; pure UI scale). Default 1.22.
+   */
+  contentScale?: number;
   /** Ionicons (or other) fallback when Marketing asset is missing/fails. */
   fallback: ReactNode;
   style?: ViewStyle;
 };
 
 /**
- * Renders a Marketing category icon when a valid media path exists;
- * otherwise renders the provided Ionicons fallback. Never shows a broken image.
+ * Marketing category icon — transparent float, larger perceived size via soft scale.
+ * Never shows a broken image; falls back to Ionicons.
  */
 export function CategoryMarketingIcon({
   iconPath,
-  size = 22,
+  size = 36,
+  contentScale = 1.22,
   fallback,
   style,
 }: CategoryMarketingIconProps) {
@@ -34,10 +40,15 @@ export function CategoryMarketingIcon({
   }
 
   return (
-    <View style={[{ width: size, height: size }, style]}>
+    <View style={[{ width: size, height: size, overflow: 'hidden' }, style]}>
       <Image
         source={{ uri }}
-        style={styles.image}
+        style={[
+          styles.image,
+          {
+            transform: [{ scale: contentScale }],
+          },
+        ]}
         resizeMode="contain"
         onError={() => setFailed(true)}
       />

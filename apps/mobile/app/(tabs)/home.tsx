@@ -6,6 +6,7 @@ import { useWalletStore } from '../../src/store/wallet.store';
 import { useAuthStore } from '../../src/store/auth.store';
 import { useCatalogStore } from '../../src/store/catalog.store';
 import { useBannerStore } from '../../src/store/banner.store';
+import { useWebsiteStore } from '../../src/store/website.store';
 import { Category, CategoryIconMap } from '../../src/services/catalog.service';
 import {
   ScreenContainer,
@@ -14,6 +15,7 @@ import {
   StatusBadge,
   CategoryMarketingIcon,
   PromoBannerCarousel,
+  PlatformLogo,
 } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
@@ -118,6 +120,7 @@ export default function HomeScreen() {
   const { overview, loading, error, fetchWallet } = useWalletStore();
   const { categories, fetchCategories, categoryIcons, fetchCategoryIcons } = useCatalogStore();
   const { banners, fetchBanners } = useBannerStore();
+  const { logo: platformLogo, fetchSettings } = useWebsiteStore();
   const firstName = user?.name?.split(' ')[0] || 'Kasir';
 
   useEffect(() => {
@@ -125,7 +128,8 @@ export default function HomeScreen() {
     fetchCategories();
     fetchCategoryIcons();
     fetchBanners();
-  }, [fetchWallet, fetchCategories, fetchCategoryIcons, fetchBanners]);
+    fetchSettings();
+  }, [fetchWallet, fetchCategories, fetchCategoryIcons, fetchBanners, fetchSettings]);
 
   // Refresh balance every time Home regains focus (e.g. returning from a purchase) —
   // spec section 34: refresh wallet after anything that could have changed it.
@@ -144,6 +148,8 @@ export default function HomeScreen() {
     const matched = resolveCategory(categories, shortcut.slugCandidates);
     const slug = matched?.slug || shortcut.slugCandidates[0];
     const name = matched?.name || shortcut.label;
+    // Same route for all shortcuts — inquiry categories are blocked inside
+    // /produk/[slug] (preparation notice), not by removing Home tiles.
     router.push({ pathname: '/produk/[slug]', params: { slug, name } });
   };
 
@@ -154,11 +160,18 @@ export default function HomeScreen() {
       }}
       refreshing={loading}
     >
-      {/* 1. HEADER */}
+      {/* 1. HEADER — compact left brand group; padding from ScreenContainer only */}
       <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.greeting}>Halo, {firstName}</Text>
-          <Text style={styles.greetingSub}>Siap melayani transaksi hari ini</Text>
+        <View style={styles.headerLeft}>
+          <PlatformLogo logo={platformLogo} height={36} contentScale={1.2} style={styles.headerLogo} />
+          <View style={styles.headerText}>
+            <Text style={styles.greeting} numberOfLines={1}>
+              Halo, {firstName}
+            </Text>
+            <Text style={styles.greetingSub} numberOfLines={1}>
+              Siap melayani transaksi hari ini
+            </Text>
+          </View>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -237,6 +250,7 @@ export default function HomeScreen() {
             <View style={styles.categoryGrid}>
               {SERVICE_SHORTCUTS.map((cat) => {
                 const marketingPath = resolveMarketingIconPath(categoryIcons, cat.iconKeys);
+                const hasMarketingIcon = Boolean(marketingPath);
                 return (
                   <Pressable
                     key={cat.key}
@@ -245,12 +259,18 @@ export default function HomeScreen() {
                     onPress={() => openService(cat)}
                     style={({ pressed }) => [styles.categoryItem, pressed && styles.pressed]}
                   >
-                    <View style={styles.categoryIconWrap}>
+                    <View
+                      style={[
+                        styles.categoryIconWrap,
+                        hasMarketingIcon ? styles.categoryIconWrapClear : styles.categoryIconWrapFallback,
+                      ]}
+                    >
                       <CategoryMarketingIcon
                         iconPath={marketingPath}
-                        size={22}
+                        size={40}
+                        contentScale={1.24}
                         fallback={
-                          <Ionicons name={cat.icon} size={22} color={colors.primary[600]} />
+                          <Ionicons name={cat.icon} size={26} color={colors.primary[600]} />
                         }
                       />
                     </View>
@@ -351,19 +371,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
+    // No extra horizontal padding — ScreenContainer already applies spacing.lg.
   },
-  headerText: { flex: 1, minWidth: 0 },
+  headerLeft: {
+    flex: 1,
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  headerLogo: {
+    flexShrink: 0,
+  },
+  headerText: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
   greeting: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.black,
+    fontSize: 18,
+    fontWeight: typography.weight.bold,
     color: colors.gray[900],
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   greetingSub: {
-    fontSize: typography.size.sm,
+    fontSize: 12,
     color: colors.gray[500],
-    marginTop: 2,
+    marginTop: 1,
   },
   headerAction: {
     width: 40,
@@ -374,6 +410,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.gray[200],
+    flexShrink: 0,
   },
 
   walletCard: {
@@ -510,17 +547,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: 2,
-    minHeight: 78,
+    minHeight: 88,
   },
   categoryIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.gray[200],
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /** Marketing PNG floats on Home background — no white card. */
+  categoryIconWrapClear: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  /** Ionicons fallback keeps a soft tinted disc for touch affordance. */
+  categoryIconWrapFallback: {
+    borderRadius: radius.md,
+    backgroundColor: colors.primary[50],
   },
   categoryLabel: {
     fontSize: 11,

@@ -1,53 +1,62 @@
 import { create } from 'zustand';
 import { Product } from '../services/catalog.service';
+import { PlnInquiryResult } from '../services/pln.service';
 import { Transaction, TransactionStatus } from '../api/types';
 import { createIdempotencyKey } from '../utils/idempotency';
 
 /**
- * Transient checkout state only. This store NEVER holds the PIN — the PIN lives
- * exclusively in the PIN screen's local component state and is cleared the instant
- * the POST /transactions request settles (success or failure). It also never holds
- * price/balance — those are always read fresh from the catalog/wallet stores or the
- * transaction response itself, never computed or cached here.
+ * Transient checkout state only. PIN never lives here.
+ *
+ * PLN prepaid: plnInquiry + plnInquiredMeter + plnInquiryExpiresAt are UI/session
+ * mirrors of backend PlnInquiryService (keyed by user + customer_no). They are NOT
+ * sent as inquiry_ref_id — POST /transactions only uses target_number = customer_no.
  */
+
+export type PlnCheckoutContext = {
+  inquiry: PlnInquiryResult;
+  /** Meter/ID the user typed when inquiry succeeded (may differ from customer_no). */
+  inquiredMeter: string;
+  /** Absolute expiry timestamp (ms) from inquiry.expires_in_seconds. */
+  expiresAt: number;
+};
+
 interface CheckoutState {
   skuCode: string | null;
+  categorySlug: string | null;
   targetNumber: string;
+  operatorLabel: string | null;
+  selectedRegion: string | null;
+  plnContext: PlnCheckoutContext | null;
   idempotencyKey: string | null;
   submitting: boolean;
   transaction: Transaction | null;
   status: TransactionStatus | 'idle';
   error: string | null;
 
-  /**
-   * Entry point when navigating from Product Detail's "Beli Sekarang". Remount-safe:
-   * if this exact product's attempt is already in progress (same skuCode, a key
-   * already exists), it does nothing — the idempotency key and any in-flight/terminal
-   * state are left untouched. Only initializes a genuinely fresh attempt (idle, or a
-   * different product than whatever was tracked before).
-   */
   startCheckout: (product: Product) => void;
   setTarget: (target: string) => void;
+  setPurchaseContext: (ctx: {
+    operatorLabel?: string | null;
+    selectedRegion?: string | null;
+    plnContext?: PlnCheckoutContext | null;
+  }) => void;
+  clearPlnContext: () => void;
   setSubmitting: (submitting: boolean) => void;
   setTransaction: (transaction: Transaction | null) => void;
   setStatus: (status: TransactionStatus | 'idle') => void;
   setError: (error: string | null) => void;
-  /** Resets to idle. Only ever called from an explicit "start over" user action —
-   * never on a network error or timeout, which must preserve the idempotency key. */
   resetCheckout: () => void;
-  /** User-facing "Mulai Pembelian Baru" action. Same effect as resetCheckout() today
-   * (no product is known yet at that point — the user goes back to pick one), kept as
-   * a distinct named action so the one deliberate reset path in the UI is explicit
-   * about intent rather than reusing the generic primitive by coincidence. */
   startNewPurchase: () => void;
-
-  // Rotate idempotency key – used only after a confirmed wrong PIN error.
   rotateIdempotencyKey: () => void;
 }
 
 const IDLE_STATE = {
   skuCode: null as string | null,
+  categorySlug: null as string | null,
   targetNumber: '',
+  operatorLabel: null as string | null,
+  selectedRegion: null as string | null,
+  plnContext: null as PlnCheckoutContext | null,
   idempotencyKey: null as string | null,
   submitting: false,
   transaction: null as Transaction | null,
@@ -55,24 +64,39 @@ const IDLE_STATE = {
   error: null as string | null,
 };
 
+/** True when PLN inquiry context is present, matches target, and not client-expired. */
+export function isPlnContextValid(ctx: PlnCheckoutContext | null, targetNumber: string): boolean {
+  if (!ctx?.inquiry) return false;
+  if (!ctx.inquiry.customer_name) return false;
+  if (ctx.inquiry.customer_no !== targetNumber) return false;
+  if (!ctx.expiresAt || Date.now() >= ctx.expiresAt) return false;
+  return true;
+}
+
 export const useCheckoutStore = create<CheckoutState>((set, get) => ({
   ...IDLE_STATE,
 
   startCheckout: (product) => {
     const state = get();
     if (state.skuCode === product.code && state.idempotencyKey) {
-      // Resuming the same attempt after a remount/re-render/navigation — never
-      // rotate the key or clear in-flight/terminal state here.
       return;
     }
     set({
       ...IDLE_STATE,
       skuCode: product.code,
+      categorySlug: product.category || null,
       idempotencyKey: createIdempotencyKey(),
     });
   },
 
   setTarget: (target) => set({ targetNumber: target }),
+  setPurchaseContext: (ctx) =>
+    set({
+      ...(ctx.operatorLabel !== undefined ? { operatorLabel: ctx.operatorLabel } : {}),
+      ...(ctx.selectedRegion !== undefined ? { selectedRegion: ctx.selectedRegion } : {}),
+      ...(ctx.plnContext !== undefined ? { plnContext: ctx.plnContext } : {}),
+    }),
+  clearPlnContext: () => set({ plnContext: null }),
   setSubmitting: (submitting) => set({ submitting }),
   setTransaction: (transaction) => set({ transaction }),
   setStatus: (status) => set({ status }),
@@ -84,7 +108,6 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
     get().resetCheckout();
   },
 
-  // Rotate idempotency key – used only after a confirmed wrong PIN error.
   rotateIdempotencyKey: () => {
     set({ idempotencyKey: createIdempotencyKey() });
   },

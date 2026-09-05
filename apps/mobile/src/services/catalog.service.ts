@@ -49,16 +49,34 @@ export interface Product {
   isPurchasable: boolean;
   category: string;
   operatorName: string;
+  /** From ProductResource — taxonomy mentionsRegion; UI-only until purchase (not sent on POST). */
+  requiresRegion?: boolean;
   /** Optional — present when API loads provider relation; used for Marketing brand logos. */
   providerDetails?: ProviderDetails | null;
 }
 
 export interface ProductFilters {
   category?: string;
+  provider?: string;
   keyword?: string;
   per_page?: number;
   page?: number;
+  data_group?: string;
+  telkomsel_group?: string;
+  sort?: string;
 }
+
+export type DataTaxonomyChip = {
+  key: string;
+  label: string;
+  group: string | null;
+};
+
+export type OperatorDataTaxonomy = {
+  chips: DataTaxonomyChip[];
+  operator: string;
+  regionOptions?: string[];
+};
 
 /** Flat map from GET /catalog/category-icons — keys like `hub:telco` / `sub:telco:pulsa`. */
 export type CategoryIconMap = Record<string, string>;
@@ -76,7 +94,7 @@ export const catalogService = {
     return response.data;
   },
 
-  /** GET /products?category=&keyword=&per_page= — public, server-paginated. */
+  /** GET /products — same contract as web productService.getProducts. */
   getProducts: async (filters: ProductFilters): Promise<ApiResponse<Product[]>> => {
     const response = await apiClient.get<ApiResponse<Product[]>>('/products', { params: filters });
     return response.data;
@@ -86,6 +104,23 @@ export const catalogService = {
    * current price; never reuse a price captured from the list response. */
   getProduct: async (skuCode: string): Promise<ApiResponse<Product>> => {
     const response = await apiClient.get<ApiResponse<Product>>(`/products/${encodeURIComponent(skuCode)}`);
+    return response.data;
+  },
+
+  /** GET /catalog/{op}-data/taxonomy — Paket Data chips (same paths as web). */
+  getOperatorDataTaxonomy: async (
+    key: 'telkomsel' | 'xl' | 'indosat' | 'tri' | 'smartfren' | 'axis' | 'byu'
+  ): Promise<ApiResponse<OperatorDataTaxonomy>> => {
+    const pathMap: Record<string, string> = {
+      telkomsel: '/catalog/telkomsel-data/taxonomy',
+      xl: '/catalog/xl-data/taxonomy',
+      indosat: '/catalog/indosat-data/taxonomy',
+      tri: '/catalog/tri-data/taxonomy',
+      smartfren: '/catalog/smartfren-data/taxonomy',
+      axis: '/catalog/axis-data/taxonomy',
+      byu: '/catalog/byu-data/taxonomy',
+    };
+    const response = await apiClient.get<ApiResponse<OperatorDataTaxonomy>>(pathMap[key]);
     return response.data;
   },
 };
