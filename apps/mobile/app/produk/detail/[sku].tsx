@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../../src/store/catalog.store';
 import { useCheckoutStore } from '../../../src/store/checkout.store';
-import { ScreenContainer, Card, Button, LoadingState, ErrorState } from '../../../src/components/ui';
+import { ScreenContainer, Card, Button, LoadingState, ErrorState, BrandLogo } from '../../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../../src/theme';
 import { formatIDR } from '../../../src/utils/currency';
 
@@ -21,6 +21,7 @@ export default function ProductDetailScreen() {
   }, [sku, fetchProductDetail, clearProductDetail]);
 
   const unavailable = productDetail && productDetail.status !== 'tersedia';
+  const brandName = productDetail?.operatorName || productDetail?.providerDetails?.name || '';
 
   return (
     <ScreenContainer>
@@ -35,10 +36,18 @@ export default function ProductDetailScreen() {
       ) : (
         <>
           <Card>
-            {productDetail.operatorName ? (
-              <Text style={styles.operator}>{productDetail.operatorName}</Text>
-            ) : null}
-            <Text style={styles.name}>{productDetail.name}</Text>
+            <View style={styles.brandRow}>
+              <BrandLogo
+                name={brandName || 'Brand'}
+                logo={productDetail.providerDetails?.logo}
+                size={56}
+              />
+              <View style={styles.brandText}>
+                {brandName ? <Text style={styles.operator}>{brandName}</Text> : null}
+                <Text style={styles.name}>{productDetail.name}</Text>
+              </View>
+            </View>
+
             <Text style={styles.price}>{formatIDR(productDetail.price)}</Text>
 
             {(productDetail.quota || productDetail.validity) && (
@@ -91,6 +100,12 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  brandText: { flex: 1, gap: 2 },
   operator: {
     fontSize: typography.size.xs,
     color: colors.primary[600],
@@ -101,13 +116,12 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.black,
     color: colors.gray[900],
-    marginTop: spacing.xs,
   },
   price: {
     fontSize: typography.size['2xl'],
     fontWeight: typography.weight.black,
     color: colors.primary[700],
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
   metaRow: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.md },
   metaItem: { gap: 2 },

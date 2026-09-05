@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../src/store/catalog.store';
-import { ScreenContainer, Card, LoadingState, ErrorState, EmptyState } from '../../src/components/ui';
+import { ScreenContainer, Card, LoadingState, ErrorState, EmptyState, BrandLogo } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 
@@ -52,6 +52,7 @@ export default function ProductListScreen() {
         <View style={styles.list}>
           {products.map((product) => {
             const unavailable = product.status !== 'tersedia';
+            const brandName = product.operatorName || product.providerDetails?.name || '';
             return (
               <TouchableOpacity
                 key={product.id}
@@ -62,7 +63,18 @@ export default function ProductListScreen() {
               >
                 <Card style={styles.productCard}>
                   <View style={styles.productRow}>
+                    <BrandLogo
+                      name={brandName || 'Brand'}
+                      logo={product.providerDetails?.logo}
+                      size={40}
+                      style={styles.brandLogo}
+                    />
                     <View style={styles.productInfo}>
+                      {brandName ? (
+                        <Text style={styles.productOperator} numberOfLines={1}>
+                          {brandName}
+                        </Text>
+                      ) : null}
                       <Text style={styles.productName} numberOfLines={2}>
                         {product.name}
                       </Text>
@@ -71,9 +83,6 @@ export default function ProductListScreen() {
                           {[product.quota, product.validity].filter(Boolean).join(' · ')}
                         </Text>
                       )}
-                      {product.operatorName ? (
-                        <Text style={styles.productOperator}>{product.operatorName}</Text>
-                      ) : null}
                     </View>
                     <View style={styles.productPriceWrap}>
                       <Text style={styles.productPrice}>{formatIDR(product.price)}</Text>
@@ -114,11 +123,17 @@ const styles = StyleSheet.create({
   },
   list: { gap: spacing.sm },
   productCard: { padding: spacing.md },
-  productRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  productRow: { flexDirection: 'row', alignItems: 'center' },
+  brandLogo: { marginRight: spacing.md },
   productInfo: { flex: 1, marginRight: spacing.sm, gap: 2 },
   productName: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.gray[900] },
   productMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
-  productOperator: { fontSize: typography.size.xs, color: colors.primary[600], fontWeight: typography.weight.medium },
+  productOperator: {
+    fontSize: typography.size.xs,
+    color: colors.primary[600],
+    fontWeight: typography.weight.medium,
+    textTransform: 'uppercase',
+  },
   productPriceWrap: { alignItems: 'flex-end', gap: spacing.xs },
   productPrice: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full },

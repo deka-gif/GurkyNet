@@ -9,6 +9,17 @@ export interface Category {
 }
 
 /**
+ * Operator brand (Telkomsel, PLN, …) — not Digiflazz/VIP fulfillment source.
+ * Nested under ProductResource.providerDetails when provider relation is loaded.
+ */
+export interface ProviderDetails {
+  id: number;
+  name: string;
+  logo?: string | null;
+  isActive?: boolean;
+}
+
+/**
  * Only the customer-facing subset of ProductResource
  * (laravel/app/Http/Resources/ProductResource.php). The real API response also carries
  * internal fields — providerCost, margin, productProvider, productProviderCode,
@@ -38,6 +49,8 @@ export interface Product {
   isPurchasable: boolean;
   category: string;
   operatorName: string;
+  /** Optional — present when API loads provider relation; used for Marketing brand logos. */
+  providerDetails?: ProviderDetails | null;
 }
 
 export interface ProductFilters {
@@ -47,10 +60,19 @@ export interface ProductFilters {
   page?: number;
 }
 
+/** Flat map from GET /catalog/category-icons — keys like `hub:telco` / `sub:telco:pulsa`. */
+export type CategoryIconMap = Record<string, string>;
+
 export const catalogService = {
   /** GET /categories — public, returns all categories regardless of product count. */
   getCategories: async (): Promise<ApiResponse<Category[]>> => {
     const response = await apiClient.get<ApiResponse<Category[]>>('/categories');
+    return response.data;
+  },
+
+  /** GET /catalog/category-icons — Marketing-uploaded hub/sub icons (not ProductCategory.icon). */
+  getCategoryIcons: async (): Promise<ApiResponse<CategoryIconMap>> => {
+    const response = await apiClient.get<ApiResponse<CategoryIconMap>>('/catalog/category-icons');
     return response.data;
   },
 

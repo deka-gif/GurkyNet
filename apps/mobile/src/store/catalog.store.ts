@@ -1,11 +1,16 @@
 import { create } from 'zustand';
-import { catalogService, Category, Product } from '../services/catalog.service';
+import { catalogService, Category, CategoryIconMap, Product } from '../services/catalog.service';
 
 interface CatalogState {
   categories: Category[];
   categoriesLoading: boolean;
   categoriesError: string | null;
   fetchCategories: () => Promise<void>;
+
+  /** Marketing category icons — keys `hub:{id}` / `sub:{hubId}:{childKey}`. */
+  categoryIcons: CategoryIconMap;
+  categoryIconsLoading: boolean;
+  fetchCategoryIcons: () => Promise<void>;
 
   products: Product[];
   productsLoading: boolean;
@@ -39,6 +44,23 @@ export const useCatalogStore = create<CatalogState>((set) => ({
       }
     } catch (err: any) {
       set({ categoriesError: err?.message || 'Gagal memuat kategori.', categoriesLoading: false });
+    }
+  },
+
+  categoryIcons: {},
+  categoryIconsLoading: false,
+  fetchCategoryIcons: async () => {
+    set({ categoryIconsLoading: true });
+    try {
+      const response = await catalogService.getCategoryIcons();
+      if (response.success && response.data && typeof response.data === 'object') {
+        set({ categoryIcons: response.data, categoryIconsLoading: false });
+      } else {
+        set({ categoryIconsLoading: false });
+      }
+    } catch {
+      // Non-fatal — Home falls back to Ionicons when map is empty.
+      set({ categoryIconsLoading: false });
     }
   },
 

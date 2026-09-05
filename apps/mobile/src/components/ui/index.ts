@@ -5,3 +5,6 @@ export { LoadingState, ErrorState, EmptyState } from './States';
 export { StatusBadge } from './StatusBadge';
 export { ComingSoon } from './ComingSoon';
 export { PinInput } from './PinInput';
+export { BrandLogo } from './BrandLogo';
+export { CategoryMarketingIcon } from './CategoryMarketingIcon';
+export { PromoBannerCarousel } from './PromoBannerCarousel';
