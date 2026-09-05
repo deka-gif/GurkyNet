@@ -5,6 +5,8 @@ import {
   WalletOverview,
   WalletHistoryPagination,
 } from '../services/wallet.service';
+import { currentMonthBounds } from '../utils/walletExpenseCategory';
+import { fetchAllWalletHistoryPages } from '../utils/fetchAllWalletHistoryPages';
 
 export type WalletDirectionFilter = 'all' | 'credit' | 'debit';
 
@@ -24,14 +26,29 @@ interface WalletState {
   ledgerError: string | null;
   directionFilter: WalletDirectionFilter;
 
+  /**
+   * Full current-month ledger (credit + debit) for Cashflow + Pengeluaran.
+   * Loaded via GET /wallet/history?start_date&end_date — all pages to last_page.
+   */
+  monthLedger: WalletMutation[];
+  monthLedgerLoading: boolean;
+  monthLedgerError: string | null;
+  /** True only when every page through last_page was fetched successfully. */
+  monthLedgerComplete: boolean;
+  monthLabel: string;
+  /** YYYY-MM — same period as Financial Tracker / monthLedger. */
+  monthKey: string;
+
   fetchWallet: () => Promise<void>;
   setDirectionFilter: (f: WalletDirectionFilter) => void;
   refreshLedger: () => Promise<void>;
   loadMoreLedger: () => Promise<void>;
+  refreshMonthLedger: () => Promise<void>;
   refreshAll: () => Promise<void>;
 }
 
 const LEDGER_PER_PAGE = 15;
+const MONTH_PAGE_SIZE = 100;
 
 /**
  * Wallet store — mirrors GET /wallet + GET /wallet/history only.
@@ -50,6 +67,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   ledgerLoadingMore: false,
   ledgerError: null,
   directionFilter: 'all',
+
+  monthLedger: [],
+  monthLedgerLoading: false,
+  monthLedgerError: null,
+  monthLedgerComplete: false,
+  monthLabel: currentMonthBounds().label,
+  monthKey: currentMonthBounds().monthKey,
 
   fetchWallet: async () => {
     set({ loading: true, overviewLoading: true, error: null, overviewError: null });
@@ -84,8 +108,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ ledgerLoading: true, ledgerError: null });
     try {
       const { directionFilter } = get();
+      const { startDate, endDate, label, monthKey } = currentMonthBounds();
       const result = await walletService.getHistory({
         type: directionFilter === 'all' ? undefined : directionFilter,
+        start_date: startDate,
+        end_date: endDate,
         page: 1,
         per_page: LEDGER_PER_PAGE,
       });
@@ -94,6 +121,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         ledgerPagination: result.pagination,
         ledgerLoading: false,
         ledgerError: null,
+        monthLabel: label,
+        monthKey,
       });
     } catch (err: any) {
       set({
@@ -110,9 +139,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     set({ ledgerLoadingMore: true });
     try {
+      const { startDate, endDate } = currentMonthBounds();
       const next = ledgerPagination.currentPage + 1;
       const result = await walletService.getHistory({
         type: directionFilter === 'all' ? undefined : directionFilter,
+        start_date: startDate,
+        end_date: endDate,
         page: next,
         per_page: LEDGER_PER_PAGE,
       });
@@ -131,7 +163,46 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
+  refreshMonthLedger: async () => {
+    set({
+      monthLedgerLoading: true,
+      monthLedgerError: null,
+      monthLedgerComplete: false,
+    });
+    try {
+      const { startDate, endDate, label, monthKey } = currentMonthBounds();
+      const { items } = await fetchAllWalletHistoryPages(
+        (filters) => walletService.getHistory(filters),
+        {
+          start_date: startDate,
+          end_date: endDate,
+          per_page: MONTH_PAGE_SIZE,
+        }
+      );
+
+      set({
+        monthLedger: items,
+        monthLedgerLoading: false,
+        monthLedgerError: null,
+        monthLedgerComplete: true,
+        monthLabel: label,
+        monthKey,
+      });
+    } catch (err: any) {
+      set({
+        monthLedger: [],
+        monthLedgerLoading: false,
+        monthLedgerComplete: false,
+        monthLedgerError: err?.message || 'Gagal memuat data Financial Tracker bulan ini.',
+      });
+    }
+  },
+
   refreshAll: async () => {
-    await Promise.all([get().fetchWallet(), get().refreshLedger()]);
+    await Promise.all([
+      get().fetchWallet(),
+      get().refreshLedger(),
+      get().refreshMonthLedger(),
+    ]);
   },
 }));

@@ -1,14 +1,9 @@
 import { apiClient } from '../api/client';
-import { ApiResponse, Transaction } from '../api/types';
+import { ApiResponse, Transaction, TransactionStatus } from '../api/types';
 
 /**
  * The exact, and only, fields `POST /transactions` accepts
- * (laravel/app/Http/Requests/Api/v1/CreateTransactionRequest.php). `status`, `amount`,
- * `admin_fee`, `total_payment`, `sell_price` are stripped server-side before validation
- * even runs — this type deliberately has no room for them so nothing can be added here
- * by mistake. `inquiry_ref_id` is optional for postpaid/e-wallet/tagihan paths that
- * require a Digiflazz pasca session ref. Token PLN does NOT send inquiry_ref_id —
- * backend binds prepaid inquiry by user + target_number (customer_no).
+ * (laravel/app/Http/Requests/Api/v1/CreateTransactionRequest.php).
  */
 export interface CreateTransactionPayload {
   sku_code: string;
@@ -19,12 +14,7 @@ export interface CreateTransactionPayload {
 }
 
 /**
- * Customer-facing subset of GetReceiptAction's output
- * (laravel/app/Actions/Transaction/GetReceiptAction.php). No provider/cost/margin
- * fields exist anywhere in that action's output — verified by reading the source,
- * so nothing here needs to be filtered the way Product is. The index signature covers
- * category-specific fields (PLN token, game nickname, tagihan tax details, …) that
- * Fase 3B's generic checkout never reads.
+ * Customer-facing subset of GetReceiptAction's output.
  */
 export interface ReceiptData {
   header: {
@@ -55,24 +45,94 @@ export interface ReceiptData {
   footer: { note: string };
 }
 
+export type TransactionListFilters = {
+  status?: string;
+  start_date?: string;
+  end_date?: string;
+  per_page?: number;
+  page?: number;
+};
+
+export type TransactionListMeta = {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+};
+
+export type TransactionListResult = {
+  items: Transaction[];
+  meta: TransactionListMeta;
+};
+
+function normalizeListRow(row: any): Transaction {
+  const status = String(row?.status ?? 'pending').toLowerCase() as TransactionStatus;
+  return {
+    id: String(row?.id ?? ''),
+    transactionCode: String(row?.transactionCode || row?.invoice_number || row?.transaction_code || ''),
+    serviceName: String(row?.serviceName || row?.service_name || ''),
+    productName: String(
+      row?.productName || row?.product_name || row?.serviceName || row?.service_name || ''
+    ),
+    targetNo: String(row?.targetNo || row?.target_number || ''),
+    amount: Number(row?.amount ?? 0),
+    adminFee: Number(row?.adminFee ?? row?.admin_fee ?? 0),
+    totalPayment: Number(row?.totalPayment ?? row?.total_payment ?? row?.amount ?? 0),
+    paymentMethod: String(row?.paymentMethod || row?.payment_method || ''),
+    status,
+    notes: row?.notes ?? row?.note ?? null,
+    date: row?.date || row?.createdAt || row?.created_at || undefined,
+    createdAt: row?.createdAt || row?.created_at || row?.date || undefined,
+    lastUpdated: row?.lastUpdated || row?.updated_at || undefined,
+  };
+}
+
+function unwrapList(payload: unknown): any[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === 'object') {
+    const obj = payload as { data?: unknown };
+    if (Array.isArray(obj.data)) return obj.data;
+  }
+  return [];
+}
+
 export const transactionService = {
-  /** POST /transactions — a 201 here is NOT a settled purchase; `data.status` will be
-   * pending/processing (raw LOCKED) until the async fulfillment job resolves it. */
   create: async (payload: CreateTransactionPayload): Promise<ApiResponse<Transaction>> => {
     const response = await apiClient.post<ApiResponse<Transaction>>('/transactions', payload);
     return response.data;
   },
 
-  /** GET /transactions/{id} — read-only, ownership-scoped, safe to poll repeatedly.
-   * Never call this in a loop that also POSTs; polling only ever re-GETs. */
+  /**
+   * GET /transactions — purchase history (TransactionController::index).
+   * Server filters: status, start_date, end_date, per_page (+ page).
+   * No keyword param — search is client-side (Web RiwayatPage same).
+   */
+  list: async (filters: TransactionListFilters = {}): Promise<TransactionListResult> => {
+    const response = await apiClient.get<
+      ApiResponse<Transaction[]> & { meta?: TransactionListMeta }
+    >('/transactions', { params: filters });
+    const body = response.data;
+    const items = unwrapList(body?.data ?? body).map(normalizeListRow);
+    const meta = (body as any)?.meta || {
+      current_page: 1,
+      last_page: 1,
+      per_page: filters.per_page ?? 15,
+      total: items.length,
+    };
+    return { items, meta };
+  },
+
   getById: async (idOrInvoice: string | number): Promise<ApiResponse<Transaction>> => {
     const response = await apiClient.get<ApiResponse<Transaction>>(
       `/transactions/${encodeURIComponent(String(idOrInvoice))}`
     );
-    return response.data;
+    const body = response.data;
+    if (body.success && body.data) {
+      return { ...body, data: normalizeListRow(body.data) };
+    }
+    return body;
   },
 
-  /** GET /transactions/{id}/receipt — JSON receipt only; PDF export is out of scope. */
   getReceipt: async (idOrInvoice: string | number): Promise<ApiResponse<ReceiptData>> => {
     const response = await apiClient.get<ApiResponse<ReceiptData>>(
       `/transactions/${encodeURIComponent(String(idOrInvoice))}/receipt`

@@ -5,8 +5,8 @@ namespace App\Services\Finance\Reconciliation;
 use App\Models\ReconciliationIncident;
 use App\Models\User;
 use App\Models\Wallet;
-use App\Models\WalletMutation;
 use App\Services\Finance\FinanceAlertService;
+use App\Services\Wallet\WalletMutationBalanceQuery;
 use App\Support\Finance\FinanceAudit;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +17,8 @@ class ReconciliationIncidentService
 {
     public function __construct(
         protected FinanceAlertService $alerts,
-        protected ReconciliationConfig $config
+        protected ReconciliationConfig $config,
+        protected WalletMutationBalanceQuery $mutationBalanceQuery
     ) {}
 
     /**
@@ -159,27 +160,12 @@ class ReconciliationIncidentService
 
     /**
      * Expected wallet balance from mutations (SRS 18.1).
-     * Excludes Finance-approve TYPE_WITHDRAW markers that share a HOLD reference
-     * (balance already moved on hold — ApproveWithdrawAction does not debit again).
+     * Delegates to WalletMutationBalanceQuery so reconciliation and customer
+     * statements share the same withdraw-marker exclusion rule.
      */
     public function expectedBalanceFromMutations(int $walletId): float
     {
-        $sum = (float) WalletMutation::query()
-            ->where('wallet_id', $walletId)
-            ->where(function ($q) {
-                $q->where('type', '!=', WalletMutation::TYPE_WITHDRAW)
-                    ->orWhereNotExists(function ($sub) {
-                        $sub->selectRaw('1')
-                            ->from('wallet_mutations as holds')
-                            ->whereColumn('holds.wallet_id', 'wallet_mutations.wallet_id')
-                            ->whereColumn('holds.reference_id', 'wallet_mutations.reference_id')
-                            ->where('holds.type', WalletMutation::TYPE_HOLD)
-                            ->whereNotNull('holds.reference_id');
-                    });
-            })
-            ->sum('amount');
-
-        return round($sum, 2);
+        return $this->mutationBalanceQuery->expectedBalance($walletId);
     }
 
     protected function nextCode(): string

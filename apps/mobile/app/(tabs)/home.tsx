@@ -190,31 +190,38 @@ export default function HomeScreen() {
         <ErrorState message={error} onRetry={fetchWallet} />
       ) : (
         <>
-          {/* 2. WALLET CARD */}
-          <View style={styles.walletCard}>
-            <View style={styles.walletAccent} />
-            <View style={styles.walletBody}>
-              <View style={styles.walletTopRow}>
-                <View style={styles.walletLabelBlock}>
-                  <Text style={styles.walletLabel}>Saldo GurkyPay</Text>
-                  <Text style={styles.walletAmount}>{formatIDR(overview?.wallet.balance)}</Text>
+          {/* 2. WALLET CARD — summary + shortcut to Wallet tab (visual unchanged) */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Buka Wallet"
+            onPress={() => router.push('/(tabs)/wallet')}
+            style={({ pressed }) => [pressed && styles.pressed]}
+          >
+            <View style={styles.walletCard}>
+              <View style={styles.walletAccent} />
+              <View style={styles.walletBody}>
+                <View style={styles.walletTopRow}>
+                  <View style={styles.walletLabelBlock}>
+                    <Text style={styles.walletLabel}>Saldo GurkyPay</Text>
+                    <Text style={styles.walletAmount}>{formatIDR(overview?.wallet.balance)}</Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Top Up"
+                    onPress={() => {}}
+                    disabled
+                    style={styles.topUpButton}
+                  >
+                    <Ionicons name="add" size={16} color={colors.primary[700]} />
+                    <Text style={styles.topUpLabel}>Top Up</Text>
+                  </Pressable>
                 </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Top Up"
-                  onPress={() => {}}
-                  disabled
-                  style={styles.topUpButton}
-                >
-                  <Ionicons name="add" size={16} color={colors.primary[700]} />
-                  <Text style={styles.topUpLabel}>Top Up</Text>
-                </Pressable>
+                <Text style={styles.walletNo}>
+                  {overview?.wallet.walletNo || overview?.wallet.wallet_number || '-'}
+                </Text>
               </View>
-              <Text style={styles.walletNo}>
-                {overview?.wallet.walletNo || overview?.wallet.wallet_number || '-'}
-              </Text>
             </View>
-          </View>
+          </Pressable>
 
           {/* 3. FINANCIAL SUMMARY — compact strip */}
           <View style={styles.summaryStrip}>

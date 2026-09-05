@@ -15,14 +15,32 @@ import {
 import { PulsaCatalogFlow } from '../../src/components/catalog/PulsaCatalogFlow';
 import { PaketDataCatalogFlow } from '../../src/components/catalog/PaketDataCatalogFlow';
 import { PlnTokenCatalogFlow } from '../../src/components/catalog/PlnTokenCatalogFlow';
+import { ProviderCatalogBrowseFlow } from '../../src/components/catalog/ProviderCatalogBrowseFlow';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import {
   INQUIRY_FLOW_NOTICE,
   isInquiryRequiredCategory,
   isPlnPrepaidCategory,
+  isProviderBrowseCategory,
   normalizeCategorySlug,
+  resolveProviderBrowseCategory,
 } from '../../src/utils/purchaseCategory';
+
+/**
+ * Category product entry — dedicated flows for pulsa/data/pln;
+ * provider browse for E-Money/Game/Langganan (Tahap 3B);
+ * generic list otherwise. Inquiry gate is purchase-only (detail/checkout).
+ *
+ * Category name is shown only in Stack header (← [Nama]) — not duplicated in content.
+ */
+
+function browseSearchPlaceholder(canonical: string): string {
+  if (canonical === 'game') return 'Ketik nama game yang ingin Anda top up...';
+  if (canonical === 'langganan-digital') return 'Ketik nama aplikasi streaming atau produktivitas...';
+  if (canonical === 'topup-digital') return 'Cari e-wallet...';
+  return 'Cari provider...';
+}
 
 export default function ProductListScreen() {
   const params = useLocalSearchParams<{ slug: string; name?: string }>();
@@ -36,40 +54,64 @@ export default function ProductListScreen() {
   const fetchFeatures = useFeaturesStore((s) => s.fetchFeatures);
   const [keyword, setKeyword] = useState('');
 
-  const inquiryBlocked = isInquiryRequiredCategory(slug);
   const normalized = normalizeCategorySlug(slug);
   const isPulsaFlow = normalized === 'pulsa';
   const isPaketDataFlow = normalized === 'data' || normalized === 'paket-data';
   const isPlnFlow = isPlnPrepaidCategory(slug);
+  const providerBrowseCategory = resolveProviderBrowseCategory(slug);
+  const isProviderBrowse = isProviderBrowseCategory(slug);
+  // Tagihan / other inquiry cats without provider-browse: still show honest notice (no fake catalog).
+  const inquiryBrowseBlocked =
+    isInquiryRequiredCategory(slug) && !isProviderBrowse && !isPlnFlow;
 
   const load = useCallback(() => {
-    if (slug && !inquiryBlocked && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow) {
+    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !inquiryBrowseBlocked) {
       fetchProducts(slug, keyword.trim() || undefined);
     }
-  }, [slug, keyword, fetchProducts, inquiryBlocked, isPulsaFlow, isPaketDataFlow, isPlnFlow]);
+  }, [
+    slug,
+    keyword,
+    fetchProducts,
+    isPulsaFlow,
+    isPaketDataFlow,
+    isPlnFlow,
+    isProviderBrowse,
+    inquiryBrowseBlocked,
+  ]);
 
   useEffect(() => {
     void fetchFeatures();
   }, [fetchFeatures]);
 
   useEffect(() => {
-    if (slug && !inquiryBlocked && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow) fetchProducts(slug);
+    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !inquiryBrowseBlocked) {
+      fetchProducts(slug);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, inquiryBlocked, isPulsaFlow, isPaketDataFlow, isPlnFlow]);
+  }, [slug, isPulsaFlow, isPaketDataFlow, isPlnFlow, isProviderBrowse, inquiryBrowseBlocked]);
 
   const purchaseBanner =
     !purchaseEnabled && !flagsLoading ? `Pembelian belum aktif — ${flags.messages.purchase}` : null;
 
-  return (
-    <ScreenContainer
-      onRefresh={
-        inquiryBlocked || isPulsaFlow || isPaketDataFlow || isPlnFlow ? fetchFeatures : load
-      }
-      refreshing={productsLoading || flagsLoading}
-    >
-      <Stack.Screen options={{ headerShown: true, title: categoryName, headerBackTitle: 'Kembali' }} />
+  const onRefresh = () => {
+    if (isPulsaFlow || isPaketDataFlow || isPlnFlow || isProviderBrowse || inquiryBrowseBlocked) {
+      return fetchFeatures();
+    }
+    return load();
+  };
 
-      {inquiryBlocked ? (
+  return (
+    <ScreenContainer belowHeader onRefresh={onRefresh} refreshing={productsLoading || flagsLoading}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: categoryName,
+          headerBackTitle: 'Kembali',
+          headerBackButtonDisplayMode: 'minimal',
+        }}
+      />
+
+      {inquiryBrowseBlocked ? (
         <PurchaseFlowNotice
           icon="shield-checkmark-outline"
           title={`${categoryName} — Validasi Diperlukan`}
@@ -81,13 +123,14 @@ export default function ProductListScreen() {
         <PaketDataCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isPlnFlow ? (
         <PlnTokenCatalogFlow purchaseBanner={purchaseBanner} />
+      ) : isProviderBrowse && providerBrowseCategory ? (
+        <ProviderCatalogBrowseFlow
+          category={providerBrowseCategory}
+          purchaseBanner={purchaseBanner}
+          providerSearchPlaceholder={browseSearchPlaceholder(providerBrowseCategory)}
+        />
       ) : (
         <>
-          {purchaseBanner ? (
-            <View style={styles.banner}>
-              <Text style={styles.bannerText}>{purchaseBanner}</Text>
-            </View>
-          ) : null}
           <TextInput
             placeholder="Cari produk..."
             placeholderTextColor={colors.gray[400]}
@@ -97,6 +140,11 @@ export default function ProductListScreen() {
             returnKeyType="search"
             style={styles.searchInput}
           />
+          {purchaseBanner ? (
+            <View style={styles.banner}>
+              <Text style={styles.bannerText}>{purchaseBanner}</Text>
+            </View>
+          ) : null}
 
           {productsLoading && products.length === 0 ? (
             <LoadingState label="Memuat produk..." />

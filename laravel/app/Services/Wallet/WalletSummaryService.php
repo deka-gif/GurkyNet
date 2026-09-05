@@ -99,6 +99,24 @@ class WalletSummaryService
     }
 
     /**
+     * Enrich ledger rows with linked Transaction fields (batch join — no N+1).
+     * Same shape as recent_transactions in buildOverview.
+     *
+     * @param  Collection<int, WalletHistory>|iterable<WalletHistory>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public function enrichHistoryRows(iterable $rows): array
+    {
+        $collection = $rows instanceof Collection ? $rows : collect($rows);
+        $transactionsById = $this->loadReferencedTransactions($collection);
+
+        return $collection
+            ->map(fn (WalletHistory $row) => $this->mapHistoryRow($row, $transactionsById))
+            ->values()
+            ->all();
+    }
+
+    /**
      * @param  Collection<int|string, Transaction>  $transactionsById
      */
     protected function mapHistoryRow(WalletHistory $row, Collection $transactionsById): array

@@ -1,11 +1,14 @@
 /**
- * Purchase-flow category classification for Mobile hardening (Tahap 1+).
+ * Purchase-flow category classification for Mobile hardening (Tahap 1+ / 3B).
  * Sourced from Web/backend audit — not invented business rules.
+ *
+ * Tahap 3B: inquiry-required blocks PURCHASE only — browsing/provider→product is allowed
+ * for E-Money / Game / Langganan (mirrors Web ProviderCatalogFlow catalog steps).
  *
  * Direct: may use generic checkout (SKU + target + PIN → POST /transactions).
  * PLN prepaid: dedicated inquiry flow (POST /pln/inquiry) then same purchase pipe
  * without inquiry_ref_id (session keyed by user + customer_no on backend).
- * Inquiry-required (blocked until dedicated flow exists): e-wallet, game, tagihan, etc.
+ * Inquiry-required: must not reach PIN / POST /transactions without validation.
  */
 
 const DIRECT_PURCHASE_SLUGS = new Set([
@@ -17,6 +20,20 @@ const DIRECT_PURCHASE_SLUGS = new Set([
 
 /** Token PLN prepaid — uses PlnTokenCatalogFlow, not generic checkout. */
 const PLN_PREPAID_SLUGS = new Set(['pln', 'token-pln']);
+
+/**
+ * Provider-first browse catalogs (Web ProviderCatalogFlow).
+ * Value = canonical GET /products `category` + GET /products/providers `category`.
+ */
+const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
+  'topup-digital': 'topup-digital',
+  ewallet: 'topup-digital',
+  'e-money': 'topup-digital',
+  game: 'game',
+  'langganan-digital': 'langganan-digital',
+  langganan: 'langganan-digital',
+  streaming: 'langganan-digital',
+};
 
 /** Categories whose Web/backend pre-checkout requires inquiry/schema not yet on Mobile. */
 const INQUIRY_REQUIRED_SLUGS = new Set([
@@ -60,8 +77,20 @@ export function isPlnPrepaidCategory(slug: string | null | undefined): boolean {
   return PLN_PREPAID_SLUGS.has(normalizeCategorySlug(slug));
 }
 
+/** Purchase gate only — does NOT block browsing/product list. */
 export function isInquiryRequiredCategory(slug: string | null | undefined): boolean {
   return INQUIRY_REQUIRED_SLUGS.has(normalizeCategorySlug(slug));
+}
+
+/** Provider → product browse UX (Tahap 3B). */
+export function isProviderBrowseCategory(slug: string | null | undefined): boolean {
+  return normalizeCategorySlug(slug) in PROVIDER_BROWSE_CANONICAL;
+}
+
+/** Canonical API category for provider browse (Web SoT). */
+export function resolveProviderBrowseCategory(slug: string | null | undefined): string | null {
+  const s = normalizeCategorySlug(slug);
+  return PROVIDER_BROWSE_CANONICAL[s] ?? null;
 }
 
 /** Phone-style target (digits) — matches Web Pulsa / Paket Data / Voucher Internet tembak. */

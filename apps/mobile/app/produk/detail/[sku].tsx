@@ -22,6 +22,10 @@ import {
   isPlnPrepaidCategory,
 } from '../../../src/utils/purchaseCategory';
 
+/**
+ * Customer-facing product detail. Inquiry-required categories may be browsed
+ * (Tahap 3B) but purchase stays gated — never PIN / POST without inquiry.
+ */
 export default function ProductDetailScreen() {
   const params = useLocalSearchParams<{ sku: string }>();
   const sku = typeof params.sku === 'string' ? params.sku : '';
@@ -61,7 +65,7 @@ export default function ProductDetailScreen() {
   };
 
   return (
-    <ScreenContainer>
+    <ScreenContainer belowHeader>
       <Stack.Screen options={{ headerShown: true, title: 'Detail Produk', headerBackTitle: 'Kembali' }} />
 
       {productDetailLoading ? (
@@ -70,30 +74,6 @@ export default function ProductDetailScreen() {
         <ErrorState message={productDetailError} onRetry={() => sku && fetchProductDetail(sku)} />
       ) : !productDetail ? (
         <ErrorState message="Produk tidak ditemukan." />
-      ) : inquiryBlocked ? (
-        <PurchaseFlowNotice
-          icon="shield-checkmark-outline"
-          title="Validasi Diperlukan"
-          message={INQUIRY_FLOW_NOTICE}
-        />
-      ) : plnPrepaid ? (
-        <PurchaseFlowNotice
-          icon="flash-outline"
-          title="Gunakan Menu Token PLN"
-          message="Token PLN dibeli melalui Cek Meteran di menu PLN pada Home. Buka Layanan → PLN, cek meteran, lalu pilih nominal."
-        />
-      ) : !purchaseEnabled ? (
-        <PurchaseFlowNotice
-          icon="time-outline"
-          title="Pembelian Belum Aktif"
-          message={flags.messages.purchase}
-        />
-      ) : categoryBlocked ? (
-        <PurchaseFlowNotice
-          icon="information-circle-outline"
-          title="Checkout Belum Tersedia"
-          message="Kategori produk ini belum didukung pada alur pembelian mobile saat ini. Silakan gunakan Web GurkyNet atau pilih Pulsa, Paket Data, atau Voucher Internet."
-        />
       ) : (
         <>
           <Card>
@@ -146,11 +126,37 @@ export default function ProductDetailScreen() {
             )}
           </Card>
 
-          <Button
-            label={flagsLoading ? 'Memuat...' : 'Beli Sekarang'}
-            onPress={onBuy}
-            disabled={!canBuy}
-          />
+          {inquiryBlocked ? (
+            <PurchaseFlowNotice
+              icon="shield-checkmark-outline"
+              title="Validasi Diperlukan"
+              message={INQUIRY_FLOW_NOTICE}
+            />
+          ) : plnPrepaid ? (
+            <PurchaseFlowNotice
+              icon="flash-outline"
+              title="Gunakan Menu Token PLN"
+              message="Token PLN dibeli melalui Cek Meteran di menu PLN pada Home. Buka Layanan → PLN, cek meteran, lalu pilih nominal."
+            />
+          ) : !purchaseEnabled ? (
+            <PurchaseFlowNotice
+              icon="time-outline"
+              title="Pembelian Belum Aktif"
+              message={flags.messages.purchase}
+            />
+          ) : categoryBlocked ? (
+            <PurchaseFlowNotice
+              icon="information-circle-outline"
+              title="Checkout Belum Tersedia"
+              message="Kategori produk ini belum didukung pada alur pembelian mobile saat ini. Silakan gunakan Web GurkyNet atau pilih Pulsa, Paket Data, atau Voucher Internet."
+            />
+          ) : (
+            <Button
+              label={flagsLoading ? 'Memuat...' : 'Beli Sekarang'}
+              onPress={onBuy}
+              disabled={!canBuy}
+            />
+          )}
         </>
       )}
     </ScreenContainer>

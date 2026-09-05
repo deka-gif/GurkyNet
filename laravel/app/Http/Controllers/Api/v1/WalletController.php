@@ -15,10 +15,12 @@ use App\Http\Requests\Api\v1\TransferRequest;
 use App\Http\Requests\Api\v1\WithdrawRequest;
 use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Services\Wallet\WalletSummaryService;
+use App\Services\Wallet\CustomerStatementService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class WalletController extends Controller
 {
@@ -32,6 +34,7 @@ class WalletController extends Controller
     protected WithdrawWalletAction $withdrawWalletAction;
     protected WalletRepositoryInterface $walletRepository;
     protected WalletSummaryService $walletSummaryService;
+    protected CustomerStatementService $customerStatementService;
 
     public function __construct(
         GetWalletAction $getWalletAction,
@@ -40,7 +43,8 @@ class WalletController extends Controller
         TransferWalletAction $transferWalletAction,
         WithdrawWalletAction $withdrawWalletAction,
         WalletRepositoryInterface $walletRepository,
-        WalletSummaryService $walletSummaryService
+        WalletSummaryService $walletSummaryService,
+        CustomerStatementService $customerStatementService
     ) {
         $this->getWalletAction = $getWalletAction;
         $this->getWalletHistoryAction = $getWalletHistoryAction;
@@ -49,6 +53,7 @@ class WalletController extends Controller
         $this->withdrawWalletAction = $withdrawWalletAction;
         $this->walletRepository = $walletRepository;
         $this->walletSummaryService = $walletSummaryService;
+        $this->customerStatementService = $customerStatementService;
     }
 
     /**
@@ -99,10 +104,86 @@ class WalletController extends Controller
         }
 
         $filters = $request->only(['start_date', 'end_date', 'type', 'min_amount', 'max_amount', 'per_page']);
-        
+
         $history = $this->getWalletHistoryAction->execute($wallet, $filters);
 
-        return $this->paginatedResponse('Histori data dompet digital berhasil didapatkan.', $history->items(), $history);
+        // Enrich with service_name via batch Transaction join (same as GET /wallet recent rows).
+        $enriched = $this->walletSummaryService->enrichHistoryRows($history->items());
+
+        return $this->paginatedResponse('Histori data dompet digital berhasil didapatkan.', $enriched, $history);
+    }
+
+    /**
+     * Customer monthly financial statement (JSON) — wallet_mutations SoT.
+     * GET /api/v1/wallet/statements/{period}  period=YYYY-MM
+     */
+    public function statement(Request $request, string $period): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->errorResponse('Sesi Anda tidak valid.', 401);
+        }
+
+        $wallet = $this->getWalletAction->execute($user->id);
+
+        if (!$wallet) {
+            return $this->errorResponse('Wallet tidak ditemukan.', 404);
+        }
+
+        if ($user->cannot('viewHistory', $wallet)) {
+            return $this->errorResponse('Anda tidak diizinkan untuk mengakses laporan keuangan ini.', 403);
+        }
+
+        try {
+            $statement = $this->customerStatementService->build($user, $wallet, $period);
+        } catch (ValidationException $e) {
+            return $this->errorResponse(
+                collect($e->errors())->flatten()->first() ?: 'Periode tidak valid.',
+                422,
+                $e->errors()
+            );
+        }
+
+        return $this->successResponse('Laporan keuangan berhasil didapatkan.', $statement);
+    }
+
+    /**
+     * Customer monthly financial statement PDF — same DTO as JSON statement.
+     * GET /api/v1/wallet/statements/{period}/pdf
+     */
+    public function statementPdf(Request $request, string $period)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->errorResponse('Sesi Anda tidak valid.', 401);
+        }
+
+        $wallet = $this->getWalletAction->execute($user->id);
+
+        if (!$wallet) {
+            return $this->errorResponse('Wallet tidak ditemukan.', 404);
+        }
+
+        if ($user->cannot('viewHistory', $wallet)) {
+            return $this->errorResponse('Anda tidak diizinkan untuk mengakses laporan keuangan ini.', 403);
+        }
+
+        try {
+            $statement = $this->customerStatementService->build($user, $wallet, $period);
+        } catch (ValidationException $e) {
+            return $this->errorResponse(
+                collect($e->errors())->flatten()->first() ?: 'Periode tidak valid.',
+                422,
+                $e->errors()
+            );
+        }
+
+        $filename = $this->customerStatementService->pdfFilename($period);
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('statements.monthly', [
+            'statement' => $statement,
+            'period_label' => $this->customerStatementService->formatPeriodLabel($statement),
+        ])->download($filename);
     }
 
     /**

@@ -257,6 +257,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::middleware('throttle:financial')->group(function () {
             Route::get('/wallet', [WalletController::class, 'show']);
             Route::get('/wallet/history', [WalletController::class, 'history']);
+            Route::get('/wallet/statements/{period}', [WalletController::class, 'statement']);
+            Route::get('/wallet/statements/{period}/pdf', [WalletController::class, 'statementPdf']);
             Route::get('/wallet/payment-config', [WalletController::class, 'paymentConfig']);
             Route::post('/wallet/topup', [WalletController::class, 'topUp']);
             Route::post('/wallet/deposit-manual', [WalletController::class, 'depositManual']); // FR-FIN-03

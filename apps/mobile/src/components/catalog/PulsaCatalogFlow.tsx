@@ -86,12 +86,6 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
 
   return (
     <View style={styles.wrap}>
-      {purchaseBanner ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{purchaseBanner}</Text>
-        </View>
-      ) : null}
-
       <View style={styles.field}>
         <Text style={styles.label}>Nomor Handphone</Text>
         <TextInput
@@ -111,6 +105,12 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
         )}
         {phoneErr ? <Text style={styles.error}>{phoneErr}</Text> : null}
       </View>
+
+      {purchaseBanner ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{purchaseBanner}</Text>
+        </View>
+      ) : null}
 
       {!operator ? (
         <EmptyState

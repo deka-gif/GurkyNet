@@ -58,12 +58,25 @@ export interface Product {
 export interface ProductFilters {
   category?: string;
   provider?: string;
+  /** Brand/operator id from GET /products/providers — catalog grouping only. */
+  provider_id?: number;
   keyword?: string;
   per_page?: number;
   page?: number;
   data_group?: string;
   telkomsel_group?: string;
   sort?: string;
+}
+
+/**
+ * Customer-facing brand row from GET /products/providers?category=…
+ * (same shape as web CategoryProviderSummary — not Digiflazz/VIP source).
+ */
+export interface CategoryProviderSummary {
+  providerId: number;
+  name: string;
+  logo: string | null;
+  count: number;
 }
 
 export type DataTaxonomyChip = {
@@ -97,6 +110,17 @@ export const catalogService = {
   /** GET /products — same contract as web productService.getProducts. */
   getProducts: async (filters: ProductFilters): Promise<ApiResponse<Product[]>> => {
     const response = await apiClient.get<ApiResponse<Product[]>>('/products', { params: filters });
+    return response.data;
+  },
+
+  /** GET /products/providers?category= — Web ProviderCatalogFlow step 1. */
+  getCategoryProviders: async (
+    category: string
+  ): Promise<ApiResponse<CategoryProviderSummary[]>> => {
+    const response = await apiClient.get<ApiResponse<CategoryProviderSummary[]>>(
+      '/products/providers',
+      { params: { category } }
+    );
     return response.data;
   },
 

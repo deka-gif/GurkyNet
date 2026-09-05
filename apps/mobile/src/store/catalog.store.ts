@@ -70,7 +70,8 @@ export const useCatalogStore = create<CatalogState>((set) => ({
   fetchProducts: async (category, keyword) => {
     set({ productsLoading: true, productsError: null, products: [] });
     try {
-      const response = await catalogService.getProducts({ category, keyword, per_page: 50 });
+      // Align with web productService default (≈5000) for catalog parity.
+      const response = await catalogService.getProducts({ category, keyword, per_page: 5000 });
       if (response.success) {
         set({ products: response.data, productsLoading: false });
       } else {

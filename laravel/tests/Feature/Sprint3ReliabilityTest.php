@@ -334,6 +334,18 @@ class Sprint3ReliabilityTest extends TestCase
         $this->assertSame('LOCKED', TransactionStatusMapper::toSrs('LOCKED'));
     }
 
+    public function test_is_terminal_failure_raw_recognizes_midtrans_terminal_states(): void
+    {
+        $this->assertTrue(TransactionStatusMapper::isTerminalFailureRaw('failed'));
+        $this->assertTrue(TransactionStatusMapper::isTerminalFailureRaw('EXPIRED'));
+        $this->assertTrue(TransactionStatusMapper::isTerminalFailureRaw('canceled'));
+        $this->assertTrue(TransactionStatusMapper::isTerminalFailureRaw('cancelled'));
+        $this->assertTrue(TransactionStatusMapper::isTerminalFailureRaw('gagal'));
+        $this->assertFalse(TransactionStatusMapper::isTerminalFailureRaw('pending'));
+        $this->assertFalse(TransactionStatusMapper::isTerminalFailureRaw('processing'));
+        $this->assertFalse(TransactionStatusMapper::isTerminalFailureRaw('success'));
+    }
+
     public function test_idempotency_ttl_archives_not_hard_delete(): void
     {
         $row = IdempotencyRequest::create([

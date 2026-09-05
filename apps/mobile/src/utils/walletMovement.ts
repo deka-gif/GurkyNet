@@ -1,6 +1,6 @@
 import type { WalletMutation } from '../services/wallet.service';
 
-/** Customer-facing money-movement labels — not purchase-history copy. */
+/** Customer-facing money-movement labels — Wallet mutasi, not Riwayat pembelian. */
 
 export function isCreditMovement(row: Pick<WalletMutation, 'type' | 'direction'>): boolean {
   return String(row.type || row.direction || '')
@@ -9,47 +9,20 @@ export function isCreditMovement(row: Pick<WalletMutation, 'type' | 'direction'>
 }
 
 /**
- * Primary label for Aktivitas Uang.
- * Direction first; refine with backend description keywords only (no invented categories).
+ * Primary label for Aktivitas Uang — emphasize money in/out only.
+ * Adjustment credit/debit → Penyesuaian Saldo (no fake purchase categories).
  */
 export function walletMovementTitle(row: WalletMutation): string {
-  const credit = isCreditMovement(row);
   const desc = String(row.description || '').toLowerCase();
-
   if (desc.includes('adjustment') || desc.includes('penyesuaian')) {
     return 'Penyesuaian Saldo';
   }
-
-  if (credit) {
-    if (desc.includes('refund') || desc.includes('dana kembali') || desc.includes('pengembalian')) {
-      return 'Refund';
-    }
-    if (desc.includes('top up') || desc.includes('topup') || desc.includes('isi saldo')) {
-      return 'Top Up';
-    }
-    if (desc.includes('transfer')) return 'Transfer Masuk';
-    return 'Uang Masuk';
-  }
-
-  if (desc.includes('transfer')) return 'Transfer Keluar';
-  if (desc.includes('withdraw') || desc.includes('tarik')) return 'Tarik Dana';
-  return 'Uang Keluar';
+  return isCreditMovement(row) ? 'Uang Masuk' : 'Uang Keluar';
 }
 
-/**
- * Secondary line — backend description, softened for customers.
- * Hides raw technical tokens like "Adjustment (debit)".
- */
-export function walletMovementSubtitle(row: WalletMutation): string | null {
-  const desc = String(row.description || '').trim();
-  if (!desc) return null;
-
-  const lower = desc.toLowerCase();
-  if (lower.includes('adjustment') || lower.includes('penyesuaian')) {
-    return null;
-  }
-
-  return desc;
+/** Optional timestamp only — hide product-style descriptions from Wallet list. */
+export function walletMovementSubtitle(_row: WalletMutation): string | null {
+  return null;
 }
 
 export function formatWalletWhen(iso: string | null | undefined): string {

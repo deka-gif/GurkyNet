@@ -295,6 +295,36 @@ class TopUpMidtransFinancialIntegrityTest extends TestCase
         ]);
     }
 
+    /**
+     * @dataProvider terminalFailureStatusesProvider
+     */
+    public function test_e_terminal_failure_cannot_be_revived_by_settlement(string $terminalStatus): void
+    {
+        $tx = $this->makeTopUp(['status' => $terminalStatus]);
+        $before = (float) $this->wallet->fresh()->balance;
+
+        $this->process($this->settlementPayload($tx));
+
+        $this->assertSame($terminalStatus, $tx->fresh()->status);
+        $this->assertEquals($before, (float) $this->wallet->fresh()->balance);
+        $this->assertSame(0, WalletMutation::where('reference_id', (string) $tx->id)->count());
+        $this->assertDatabaseHas('activity_logs', [
+            'activity' => 'MIDTRANS_LATE_SETTLEMENT_ON_TERMINAL',
+            'user_id' => $this->user->id,
+        ]);
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function terminalFailureStatusesProvider(): array
+    {
+        return [
+            'failed' => [TransactionStatus::FAILED->value],
+            'expired' => [TransactionStatus::EXPIRED->value],
+            'canceled' => [TransactionStatus::CANCELED->value],
+            'legacy gagal' => [TransactionStatus::GAGAL->value],
+        ];
+    }
+
     public function test_m_refund_after_credit_opens_manual_incident_not_second_topup(): void
     {
         $tx = $this->makeTopUp();

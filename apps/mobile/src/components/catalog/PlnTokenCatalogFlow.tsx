@@ -174,12 +174,6 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
 
   return (
     <View style={styles.wrap}>
-      {purchaseBanner ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{purchaseBanner}</Text>
-        </View>
-      ) : null}
-
       <View style={styles.field}>
         <Text style={styles.label}>Nomor Meter / ID Pelanggan PLN</Text>
         <TextInput
@@ -199,6 +193,12 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
         />
         {inquiryError ? <Text style={styles.error}>{inquiryError}</Text> : null}
       </View>
+
+      {purchaseBanner ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{purchaseBanner}</Text>
+        </View>
+      ) : null}
 
       {!purchaseEnabled ? (
         <PurchaseFlowNotice
