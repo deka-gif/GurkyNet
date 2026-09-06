@@ -7,6 +7,8 @@ export { ComingSoon } from './ComingSoon';
 export { PurchaseFlowNotice } from './PurchaseFlowNotice';
 export { PinInput } from './PinInput';
 export { PinConfirmModal } from './PinConfirmModal';
+export { PinKeypadPanel } from './PinKeypadPanel';
+export { ConfirmSheet } from './ConfirmSheet';
 export { BrandLogo } from './BrandLogo';
 export { CategoryMarketingIcon } from './CategoryMarketingIcon';
 export { PlatformLogo } from './PlatformLogo';

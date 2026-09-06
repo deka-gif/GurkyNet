@@ -386,7 +386,7 @@ export default function CheckoutScreen() {
           <PinConfirmModal
             visible={pinOpen}
             title="Masukkan PIN"
-            subtitle="PIN 6 digit untuk mengonfirmasi pembelian."
+            subtitle="Masukkan 6 digit PIN kamu"
             loading={submitting}
             error={
               pinError
@@ -404,6 +404,12 @@ export default function CheckoutScreen() {
             }}
             onEditing={() => setPinError(null)}
             onSubmit={handlePinSubmit}
+            onForgotPin={() => {
+              if (submitting) return;
+              setPinOpen(false);
+              setPinError(null);
+              router.push('/akun/pin/forgot');
+            }}
           />
         </>
       )}

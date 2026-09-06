@@ -1,56 +1,30 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-  type TextInput as TextInputType,
-} from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { colors, spacing } from '../../theme';
 
 interface PinInputProps {
+  /** Digits entered so far (0–6). Digits are never rendered — only fill state. */
   value: string;
-  onChange: (value: string) => void;
-  onComplete: (value: string) => void;
   disabled?: boolean;
-  autoFocus?: boolean;
 }
 
+const DOT = 14;
+
 /**
- * 6-slot PIN visual: empty ○ / filled ● (primary green). Digits never shown.
- * Hidden numeric TextInput keeps the system number-pad open; auto-submits at 6.
+ * 6-slot PIN visual only (empty ○ / filled ● primary green).
+ * Digits are never shown. Keypad lives in PinConfirmModal — no native keyboard.
  * Caller owns `value` in local state — never Zustand / SecureStore. Never log PIN.
  */
-export function PinInput({ value, onChange, onComplete, disabled, autoFocus }: PinInputProps) {
-  const inputRef = useRef<TextInputType>(null);
+export function PinInput({ value, disabled }: PinInputProps) {
   const length = Math.min(6, (value || '').replace(/\D/g, '').length);
 
-  useEffect(() => {
-    if (autoFocus && !disabled) {
-      const t = setTimeout(() => inputRef.current?.focus(), 80);
-      return () => clearTimeout(t);
-    }
-  }, [autoFocus, disabled]);
-
-  const handleChange = (text: string) => {
-    if (disabled) return;
-    const cleaned = text.replace(/\D/g, '').slice(0, 6);
-    onChange(cleaned);
-    if (cleaned.length === 6) {
-      onComplete(cleaned);
-    }
-  };
-
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Masukkan PIN 6 digit"
-      onPress={() => {
-        if (!disabled) inputRef.current?.focus();
-      }}
-      style={styles.wrap}
+    <View
+      accessibilityRole="text"
+      accessibilityLabel={`PIN ${length} dari 6 digit`}
+      style={[styles.wrap, disabled && styles.disabled]}
     >
-      <View style={styles.dots} pointerEvents="none">
+      <View style={styles.dots}>
         {Array.from({ length: 6 }).map((_, i) => {
           const filled = i < length;
           return (
@@ -61,35 +35,19 @@ export function PinInput({ value, onChange, onComplete, disabled, autoFocus }: P
           );
         })}
       </View>
-
-      <TextInput
-        ref={inputRef}
-        value={value}
-        onChangeText={handleChange}
-        keyboardType="number-pad"
-        textContentType="oneTimeCode"
-        autoComplete="off"
-        importantForAutofill="no"
-        secureTextEntry
-        caretHidden
-        maxLength={6}
-        editable={!disabled}
-        autoFocus={autoFocus}
-        style={styles.hiddenInput}
-        contextMenuHidden
-      />
-    </Pressable>
+    </View>
   );
 }
-
-const DOT = 16;
 
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 40,
     width: '100%',
+  },
+  disabled: {
+    opacity: 0.55,
   },
   dots: {
     flexDirection: 'row',
@@ -103,18 +61,13 @@ const styles = StyleSheet.create({
     borderRadius: DOT / 2,
   },
   dotEmpty: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.gray[300],
     backgroundColor: 'transparent',
   },
   dotFilled: {
-    borderWidth: 0,
+    borderWidth: 1.5,
+    borderColor: colors.primary[600],
     backgroundColor: colors.primary[600],
-  },
-  /** Invisible field over the dots so the numeric keyboard stays available. */
-  hiddenInput: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0.02,
-    color: 'transparent',
   },
 });

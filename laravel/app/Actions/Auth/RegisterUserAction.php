@@ -24,16 +24,30 @@ class RegisterUserAction
             // Create user
             $user = $this->userRepository->create($data);
 
+            // Verification timestamps are server-authoritative only (never from client input
+            // that could spoof phone_verified / email_verified). Callers pass stamps after
+            // successful OTP / trusted IdP flows.
             if (!empty($data['transaction_pin'])) {
-                $user->forceFill([
+                $fill = [
                     'transaction_pin' => Hash::make((string) $data['transaction_pin']),
                     'pin_updated_at' => now(),
                     'email_verified_at' => $data['email_verified_at'] ?? now(),
-                ])->save();
-            } elseif (!empty($data['email_verified_at'])) {
-                $user->forceFill([
-                    'email_verified_at' => $data['email_verified_at'],
-                ])->save();
+                ];
+                // Unified registration contact verification: email OTP at signup also
+                // covers the phone number collected during the same onboarding attempt.
+                if (!empty($data['phone_verified_at'])) {
+                    $fill['phone_verified_at'] = $data['phone_verified_at'];
+                }
+                $user->forceFill($fill)->save();
+            } elseif (!empty($data['email_verified_at']) || !empty($data['phone_verified_at'])) {
+                $fill = [];
+                if (!empty($data['email_verified_at'])) {
+                    $fill['email_verified_at'] = $data['email_verified_at'];
+                }
+                if (!empty($data['phone_verified_at'])) {
+                    $fill['phone_verified_at'] = $data['phone_verified_at'];
+                }
+                $user->forceFill($fill)->save();
             }
 
             // Unified customer-facing account: YYYY3128NNN = gurky_pay_id = wallet_number

@@ -150,6 +150,34 @@ class AccountSecurityController extends Controller
         return $this->successResponse('OTP reset PIN telah dikirim.', $this->otpPayload($otp));
     }
 
+    /**
+     * Gate OTP for forgot-PIN UI before allowing new PIN entry.
+     * Does NOT change PIN and does NOT consume OTP (confirm still verifies).
+     * POST /api/v1/auth/pin/forgot/verify-otp
+     */
+    public function verifyForgotPinOtp(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => 'required|email',
+            'otp_code' => 'required|string|size:6',
+        ]);
+
+        // Ignore any client spoof fields (verified, otp_verified, …) — only validated keys used.
+        $user = User::query()->where('email', $data['email'])->first();
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['Email tidak ditemukan di sistem kami.'],
+            ]);
+        }
+
+        $this->otpService->assertValid($user->email, $data['otp_code'], 'forgot_pin', 'email', $user->id);
+
+        return $this->successResponse('Kode verifikasi valid.', [
+            'verified' => true,
+            'email' => $this->maskValue($user->email),
+        ]);
+    }
+
     public function confirmForgotPin(Request $request): JsonResponse
     {
         $data = $request->validate([

@@ -71,10 +71,12 @@ class SensitiveSecurityFlowTest extends TestCase
         ])->assertStatus(200)
             ->assertJsonStructure(['data' => ['token', 'user']]);
 
-        $this->assertDatabaseHas('users', [
-            'email' => 'pending@gurkynet.test',
-            'phone_number' => '081555444333',
-        ]);
+        $created = User::query()->where('email', 'pending@gurkynet.test')->first();
+        $this->assertNotNull($created);
+        $this->assertSame('081555444333', $created->phone_number);
+        // Unified registration verification: email OTP stamps both contacts.
+        $this->assertNotNull($created->email_verified_at);
+        $this->assertNotNull($created->phone_verified_at);
     }
 
     public function test_login_pin_requires_trusted_device(): void

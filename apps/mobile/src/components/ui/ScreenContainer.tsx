@@ -65,11 +65,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   padded: { padding: spacing.lg, gap: spacing.lg },
-  /** Compact top under Stack header — spacing.md (12) within 8–16 target. */
+  /** Under Stack header — room for PIN/OTP title; flex so keypad can sit toward bottom. */
   paddedBelowHeader: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
-    paddingTop: spacing.md,
-    gap: spacing.lg,
+    paddingTop: spacing.lg,
+    gap: spacing.md,
+    flexGrow: 1,
+    flex: 1,
   },
 });

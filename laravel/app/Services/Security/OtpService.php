@@ -140,6 +140,58 @@ class OtpService
         return $otp;
     }
 
+    /**
+     * Validate OTP without consuming it.
+     * Used by forgot-PIN step gate so Mobile can require backend OTP success
+     * before showing "Buat PIN baru". confirmForgotPin still calls verify() to consume.
+     */
+    public function assertValid(string $identifier, string $code, string $action, string $channel = 'email', ?int $userId = null): OtpCode
+    {
+        $otp = OtpCode::query()
+            ->where('phone_number', $identifier)
+            ->where('action', $action)
+            ->where('channel', $channel)
+            ->where('is_used', false)
+            ->latest()
+            ->first();
+
+        if (!$otp) {
+            throw ValidationException::withMessages([
+                'otp' => ['Kode OTP tidak ditemukan atau sudah digunakan.'],
+            ]);
+        }
+
+        if ($otp->expires_at->isPast()) {
+            $otp->update(['is_used' => true]);
+            throw ValidationException::withMessages([
+                'otp' => ['Kode OTP sudah kedaluwarsa.'],
+            ]);
+        }
+
+        if ((int) $otp->attempt_count >= (int) $otp->max_attempts) {
+            $otp->update(['is_used' => true]);
+            throw ValidationException::withMessages([
+                'otp' => ['Percobaan OTP melebihi batas maksimum.'],
+            ]);
+        }
+
+        if (!hash_equals((string) $otp->code, (string) $code)) {
+            $otp->increment('attempt_count');
+            throw ValidationException::withMessages([
+                'otp' => ['Kode OTP tidak valid.'],
+            ]);
+        }
+
+        // Intentionally NOT marking is_used — confirm step must still verify+consume.
+        $this->audit($userId ?? $otp->user_id, 'otp_asserted', [
+            'identifier' => $identifier,
+            'channel' => $channel,
+            'action' => $action,
+        ]);
+
+        return $otp;
+    }
+
     protected function deliver(OtpCode $otp, int $expiryMinutes): void
     {
         if (($otp->meta['delivery_override']['via'] ?? null) === 'whatsapp') {

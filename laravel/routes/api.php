@@ -161,6 +161,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::post('/auth/password/forgot/request', [AccountSecurityController::class, 'requestForgotPassword']);
         Route::post('/auth/password/forgot/confirm', [AccountSecurityController::class, 'confirmForgotPassword']);
         Route::post('/auth/pin/forgot/request', [AccountSecurityController::class, 'requestForgotPin']);
+        Route::post('/auth/pin/forgot/verify-otp', [AccountSecurityController::class, 'verifyForgotPinOtp']);
         Route::post('/auth/pin/forgot/confirm', [AccountSecurityController::class, 'confirmForgotPin']);
     });
 

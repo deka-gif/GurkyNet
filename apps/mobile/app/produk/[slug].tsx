@@ -16,6 +16,9 @@ import { PulsaCatalogFlow } from '../../src/components/catalog/PulsaCatalogFlow'
 import { PaketDataCatalogFlow } from '../../src/components/catalog/PaketDataCatalogFlow';
 import { PlnTokenCatalogFlow } from '../../src/components/catalog/PlnTokenCatalogFlow';
 import { ProviderCatalogBrowseFlow } from '../../src/components/catalog/ProviderCatalogBrowseFlow';
+import { EwalletBrandList } from '../../src/components/catalog/EwalletBrandList';
+import { useEwalletTransferStore } from '../../src/store/ewalletTransfer.store';
+import { EwalletBrandGroup } from '../../src/utils/ewalletBrand';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import {
@@ -29,7 +32,7 @@ import {
 
 /**
  * Category product entry — dedicated flows for pulsa/data/pln;
- * provider browse for E-Money/Game/Langganan (Tahap 3B);
+ * provider browse for E-Wallet/Game/Langganan (Tahap 3B);
  * generic list otherwise. Inquiry gate is purchase-only (detail/checkout).
  *
  * Category name is shown only in Stack header (← [Nama]) — not duplicated in content.
@@ -59,13 +62,26 @@ export default function ProductListScreen() {
   const isPaketDataFlow = normalized === 'data' || normalized === 'paket-data';
   const isPlnFlow = isPlnPrepaidCategory(slug);
   const providerBrowseCategory = resolveProviderBrowseCategory(slug);
-  const isProviderBrowse = isProviderBrowseCategory(slug);
+  const isEwalletFlow = providerBrowseCategory === 'topup-digital';
+  const isProviderBrowse = isProviderBrowseCategory(slug) && !isEwalletFlow;
   // Tagihan / other inquiry cats without provider-browse: still show honest notice (no fake catalog).
   const inquiryBrowseBlocked =
-    isInquiryRequiredCategory(slug) && !isProviderBrowse && !isPlnFlow;
+    isInquiryRequiredCategory(slug) && !isProviderBrowse && !isEwalletFlow && !isPlnFlow;
+
+  const beginBrand = useEwalletTransferStore((s) => s.beginBrand);
+
+  const openEwalletBrand = (brand: EwalletBrandGroup) => {
+    beginBrand({
+      key: brand.key,
+      name: brand.name,
+      logo: brand.logo,
+      providerIds: brand.providerIds,
+    });
+    router.push('/produk/ewallet');
+  };
 
   const load = useCallback(() => {
-    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !inquiryBrowseBlocked) {
+    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !isEwalletFlow && !inquiryBrowseBlocked) {
       fetchProducts(slug, keyword.trim() || undefined);
     }
   }, [
@@ -76,6 +92,7 @@ export default function ProductListScreen() {
     isPaketDataFlow,
     isPlnFlow,
     isProviderBrowse,
+    isEwalletFlow,
     inquiryBrowseBlocked,
   ]);
 
@@ -84,17 +101,17 @@ export default function ProductListScreen() {
   }, [fetchFeatures]);
 
   useEffect(() => {
-    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !inquiryBrowseBlocked) {
+    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !isEwalletFlow && !inquiryBrowseBlocked) {
       fetchProducts(slug);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, isPulsaFlow, isPaketDataFlow, isPlnFlow, isProviderBrowse, inquiryBrowseBlocked]);
+  }, [slug, isPulsaFlow, isPaketDataFlow, isPlnFlow, isProviderBrowse, isEwalletFlow, inquiryBrowseBlocked]);
 
   const purchaseBanner =
     !purchaseEnabled && !flagsLoading ? `Pembelian belum aktif — ${flags.messages.purchase}` : null;
 
   const onRefresh = () => {
-    if (isPulsaFlow || isPaketDataFlow || isPlnFlow || isProviderBrowse || inquiryBrowseBlocked) {
+    if (isPulsaFlow || isPaketDataFlow || isPlnFlow || isProviderBrowse || isEwalletFlow || inquiryBrowseBlocked) {
       return fetchFeatures();
     }
     return load();
@@ -123,6 +140,19 @@ export default function ProductListScreen() {
         <PaketDataCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isPlnFlow ? (
         <PlnTokenCatalogFlow purchaseBanner={purchaseBanner} />
+      ) : isEwalletFlow ? (
+        <View style={styles.ewalletBlock}>
+          {purchaseBanner ? (
+            <View style={styles.banner}>
+              <Text style={styles.bannerText}>{purchaseBanner}</Text>
+            </View>
+          ) : null}
+          <Text style={styles.ewalletLead}>Pilih E-Wallet</Text>
+          <EwalletBrandList
+            subtitleFor={(name) => `Top up ${name}`}
+            onSelect={openEwalletBrand}
+          />
+        </View>
       ) : isProviderBrowse && providerBrowseCategory ? (
         <ProviderCatalogBrowseFlow
           category={providerBrowseCategory}
@@ -222,6 +252,12 @@ export default function ProductListScreen() {
 }
 
 const styles = StyleSheet.create({
+  ewalletBlock: { gap: spacing.md },
+  ewalletLead: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[700],
+  },
   banner: {
     backgroundColor: colors.status.pendingBg,
     borderRadius: radius.lg,

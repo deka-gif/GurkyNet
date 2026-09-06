@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { storageService } from '../services/storage.service';
 import { appEvents, AUTH_UNAUTHORIZED_EVENT } from '../utils/eventEmitter';
+import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
 
 /**
  * Same base-URL / v1-prefix handling as src/services/api.ts on web. Set
@@ -118,6 +119,8 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
     config.headers['X-Device-UUID'] = await storageService.getDeviceUuid();
     config.headers['X-Platform'] = Platform.OS; // 'android' | 'ios' — never 'web' here
     config.headers['X-App-Version'] = Constants.expoConfig?.version ?? 'unknown';
+    config.headers['X-Device-Model'] = getDeviceModel();
+    config.headers['X-Os-Version'] = getOsVersion();
   }
 
   return config;

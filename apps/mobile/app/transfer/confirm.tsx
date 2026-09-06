@@ -94,7 +94,7 @@ export default function TransferConfirmScreen() {
       <PinConfirmModal
         visible={pinOpen}
         title="Masukkan PIN"
-        subtitle="PIN 6 digit untuk mengonfirmasi transfer."
+        subtitle="Masukkan 6 digit PIN kamu"
         loading={submitting}
         error={
           submitError
@@ -112,6 +112,12 @@ export default function TransferConfirmScreen() {
         }}
         onEditing={() => clearSubmitError()}
         onSubmit={onPinSubmit}
+        onForgotPin={() => {
+          if (submitting) return;
+          setPinOpen(false);
+          clearSubmitError();
+          router.push('/akun/pin/forgot');
+        }}
       />
     </ScreenContainer>
   );

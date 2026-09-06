@@ -39,7 +39,14 @@
         }
       ],
       "expo-sharing",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GurkyPay membutuhkan akses galeri untuk mengganti foto profil.",
+          "cameraPermission": "GurkyPay membutuhkan akses kamera hanya saat kamu memilih ambil foto profil."
+        }
+      ]
     ]
   }
 }

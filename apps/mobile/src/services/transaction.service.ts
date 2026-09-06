@@ -99,7 +99,11 @@ function unwrapList(payload: unknown): any[] {
 export const transactionService = {
   create: async (payload: CreateTransactionPayload): Promise<ApiResponse<Transaction>> => {
     const response = await apiClient.post<ApiResponse<Transaction>>('/transactions', payload);
-    return response.data;
+    const body = response.data;
+    if (body.success && body.data) {
+      return { ...body, data: normalizeListRow(body.data) };
+    }
+    return body;
   },
 
   /**

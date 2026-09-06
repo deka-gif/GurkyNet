@@ -73,7 +73,7 @@ const SERVICE_SHORTCUTS: ServiceShortcut[] = [
   },
   {
     key: 'e-money',
-    label: 'E-Money',
+    label: 'E-Wallet',
     icon: 'wallet-outline',
     slugCandidates: ['topup-digital', 'ewallet', 'e-money'],
     iconKeys: ['hub:topup-digital'],

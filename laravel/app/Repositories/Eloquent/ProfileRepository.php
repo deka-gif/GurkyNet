@@ -97,6 +97,8 @@ class ProfileRepository implements ProfileRepositoryInterface
 
     /**
      * Get the security overview for the given user.
+     * Session display prefers UserDevice.device_model over raw HTTP User-Agent
+     * (okhttp/axios must never be shown as the device name).
      */
     public function getSecurityOverview(User $user): array
     {
@@ -105,29 +107,73 @@ class ProfileRepository implements ProfileRepositoryInterface
             ->latest('logged_at')
             ->first();
 
-        // Registered Devices from login logs
-        $loginLogs = LoginLog::where('user_id', $user->id)
+        $devices = UserDevice::query()
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->latest('last_seen_at')
             ->get();
+        $devicesByUuid = $devices->keyBy('device_uuid');
+        $currentUuid = (string) request()->header('X-Device-UUID', '');
 
-        $registeredDevices = [];
-        $seenUserAgents = [];
-        foreach ($loginLogs as $log) {
-            $ua = $log->user_agent ?: 'Unknown Device';
-            if (!in_array($ua, $seenUserAgents)) {
-                $seenUserAgents[] = $ua;
-                $registeredDevices[] = [
-                    'user_agent' => $ua,
-                    'ip_address' => $log->ip_address,
-                    'last_login_at' => $log->logged_at?->toDateTimeString(),
+        if ($devices->isNotEmpty()) {
+            $registeredDevices = $devices->map(function (UserDevice $device) use ($currentUuid) {
+                return [
+                    'device_uuid' => $device->device_uuid,
+                    'device_model' => $device->device_model,
+                    'platform' => $device->platform,
+                    'display_name' => $this->formatDeviceDisplayName(
+                        $device->device_model,
+                        $device->platform,
+                        $device->user_agent
+                    ),
+                    'user_agent' => $device->user_agent,
+                    'ip_address' => null,
+                    'last_login_at' => $device->last_seen_at?->toDateTimeString(),
+                    'is_current' => $currentUuid !== '' && hash_equals($currentUuid, (string) $device->device_uuid),
                 ];
+            })->values()->toArray();
+        } else {
+            // Fallback: login logs — never expose raw client library UAs as the label.
+            $registeredDevices = [];
+            $seenUserAgents = [];
+            $loginLogs = LoginLog::where('user_id', $user->id)->get();
+            foreach ($loginLogs as $log) {
+                $ua = $log->user_agent ?: 'Unknown Device';
+                if (!in_array($ua, $seenUserAgents, true)) {
+                    $seenUserAgents[] = $ua;
+                    $registeredDevices[] = [
+                        'user_agent' => $ua,
+                        'display_name' => $this->formatDeviceDisplayName(null, null, $ua),
+                        'ip_address' => $log->ip_address,
+                        'last_login_at' => $log->logged_at?->toDateTimeString(),
+                        'is_current' => false,
+                    ];
+                }
             }
         }
 
-        // Active Tokens
-        $activeTokens = $user->tokens->map(function ($token) {
+        // Active Tokens — enrich Sanctum token name (platform|uuid) with device_model.
+        $activeTokens = $user->tokens->map(function ($token) use ($devicesByUuid, $currentUuid) {
+            $rawName = (string) $token->name;
+            $parts = explode('|', $rawName, 2);
+            $platform = isset($parts[1]) ? strtolower((string) $parts[0]) : null;
+            $uuid = isset($parts[1]) ? (string) $parts[1] : null;
+            $device = ($uuid && $devicesByUuid->has($uuid)) ? $devicesByUuid->get($uuid) : null;
+
+            $displayName = $this->formatDeviceDisplayName(
+                $device?->device_model,
+                $device?->platform ?? $platform,
+                $device?->user_agent ?? $rawName
+            );
+
             return [
                 'id' => $token->id,
-                'name' => $token->name,
+                'name' => $displayName,
+                'token_name' => $rawName,
+                'device_model' => $device?->device_model,
+                'platform' => $device?->platform ?? $platform,
+                'device_uuid' => $uuid,
+                'is_current' => $uuid && $currentUuid !== '' && hash_equals($currentUuid, $uuid),
                 'last_used_at' => $token->last_used_at?->toDateTimeString(),
                 'created_at' => $token->created_at?->toDateTimeString(),
             ];
@@ -137,6 +183,7 @@ class ProfileRepository implements ProfileRepositoryInterface
             'last_login' => $lastLogin ? [
                 'ip_address' => $lastLogin->ip_address,
                 'user_agent' => $lastLogin->user_agent,
+                'display_name' => $this->formatDeviceDisplayName(null, null, $lastLogin->user_agent),
                 'logged_at' => $lastLogin->logged_at?->toDateTimeString(),
             ] : null,
             'registered_devices' => $registeredDevices,
@@ -145,6 +192,43 @@ class ProfileRepository implements ProfileRepositoryInterface
             'pin_updated_at' => $user->pin_updated_at?->toIso8601String(),
             'two_factor_status' => false,
         ];
+    }
+
+    /**
+     * Human-readable device label — never show HTTP client libraries (okhttp, axios, …).
+     */
+    protected function formatDeviceDisplayName(?string $deviceModel, ?string $platform, ?string $userAgent): string
+    {
+        $model = trim((string) $deviceModel);
+        if ($model !== '' && !preg_match('/okhttp|axios|curl|python-requests|postman/i', $model)) {
+            return $model;
+        }
+
+        $plat = strtolower(trim((string) $platform));
+        if (in_array($plat, ['android', 'ios', 'web', 'pwa'], true)) {
+            return match ($plat) {
+                'android' => 'Perangkat Android',
+                'ios' => 'Perangkat iOS',
+                'pwa' => 'Aplikasi Web',
+                default => 'Browser Web',
+            };
+        }
+
+        $ua = (string) $userAgent;
+        if ($ua === '' || preg_match('/okhttp|axios|curl|python-requests|postman/i', $ua)) {
+            return 'Perangkat tidak dikenal';
+        }
+        if (preg_match('/android/i', $ua)) {
+            return 'Perangkat Android';
+        }
+        if (preg_match('/iphone|ipad|ios/i', $ua)) {
+            return 'Perangkat iOS';
+        }
+        if (preg_match('/mozilla|chrome|safari|firefox|edg/i', $ua)) {
+            return 'Browser Web';
+        }
+
+        return 'Perangkat tidak dikenal';
     }
 
     /**

@@ -447,13 +447,19 @@ class AuthController extends Controller
 
         $result = DB::transaction(function () use ($attempt, $data, $request) {
             $meta = is_array($attempt->meta) ? $attempt->meta : [];
+            // Email OTP onboarding already verified contact ownership for this attempt.
+            // Stamp BOTH email_verified_at and phone_verified_at so Tier-1 contact gates
+            // (IdentityVerificationGate) do not ask for a separate phone OTP after register.
+            // Does NOT bypass KYC Tier-2 / withdraw gates. PURCHASE_KYC_REQUIRED unchanged.
+            $verifiedAt = now();
             $user = $this->registerAction->execute([
                 'name' => $attempt->name,
                 'email' => $attempt->email,
                 'phone_number' => $attempt->phone_number,
                 'password' => Crypt::decryptString($attempt->password),
                 'transaction_pin' => $data['pin'],
-                'email_verified_at' => now(),
+                'email_verified_at' => $verifiedAt,
+                'phone_verified_at' => $verifiedAt,
                 'referral_code' => $meta['referral_code'] ?? null,
                 'referral_context' => [
                     'ip' => $request->ip(),
@@ -625,11 +631,16 @@ class AuthController extends Controller
             return;
         }
 
+        $deviceModel = trim((string) $request->header('X-Device-Model', $request->input('device_model', '')));
+        $osVersion = trim((string) $request->header('X-Os-Version', $request->input('os_version', '')));
+
         UserDevice::updateOrCreate(
             ['device_uuid' => $deviceUuid, 'platform' => strtolower((string) $request->header('X-Platform', 'web'))],
             [
                 'user_id' => $user->id,
                 'app_version' => $request->header('X-App-Version'),
+                'device_model' => $deviceModel !== '' ? substr($deviceModel, 0, 128) : null,
+                'os_version' => $osVersion !== '' ? substr($osVersion, 0, 64) : null,
                 'user_agent' => substr((string) $request->userAgent(), 0, 512),
                 'is_active' => $active,
                 'last_seen_at' => now(),

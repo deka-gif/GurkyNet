@@ -1,26 +1,95 @@
-import { useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useCallback, type ReactNode } from 'react';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useAuthStore } from '../../src/store/auth.store';
-import { ScreenContainer, Card, Button } from '../../src/components/ui';
+import { ScreenContainer } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 
-const MENU_ITEMS = [
-  { key: 'security', icon: 'shield-checkmark' as const, label: 'Keamanan & PIN', phase: 'Fase 8', href: null as string | null },
-  { key: 'kyc', icon: 'document-text' as const, label: 'Verifikasi KYC', phase: 'Fase 8', href: null },
-  { key: 'referral', icon: 'people' as const, label: 'Referral', phase: 'Fase 8', href: null },
-  { key: 'loyalty', icon: 'star' as const, label: 'Poin & Loyalitas', phase: 'Fase 8', href: null },
-  { key: 'help', icon: 'help-circle' as const, label: 'Bantuan', phase: null, href: '/(tabs)/help' },
-];
+type MenuRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  subtitle?: string;
+  onPress?: () => void;
+  showChevron?: boolean;
+  isLast?: boolean;
+};
 
+function MenuRow({
+  icon,
+  label,
+  subtitle,
+  onPress,
+  showChevron = true,
+  isLast = false,
+}: MenuRowProps) {
+  const content = (
+    <View style={[styles.row, !isLast && styles.rowBorder]}>
+      <View style={styles.rowIcon}>
+        <Ionicons name={icon} size={20} color={colors.gray[600]} />
+      </View>
+      <View style={styles.rowText}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        {subtitle ? <Text style={styles.rowSub}>{subtitle}</Text> : null}
+      </View>
+      {showChevron && onPress ? (
+        <Ionicons name="chevron-forward" size={16} color={colors.gray[400]} />
+      ) : null}
+    </View>
+  );
+
+  if (!onPress) return content;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [pressed && styles.rowPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionBody}>{children}</View>
+    </View>
+  );
+}
+
+/**
+ * Akun IA final:
+ * PROFILE → AKUN → KEAMANAN → FITUR → BANTUAN → TENTANG GURKYPAY → Keluar → Version
+ * No GurkyPay ID / role / KYC menu / Referral / Loyalty / placeholders.
+ */
 export default function AkunScreen() {
   const router = useRouter();
   const { user, fetchUser, logout, loading } = useAuthStore();
 
-  useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchUser();
+    }, [fetchUser])
+  );
+
+  const avatarUri = resolveMediaUrl(user?.avatar || null);
+  const appVersion =
+    Constants.expoConfig?.version ||
+    Constants.nativeAppVersion ||
+    '1.0.0';
+  const contactLine = user?.email || user?.phone || '—';
 
   const handleLogout = async () => {
     await logout();
@@ -28,81 +97,240 @@ export default function AkunScreen() {
   };
 
   return (
-    <ScreenContainer>
-      <View style={styles.profileHeader}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarInitial}>{(user?.name || '?').charAt(0).toUpperCase()}</Text>
-        </View>
-        <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{user?.name || '-'}</Text>
-          <Text style={styles.profileContact}>{user?.email || user?.phone || '-'}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{user?.role || 'User'}</Text>
-          </View>
-        </View>
-      </View>
+    <ScreenContainer scroll style={styles.screen}>
+      <Text style={styles.pageTitle}>Akun</Text>
 
-      <Card style={styles.menuCard}>
-        {MENU_ITEMS.map((item, index) => (
-          <Pressable
-            key={item.key}
-            onPress={() => {
-              if (item.href) router.push(item.href as any);
-            }}
-            disabled={!item.href}
-            style={[styles.menuRow, index < MENU_ITEMS.length - 1 && styles.menuRowBorder]}
-          >
-            <View style={styles.menuLeft}>
-              <Ionicons name={item.icon} size={20} color={colors.gray[500]} />
-              <Text style={styles.menuLabel}>{item.label}</Text>
+      <Section title="Profile">
+        <Pressable
+          onPress={() => router.push('/akun/profile')}
+          style={({ pressed }) => [styles.profileRow, pressed && styles.rowPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Ubah Profil"
+        >
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+          ) : (
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitial}>
+                {(user?.name || '?').charAt(0).toUpperCase()}
+              </Text>
             </View>
-            {item.phase ? (
-              <Text style={styles.menuPhase}>{item.phase}</Text>
-            ) : (
-              <Ionicons name="chevron-forward" size={18} color={colors.gray[400]} />
-            )}
-          </Pressable>
-        ))}
-      </Card>
+          )}
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName} numberOfLines={1}>
+              {user?.name || '—'}
+            </Text>
+            <Text style={styles.profileContact} numberOfLines={1}>
+              {contactLine}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.gray[400]} />
+        </Pressable>
+      </Section>
 
-      <Button label="Keluar Akun" onPress={handleLogout} variant="danger" loading={loading} />
+      <Section title="Akun">
+        <MenuRow
+          icon="document-text-outline"
+          label="Verifikasi Identitas"
+          subtitle="Verifikasi data diri untuk keamanan akun"
+          onPress={() => router.push('/akun/identity')}
+          isLast
+        />
+      </Section>
+
+      <Section title="Keamanan">
+        <MenuRow
+          icon="shield-checkmark-outline"
+          label="Keamanan & PIN"
+          subtitle="Kelola PIN transaksi dan keamanan akun"
+          onPress={() => router.push('/akun/security')}
+          isLast
+        />
+      </Section>
+
+      <Section title="Fitur">
+        <MenuRow
+          icon="print-outline"
+          label="Bluetooth & Printer"
+          subtitle="Hubungkan printer mini Bluetooth untuk mencetak struk"
+          onPress={() => router.push('/akun/printer')}
+          isLast
+        />
+      </Section>
+
+      <Section title="Bantuan">
+        <MenuRow
+          icon="help-circle-outline"
+          label="Pusat Bantuan"
+          subtitle="FAQ & Chat dengan CS"
+          onPress={() => router.push('/(tabs)/help')}
+          isLast
+        />
+      </Section>
+
+      <Section title="Tentang GurkyPay">
+        <MenuRow
+          icon="document-text-outline"
+          label="Syarat & Ketentuan"
+          onPress={() =>
+            router.push({ pathname: '/akun/legal/[kind]', params: { kind: 'terms' } })
+          }
+        />
+        <MenuRow
+          icon="lock-closed-outline"
+          label="Kebijakan Privasi"
+          onPress={() =>
+            router.push({ pathname: '/akun/legal/[kind]', params: { kind: 'privacy' } })
+          }
+        />
+        <MenuRow
+          icon="information-circle-outline"
+          label="Tentang GurkyNet"
+          onPress={() =>
+            router.push({ pathname: '/akun/legal/[kind]', params: { kind: 'about' } })
+          }
+          isLast
+        />
+      </Section>
+
+      <Pressable
+        onPress={() => void handleLogout()}
+        disabled={loading}
+        style={({ pressed }) => [
+          styles.logoutBtn,
+          pressed && !loading && styles.logoutPressed,
+          loading && styles.logoutDisabled,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Keluar Akun"
+      >
+        <Text style={styles.logoutText}>{loading ? 'Keluar…' : 'Keluar Akun'}</Text>
+      </Pressable>
+
+      <Text style={styles.version}>Version {appVersion}</Text>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  profileHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  screen: { backgroundColor: colors.gray[50] },
+  pageTitle: {
+    fontSize: typography.size.xl,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+    marginBottom: spacing.sm,
+  },
+  section: {
+    marginBottom: spacing.md,
+  },
+  sectionTitle: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[500],
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  sectionBody: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray[200],
+    overflow: 'hidden',
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    minHeight: 64,
+  },
   avatarCircle: {
-    width: 64,
-    height: 64,
+    width: 48,
+    height: 48,
     borderRadius: radius.full,
     backgroundColor: colors.primary[600],
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: colors.white, fontSize: typography.size.xl, fontWeight: typography.weight.black },
-  profileInfo: { flex: 1, gap: 4 },
-  profileName: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.gray[900] },
-  profileContact: { fontSize: typography.size.sm, color: colors.gray[500] },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary[50],
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+  avatarImg: {
+    width: 48,
+    height: 48,
     borderRadius: radius.full,
-    marginTop: 2,
+    backgroundColor: colors.gray[200],
   },
-  roleBadgeText: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.primary[700] },
-  menuCard: { padding: 0, overflow: 'hidden' },
-  menuRow: {
+  avatarInitial: {
+    color: colors.white,
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+  },
+  profileInfo: { flex: 1, minWidth: 0, gap: 2 },
+  profileName: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  profileContact: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+    minHeight: 52,
   },
-  menuRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.gray[100] },
-  menuLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  menuLabel: { fontSize: typography.size.base, color: colors.gray[800], fontWeight: typography.weight.medium },
-  menuPhase: { fontSize: typography.size.xs, color: colors.gray[400] },
+  rowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.gray[100],
+  },
+  rowPressed: {
+    backgroundColor: colors.gray[50],
+  },
+  rowIcon: {
+    width: 24,
+    alignItems: 'center',
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  rowLabel: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.medium,
+    color: colors.gray[900],
+  },
+  rowSub: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+  },
+  logoutBtn: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    minHeight: 44,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.status.failed,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutPressed: { backgroundColor: colors.status.failedBg },
+  logoutDisabled: { opacity: 0.5 },
+  logoutText: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.status.failed,
+  },
+  version: {
+    textAlign: 'center',
+    fontSize: typography.size.xs,
+    color: colors.gray[400],
+    marginBottom: spacing.lg,
+  },
 });

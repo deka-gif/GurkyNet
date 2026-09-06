@@ -2,13 +2,15 @@
  * Purchase-flow category classification for Mobile hardening (Tahap 1+ / 3B).
  * Sourced from Web/backend audit — not invented business rules.
  *
- * Tahap 3B: inquiry-required blocks PURCHASE only — browsing/provider→product is allowed
- * for E-Money / Game / Langganan (mirrors Web ProviderCatalogFlow catalog steps).
+ * Tahap 3B: inquiry-required blocks PURCHASE via generic product detail/checkout.
+ * E-Wallet (topup-digital) has a dedicated Transfer/Layanan flow:
+ * brand → nomor + nominal manual → inquiry → confirm → PIN → POST /transactions.
+ * Game / Langganan remain provider→product browse until their inquiry flows exist.
  *
  * Direct: may use generic checkout (SKU + target + PIN → POST /transactions).
  * PLN prepaid: dedicated inquiry flow (POST /pln/inquiry) then same purchase pipe
  * without inquiry_ref_id (session keyed by user + customer_no on backend).
- * Inquiry-required: must not reach PIN / POST /transactions without validation.
+ * Inquiry-required: must not reach generic PIN / POST /transactions without validation.
  */
 
 const DIRECT_PURCHASE_SLUGS = new Set([
@@ -39,7 +41,7 @@ const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
 const INQUIRY_REQUIRED_SLUGS = new Set([
   // Pascabayar PLN (tagihan) — NOT token prepaid
   'pln-pascabayar',
-  // E-Money / e-wallet
+  // E-Wallet / e-money (catalog aliases → topup-digital)
   'topup-digital',
   'ewallet',
   'e-money',

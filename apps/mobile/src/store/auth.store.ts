@@ -1,6 +1,10 @@
 import { create } from 'zustand';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { authService, LoginPayload } from '../services/auth.service';
 import { storageService } from '../services/storage.service';
+import { profileService } from '../services/profile.service';
+import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
 import { User } from '../api/types';
 
 /** Same role-label mapping as src/store/auth.store.ts on web. */
@@ -46,6 +50,23 @@ function normalizeUserPayload(raw: any): User {
   };
 }
 
+/** Best-effort device upsert for session display — never blocks login. */
+async function syncDeviceRegistration(): Promise<void> {
+  try {
+    const device_uuid = await storageService.getDeviceUuid();
+    if (!device_uuid) return;
+    await profileService.registerDevice({
+      device_uuid,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      device_model: getDeviceModel(),
+      os_version: getOsVersion(),
+      app_version: Constants.expoConfig?.version ?? undefined,
+    });
+  } catch {
+    // ignore — sessions still work; display may fall back to platform label
+  }
+}
+
 export type TwoFactorChallenge = {
   identifier: string;
   expiresAt?: string | null;
@@ -85,6 +106,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const [token, storedUser] = await Promise.all([storageService.getToken(), storageService.getUser()]);
     const user = storedUser ? normalizeUserPayload(storedUser) : null;
     set({ token, user, hydrated: true });
+    if (token) {
+      void syncDeviceRegistration();
+    }
   },
 
   clearTwoFactorChallenge: () => set({ twoFactorChallenge: null }),
@@ -118,6 +142,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await storageService.setRememberedIdentity(payload.identity);
         await storageService.markTrustedIdentity(payload.identity);
         set({ token: data.token, user: normalizedUser, loading: false, twoFactorChallenge: null });
+        void syncDeviceRegistration();
         return 'ok';
       }
       set({ error: response.message, loading: false });
@@ -147,6 +172,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
         await storageService.markTrustedIdentity(challenge.identifier);
         set({ token: response.data.token, user: normalizedUser, loading: false, twoFactorChallenge: null });
+        void syncDeviceRegistration();
         return true;
       }
       set({ error: response.message || 'Kode verifikasi tidak valid.', loading: false });
