@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../src/store/catalog.store';
 import { isPlnContextValid, useCheckoutStore } from '../../src/store/checkout.store';
 import { useWalletStore } from '../../src/store/wallet.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../src/store/features.store';
+import { transactionService } from '../../src/services/transaction.service';
+import { parseApiError } from '../../src/api/client';
 import {
   ScreenContainer,
   Card,
@@ -12,6 +14,7 @@ import {
   LoadingState,
   ErrorState,
   PurchaseFlowNotice,
+  PinConfirmModal,
 } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
@@ -42,10 +45,19 @@ export default function CheckoutScreen() {
   const clearPlnContext = useCheckoutStore((s) => s.clearPlnContext);
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const idempotencyKey = useCheckoutStore((s) => s.idempotencyKey);
+  const submitting = useCheckoutStore((s) => s.submitting);
+  const setSubmitting = useCheckoutStore((s) => s.setSubmitting);
+  const setTransaction = useCheckoutStore((s) => s.setTransaction);
+  const setStatus = useCheckoutStore((s) => s.setStatus);
   const flags = useFeaturesStore((s) => s.flags);
   const flagsLoading = useFeaturesStore((s) => s.loading);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
   const fetchFeatures = useFeaturesStore((s) => s.fetchFeatures);
+
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const pinLockRef = useRef(false);
 
   useEffect(() => {
     void fetchFeatures();
@@ -70,7 +82,6 @@ export default function CheckoutScreen() {
   const plnValid = isPlnContextValid(plnContext, targetNumber);
   const plnExpired = !!plnContext && Date.now() >= (plnContext.expiresAt || 0);
 
-  // PLN must come from inquiry flow with a still-valid session mirror; others need direct allow.
   const categoryBlocked =
     inquiryBlocked ||
     (!!categorySlug && !directAllowed && !plnPrepaid) ||
@@ -111,17 +122,71 @@ export default function CheckoutScreen() {
     !!productDetail;
 
   const onTargetChange = (text: string) => {
-    if (plnPrepaid) return; // Locked — changing meter would break backend session binding.
+    if (plnPrepaid) return;
     setTarget(phoneCategory ? sanitizePhoneDigits(text) : text);
   };
 
-  const goToPin = () => {
+  const openPinModal = () => {
     if (!canContinue) return;
     if (plnPrepaid && !isPlnContextValid(plnContext, targetNumber)) {
       clearPlnContext();
       return;
     }
-    router.push({ pathname: '/checkout/pin', params: { sku } });
+    setPinError(null);
+    setPinOpen(true);
+  };
+
+  const handlePinSubmit = async (enteredPin: string) => {
+    if (pinLockRef.current || submitting) return;
+    if (!skuCode || !idempotencyKey) {
+      setPinError('Sesi checkout tidak valid. Silakan mulai ulang dari detail produk.');
+      return;
+    }
+
+    pinLockRef.current = true;
+    setSubmitting(true);
+    setPinError(null);
+
+    try {
+      const response = await transactionService.create({
+        sku_code: skuCode,
+        target_number: targetNumber,
+        pin: enteredPin,
+        idempotency_key: idempotencyKey,
+      });
+
+      if (response.success && response.data) {
+        setTransaction(response.data);
+        setStatus(response.data.status);
+        setSubmitting(false);
+        setPinOpen(false);
+        router.replace({ pathname: '/checkout/result', params: { sku } });
+        return;
+      }
+
+      setSubmitting(false);
+      setPinError(response.message || 'Transaksi gagal diproses.');
+    } catch (err: unknown) {
+      setSubmitting(false);
+      const parsed = parseApiError(err);
+      setPinError(parsed.message || 'Gagal memproses transaksi. Silakan coba lagi.');
+      if (
+        typeof parsed.message === 'string' &&
+        parsed.message.toLowerCase().includes('pin transaksi salah')
+      ) {
+        useCheckoutStore.getState().rotateIdempotencyKey();
+      }
+      if (
+        typeof parsed.message === 'string' &&
+        (parsed.message.toLowerCase().includes('cek meteran') ||
+          parsed.message.toLowerCase().includes('kedaluwarsa') ||
+          parsed.message.toLowerCase().includes('inquiry'))
+      ) {
+        clearPlnContext();
+      }
+    } finally {
+      pinLockRef.current = false;
+    }
   };
 
   if (productDetail && inquiryBlocked) {
@@ -314,8 +379,31 @@ export default function CheckoutScreen() {
 
           <Button
             label={flagsLoading ? 'Memuat...' : 'Lanjut Bayar (PIN)'}
-            onPress={goToPin}
-            disabled={!canContinue}
+            onPress={openPinModal}
+            disabled={!canContinue || submitting}
+          />
+
+          <PinConfirmModal
+            visible={pinOpen}
+            title="Masukkan PIN"
+            subtitle="PIN 6 digit untuk mengonfirmasi pembelian."
+            loading={submitting}
+            error={
+              pinError
+                ? pinError.toLowerCase().includes('pin')
+                  ? 'PIN salah\nSilakan coba lagi.'
+                  : pinError
+                : null
+            }
+            dismissible={!submitting}
+            onClose={() => {
+              if (!submitting) {
+                setPinOpen(false);
+                setPinError(null);
+              }
+            }}
+            onEditing={() => setPinError(null)}
+            onSubmit={handlePinSubmit}
           />
         </>
       )}

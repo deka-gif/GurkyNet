@@ -222,6 +222,9 @@ export const MarketingBannerManagement: React.FC = () => {
   };
 
   const handleMediaSelect = (url: string, mediaItem?: Media) => {
+    // Persist disk-relative path when available (DB image_url varchar 255 + NOT NULL).
+    // Preview still uses absolute `url` via resolveMediaUrl in the form UI.
+    const storedPath = mediaItem?.path || url;
     if (chooserKey === 'image') {
       setDesktopSizeWarning(
         softSizeMismatch(mediaItem?.width, mediaItem?.height, DESKTOP_BANNER_RATIO)
@@ -230,7 +233,7 @@ export const MarketingBannerManagement: React.FC = () => {
         ...prev,
         image_media_id: mediaItem?.id,
         image_media: mediaItem,
-        image_url: url,
+        image_url: storedPath,
       }));
     } else if (chooserKey === 'mobileImage') {
       setMobileSizeWarning(
@@ -263,7 +266,13 @@ export const MarketingBannerManagement: React.FC = () => {
       is_active: formState.is_active,
       image_media_id: formState.image_media_id ?? null,
       mobile_image_media_id: formState.mobile_image_media_id ?? null,
-      image_url: formState.image_url || null,
+      // Prefer desktop path; if Marketing only chose Mobile, still send a path so DB NOT NULL image_url is satisfied.
+      image_url:
+        formState.image_url ||
+        formState.image_media?.path ||
+        formState.mobile_image_media?.path ||
+        formState.mobile_image_url ||
+        null,
     };
 
     let result;

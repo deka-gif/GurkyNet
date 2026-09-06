@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import {
@@ -29,6 +29,7 @@ import {
 } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
+import { GurkyPayBalanceCard } from '../../src/components/wallet/GurkyPayBalanceCard';
 
 /**
  * Wallet tab — financial movements only (GET /wallet + GET /wallet/history).
@@ -73,6 +74,7 @@ function MovementRow({ row }: { row: WalletMutation }) {
 }
 
 export default function WalletScreen() {
+  const router = useRouter();
   const overview = useWalletStore((s) => s.overview);
   const overviewLoading = useWalletStore((s) => s.overviewLoading);
   const overviewError = useWalletStore((s) => s.overviewError);
@@ -139,33 +141,14 @@ export default function WalletScreen() {
         <ErrorState message={overviewError} onRetry={fetchWallet} />
       ) : (
         <>
-          <View style={styles.balanceCard}>
-            <Text style={styles.balanceLabel}>Saldo tersedia</Text>
-            <Text style={styles.balanceAmount}>{formatIDR(overview?.wallet?.balance)}</Text>
-            {accountNumber ? (
-              <View style={styles.idBlock}>
-                <Text style={styles.idLabel}>ID / No. Rekening GurkyPay</Text>
-                <View style={styles.idRow}>
-                  <Text style={styles.idValue} numberOfLines={1}>
-                    {accountNumber}
-                  </Text>
-                  <Pressable
-                    onPress={() => void onCopyAccount()}
-                    style={styles.copyBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Salin ID GurkyPay"
-                    hitSlop={8}
-                  >
-                    <Ionicons name="copy-outline" size={16} color={colors.primary[100]} />
-                    <Text style={styles.copyText}>Salin</Text>
-                  </Pressable>
-                </View>
-                {copyFeedback ? (
-                  <Text style={styles.copyFeedback}>ID / No. Rekening disalin</Text>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
+          <GurkyPayBalanceCard
+            balance={overview?.wallet?.balance}
+            accountNumber={accountNumber}
+            onPressTopUp={() => router.push('/topup')}
+            onPressTransfer={() => router.push('/transfer')}
+            onPressCopy={() => void onCopyAccount()}
+            copyFeedback={copyFeedback}
+          />
 
           <FinancialTrackerCard
             monthLabel={monthLabel}
@@ -240,64 +223,6 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
   },
   subtitle: { fontSize: typography.size.sm, color: colors.gray[500] },
-  balanceCard: {
-    backgroundColor: colors.primary[700],
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    gap: spacing.xs,
-  },
-  balanceLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[200],
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  balanceAmount: {
-    fontSize: typography.size['2xl'],
-    fontWeight: typography.weight.black,
-    color: colors.white,
-  },
-  idBlock: { marginTop: spacing.sm, gap: 4 },
-  idLabel: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[200],
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  idRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  idValue: {
-    flex: 1,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[50],
-    letterSpacing: 0.4,
-    minWidth: 0,
-  },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  copyText: {
-    fontSize: 11,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[50],
-  },
-  copyFeedback: {
-    fontSize: 11,
-    color: colors.primary[100],
-    fontWeight: typography.weight.medium,
-  },
   sectionLabel: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,

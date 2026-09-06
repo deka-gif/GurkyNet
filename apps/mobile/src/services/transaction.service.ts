@@ -133,6 +133,28 @@ export const transactionService = {
     return body;
   },
 
+  /**
+   * GET /transactions/{id} — raw detail for Top Up resume (paymentResume).
+   * Do not strip paymentResume / midtrans fields.
+   */
+  getDetailRaw: async (idOrInvoice: string | number): Promise<Record<string, unknown>> => {
+    const response = await apiClient.get<ApiResponse<Record<string, unknown>>>(
+      `/transactions/${encodeURIComponent(String(idOrInvoice))}`
+    );
+    return (response.data.data as Record<string, unknown>) || {};
+  },
+
+  /**
+   * POST /transactions/{id}/sync-payment — reconcile Midtrans (wallet top-up only).
+   * Does not create a new Snap token; returns updated transaction resource.
+   */
+  syncPayment: async (idOrInvoice: string | number): Promise<Record<string, unknown>> => {
+    const response = await apiClient.post<ApiResponse<Record<string, unknown>>>(
+      `/transactions/${encodeURIComponent(String(idOrInvoice))}/sync-payment`
+    );
+    return (response.data.data as Record<string, unknown>) || {};
+  },
+
   getReceipt: async (idOrInvoice: string | number): Promise<ApiResponse<ReceiptData>> => {
     const response = await apiClient.get<ApiResponse<ReceiptData>>(
       `/transactions/${encodeURIComponent(String(idOrInvoice))}/receipt`

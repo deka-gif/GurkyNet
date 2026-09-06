@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { formatIDR } from '../utils/currency';
 
-export type ReceiptStatus = 'success' | 'pending' | 'failed';
+export type ReceiptStatus = 'success' | 'pending' | 'failed' | 'expired';
 
 export interface ReceiptExtraRow {
   label: string;
@@ -260,10 +260,30 @@ export function TransactionReceipt({
                     <Clock className="h-6 w-6 stroke-[3]" />
                   </div>
                   <div>
-                    <h4 className="text-base font-extrabold text-amber-950">Transaksi Tertunda (Pending)</h4>
+                    <h4 className="text-base font-extrabold text-amber-950">
+                      {pendingMessage &&
+                      /menunggu pembayaran|selesaikan pembayaran|belum dibayar/i.test(
+                        pendingMessage
+                      )
+                        ? 'Belum Dibayar'
+                        : 'Transaksi Tertunda'}
+                    </h4>
                     <p className="mt-0.5 text-xs font-medium text-amber-700">
                       {pendingMessage ||
                         'Transaksi Anda sedang diproses. Struk ini akan diperbarui otomatis begitu status berubah.'}
+                    </p>
+                  </div>
+                </>
+              )}
+              {status === 'expired' && (
+                <>
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-700 shadow-inner">
+                    <AlertTriangle className="h-6 w-6 stroke-[3]" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-extrabold text-rose-950">Expired</h4>
+                    <p className="mt-0.5 text-xs font-medium text-rose-700">
+                      Pembayaran kedaluwarsa. Tidak dapat dilanjutkan — buat Top Up baru.
                     </p>
                   </div>
                 </>

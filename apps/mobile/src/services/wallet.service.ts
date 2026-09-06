@@ -233,6 +233,70 @@ export const walletService = {
       UTI: 'com.adobe.pdf',
     });
   },
+
+  /**
+   * POST /wallet/transfer — Sesama GurkyPay (internal ledger).
+   * Same contract as web `wallet.service.transfer`. Never mutates balance locally.
+   */
+  transfer: async (payload: {
+    recipientWalletNumber: string;
+    amount: number;
+    pin: string;
+    adminFee?: number;
+    idempotencyKey: string;
+  }): Promise<ApiResponse<{ transaction: TransferTransaction }>> => {
+    const response = await apiClient.post<ApiResponse<{ transaction: TransferTransaction }>>(
+      '/wallet/transfer',
+      {
+        recipient_wallet_number: payload.recipientWalletNumber,
+        amount: payload.amount,
+        pin: payload.pin,
+        admin_fee: payload.adminFee ?? 0,
+        idempotency_key: payload.idempotencyKey,
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * GET /wallet/transfer/recipient/{walletNumber} — read-only preview.
+   * Never transfers / never mutates balance.
+   */
+  getTransferRecipient: async (
+    walletNumber: string
+  ): Promise<ApiResponse<{ recipient: TransferRecipient }>> => {
+    const encoded = encodeURIComponent(String(walletNumber).trim());
+    const response = await apiClient.get<ApiResponse<{ recipient: TransferRecipient }>>(
+      `/wallet/transfer/recipient/${encoded}`
+    );
+    return response.data;
+  },
+};
+
+/** Public recipient preview — no balance / email / phone / internal ids. */
+export type TransferRecipient = {
+  wallet_number: string;
+  name: string;
+};
+
+/** Subset of Transaction returned by POST /wallet/transfer. */
+export type TransferTransaction = {
+  id: number | string;
+  invoice_number?: string;
+  invoiceNumber?: string;
+  service_name?: string;
+  serviceName?: string;
+  target_number?: string;
+  targetNumber?: string;
+  amount: number;
+  admin_fee?: number;
+  adminFee?: number;
+  total_payment?: number;
+  totalPayment?: number;
+  status: string;
+  notes?: string | null;
+  created_at?: string;
+  createdAt?: string;
 };
 
 /** Months with ledger activity — for Laporan Keuangan picker (newest first). */

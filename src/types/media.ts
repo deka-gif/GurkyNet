@@ -11,6 +11,8 @@ export interface Media {
   folder?: string;
   storageDisk?: string;
   url: string;
+  /** Disk-relative path from MediaResource (prefer for banner_promotions.image_url). */
+  path?: string;
   uploadedBy?: string;
   createdAt?: string;
 }

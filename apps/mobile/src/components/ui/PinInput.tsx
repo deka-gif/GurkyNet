@@ -1,6 +1,12 @@
-import React from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
-import { colors, radius, spacing, typography } from '../../theme';
+import React, { useEffect, useRef } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type TextInput as TextInputType,
+} from 'react-native';
+import { colors, spacing } from '../../theme';
 
 interface PinInputProps {
   value: string;
@@ -11,16 +17,23 @@ interface PinInputProps {
 }
 
 /**
- * A single masked field, not per-digit boxes — mirrors the OTP input already used in
- * app/(auth)/login.tsx for visual/behavioral consistency and to avoid multi-box
- * focus-management bugs. Fires onComplete the instant the 6th digit lands, matching
- * web's CheckoutSummary.handlePinChange auto-submit-at-6-digits behavior.
- *
- * This component is the only place a purchase PIN value exists. The caller owns
- * `value` as local component state — never store this in Zustand, never persist it.
+ * 6-slot PIN visual: empty ○ / filled ● (primary green). Digits never shown.
+ * Hidden numeric TextInput keeps the system number-pad open; auto-submits at 6.
+ * Caller owns `value` in local state — never Zustand / SecureStore. Never log PIN.
  */
 export function PinInput({ value, onChange, onComplete, disabled, autoFocus }: PinInputProps) {
+  const inputRef = useRef<TextInputType>(null);
+  const length = Math.min(6, (value || '').replace(/\D/g, '').length);
+
+  useEffect(() => {
+    if (autoFocus && !disabled) {
+      const t = setTimeout(() => inputRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [autoFocus, disabled]);
+
   const handleChange = (text: string) => {
+    if (disabled) return;
     const cleaned = text.replace(/\D/g, '').slice(0, 6);
     onChange(cleaned);
     if (cleaned.length === 6) {
@@ -29,35 +42,79 @@ export function PinInput({ value, onChange, onComplete, disabled, autoFocus }: P
   };
 
   return (
-    <View style={styles.wrap}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Masukkan PIN 6 digit"
+      onPress={() => {
+        if (!disabled) inputRef.current?.focus();
+      }}
+      style={styles.wrap}
+    >
+      <View style={styles.dots} pointerEvents="none">
+        {Array.from({ length: 6 }).map((_, i) => {
+          const filled = i < length;
+          return (
+            <View
+              key={i}
+              style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
+            />
+          );
+        })}
+      </View>
+
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={handleChange}
-        placeholder="000000"
         keyboardType="number-pad"
+        textContentType="oneTimeCode"
+        autoComplete="off"
+        importantForAutofill="no"
         secureTextEntry
+        caretHidden
         maxLength={6}
         editable={!disabled}
         autoFocus={autoFocus}
-        style={[styles.input, disabled && styles.inputDisabled]}
+        style={styles.hiddenInput}
+        contextMenuHidden
       />
-    </View>
+    </Pressable>
   );
 }
 
+const DOT = 16;
+
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center' },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-    fontSize: typography.size['2xl'],
-    letterSpacing: 8,
-    textAlign: 'center',
-    backgroundColor: colors.gray[50],
-    color: colors.gray[900],
-    width: 220,
+  wrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    width: '100%',
   },
-  inputDisabled: { opacity: 0.5 },
+  dots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.lg,
+  },
+  dot: {
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+  },
+  dotEmpty: {
+    borderWidth: 2,
+    borderColor: colors.gray[300],
+    backgroundColor: 'transparent',
+  },
+  dotFilled: {
+    borderWidth: 0,
+    backgroundColor: colors.primary[600],
+  },
+  /** Invisible field over the dots so the numeric keyboard stays available. */
+  hiddenInput: {
+    ...StyleSheet.absoluteFill,
+    opacity: 0.02,
+    color: 'transparent',
+  },
 });

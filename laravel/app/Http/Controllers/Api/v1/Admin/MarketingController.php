@@ -72,10 +72,24 @@ class MarketingController extends Controller
      */
     public function storeBanner(CreateBannerRequest $request, MarketingBannerAction $action): JsonResponse
     {
-        $data = $request->validated();
-        $banner = $action->create($data);
+        try {
+            $data = $request->validated();
+            $banner = $action->create($data);
 
-        return $this->successResponse('Banner berhasil dibuat.', new BannerResource($banner), 201);
+            return $this->successResponse('Banner berhasil dibuat.', new BannerResource($banner), 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            return $this->errorResponse(
+                'Slug banner sudah digunakan. Kosongkan slug untuk digenerate otomatis, atau pilih slug lain.',
+                422
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            return $this->errorResponse(
+                'Gagal menyimpan banner. Pastikan gambar Web sudah dipilih dan data valid.',
+                422
+            );
+        }
     }
 
     /**

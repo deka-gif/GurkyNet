@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { isPlnContextValid, useCheckoutStore } from '../../src/store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../src/store/features.store';
 import { transactionService } from '../../src/services/transaction.service';
 import { parseApiError } from '../../src/api/client';
-import { ScreenContainer, PinInput, PurchaseFlowNotice } from '../../src/components/ui';
-import { colors, spacing, typography } from '../../src/theme';
+import { ScreenContainer, PinConfirmModal, PurchaseFlowNotice } from '../../src/components/ui';
+import { colors } from '../../src/theme';
 import {
   INQUIRY_FLOW_NOTICE,
   isDirectPurchaseCategory,
@@ -14,6 +14,10 @@ import {
   isPlnPrepaidCategory,
 } from '../../src/utils/purchaseCategory';
 
+/**
+ * Legacy route /checkout/pin — kept for deep links / back-stack.
+ * UI is PinConfirmModal (same component as confirmation modal on /checkout/[sku]).
+ */
 export default function CheckoutPinScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ sku: string }>();
@@ -32,8 +36,8 @@ export default function CheckoutPinScreen() {
   const flags = useFeaturesStore((s) => s.flags);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
 
-  const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
+  const lockRef = useRef(false);
 
   const inquiryBlocked = isInquiryRequiredCategory(categorySlug);
   const plnPrepaid = isPlnPrepaidCategory(categorySlug);
@@ -44,7 +48,7 @@ export default function CheckoutPinScreen() {
     (plnPrepaid && !plnValid);
 
   const handleSubmit = async (enteredPin: string) => {
-    if (submitting) return;
+    if (lockRef.current || submitting) return;
     if (!purchaseEnabled) {
       setPinError(flags.messages.purchase);
       return;
@@ -69,19 +73,17 @@ export default function CheckoutPinScreen() {
       return;
     }
 
+    lockRef.current = true;
     setSubmitting(true);
     setPinError(null);
 
     try {
-      // PLN: no inquiry_ref_id — backend resolves session by user + target_number (customer_no).
       const response = await transactionService.create({
         sku_code: skuCode,
         target_number: targetNumber,
         pin: enteredPin,
         idempotency_key: idempotencyKey,
       });
-
-      setPin('');
 
       if (response.success && response.data) {
         setTransaction(response.data);
@@ -93,15 +95,16 @@ export default function CheckoutPinScreen() {
 
       setSubmitting(false);
       setPinError(response.message || 'Transaksi gagal diproses.');
-    } catch (err: any) {
-      setPin('');
+    } catch (err: unknown) {
       setSubmitting(false);
       const parsed = parseApiError(err);
       setPinError(parsed.message || 'Gagal memproses transaksi. Silakan coba lagi.');
-      if (typeof parsed.message === 'string' && parsed.message.toLowerCase().includes('pin transaksi salah')) {
+      if (
+        typeof parsed.message === 'string' &&
+        parsed.message.toLowerCase().includes('pin transaksi salah')
+      ) {
         useCheckoutStore.getState().rotateIdempotencyKey();
       }
-      // Expired / missing PLN session — clear local mirror so user re-inquires.
       if (
         typeof parsed.message === 'string' &&
         (parsed.message.toLowerCase().includes('cek meteran') ||
@@ -110,6 +113,8 @@ export default function CheckoutPinScreen() {
       ) {
         clearPlnContext();
       }
+    } finally {
+      lockRef.current = false;
     }
   };
 
@@ -146,46 +151,33 @@ export default function CheckoutPinScreen() {
   }
 
   return (
-    <ScreenContainer scroll={false}>
+    <ScreenContainer scroll={false} padded={false}>
       <Stack.Screen options={{ headerShown: true, title: 'Masukkan PIN', headerBackTitle: 'Kembali' }} />
-      <View style={styles.center}>
-        <Text style={styles.title}>Masukkan PIN Transaksi</Text>
-        <Text style={styles.subtitle}>PIN 6 digit untuk mengonfirmasi pembelian.</Text>
-
-        <View style={styles.pinWrap}>
-          <PinInput
-            value={pin}
-            onChange={(value) => {
-              setPin(value);
-              if (pinError) setPinError(null);
-            }}
-            onComplete={handleSubmit}
-            disabled={submitting}
-            autoFocus
-          />
-        </View>
-
-        {pinError ? <Text style={styles.error}>{pinError}</Text> : null}
-        {submitting ? <Text style={styles.hint}>Memproses...</Text> : null}
+      <View style={styles.fill}>
+        <PinConfirmModal
+          visible
+          title="Masukkan PIN"
+          subtitle="PIN 6 digit untuk mengonfirmasi pembelian."
+          loading={submitting}
+          error={
+            pinError
+              ? pinError.toLowerCase().includes('pin')
+                ? 'PIN salah\nSilakan coba lagi.'
+                : pinError
+              : null
+          }
+          dismissible={!submitting}
+          onClose={() => {
+            if (!submitting) router.back();
+          }}
+          onEditing={() => setPinError(null)}
+          onSubmit={handleSubmit}
+        />
       </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing['2xl'] },
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.gray[900] },
-  subtitle: { fontSize: typography.size.sm, color: colors.gray[500], textAlign: 'center' },
-  pinWrap: { marginTop: spacing.lg },
-  error: {
-    fontSize: typography.size.sm,
-    color: colors.status.failed,
-    backgroundColor: colors.status.failedBg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  hint: { fontSize: typography.size.sm, color: colors.gray[500], marginTop: spacing.md },
+  fill: { flex: 1, backgroundColor: colors.gray[50] },
 });

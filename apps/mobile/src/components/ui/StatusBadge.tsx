@@ -2,35 +2,52 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '../../theme';
 import { TransactionStatus } from '../../api/types';
+import { historyStatusLabel } from '../../utils/transactionStatus';
 
 /**
- * Backend is the sole authority on status (spec section 11) — this component only ever
- * renders whatever status string the API actually returned normalized to lowercase, it
- * never infers SUCCESS from "the HTTP request succeeded."
+ * Backend is the sole authority on status (spec section 11).
+ * Optional Top Up context → "Belum Dibayar" instead of generic Tertunda.
  */
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  success: { label: 'Berhasil', color: colors.status.success, bg: colors.status.successBg },
-  pending: { label: 'Tertunda', color: colors.status.pending, bg: colors.status.pendingBg },
-  processing: { label: 'Diproses', color: colors.status.pending, bg: colors.status.pendingBg },
-  failed: { label: 'Gagal', color: colors.status.failed, bg: colors.status.failedBg },
-  expired: { label: 'Kedaluwarsa', color: colors.gray[600], bg: colors.gray[100] },
-  cancelled: { label: 'Dibatalkan', color: colors.gray[600], bg: colors.gray[100] },
-  refunded: { label: 'Dana Kembali', color: colors.primary[600], bg: colors.primary[50] },
-};
-
-export function StatusBadge({ status }: { status: TransactionStatus | string }) {
-  const config = STATUS_CONFIG[String(status).toLowerCase()] ?? {
-    label: String(status),
-    color: colors.gray[600],
-    bg: colors.gray[100],
-  };
+export function StatusBadge({
+  status,
+  serviceName,
+  paymentMethod,
+  transactionCode,
+}: {
+  status: TransactionStatus | string;
+  serviceName?: string | null;
+  paymentMethod?: string | null;
+  transactionCode?: string | null;
+}) {
+  const label = historyStatusLabel(status, {
+    serviceName,
+    paymentMethod,
+    transactionCode,
+  });
+  const key = String(status).toLowerCase();
+  const palette =
+    STATUS_COLORS[key] ??
+    (label === 'Belum Dibayar'
+      ? STATUS_COLORS.pending
+      : { color: colors.gray[600], bg: colors.gray[100] });
 
   return (
-    <View style={[styles.badge, { backgroundColor: config.bg }]}>
-      <Text style={[styles.text, { color: config.color }]}>{config.label}</Text>
+    <View style={[styles.badge, { backgroundColor: palette.bg }]}>
+      <Text style={[styles.text, { color: palette.color }]}>{label}</Text>
     </View>
   );
 }
+
+const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
+  success: { color: colors.status.success, bg: colors.status.successBg },
+  pending: { color: colors.status.pending, bg: colors.status.pendingBg },
+  processing: { color: colors.status.pending, bg: colors.status.pendingBg },
+  failed: { color: colors.status.failed, bg: colors.status.failedBg },
+  expired: { color: colors.gray[600], bg: colors.gray[100] },
+  cancelled: { color: colors.gray[600], bg: colors.gray[100] },
+  canceled: { color: colors.gray[600], bg: colors.gray[100] },
+  refunded: { color: colors.primary[600], bg: colors.primary[50] },
+};
 
 const styles = StyleSheet.create({
   badge: {

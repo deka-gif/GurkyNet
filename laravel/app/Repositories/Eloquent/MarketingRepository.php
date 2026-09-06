@@ -4,10 +4,13 @@ namespace App\Repositories\Eloquent;
 
 use App\Repositories\Contracts\MarketingRepositoryInterface;
 use App\Models\BannerPromotion;
+use App\Models\Media;
 use App\Models\Notification;
 use App\Models\ActivityLog;
 use App\Services\MarketingService;
+use App\Support\MediaUrl;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
 
 class MarketingRepository implements MarketingRepositoryInterface
 {
@@ -67,6 +70,9 @@ class MarketingRepository implements MarketingRepositoryInterface
 
     /**
      * Create banner.
+     *
+     * FR-MKT (Bagian Marketing CMS): image_url is NOT NULL in DB; hydrate from media
+     * and keep slug unique including soft-deleted rows (unique index is global).
      */
     public function createBanner(array $data): BannerPromotion
     {
@@ -76,6 +82,20 @@ class MarketingRepository implements MarketingRepositoryInterface
 
         if (empty($data['slug']) && ! empty($data['title'])) {
             $data['slug'] = BannerPromotion::makeUniqueSlug($data['title']);
+        } elseif (! empty($data['slug'])) {
+            // Unique index includes soft-deleted rows; suffix instead of SQL 500.
+            $conflict = BannerPromotion::withTrashed()
+                ->where('slug', $data['slug'])
+                ->exists();
+            if ($conflict) {
+                $data['slug'] = BannerPromotion::makeUniqueSlug((string) $data['slug']);
+            }
+        }
+
+        if (blank($data['image_url'] ?? null)) {
+            throw ValidationException::withMessages([
+                'image_url' => ['Banner wajib memiliki gambar Web dan/atau Mobile (pilih dari Media Library).'],
+            ]);
         }
 
         $banner = BannerPromotion::create($data);
@@ -106,6 +126,16 @@ class MarketingRepository implements MarketingRepositoryInterface
             $data['slug'] = BannerPromotion::makeUniqueSlug((string) $data['slug'], $banner->id);
         } elseif (! empty($data['title']) && blank($banner->slug)) {
             $data['slug'] = BannerPromotion::makeUniqueSlug($data['title'], $banner->id);
+        }
+
+        // Clearing image without replacement would violate NOT NULL — reject explicitly.
+        if (array_key_exists('image_url', $data) && blank($data['image_url']) && blank($data['image_media_id'] ?? null)) {
+            if (blank($banner->image_url) && blank($banner->image_media_id)) {
+                throw ValidationException::withMessages([
+                    'image_url' => ['Banner Web wajib memiliki gambar.'],
+                ]);
+            }
+            unset($data['image_url']);
         }
 
         $banner->update($data);
@@ -451,6 +481,7 @@ class MarketingRepository implements MarketingRepositoryInterface
 
     /**
      * Keep only fillable banner fields; drop UI-only keys.
+     * Hydrate / normalize image_url so CMS never hits NOT NULL or varchar(255) 500s.
      */
     protected function normalizeBannerPayload(array $data): array
     {
@@ -474,6 +505,74 @@ class MarketingRepository implements MarketingRepositoryInterface
             $data['mobileImage'],
         );
 
+        if (array_key_exists('image_media_id', $data) && $data['image_media_id'] !== null && $data['image_media_id'] !== '') {
+            $data['image_media_id'] = (int) $data['image_media_id'];
+        }
+        if (array_key_exists('mobile_image_media_id', $data) && $data['mobile_image_media_id'] !== null && $data['mobile_image_media_id'] !== '') {
+            $data['mobile_image_media_id'] = (int) $data['mobile_image_media_id'];
+        }
+
+        $mediaRelative = null;
+        if (! empty($data['image_media_id'])) {
+            $media = Media::query()->find($data['image_media_id']);
+            if ($media) {
+                $mediaRelative = (string) ($media->getRawOriginal('url') ?: $media->diskPath());
+            }
+        }
+
+        // Production CMS often uploads Mobile-only first. image_url is NOT NULL — fall back to mobile asset.
+        // Proven production error 2026-09-06 11:18:42: image_url=null, image_media_id=null, mobile_image_media_id=77.
+        if ($mediaRelative === null && ! empty($data['mobile_image_media_id'])) {
+            $mobileMedia = Media::query()->find($data['mobile_image_media_id']);
+            if ($mobileMedia) {
+                $mediaRelative = (string) ($mobileMedia->getRawOriginal('url') ?: $mobileMedia->diskPath());
+            }
+        }
+
+        if (array_key_exists('image_url', $data) || $mediaRelative !== null) {
+            $rawUrl = array_key_exists('image_url', $data) ? $data['image_url'] : null;
+            if (blank($rawUrl) && $mediaRelative !== null) {
+                $data['image_url'] = $mediaRelative;
+            } elseif (! blank($rawUrl)) {
+                $data['image_url'] = $this->normalizeStoredImageUrl((string) $rawUrl, $mediaRelative);
+            }
+        }
+
+        if (array_key_exists('image_url', $data) && is_string($data['image_url']) && strlen($data['image_url']) > 255) {
+            throw ValidationException::withMessages([
+                'image_url' => ['URL gambar terlalu panjang (maks. 255 karakter). Gunakan Media Library.'],
+            ]);
+        }
+
         return $data;
+    }
+
+    /**
+     * Prefer disk-relative media paths for DB storage; keep true external URLs as-is.
+     */
+    protected function normalizeStoredImageUrl(string $url, ?string $mediaRelative = null): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return $mediaRelative ?: '';
+        }
+
+        $delivery = MediaUrl::publicDeliveryPrefix();
+        $isOurMedia = str_contains($url, $delivery)
+            || str_contains($url, '/storage/')
+            || preg_match('#^/?storage/#i', $url)
+            || (! preg_match('#^https?://#i', $url) && ! str_starts_with($url, 'data:'));
+
+        if ($isOurMedia && ! str_starts_with($url, 'data:')) {
+            $relative = MediaUrl::toDiskRelativePath($url);
+            if ($relative !== '') {
+                return $relative;
+            }
+            if ($mediaRelative) {
+                return $mediaRelative;
+            }
+        }
+
+        return $url;
     }
 }

@@ -314,11 +314,15 @@ export function TransactionDetailPage() {
     tx.paymentMethodLabel || tx.paymentMethod
   );
 
-  const receiptStatus: 'success' | 'pending' | 'failed' = isSuccessStatus(tx.statusRaw || tx.status)
+  const receiptStatus: 'success' | 'pending' | 'failed' | 'expired' = isSuccessStatus(
+    tx.statusRaw || tx.status
+  )
     ? 'success'
     : isPendingStatus(tx.statusRaw || tx.status)
-    ? 'pending'
-    : 'failed';
+      ? 'pending'
+      : isExpiredStatus(tx.statusRaw || tx.status)
+        ? 'expired'
+        : 'failed';
 
   const notesDisplay = customerFacingTransactionNotes(tx.notes || tx.note, {
     serviceName: tx.serviceName,

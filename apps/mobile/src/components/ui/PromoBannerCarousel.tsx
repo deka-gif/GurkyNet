@@ -17,6 +17,8 @@ type PromoBannerCarouselProps = {
   banners: Banner[];
 };
 
+const AUTOPLAY_MS = 5000;
+
 /** Prefer Marketing mobile asset; fall back to desktop image (BannerResource already absolute). */
 export function bannerImageUrl(banner: Banner): string {
   const raw =
@@ -44,13 +46,18 @@ function openBannerAction(banner: Banner): void {
 /**
  * Compact Marketing promo carousel for Home.
  * Data must come from GET /public/banners (same CMS as web).
+ *
+ * - 0 banners → parent hides
+ * - 1 banner → no auto-slide
+ * - 2+ → auto-slide 5s; hold pauses; release resets full 5s; swipe resets timer
  */
 export function PromoBannerCarousel({ banners }: PromoBannerCarouselProps) {
   const [index, setIndex] = useState(0);
   const [slideWidth, setSlideWidth] = useState(0);
   const [failedIds, setFailedIds] = useState<Record<string, true>>({});
+  const [paused, setPaused] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const pausedRef = useRef(false);
+  const indexRef = useRef(0);
 
   const visible = banners.filter((b) => {
     const uri = bannerImageUrl(b);
@@ -58,33 +65,36 @@ export function PromoBannerCarousel({ banners }: PromoBannerCarouselProps) {
   });
 
   useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
+
+  useEffect(() => {
     setIndex(0);
+    indexRef.current = 0;
     if (slideWidth > 0) {
       scrollRef.current?.scrollTo({ x: 0, animated: false });
     }
   }, [visible.length, slideWidth]);
 
-  // Gentle autoplay — pause while user is interacting (mirrors web 5s interval).
+  // Single timeout (not overlapping intervals). Restarts on index / pause release.
   useEffect(() => {
-    if (visible.length <= 1 || slideWidth <= 0) return;
-    const timer = setInterval(() => {
-      if (pausedRef.current) return;
-      setIndex((prev) => {
-        const next = (prev + 1) % visible.length;
-        scrollRef.current?.scrollTo({ x: next * slideWidth, animated: true });
-        return next;
-      });
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [visible.length, slideWidth]);
+    if (visible.length <= 1 || slideWidth <= 0 || paused) return;
+    const timer = setTimeout(() => {
+      const next = (indexRef.current + 1) % visible.length;
+      scrollRef.current?.scrollTo({ x: next * slideWidth, animated: true });
+      setIndex(next);
+    }, AUTOPLAY_MS);
+    return () => clearTimeout(timer);
+  }, [visible.length, slideWidth, paused, index]);
 
   const onScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (slideWidth <= 0) return;
       const next = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
-      setIndex(next);
+      const clamped = Math.max(0, Math.min(next, visible.length - 1));
+      setIndex(clamped);
     },
-    [slideWidth]
+    [slideWidth, visible.length]
   );
 
   if (visible.length === 0) {
@@ -104,47 +114,48 @@ export function PromoBannerCarousel({ banners }: PromoBannerCarouselProps) {
           ref={scrollRef}
           horizontal
           pagingEnabled
+          nestedScrollEnabled
+          directionalLockEnabled
           showsHorizontalScrollIndicator={false}
           decelerationRate="fast"
-          onScrollBeginDrag={() => {
-            pausedRef.current = true;
-          }}
+          onScrollBeginDrag={() => setPaused(true)}
           onMomentumScrollEnd={(e) => {
             onScrollEnd(e);
-            pausedRef.current = false;
+            setPaused(false);
           }}
-          onScrollEndDrag={() => {
-            pausedRef.current = false;
+          onScrollEndDrag={(e) => {
+            // If no momentum (short drag), still sync index + resume timer from full 5s.
+            if (e.nativeEvent.velocity && Math.abs(e.nativeEvent.velocity.x) > 0.05) {
+              return;
+            }
+            onScrollEnd(e);
+            setPaused(false);
           }}
           style={styles.scroll}
         >
           {visible.map((banner) => {
             const uri = bannerImageUrl(banner);
             const clickable = /^https?:\/\//i.test((banner.redirectUrl || banner.ctaUrl || '').trim());
-            const content = (
-              <Image
-                source={{ uri }}
-                style={{ width: slideWidth, height: slideWidth / 2.4 }}
-                resizeMode="cover"
-                accessibilityLabel={banner.title}
-                onError={() => setFailedIds((prev) => ({ ...prev, [banner.id]: true }))}
-              />
-            );
-
             return (
-              <View key={banner.id} style={{ width: slideWidth, height: slideWidth / 2.4 }}>
-                {clickable ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={banner.ctaLabel || banner.title}
-                    onPress={() => openBannerAction(banner)}
-                  >
-                    {content}
-                  </Pressable>
-                ) : (
-                  content
-                )}
-              </View>
+              <Pressable
+                key={banner.id}
+                style={{ width: slideWidth, height: slideWidth / 2.4 }}
+                accessibilityRole={clickable ? 'button' : 'image'}
+                accessibilityLabel={banner.ctaLabel || banner.title}
+                onPressIn={() => setPaused(true)}
+                onPressOut={() => setPaused(false)}
+                onPress={() => {
+                  if (clickable) openBannerAction(banner);
+                }}
+              >
+                <Image
+                  source={{ uri }}
+                  style={{ width: slideWidth, height: slideWidth / 2.4 }}
+                  resizeMode="cover"
+                  accessibilityLabel={banner.title}
+                  onError={() => setFailedIds((prev) => ({ ...prev, [banner.id]: true }))}
+                />
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -166,6 +177,8 @@ export function PromoBannerCarousel({ banners }: PromoBannerCarouselProps) {
 const styles = StyleSheet.create({
   wrap: {
     marginBottom: spacing.lg,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   scroll: {
     borderRadius: radius.lg,

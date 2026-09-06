@@ -83,7 +83,12 @@ function TransactionCard({ tx, onPress }: { tx: Transaction; onPress: () => void
           </View>
           <View style={styles.txRight}>
             <Text style={styles.txAmount}>{formatIDR(amount)}</Text>
-            <StatusBadge status={tx.status} />
+            <StatusBadge
+              status={tx.status}
+              serviceName={tx.serviceName}
+              paymentMethod={tx.paymentMethod}
+              transactionCode={tx.transactionCode}
+            />
           </View>
         </View>
       </Card>

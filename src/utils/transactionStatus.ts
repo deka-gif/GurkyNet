@@ -173,12 +173,12 @@ export function transactionStatusLabel(
     switch (canonical) {
       case 'pending':
       case 'processing':
-        // Customer-facing unpaid Top Up is always "Menunggu Pembayaran".
-        return 'Menunggu Pembayaran';
+        // Customer-facing unpaid Top Up is always "Belum Dibayar".
+        return 'Belum Dibayar';
       case 'success':
         return 'Sukses';
       case 'expired':
-        return 'Pembayaran Kedaluwarsa';
+        return 'Expired';
       case 'cancelled':
         return 'Dibatalkan';
       case 'failed':
@@ -186,7 +186,7 @@ export function transactionStatusLabel(
       case 'refunded':
         return 'Direfund';
       default:
-        return 'Menunggu Pembayaran';
+        return 'Belum Dibayar';
     }
   }
 

@@ -17,11 +17,17 @@ import {
   formatHistoryTarget,
   formatTransactionDateTime,
 } from '../../src/utils/transactionDisplay';
-import { isPendingStatus } from '../../src/utils/transactionStatus';
+import {
+  isPendingStatus,
+  isWalletTopUpService,
+} from '../../src/utils/transactionStatus';
+import { openSnapCheckout } from '../../src/utils/topupSnap';
+import { useTopUpStore } from '../../src/store/topup.store';
 
 /**
- * Purchase transaction detail — GET /transactions/{id_or_invoice}.
- * Read-only; no retry / re-POST.
+ * Transaction detail — GET /transactions/{id}.
+ * Top Up pending: resume via paymentResume (no new create).
+ * Closing Snap ≠ cancel; sync determines status.
  */
 export default function RiwayatDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -30,6 +36,16 @@ export default function RiwayatDetailScreen() {
   const [tx, setTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [canResume, setCanResume] = useState(false);
+  const [snapToken, setSnapToken] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const config = useTopUpStore((s) => s.config);
+  const loadConfig = useTopUpStore((s) => s.loadConfig);
+
+  const isTopUp = tx
+    ? isWalletTopUpService(tx.serviceName, tx.paymentMethod, tx.transactionCode)
+    : false;
 
   const load = useCallback(async () => {
     if (!id) {
@@ -40,6 +56,11 @@ export default function RiwayatDetailScreen() {
     setLoading(true);
     setError(null);
     try {
+      const raw = await transactionService.getDetailRaw(id);
+      const resume = (raw.paymentResume as Record<string, unknown>) || {};
+      setCanResume(Boolean(resume.canResume));
+      setSnapToken((resume.snapToken as string | null) ?? null);
+
       const res = await transactionService.getById(id);
       if (res.success && res.data) {
         setTx(res.data);
@@ -57,9 +78,9 @@ export default function RiwayatDetailScreen() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    if (!config) void loadConfig();
+  }, [load, config, loadConfig]);
 
-  // Soft poll while pending (same idea as Web Riwayat) — GET only.
   useEffect(() => {
     if (!tx || !isPendingStatus(tx.status)) return;
     const timer = setInterval(() => {
@@ -67,6 +88,47 @@ export default function RiwayatDetailScreen() {
     }, 10_000);
     return () => clearInterval(timer);
   }, [tx?.status, tx?.id, load]);
+
+  const onResume = async () => {
+    if (!canResume || !snapToken || busy) return;
+    setBusy(true);
+    setActionMsg(null);
+    try {
+      await transactionService.syncPayment(id);
+      const raw = await transactionService.getDetailRaw(id);
+      const resume = (raw.paymentResume as Record<string, unknown>) || {};
+      const still = Boolean(resume.canResume);
+      const token = (resume.snapToken as string | null) ?? null;
+      setCanResume(still);
+      setSnapToken(token);
+      const status = String(raw.status || '').toLowerCase();
+      if (status === 'expired') {
+        setActionMsg('Pembayaran sudah kedaluwarsa. Buat Top Up baru.');
+        await load();
+        return;
+      }
+      if (!still || !token) {
+        setActionMsg('Pembayaran tidak dapat dilanjutkan.');
+        await load();
+        return;
+      }
+      await openSnapCheckout({
+        snapToken: token,
+        isProduction: !!config?.is_production,
+      });
+      // Close Snap ≠ cancel — reconcile then refresh.
+      await transactionService.syncPayment(id);
+      await load();
+      setActionMsg('Jika sudah membayar, status akan diperbarui setelah dikonfirmasi backend.');
+    } catch (err: any) {
+      setActionMsg(err?.message || 'Gagal melanjutkan pembayaran.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const expired = String(tx?.status || '').toLowerCase() === 'expired';
+  const success = String(tx?.status || '').toLowerCase() === 'success';
 
   return (
     <ScreenContainer belowHeader onRefresh={() => void load()} refreshing={loading}>
@@ -89,7 +151,12 @@ export default function RiwayatDetailScreen() {
         <>
           <Card style={styles.card}>
             <View style={styles.statusRow}>
-              <StatusBadge status={tx.status} />
+              <StatusBadge
+                status={tx.status}
+                serviceName={tx.serviceName}
+                paymentMethod={tx.paymentMethod}
+                transactionCode={tx.transactionCode}
+              />
             </View>
             <Text style={styles.service}>{tx.serviceName || 'Transaksi'}</Text>
             {tx.productName && tx.productName !== tx.serviceName ? (
@@ -100,7 +167,9 @@ export default function RiwayatDetailScreen() {
 
           <Card style={styles.card}>
             <DetailRow label="Invoice" value={tx.transactionCode || '—'} />
-            <DetailRow label="Tujuan" value={formatHistoryTarget(tx.targetNo)} />
+            {!isTopUp ? (
+              <DetailRow label="Tujuan" value={formatHistoryTarget(tx.targetNo)} />
+            ) : null}
             <DetailRow label="Waktu" value={formatTransactionDateTime(tx.createdAt || tx.date)} />
             <DetailRow label="Metode" value={tx.paymentMethod || '—'} />
             {tx.adminFee > 0 ? (
@@ -109,7 +178,42 @@ export default function RiwayatDetailScreen() {
             {tx.notes ? <DetailRow label="Catatan" value={String(tx.notes)} /> : null}
           </Card>
 
-          {isPendingStatus(tx.status) ? (
+          {isTopUp && isPendingStatus(tx.status) ? (
+            <Text style={styles.pendingHint}>
+              Belum Dibayar. Menutup halaman pembayaran tidak membatalkan transaksi. Selesaikan
+              pembayaran atau lanjutkan dari sini.
+            </Text>
+          ) : null}
+
+          {isTopUp && expired ? (
+            <View style={styles.expiredBox}>
+              <Text style={styles.expiredTitle}>Expired</Text>
+              <Text style={styles.expiredBody}>
+                Pembayaran kedaluwarsa. Tidak dapat dilanjutkan. Buat Top Up baru jika ingin mengisi
+                saldo.
+              </Text>
+            </View>
+          ) : null}
+
+          {actionMsg ? <Text style={styles.actionMsg}>{actionMsg}</Text> : null}
+
+          {isTopUp && canResume && snapToken && isPendingStatus(tx.status) ? (
+            <Button
+              label={busy ? 'Membuka…' : 'Lanjutkan Pembayaran'}
+              onPress={() => void onResume()}
+              disabled={busy}
+            />
+          ) : null}
+
+          {isTopUp && expired ? (
+            <Button label="Top Up Baru" onPress={() => router.push('/topup')} />
+          ) : null}
+
+          {isTopUp && success ? (
+            <Button label="Buka Wallet" variant="secondary" onPress={() => router.push('/(tabs)/wallet')} />
+          ) : null}
+
+          {!isTopUp && isPendingStatus(tx.status) ? (
             <Text style={styles.pendingHint}>
               Transaksi masih diproses. Status akan diperbarui otomatis — tidak perlu mengirim ulang.
             </Text>
@@ -132,8 +236,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  card: { padding: spacing.lg, gap: spacing.sm },
-  statusRow: { marginBottom: spacing.xs },
+  card: { gap: spacing.sm },
+  statusRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   service: {
     fontSize: typography.size.lg,
     fontWeight: typography.weight.black,
@@ -141,33 +245,41 @@ const styles = StyleSheet.create({
   },
   product: { fontSize: typography.size.sm, color: colors.gray[600] },
   amount: {
-    fontSize: typography.size['2xl'],
+    fontSize: typography.size.xl,
     fontWeight: typography.weight.black,
-    color: colors.primary[700],
-    marginTop: spacing.sm,
+    color: colors.gray[900],
+    marginTop: spacing.xs,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.md,
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.gray[100],
   },
-  detailLabel: { fontSize: typography.size.xs, color: colors.gray[500], fontWeight: typography.weight.medium },
+  detailLabel: { fontSize: typography.size.sm, color: colors.gray[500] },
   detailValue: {
     flex: 1,
     textAlign: 'right',
     fontSize: typography.size.sm,
-    color: colors.gray[900],
     fontWeight: typography.weight.medium,
+    color: colors.gray[900],
   },
   pendingHint: {
-    fontSize: typography.size.xs,
+    fontSize: typography.size.sm,
     color: colors.gray[600],
-    lineHeight: 18,
-    backgroundColor: colors.status.pendingBg,
-    padding: spacing.md,
-    borderRadius: radius.lg,
+    lineHeight: 20,
   },
+  expiredBox: {
+    backgroundColor: colors.status.failedBg,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: 4,
+  },
+  expiredTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.status.failed,
+  },
+  expiredBody: { fontSize: typography.size.sm, color: colors.gray[700], lineHeight: 20 },
+  actionMsg: { fontSize: typography.size.sm, color: colors.gray[600], lineHeight: 20 },
 });

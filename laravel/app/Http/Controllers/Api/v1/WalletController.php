@@ -8,6 +8,7 @@ use App\Actions\Wallet\GetWalletAction;
 use App\Actions\Wallet\GetWalletHistoryAction;
 use App\Actions\Wallet\TopUpWalletAction;
 use App\Actions\Wallet\TransferWalletAction;
+use App\Actions\Wallet\LookupTransferRecipientAction;
 use App\Actions\Wallet\WithdrawWalletAction;
 use App\Actions\Wallet\CreateManualDepositAction;
 use App\Http\Requests\Api\v1\TopUpRequest;
@@ -32,6 +33,7 @@ class WalletController extends Controller
     protected GetWalletHistoryAction $getWalletHistoryAction;
     protected TopUpWalletAction $topUpWalletAction;
     protected TransferWalletAction $transferWalletAction;
+    protected LookupTransferRecipientAction $lookupTransferRecipientAction;
     protected WithdrawWalletAction $withdrawWalletAction;
     protected WalletRepositoryInterface $walletRepository;
     protected WalletSummaryService $walletSummaryService;
@@ -43,6 +45,7 @@ class WalletController extends Controller
         GetWalletHistoryAction $getWalletHistoryAction,
         TopUpWalletAction $topUpWalletAction,
         TransferWalletAction $transferWalletAction,
+        LookupTransferRecipientAction $lookupTransferRecipientAction,
         WithdrawWalletAction $withdrawWalletAction,
         WalletRepositoryInterface $walletRepository,
         WalletSummaryService $walletSummaryService,
@@ -53,6 +56,7 @@ class WalletController extends Controller
         $this->getWalletHistoryAction = $getWalletHistoryAction;
         $this->topUpWalletAction = $topUpWalletAction;
         $this->transferWalletAction = $transferWalletAction;
+        $this->lookupTransferRecipientAction = $lookupTransferRecipientAction;
         $this->withdrawWalletAction = $withdrawWalletAction;
         $this->walletRepository = $walletRepository;
         $this->walletSummaryService = $walletSummaryService;
@@ -322,6 +326,42 @@ class WalletController extends Controller
                 'errors' => null,
             ], 500);
         }
+    }
+
+    /**
+     * Read-only recipient preview for Sesama GurkyPay transfer.
+     * Lookup only — no PIN, no debit/credit, no transaction/mutation.
+     * Self-transfer → 422 (found but rejected), unknown → 404.
+     */
+    public function transferRecipient(Request $request, string $walletNumber): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->errorResponse('Sesi Anda tidak valid.', 401);
+        }
+
+        $walletNumber = trim(urldecode($walletNumber));
+        if ($walletNumber === '' || strlen($walletNumber) > 32) {
+            return $this->errorResponse('Nomor GurkyPay tidak ditemukan.', 404);
+        }
+
+        try {
+            $recipient = $this->lookupTransferRecipientAction->execute($walletNumber, $user);
+        } catch (ValidationException $e) {
+            $message = collect($e->errors())->flatten()->first()
+                ?: 'Anda tidak dapat melakukan transfer ke rekening GurkyPay sendiri.';
+
+            return $this->errorResponse((string) $message, 422, $e->errors());
+        }
+
+        if (!$recipient) {
+            return $this->errorResponse('Nomor GurkyPay tidak ditemukan.', 404);
+        }
+
+        // Public preview payload only — never balance, email, phone, or internal ids.
+        return $this->successResponse('Penerima transfer ditemukan.', [
+            'recipient' => $recipient,
+        ]);
     }
 
     /**

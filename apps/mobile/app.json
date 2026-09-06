@@ -38,7 +38,8 @@
           "imageWidth": 160
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-web-browser"
     ]
   }
 }

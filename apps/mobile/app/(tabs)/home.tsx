@@ -6,6 +6,7 @@ import { useWalletStore } from '../../src/store/wallet.store';
 import { useAuthStore } from '../../src/store/auth.store';
 import { useCatalogStore } from '../../src/store/catalog.store';
 import { useBannerStore } from '../../src/store/banner.store';
+import { useAnnouncementStore } from '../../src/store/announcement.store';
 import { useWebsiteStore } from '../../src/store/website.store';
 import { Category, CategoryIconMap } from '../../src/services/catalog.service';
 import {
@@ -15,11 +16,13 @@ import {
   StatusBadge,
   CategoryMarketingIcon,
   PromoBannerCarousel,
+  AnnouncementTicker,
   PlatformLogo,
 } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import { formatDateTime } from '../../src/utils/date';
+import { GurkyPayBalanceCard } from '../../src/components/wallet/GurkyPayBalanceCard';
 
 /**
  * Home "Layanan" shortcuts (exactly 8 = 4×2). Slug candidates map to existing
@@ -120,6 +123,7 @@ export default function HomeScreen() {
   const { overview, loading, error, fetchWallet } = useWalletStore();
   const { categories, fetchCategories, categoryIcons, fetchCategoryIcons } = useCatalogStore();
   const { banners, fetchBanners } = useBannerStore();
+  const { announcements, fetchAnnouncements } = useAnnouncementStore();
   const { logo: platformLogo, fetchSettings } = useWebsiteStore();
   const firstName = user?.name?.split(' ')[0] || 'Kasir';
 
@@ -128,8 +132,9 @@ export default function HomeScreen() {
     fetchCategories();
     fetchCategoryIcons();
     fetchBanners();
+    fetchAnnouncements();
     fetchSettings();
-  }, [fetchWallet, fetchCategories, fetchCategoryIcons, fetchBanners, fetchSettings]);
+  }, [fetchWallet, fetchCategories, fetchCategoryIcons, fetchBanners, fetchAnnouncements, fetchSettings]);
 
   // Refresh balance every time Home regains focus (e.g. returning from a purchase) —
   // spec section 34: refresh wallet after anything that could have changed it.
@@ -137,7 +142,8 @@ export default function HomeScreen() {
     useCallback(() => {
       fetchWallet();
       fetchBanners();
-    }, [fetchWallet, fetchBanners])
+      fetchAnnouncements();
+    }, [fetchWallet, fetchBanners, fetchAnnouncements])
   );
 
   const openService = (shortcut: ServiceShortcut) => {
@@ -190,66 +196,58 @@ export default function HomeScreen() {
         <ErrorState message={error} onRetry={fetchWallet} />
       ) : (
         <>
-          {/* 2. WALLET CARD — summary + shortcut to Wallet tab (visual unchanged) */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Buka Wallet"
-            onPress={() => router.push('/(tabs)/wallet')}
-            style={({ pressed }) => [pressed && styles.pressed]}
-          >
-            <View style={styles.walletCard}>
-              <View style={styles.walletAccent} />
-              <View style={styles.walletBody}>
-                <View style={styles.walletTopRow}>
-                  <View style={styles.walletLabelBlock}>
-                    <Text style={styles.walletLabel}>Saldo GurkyPay</Text>
-                    <Text style={styles.walletAmount}>{formatIDR(overview?.wallet.balance)}</Text>
-                  </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Top Up"
-                    onPress={() => {}}
-                    disabled
-                    style={styles.topUpButton}
-                  >
-                    <Ionicons name="add" size={16} color={colors.primary[700]} />
-                    <Text style={styles.topUpLabel}>Top Up</Text>
-                  </Pressable>
-                </View>
-                <Text style={styles.walletNo}>
-                  {overview?.wallet.walletNo || overview?.wallet.wallet_number || '-'}
+          {/* 2. WALLET CARD — left info + right action column */}
+          <GurkyPayBalanceCard
+            showAccent
+            balance={overview?.wallet.balance}
+            accountNumber={
+              overview?.wallet.gurkyPayId ||
+              overview?.wallet.gurky_pay_id ||
+              overview?.wallet.walletNo ||
+              overview?.wallet.wallet_number ||
+              ''
+            }
+            onPressBalance={() => router.push('/(tabs)/wallet')}
+            onPressTopUp={() => router.push('/topup')}
+            onPressTransfer={() => router.push('/transfer')}
+          />
+
+          {/* 3. RINGKASAN + MARKETING — one sibling so ScreenContainer gap:lg
+              does not create a huge void between Ringkasan and Announcement. */}
+          <View style={styles.summaryAndMarketing}>
+            <View style={styles.summaryStrip}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Pemasukan</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>
+                  {formatIDR(overview?.summary.income_this_month)}
                 </Text>
+                <Text style={styles.summaryHint}>bulan ini</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Pengeluaran</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>
+                  {formatIDR(overview?.summary.expense_this_month)}
+                </Text>
+                <Text style={styles.summaryHint}>bulan ini</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Mutasi</Text>
+                <Text style={styles.summaryValue}>{overview?.summary.transaction_count ?? 0}</Text>
+                <Text style={styles.summaryHint}>tercatat</Text>
               </View>
             </View>
-          </Pressable>
 
-          {/* 3. FINANCIAL SUMMARY — compact strip */}
-          <View style={styles.summaryStrip}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Pemasukan</Text>
-              <Text style={styles.summaryValue} numberOfLines={1}>
-                {formatIDR(overview?.summary.income_this_month)}
-              </Text>
-              <Text style={styles.summaryHint}>bulan ini</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Pengeluaran</Text>
-              <Text style={styles.summaryValue} numberOfLines={1}>
-                {formatIDR(overview?.summary.expense_this_month)}
-              </Text>
-              <Text style={styles.summaryHint}>bulan ini</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Mutasi</Text>
-              <Text style={styles.summaryValue}>{overview?.summary.transaction_count ?? 0}</Text>
-              <Text style={styles.summaryHint}>tercatat</Text>
-            </View>
+            {(announcements.length > 0 || banners.length > 0) ? (
+              <View style={styles.marketingBlock}>
+                {announcements.length > 0 ? (
+                  <AnnouncementTicker announcements={announcements} />
+                ) : null}
+                {banners.length > 0 ? <PromoBannerCarousel banners={banners} /> : null}
+              </View>
+            ) : null}
           </View>
-
-          {/* 3b. BANNER PROMO — Marketing CMS (GET /public/banners), same source as web */}
-          {banners.length > 0 ? <PromoBannerCarousel banners={banners} /> : null}
 
           {/* 4. LAYANAN — fixed 4×2 grid */}
           <View style={styles.section}>
@@ -420,68 +418,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
-  walletCard: {
-    backgroundColor: colors.primary[700],
-    borderRadius: radius.xl,
-    overflow: 'hidden',
-    minHeight: 0,
-  },
-  walletAccent: {
-    position: 'absolute',
-    right: -24,
-    top: -28,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primary[500],
-    opacity: 0.22,
-  },
-  walletBody: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    gap: spacing.sm,
-  },
-  walletTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  walletLabelBlock: { flex: 1, minWidth: 0 },
-  walletLabel: {
-    color: colors.primary[100],
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    letterSpacing: 0.2,
-  },
-  walletAmount: {
-    color: colors.white,
-    fontSize: typography.size['2xl'],
-    fontWeight: typography.weight.black,
-    marginTop: spacing.xs,
-    letterSpacing: -0.5,
-  },
-  walletNo: {
-    color: colors.primary[200],
-    fontSize: typography.size.xs,
-  },
-  topUpButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radius.full,
-    minHeight: 36,
-    opacity: 0.95,
-  },
-  topUpLabel: {
-    color: colors.primary[700],
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-  },
-
   summaryStrip: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -517,6 +453,19 @@ const styles = StyleSheet.create({
   summaryHint: {
     fontSize: 10,
     color: colors.gray[400],
+  },
+
+  summaryAndMarketing: {
+    width: '100%',
+    alignSelf: 'stretch',
+    // Ringkasan → Announcement (~8–12dp). Avoids ScreenContainer gap:lg (16) + extra margin.
+    gap: 8,
+  },
+
+  marketingBlock: {
+    width: '100%',
+    alignSelf: 'stretch',
+    // Ticker→banner spacing comes from AnnouncementTicker marginBottom (6dp).
   },
 
   section: { gap: spacing.md },

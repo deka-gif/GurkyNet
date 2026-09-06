@@ -262,6 +262,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/wallet/payment-config', [WalletController::class, 'paymentConfig']);
             Route::post('/wallet/topup', [WalletController::class, 'topUp']);
             Route::post('/wallet/deposit-manual', [WalletController::class, 'depositManual']); // FR-FIN-03
+            Route::get('/wallet/transfer/recipient/{walletNumber}', [WalletController::class, 'transferRecipient'])
+                ->where('walletNumber', '[A-Za-z0-9]+');
             Route::post('/wallet/transfer', [WalletController::class, 'transfer']);
             Route::post('/wallet/withdraw', [WalletController::class, 'withdraw']);
 

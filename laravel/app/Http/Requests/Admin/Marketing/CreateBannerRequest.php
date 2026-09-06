@@ -35,12 +35,18 @@ class CreateBannerRequest extends FormRequest
             'sort_order' => $sortOrder,
             'terms' => $terms,
         ], fn ($v) => $v !== null && $v !== ''));
+
+        if ($this->input('image_url') === '') {
+            $this->merge(['image_url' => null]);
+        }
     }
 
     public function rules(): array
     {
         return [
             'title' => 'required|string|max:255',
+            // Soft-deleted slugs are allowed past validation; repository suffixes via
+            // makeUniqueSlug so the global unique index never causes SQL 500.
             'slug' => [
                 'nullable',
                 'string',
@@ -51,9 +57,10 @@ class CreateBannerRequest extends FormRequest
             'code' => 'nullable|string|max:64',
             'description' => 'nullable|string|max:5000',
             'terms' => 'nullable|string|max:20000',
-            'image_url' => 'nullable|string|max:500',
-            'image_media_id' => 'nullable|integer',
-            'mobile_image_media_id' => 'nullable|integer',
+            // DB image_url is NOT NULL. Accept desktop URL/media OR mobile media (hydrate fills image_url).
+            'image_url' => 'nullable|string|max:255|required_without_all:image_media_id,mobile_image_media_id',
+            'image_media_id' => 'nullable|integer|exists:media,id',
+            'mobile_image_media_id' => 'nullable|integer|exists:media,id',
             'redirect_url' => 'nullable|string|max:500',
             'cta_label' => 'nullable|string|max:120',
             'starts_at' => 'nullable|date',
