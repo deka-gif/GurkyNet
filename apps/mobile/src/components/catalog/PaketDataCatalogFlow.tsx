@@ -22,16 +22,16 @@ import {
   Button,
   PurchaseFlowNotice,
 } from '../ui';
+import { PhoneOperatorInput } from './PhoneOperatorInput';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import {
   DetectedOperator,
   detectOperatorFromPhone,
-  providerBadgeLabel,
 } from '../../utils/detectOperator';
 import { DATA_PAKET_CONFIGS, DataChip, regionOptionsForOperator } from '../../utils/dataPaketConfig';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
-import { isValidPhoneTarget, phoneTargetError, sanitizePhoneDigits } from '../../utils/targetValidation';
+import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 
 /**
  * Mobile Paket Data pre-checkout — mirrors Web PaketDataPage + TelkomselPaketDataCatalog:
@@ -65,7 +65,6 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
   const config = operator ? DATA_PAKET_CONFIGS[operator as DetectedOperator] : null;
   const regionOptions = useMemo(() => regionOptionsForOperator(operator), [operator]);
   const phoneReady = isValidPhoneTarget(phoneNo);
-  const phoneErr = phoneNo.length > 0 ? phoneTargetError(phoneNo) : null;
 
   useEffect(() => {
     if (!config) {
@@ -166,25 +165,12 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.field}>
-        <Text style={styles.label}>Nomor Handphone</Text>
-        <TextInput
-          value={phoneNo}
-          onChangeText={(t) => setPhoneNo(sanitizePhoneDigits(t))}
-          placeholder="08xxxxxxxxxx"
-          keyboardType="number-pad"
-          placeholderTextColor={colors.gray[400]}
-          style={styles.input}
-        />
-        {operator ? (
-          <Text style={styles.operatorBadge}>{providerBadgeLabel(operator)}</Text>
-        ) : phoneNo.length >= 4 ? (
-          <Text style={styles.hintWarn}>Operator tidak dikenali. Paket Data memerlukan operator yang didukung.</Text>
-        ) : (
-          <Text style={styles.hint}>Masukkan minimal 4 digit untuk deteksi operator.</Text>
-        )}
-        {phoneErr ? <Text style={styles.error}>{phoneErr}</Text> : null}
-      </View>
+      <PhoneOperatorInput
+        value={phoneNo}
+        onChangeText={setPhoneNo}
+        operator={operator}
+        unrecognizedMessage="Operator tidak dikenali. Paket Data memerlukan operator yang didukung."
+      />
 
       {purchaseBanner ? (
         <View style={styles.banner}>
@@ -347,14 +333,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     color: colors.gray[900],
   },
-  operatorBadge: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[600],
-  },
-  hint: { fontSize: typography.size.xs, color: colors.gray[500] },
   hintWarn: { fontSize: typography.size.xs, color: colors.status.pending },
-  error: { fontSize: typography.size.xs, color: colors.status.failed },
   chips: { gap: spacing.sm, paddingVertical: spacing.xs },
   chip: {
     paddingHorizontal: spacing.md,

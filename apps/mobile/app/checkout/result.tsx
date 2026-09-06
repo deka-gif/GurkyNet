@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { useCheckoutStore } from '../../src/store/checkout.store';
 import { useWalletStore } from '../../src/store/wallet.store';
 import { transactionService, ReceiptData } from '../../src/services/transaction.service';
@@ -33,6 +34,7 @@ export default function CheckoutResultScreen() {
 
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const walletRefreshedRef = useRef(false);
 
   const loadReceipt = async (idOrInvoice: string | number) => {
@@ -104,6 +106,21 @@ export default function CheckoutResultScreen() {
     router.replace('/(tabs)/transaksi');
   };
 
+  const voucherCode =
+    typeof receipt?.transaction_details.voucher_internet_code === 'string'
+      ? receipt.transaction_details.voucher_internet_code
+      : null;
+
+  const copyVoucherCode = async () => {
+    if (!voucherCode) return;
+    try {
+      await Clipboard.setStringAsync(voucherCode);
+      setCopyMsg('Kode disalin.');
+    } catch {
+      setCopyMsg('Gagal menyalin kode.');
+    }
+  };
+
   if (!transaction) {
     return (
       <ScreenContainer>
@@ -142,6 +159,18 @@ export default function CheckoutResultScreen() {
 
       {terminal && receiptLoading && !receipt && <Text style={styles.receiptLoading}>Memuat struk...</Text>}
 
+      {terminal && voucherCode ? (
+        <Card style={styles.voucherCard}>
+          <Text style={styles.voucherTitle}>Kode Voucher</Text>
+          <Text style={styles.voucherCode} selectable>
+            {voucherCode}
+          </Text>
+          <Button label="Salin Kode" onPress={() => void copyVoucherCode()} />
+          {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
+          <Text style={styles.voucherHint}>Kode tersimpan di Riwayat</Text>
+        </Card>
+      ) : null}
+
       {terminal && receipt && (
         <Card style={styles.receiptCard}>
           <Text style={styles.receiptTitle}>Struk Transaksi</Text>
@@ -159,7 +188,7 @@ export default function CheckoutResultScreen() {
               <Text style={styles.receiptLabel}>Kode Token</Text>
               <Text style={styles.receiptValue}>{String(receipt.transaction_details.token_code)}</Text>
             </View>
-          ) : receipt.transaction_details.serial_number ? (
+          ) : receipt.transaction_details.serial_number && !voucherCode ? (
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Serial Number</Text>
               <Text style={styles.receiptValue}>{receipt.transaction_details.serial_number}</Text>
@@ -177,12 +206,6 @@ export default function CheckoutResultScreen() {
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Tarif / Daya</Text>
               <Text style={styles.receiptValue}>{receipt.transaction_details.segment_power}</Text>
-            </View>
-          ) : null}
-          {receipt.transaction_details.voucher_internet_code ? (
-            <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Kode Voucher</Text>
-              <Text style={styles.receiptValue}>{receipt.transaction_details.voucher_internet_code}</Text>
             </View>
           ) : null}
           <View style={styles.receiptRow}>
@@ -212,6 +235,22 @@ const styles = StyleSheet.create({
   processingWrap: { alignItems: 'center', gap: spacing.sm },
   processingHint: { fontSize: typography.size.xs, color: colors.gray[500], textAlign: 'center' },
   receiptLoading: { fontSize: typography.size.sm, color: colors.gray[500], textAlign: 'center' },
+  voucherCard: { gap: spacing.sm, alignItems: 'stretch' },
+  voucherTitle: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[700],
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  voucherCode: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.black,
+    color: colors.gray[900],
+    letterSpacing: 1,
+  },
+  voucherHint: { fontSize: typography.size.xs, color: colors.gray[500] },
+  copyMsg: { fontSize: typography.size.xs, color: colors.status.success, fontWeight: typography.weight.medium },
   receiptCard: { gap: spacing.sm },
   receiptTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between' },

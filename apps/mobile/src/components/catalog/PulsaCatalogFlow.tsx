@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { catalogService, Product } from '../../services/catalog.service';
 import { useCheckoutStore } from '../../store/checkout.store';
@@ -12,12 +12,13 @@ import {
   BrandLogo,
   PurchaseFlowNotice,
 } from '../ui';
+import { PhoneOperatorInput } from './PhoneOperatorInput';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
-import { detectOperatorFromPhone, providerBadgeLabel } from '../../utils/detectOperator';
+import { detectOperatorFromPhone } from '../../utils/detectOperator';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
-import { isValidPhoneTarget, phoneTargetError, sanitizePhoneDigits } from '../../utils/targetValidation';
+import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 
 /**
  * Mobile Pulsa pre-checkout — mirrors Web PulsaPage:
@@ -43,7 +44,6 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
 
   const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
   const phoneReady = isValidPhoneTarget(phoneNo);
-  const phoneErr = phoneNo.length > 0 ? phoneTargetError(phoneNo) : null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,25 +86,7 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.field}>
-        <Text style={styles.label}>Nomor Handphone</Text>
-        <TextInput
-          value={phoneNo}
-          onChangeText={(t) => setPhoneNo(sanitizePhoneDigits(t))}
-          placeholder="08xxxxxxxxxx"
-          keyboardType="number-pad"
-          placeholderTextColor={colors.gray[400]}
-          style={styles.input}
-        />
-        {operator ? (
-          <Text style={styles.operatorBadge}>{providerBadgeLabel(operator)}</Text>
-        ) : phoneNo.length >= 4 ? (
-          <Text style={styles.hintWarn}>Operator tidak dikenali dari nomor ini.</Text>
-        ) : (
-          <Text style={styles.hint}>Masukkan minimal 4 digit untuk deteksi operator.</Text>
-        )}
-        {phoneErr ? <Text style={styles.error}>{phoneErr}</Text> : null}
-      </View>
+      <PhoneOperatorInput value={phoneNo} onChangeText={setPhoneNo} operator={operator} />
 
       {purchaseBanner ? (
         <View style={styles.banner}>
@@ -179,26 +161,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
     lineHeight: 18,
   },
-  field: { gap: spacing.xs },
-  label: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[700] },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: typography.size.base,
-    backgroundColor: colors.white,
-    color: colors.gray[900],
-  },
-  operatorBadge: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[600],
-  },
-  hint: { fontSize: typography.size.xs, color: colors.gray[500] },
   hintWarn: { fontSize: typography.size.xs, color: colors.status.pending },
-  error: { fontSize: typography.size.xs, color: colors.status.failed },
   list: { gap: spacing.sm },
   card: { padding: spacing.md },
   cardDisabled: { opacity: 0.55 },

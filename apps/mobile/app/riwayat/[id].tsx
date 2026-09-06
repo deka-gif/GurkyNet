@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { transactionService } from '../../src/services/transaction.service';
+import * as Clipboard from 'expo-clipboard';
+import { transactionService, ReceiptData } from '../../src/services/transaction.service';
 import { Transaction } from '../../src/api/types';
 import {
   ScreenContainer,
@@ -28,6 +29,7 @@ import { useTopUpStore } from '../../src/store/topup.store';
  * Transaction detail — GET /transactions/{id}.
  * Top Up pending: resume via paymentResume (no new create).
  * Closing Snap ≠ cancel; sync determines status.
+ * Voucher Internet SN: GET …/receipt (voucher_internet_code) — never invent client-side.
  */
 export default function RiwayatDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -40,6 +42,8 @@ export default function RiwayatDetailScreen() {
   const [snapToken, setSnapToken] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const config = useTopUpStore((s) => s.config);
   const loadConfig = useTopUpStore((s) => s.loadConfig);
 
@@ -64,12 +68,22 @@ export default function RiwayatDetailScreen() {
       const res = await transactionService.getById(id);
       if (res.success && res.data) {
         setTx(res.data);
+        try {
+          const receiptRes = await transactionService.getReceipt(id);
+          if (receiptRes.success && receiptRes.data) {
+            setReceipt(receiptRes.data);
+          }
+        } catch {
+          setReceipt(null);
+        }
       } else {
         setTx(null);
+        setReceipt(null);
         setError(res.message || 'Transaksi tidak ditemukan.');
       }
     } catch (err: any) {
       setTx(null);
+      setReceipt(null);
       setError(err?.message || 'Gagal memuat detail transaksi.');
     } finally {
       setLoading(false);
@@ -129,6 +143,20 @@ export default function RiwayatDetailScreen() {
 
   const expired = String(tx?.status || '').toLowerCase() === 'expired';
   const success = String(tx?.status || '').toLowerCase() === 'success';
+  const voucherCode =
+    typeof receipt?.transaction_details.voucher_internet_code === 'string'
+      ? receipt.transaction_details.voucher_internet_code
+      : null;
+
+  const copyVoucherCode = async () => {
+    if (!voucherCode) return;
+    try {
+      await Clipboard.setStringAsync(voucherCode);
+      setCopyMsg('Kode disalin.');
+    } catch {
+      setCopyMsg('Gagal menyalin kode.');
+    }
+  };
 
   return (
     <ScreenContainer belowHeader onRefresh={() => void load()} refreshing={loading}>
@@ -177,6 +205,17 @@ export default function RiwayatDetailScreen() {
             ) : null}
             {tx.notes ? <DetailRow label="Catatan" value={String(tx.notes)} /> : null}
           </Card>
+
+          {voucherCode ? (
+            <Card style={styles.card}>
+              <Text style={styles.voucherLabel}>Kode Voucher</Text>
+              <Text style={styles.voucherCode} selectable>
+                {voucherCode}
+              </Text>
+              <Button label="Salin Kode" onPress={() => void copyVoucherCode()} />
+              {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
+            </Card>
+          ) : null}
 
           {isTopUp && isPendingStatus(tx.status) ? (
             <Text style={styles.pendingHint}>
@@ -282,4 +321,17 @@ const styles = StyleSheet.create({
   },
   expiredBody: { fontSize: typography.size.sm, color: colors.gray[700], lineHeight: 20 },
   actionMsg: { fontSize: typography.size.sm, color: colors.gray[600], lineHeight: 20 },
+  voucherLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[700],
+    textTransform: 'uppercase',
+  },
+  voucherCode: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.black,
+    color: colors.gray[900],
+    letterSpacing: 1,
+  },
+  copyMsg: { fontSize: typography.size.xs, color: colors.status.success },
 });

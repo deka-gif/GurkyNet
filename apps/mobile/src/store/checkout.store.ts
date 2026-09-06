@@ -20,6 +20,9 @@ export type PlnCheckoutContext = {
   expiresAt: number;
 };
 
+/** Web VoucherInternetPage mode — UX only; not a product-type classifier. */
+export type VoucherInternetMode = 'tembak' | 'elektronik';
+
 interface CheckoutState {
   skuCode: string | null;
   categorySlug: string | null;
@@ -27,6 +30,8 @@ interface CheckoutState {
   operatorLabel: string | null;
   selectedRegion: string | null;
   plnContext: PlnCheckoutContext | null;
+  /** Set by Voucher Internet flows; null for other categories. */
+  voucherInternetMode: VoucherInternetMode | null;
   idempotencyKey: string | null;
   submitting: boolean;
   transaction: Transaction | null;
@@ -39,6 +44,7 @@ interface CheckoutState {
     operatorLabel?: string | null;
     selectedRegion?: string | null;
     plnContext?: PlnCheckoutContext | null;
+    voucherInternetMode?: VoucherInternetMode | null;
   }) => void;
   clearPlnContext: () => void;
   setSubmitting: (submitting: boolean) => void;
@@ -57,6 +63,7 @@ const IDLE_STATE = {
   operatorLabel: null as string | null,
   selectedRegion: null as string | null,
   plnContext: null as PlnCheckoutContext | null,
+  voucherInternetMode: null as VoucherInternetMode | null,
   idempotencyKey: null as string | null,
   submitting: false,
   transaction: null as Transaction | null,
@@ -95,6 +102,9 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
       ...(ctx.operatorLabel !== undefined ? { operatorLabel: ctx.operatorLabel } : {}),
       ...(ctx.selectedRegion !== undefined ? { selectedRegion: ctx.selectedRegion } : {}),
       ...(ctx.plnContext !== undefined ? { plnContext: ctx.plnContext } : {}),
+      ...(ctx.voucherInternetMode !== undefined
+        ? { voucherInternetMode: ctx.voucherInternetMode }
+        : {}),
     }),
   clearPlnContext: () => set({ plnContext: null }),
   setSubmitting: (submitting) => set({ submitting }),

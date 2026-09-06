@@ -1,0 +1,453 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation, useRouter } from 'expo-router';
+import { catalogService, Product } from '../../services/catalog.service';
+import { useCheckoutStore } from '../../store/checkout.store';
+import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
+import { useWalletStore } from '../../store/wallet.store';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PurchaseFlowNotice,
+} from '../ui';
+import { PhoneOperatorInput } from './PhoneOperatorInput';
+import { colors, radius, spacing, typography } from '../../theme';
+import { formatIDR } from '../../utils/currency';
+import { detectOperatorFromPhone } from '../../utils/detectOperator';
+import { operatorsMatch } from '../../utils/operatorMatch';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
+import {
+  collectTelkomselZoneLabels,
+  filterProductsByZoneLabel,
+  isTelkomselOperator,
+  telkomselNationalProducts,
+  telkomselNeedsZoneGate,
+} from '../../utils/telkomselVoucherZone';
+
+/**
+ * Voucher Internet — Tembak Langsung.
+ * Flow: phone → (zone if Telkomsel gate) → products → existing checkout confirm/PIN.
+ * Catalog: GET /products?category=voucher-internet. Purchase: POST /transactions via checkout.
+ */
+
+type Props = {
+  purchaseBanner?: string | null;
+  onBack: () => void;
+};
+
+type Step = 'phone' | 'zone' | 'products';
+
+function isBackAction(action: { type: string }): boolean {
+  return action.type === 'GO_BACK' || action.type === 'POP' || action.type === 'POP_TO_TOP';
+}
+
+export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
+  const router = useRouter();
+  const navigation = useNavigation();
+  const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const setTarget = useCheckoutStore((s) => s.setTarget);
+  const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
+  const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
+  const overview = useWalletStore((s) => s.overview);
+  const fetchWallet = useWalletStore((s) => s.fetchWallet);
+
+  const [step, setStep] = useState<Step>('phone');
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [phoneNo, setPhoneNo] = useState('');
+  const [nationalSelected, setNationalSelected] = useState(false);
+  const [zoneLabel, setZoneLabel] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
+  const phoneReady = isValidPhoneTarget(phoneNo) && !!operator;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await catalogService.getProducts({ category: 'voucher-internet', per_page: 5000 });
+      if (res.success && Array.isArray(res.data)) {
+        setAllProducts(res.data.filter((p) => isCatalogListed(p)));
+      } else {
+        setAllProducts([]);
+        setError(res.message || 'Gagal memuat katalog voucher internet.');
+      }
+    } catch (err: any) {
+      setAllProducts([]);
+      setError(err?.message || 'Gagal memuat katalog voucher internet.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    void fetchWallet();
+  }, [load, fetchWallet]);
+
+  const operatorProducts = useMemo(() => {
+    if (!operator) return [];
+    return allProducts
+      .filter((p) => operatorsMatch(p.operatorName || p.providerDetails?.name, operator))
+      .sort((a, b) => a.price - b.price);
+  }, [allProducts, operator]);
+
+  const telkomselActive = !!operator && isTelkomselOperator(operator) && operatorProducts.length > 0;
+  const zoneGate = telkomselActive && telkomselNeedsZoneGate(operatorProducts);
+  const zoneLabels = useMemo(
+    () => (telkomselActive ? collectTelkomselZoneLabels(operatorProducts) : []),
+    [telkomselActive, operatorProducts]
+  );
+  const nationalProducts = useMemo(
+    () => (telkomselActive ? telkomselNationalProducts(operatorProducts) : []),
+    [telkomselActive, operatorProducts]
+  );
+  const hasNational = nationalProducts.length > 0;
+
+  const catalogProducts = useMemo(() => {
+    if (!operator) return [];
+    if (!zoneGate) return operatorProducts;
+    if (nationalSelected) return nationalProducts;
+    if (zoneLabel) return filterProductsByZoneLabel(operatorProducts, zoneLabel);
+    return [];
+  }, [operator, zoneGate, operatorProducts, nationalSelected, nationalProducts, zoneLabel]);
+
+  const displayZone =
+    zoneLabel || (nationalSelected ? 'Nasional' : null);
+
+  const resetZoneSelection = useCallback(() => {
+    setNationalSelected(false);
+    setZoneLabel(null);
+  }, []);
+
+  const onPhoneChange = (digits: string) => {
+    setPhoneNo(digits);
+    setFormError(null);
+    resetZoneSelection();
+  };
+
+  const goBackStep = useCallback(() => {
+    if (step === 'products') {
+      setFormError(null);
+      if (zoneGate) {
+        setStep('zone');
+      } else {
+        setStep('phone');
+      }
+      return;
+    }
+    if (step === 'zone') {
+      setStep('phone');
+      setFormError(null);
+      return;
+    }
+    onBack();
+  }, [step, zoneGate, onBack]);
+
+  useEffect(() => {
+    const unsub = navigation.addListener('beforeRemove', (e) => {
+      if (!isBackAction(e.data.action)) return;
+      e.preventDefault();
+      goBackStep();
+    });
+    return unsub;
+  }, [navigation, goBackStep]);
+
+  const continueFromPhone = () => {
+    setFormError(null);
+    if (!isValidPhoneTarget(phoneNo)) {
+      setFormError('Nomor HP penerima tidak valid.');
+      return;
+    }
+    if (!operator) {
+      setFormError('Operator tidak dikenali dari nomor ini.');
+      return;
+    }
+    if (zoneGate) {
+      setStep('zone');
+      return;
+    }
+    setStep('products');
+  };
+
+  const selectNational = () => {
+    setNationalSelected(true);
+    setZoneLabel(null);
+    setFormError(null);
+    setStep('products');
+  };
+
+  const selectZone = (label: string) => {
+    setNationalSelected(false);
+    setZoneLabel(label);
+    setFormError(null);
+    setStep('products');
+  };
+
+  const openHelpWilayah = () => {
+    router.push({ pathname: '/help/cek-zona', params: { provider: 'telkomsel' } });
+  };
+
+  const selectProduct = (product: Product) => {
+    setFormError(null);
+    if (!isProductPurchasable(product)) return;
+    if (!operator || !isValidPhoneTarget(phoneNo)) {
+      setFormError('Nomor HP atau operator tidak valid.');
+      return;
+    }
+    const productBrand = product.operatorName || product.providerDetails?.name;
+    if (!operatorsMatch(productBrand, operator)) {
+      setFormError('Produk tidak sesuai dengan operator nomor tujuan.');
+      return;
+    }
+    if (!purchaseEnabled) return;
+
+    const balance = overview?.wallet?.balance;
+    if (typeof balance === 'number' && balance < product.price + (product.adminFee || 0)) {
+      setFormError('Saldo GurkyPay tidak mencukupi.');
+      return;
+    }
+
+    // Idempotency key created/rotated only in startCheckout — not on step navigation.
+    startCheckout(product);
+    setTarget(sanitizePhoneDigits(phoneNo));
+    setPurchaseContext({
+      operatorLabel: operator,
+      selectedRegion: displayZone,
+      voucherInternetMode: 'tembak',
+    });
+    router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
+  };
+
+  return (
+    <View style={styles.wrap}>
+      {purchaseBanner ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{purchaseBanner}</Text>
+        </View>
+      ) : null}
+
+      <Text style={styles.modeTag}>Tembak Langsung</Text>
+
+      {loading && allProducts.length === 0 ? (
+        <LoadingState label="Memuat voucher internet..." />
+      ) : error && allProducts.length === 0 ? (
+        <ErrorState message={error} onRetry={load} />
+      ) : step === 'phone' ? (
+        <>
+          <Text style={styles.lead}>Masukkan nomor HP</Text>
+          <PhoneOperatorInput
+            label="Nomor HP"
+            value={phoneNo}
+            onChangeText={onPhoneChange}
+            operator={operator}
+            helperWhenDetected="Operator terdeteksi otomatis dari nomor kamu"
+          />
+          {formError ? <Text style={styles.error}>{formError}</Text> : null}
+          <Button label="Lanjut" onPress={continueFromPhone} disabled={!phoneReady} />
+        </>
+      ) : step === 'zone' ? (
+        <>
+          <Text style={styles.lead}>Pilih wilayah</Text>
+          <Text style={styles.phoneMeta}>
+            {sanitizePhoneDigits(phoneNo)} · {operator}
+          </Text>
+
+          <View style={styles.zoneWarn}>
+            <Text style={styles.zoneWarnText}>
+              Paket Telkomsel dibagi per wilayah. Pastikan pilih wilayah yang sesuai kartu kamu, kalau
+              salah paket tidak akan aktif.
+            </Text>
+            <Pressable onPress={openHelpWilayah} hitSlop={8}>
+              <Text style={styles.helpLink}>Cara cek wilayah kartu saya</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.section}>Pilih Wilayah</Text>
+
+          {hasNational ? (
+            <TouchableOpacity activeOpacity={0.7} onPress={selectNational}>
+              <Card style={[styles.zoneCard, nationalSelected && styles.zoneCardActive]}>
+                <Text style={[styles.zoneTitle, nationalSelected && styles.zoneTitleActive]}>Nasional</Text>
+                <Text style={styles.zoneMeta}>Berlaku semua wilayah · {nationalProducts.length} produk</Text>
+              </Card>
+            </TouchableOpacity>
+          ) : null}
+
+          {zoneLabels.length === 0 && !hasNational ? (
+            <EmptyState
+              title="Belum Ada Wilayah"
+              message="Belum ada paket tersedia untuk wilayah ini."
+            />
+          ) : (
+            <View style={styles.list}>
+              {zoneLabels.map((label) => {
+                const active = zoneLabel === label;
+                const count = filterProductsByZoneLabel(operatorProducts, label).length;
+                return (
+                  <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
+                    <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
+                      <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
+                        {label}
+                      </Text>
+                      <Text style={styles.zoneMeta}>{count} produk</Text>
+                    </Card>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </>
+      ) : (
+        <>
+          <Text style={styles.lead}>Pilih paket</Text>
+          <Text style={styles.phoneMeta}>
+            {sanitizePhoneDigits(phoneNo)} · {operator}
+            {displayZone ? ` · ${displayZone}` : ''}
+          </Text>
+
+          {!purchaseEnabled ? (
+            <PurchaseFlowNotice
+              icon="time-outline"
+              title="Pembelian Belum Aktif"
+              message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
+            />
+          ) : null}
+
+          {formError ? <Text style={styles.error}>{formError}</Text> : null}
+
+          {catalogProducts.length === 0 ? (
+            <EmptyState
+              title="Belum Ada Paket"
+              message="Belum ada paket tersedia untuk wilayah ini."
+            />
+          ) : (
+            <View style={styles.list}>
+              {catalogProducts.map((product) => {
+                const unavailable = !isProductPurchasable(product);
+                return (
+                  <TouchableOpacity
+                    key={product.id}
+                    activeOpacity={0.7}
+                    disabled={unavailable || !purchaseEnabled}
+                    onPress={() => selectProduct(product)}
+                  >
+                    <Card style={[styles.rowCard, unavailable && styles.disabled]}>
+                      <View style={styles.rowBody}>
+                        <Text style={styles.rowTitle} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        {product.zoneLabel ? (
+                          <Text style={styles.rowMeta}>{product.zoneLabel}</Text>
+                        ) : displayZone === 'Nasional' ? (
+                          <Text style={styles.rowMeta}>Nasional</Text>
+                        ) : null}
+                        {unavailable ? <Text style={styles.rowMeta}>Tidak tersedia</Text> : null}
+                      </View>
+                      <Text style={styles.price}>{formatIDR(product.price)}</Text>
+                    </Card>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { gap: spacing.md },
+  banner: {
+    backgroundColor: colors.status.pendingBg,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  bannerText: {
+    fontSize: typography.size.xs,
+    color: colors.gray[700],
+    fontWeight: typography.weight.medium,
+    lineHeight: 18,
+  },
+  modeTag: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[700],
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  lead: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  phoneMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
+  section: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  zoneWarn: {
+    backgroundColor: colors.status.pendingBg,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  zoneWarnText: {
+    fontSize: typography.size.xs,
+    color: colors.gray[800],
+    lineHeight: 18,
+    fontWeight: typography.weight.medium,
+  },
+  helpLink: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[700],
+    textDecorationLine: 'underline',
+  },
+  list: { gap: spacing.sm },
+  zoneCard: {
+    padding: spacing.md,
+    gap: 4,
+  },
+  zoneCardActive: {
+    borderWidth: 1,
+    borderColor: colors.primary[500],
+    backgroundColor: colors.primary[50],
+  },
+  zoneTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  zoneTitleActive: { color: colors.primary[700] },
+  zoneMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  rowBody: { flex: 1, gap: 2 },
+  rowTitle: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  rowMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
+  price: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  disabled: { opacity: 0.55 },
+  error: { fontSize: typography.size.xs, color: colors.status.failed },
+});

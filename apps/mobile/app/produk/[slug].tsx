@@ -15,6 +15,7 @@ import {
 import { PulsaCatalogFlow } from '../../src/components/catalog/PulsaCatalogFlow';
 import { PaketDataCatalogFlow } from '../../src/components/catalog/PaketDataCatalogFlow';
 import { PlnTokenCatalogFlow } from '../../src/components/catalog/PlnTokenCatalogFlow';
+import { VoucherInternetHubFlow } from '../../src/components/catalog/VoucherInternetHubFlow';
 import { ProviderCatalogBrowseFlow } from '../../src/components/catalog/ProviderCatalogBrowseFlow';
 import { EwalletBrandList } from '../../src/components/catalog/EwalletBrandList';
 import { useEwalletTransferStore } from '../../src/store/ewalletTransfer.store';
@@ -26,6 +27,7 @@ import {
   isInquiryRequiredCategory,
   isPlnPrepaidCategory,
   isProviderBrowseCategory,
+  isVoucherInternetCategory,
   normalizeCategorySlug,
   resolveProviderBrowseCategory,
 } from '../../src/utils/purchaseCategory';
@@ -61,6 +63,7 @@ export default function ProductListScreen() {
   const isPulsaFlow = normalized === 'pulsa';
   const isPaketDataFlow = normalized === 'data' || normalized === 'paket-data';
   const isPlnFlow = isPlnPrepaidCategory(slug);
+  const isVoucherInternetFlow = isVoucherInternetCategory(slug);
   const providerBrowseCategory = resolveProviderBrowseCategory(slug);
   const isEwalletFlow = providerBrowseCategory === 'topup-digital';
   const isProviderBrowse = isProviderBrowseCategory(slug) && !isEwalletFlow;
@@ -81,7 +84,16 @@ export default function ProductListScreen() {
   };
 
   const load = useCallback(() => {
-    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !isEwalletFlow && !inquiryBrowseBlocked) {
+    if (
+      slug &&
+      !isPulsaFlow &&
+      !isPaketDataFlow &&
+      !isPlnFlow &&
+      !isVoucherInternetFlow &&
+      !isProviderBrowse &&
+      !isEwalletFlow &&
+      !inquiryBrowseBlocked
+    ) {
       fetchProducts(slug, keyword.trim() || undefined);
     }
   }, [
@@ -91,6 +103,7 @@ export default function ProductListScreen() {
     isPulsaFlow,
     isPaketDataFlow,
     isPlnFlow,
+    isVoucherInternetFlow,
     isProviderBrowse,
     isEwalletFlow,
     inquiryBrowseBlocked,
@@ -101,17 +114,43 @@ export default function ProductListScreen() {
   }, [fetchFeatures]);
 
   useEffect(() => {
-    if (slug && !isPulsaFlow && !isPaketDataFlow && !isPlnFlow && !isProviderBrowse && !isEwalletFlow && !inquiryBrowseBlocked) {
+    if (
+      slug &&
+      !isPulsaFlow &&
+      !isPaketDataFlow &&
+      !isPlnFlow &&
+      !isVoucherInternetFlow &&
+      !isProviderBrowse &&
+      !isEwalletFlow &&
+      !inquiryBrowseBlocked
+    ) {
       fetchProducts(slug);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, isPulsaFlow, isPaketDataFlow, isPlnFlow, isProviderBrowse, isEwalletFlow, inquiryBrowseBlocked]);
+  }, [
+    slug,
+    isPulsaFlow,
+    isPaketDataFlow,
+    isPlnFlow,
+    isVoucherInternetFlow,
+    isProviderBrowse,
+    isEwalletFlow,
+    inquiryBrowseBlocked,
+  ]);
 
   const purchaseBanner =
     !purchaseEnabled && !flagsLoading ? `Pembelian belum aktif — ${flags.messages.purchase}` : null;
 
   const onRefresh = () => {
-    if (isPulsaFlow || isPaketDataFlow || isPlnFlow || isProviderBrowse || isEwalletFlow || inquiryBrowseBlocked) {
+    if (
+      isPulsaFlow ||
+      isPaketDataFlow ||
+      isPlnFlow ||
+      isVoucherInternetFlow ||
+      isProviderBrowse ||
+      isEwalletFlow ||
+      inquiryBrowseBlocked
+    ) {
       return fetchFeatures();
     }
     return load();
@@ -140,6 +179,8 @@ export default function ProductListScreen() {
         <PaketDataCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isPlnFlow ? (
         <PlnTokenCatalogFlow purchaseBanner={purchaseBanner} />
+      ) : isVoucherInternetFlow ? (
+        <VoucherInternetHubFlow purchaseBanner={purchaseBanner} />
       ) : isEwalletFlow ? (
         <View style={styles.ewalletBlock}>
           {purchaseBanner ? (

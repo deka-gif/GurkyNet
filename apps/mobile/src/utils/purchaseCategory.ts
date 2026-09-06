@@ -95,8 +95,12 @@ export function resolveProviderBrowseCategory(slug: string | null | undefined): 
   return PROVIDER_BROWSE_CANONICAL[s] ?? null;
 }
 
-/** Phone-style target (digits) — matches Web Pulsa / Paket Data / Voucher Internet tembak. */
+/** Phone-style target (digits) — Pulsa / Paket Data. Voucher Internet uses checkout.voucherInternetMode. */
 export function isPhoneTargetCategory(slug: string | null | undefined): boolean {
   const s = normalizeCategorySlug(slug);
-  return s === 'pulsa' || s === 'data' || s === 'paket-data' || s === 'voucher-internet';
+  return s === 'pulsa' || s === 'data' || s === 'paket-data';
+}
+
+export function isVoucherInternetCategory(slug: string | null | undefined): boolean {
+  return normalizeCategorySlug(slug) === 'voucher-internet';
 }

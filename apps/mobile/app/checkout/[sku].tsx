@@ -24,6 +24,7 @@ import {
   isInquiryRequiredCategory,
   isPhoneTargetCategory,
   isPlnPrepaidCategory,
+  isVoucherInternetCategory,
 } from '../../src/utils/purchaseCategory';
 import { isValidPhoneTarget, phoneTargetError, sanitizePhoneDigits } from '../../src/utils/targetValidation';
 
@@ -42,6 +43,7 @@ export default function CheckoutScreen() {
   const operatorLabel = useCheckoutStore((s) => s.operatorLabel);
   const selectedRegion = useCheckoutStore((s) => s.selectedRegion);
   const plnContext = useCheckoutStore((s) => s.plnContext);
+  const voucherInternetMode = useCheckoutStore((s) => s.voucherInternetMode);
   const clearPlnContext = useCheckoutStore((s) => s.clearPlnContext);
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
@@ -81,13 +83,15 @@ export default function CheckoutScreen() {
   const plnPrepaid = isPlnPrepaidCategory(categorySlug);
   const plnValid = isPlnContextValid(plnContext, targetNumber);
   const plnExpired = !!plnContext && Date.now() >= (plnContext.expiresAt || 0);
+  const viTembak = isVoucherInternetCategory(categorySlug) && voucherInternetMode === 'tembak';
+  const viElektronik = isVoucherInternetCategory(categorySlug) && voucherInternetMode === 'elektronik';
 
   const categoryBlocked =
     inquiryBlocked ||
     (!!categorySlug && !directAllowed && !plnPrepaid) ||
     (plnPrepaid && !plnValid);
 
-  const phoneCategory = isPhoneTargetCategory(categorySlug);
+  const phoneCategory = isPhoneTargetCategory(categorySlug) || viTembak;
 
   const estimatedTotal =
     productDetail != null ? productDetail.price + (productDetail.adminFee || 0) : 0;
@@ -101,17 +105,23 @@ export default function CheckoutScreen() {
         ? 'Sesi cek meteran sudah kedaluwarsa. Silakan cek meteran ulang.'
         : 'Silakan cek meteran terlebih dahulu dari menu Token PLN.'
       : null
-    : phoneCategory
-      ? phoneTargetError(targetNumber)
-      : targetNumber.trim().length === 0
-        ? 'Nomor tujuan wajib diisi.'
-        : null;
+    : viElektronik
+      ? targetNumber.trim().length === 0
+        ? 'Tujuan transaksi tidak valid. Kembali dan mulai ulang.'
+        : null
+      : phoneCategory
+        ? phoneTargetError(targetNumber)
+        : targetNumber.trim().length === 0
+          ? 'Nomor tujuan wajib diisi.'
+          : null;
 
   const targetOk = plnPrepaid
     ? plnValid
-    : phoneCategory
-      ? isValidPhoneTarget(targetNumber)
-      : targetNumber.trim().length > 0;
+    : viElektronik
+      ? targetNumber.trim().length > 0
+      : phoneCategory
+        ? isValidPhoneTarget(targetNumber)
+        : targetNumber.trim().length > 0;
 
   const canContinue =
     purchaseEnabled &&
@@ -122,7 +132,7 @@ export default function CheckoutScreen() {
     !!productDetail;
 
   const onTargetChange = (text: string) => {
-    if (plnPrepaid) return;
+    if (plnPrepaid || viElektronik) return;
     setTarget(phoneCategory ? sanitizePhoneDigits(text) : text);
   };
 
@@ -272,19 +282,43 @@ export default function CheckoutScreen() {
           </Card>
 
           <View style={styles.field}>
-            <Text style={styles.label}>{plnPrepaid ? 'ID Pelanggan PLN' : 'Nomor Tujuan'}</Text>
+            <Text style={styles.label}>
+              {plnPrepaid
+                ? 'ID Pelanggan PLN'
+                : viElektronik
+                  ? 'Tujuan (kode voucher)'
+                  : viTembak
+                    ? 'Nomor Tujuan'
+                    : 'Nomor Tujuan'}
+            </Text>
             <TextInput
-              value={targetNumber}
+              value={
+                viElektronik
+                  ? targetNumber.startsWith('08') && targetNumber.length >= 10
+                    ? targetNumber
+                    : 'Kode voucher ke akun Anda'
+                  : targetNumber
+              }
               onChangeText={onTargetChange}
               placeholder={plnPrepaid ? 'Dari hasil cek meteran' : 'Contoh: 081234567890'}
               keyboardType="number-pad"
-              editable={!plnPrepaid}
+              editable={!plnPrepaid && !viElektronik && !viTembak}
               placeholderTextColor={colors.gray[400]}
-              style={[styles.input, plnPrepaid && styles.inputLocked]}
+              style={[styles.input, (plnPrepaid || viElektronik || viTembak) && styles.inputLocked]}
             />
             {plnPrepaid ? (
               <Text style={styles.lockHint}>
                 Nomor terkunci dari hasil cek meteran. Ubah meter di layar sebelumnya dan cek ulang jika perlu.
+              </Text>
+            ) : null}
+            {viElektronik ? (
+              <Text style={styles.lockHint}>
+                Kode voucher akan ditampilkan setelah transaksi berhasil dan tersimpan di Riwayat.
+              </Text>
+            ) : null}
+            {viTembak ? (
+              <Text style={styles.lockHint}>
+                Nomor terkunci dari langkah Tembak Langsung. Kembali jika perlu mengubah nomor atau wilayah.
               </Text>
             ) : null}
             {targetError ? <Text style={styles.fieldError}>{targetError}</Text> : null}
@@ -328,12 +362,22 @@ export default function CheckoutScreen() {
                   </View>
                 ) : null}
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Nomor Tujuan</Text>
-                  <Text style={styles.summaryValue}>{targetNumber || '—'}</Text>
+                  <Text style={styles.summaryLabel}>
+                    {viElektronik ? 'Mode' : 'Nomor Tujuan'}
+                  </Text>
+                  <Text style={styles.summaryValue}>
+                    {viElektronik
+                      ? targetNumber.startsWith('08') && targetNumber.length >= 10
+                        ? targetNumber
+                        : 'Voucher Elektronik'
+                      : targetNumber || '—'}
+                  </Text>
                 </View>
                 {selectedRegion ? (
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Wilayah</Text>
+                    <Text style={styles.summaryLabel}>
+                      {viTembak || viElektronik ? 'Zona' : 'Wilayah'}
+                    </Text>
                     <Text style={styles.summaryValue}>{selectedRegion}</Text>
                   </View>
                 ) : null}
