@@ -23,6 +23,7 @@ import {
   PurchaseFlowNotice,
 } from '../ui';
 import { PhoneOperatorInput } from './PhoneOperatorInput';
+import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import {
@@ -32,6 +33,7 @@ import {
 import { DATA_PAKET_CONFIGS, DataChip, regionOptionsForOperator } from '../../utils/dataPaketConfig';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
+import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 
 /**
  * Mobile Paket Data pre-checkout — mirrors Web PaketDataPage + TelkomselPaketDataCatalog:
@@ -228,38 +230,27 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
             <EmptyState title="Belum Ada Paket" message="Tidak ada paket untuk filter ini." />
           ) : (
             <View style={styles.list}>
-              {products.map((product) => {
-                const unavailable = !isProductPurchasable(product);
-                const brandName = product.operatorName || product.providerDetails?.name || config.operatorLabel;
-                return (
-                  <TouchableOpacity
-                    key={product.id}
-                    activeOpacity={0.7}
-                    disabled={unavailable || !phoneReady}
-                    onPress={() => onSelect(product)}
-                  >
-                    <Card style={[styles.card, (unavailable || !phoneReady) && styles.cardDisabled]}>
-                      <View style={styles.row}>
-                        <BrandLogo name={brandName} logo={product.providerDetails?.logo} size={40} />
-                        <View style={styles.info}>
-                          <Text style={styles.name} numberOfLines={2}>
-                            {product.name}
-                          </Text>
-                          {(product.quota || product.validity) && (
-                            <Text style={styles.meta} numberOfLines={1}>
-                              {[product.quota, product.validity].filter(Boolean).join(' · ')}
-                            </Text>
-                          )}
-                          {product.requiresRegion ? (
-                            <Text style={styles.regionFlag}>Memerlukan pilihan wilayah</Text>
-                          ) : null}
-                        </View>
-                        <Text style={styles.price}>{formatIDR(product.price)}</Text>
-                      </View>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              })}
+              <ProductCatalogGrid
+                products={sortProductsByPriceAsc(products)}
+                columns={2}
+                onPress={onSelect}
+                isDisabled={(p) => !isProductPurchasable(p) || !phoneReady}
+                renderMeta={(p) => (
+                  <>
+                    {(p.quota || p.validity) ? (
+                      <Text style={styles.meta} numberOfLines={1}>
+                        {[p.quota, p.validity].filter(Boolean).join(' · ')}
+                      </Text>
+                    ) : null}
+                    {p.requiresRegion ? (
+                      <Text style={styles.regionFlag}>Perlu wilayah</Text>
+                    ) : null}
+                    {!isProductPurchasable(p) ? (
+                      <Text style={styles.meta}>Tidak tersedia</Text>
+                    ) : null}
+                  </>
+                )}
+              />
             </View>
           )}
         </>

@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { catalogService, Product } from '../../services/catalog.service';
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
 import {
-  Card,
   LoadingState,
   ErrorState,
   EmptyState,
-  BrandLogo,
   PurchaseFlowNotice,
 } from '../ui';
 import { PhoneOperatorInput } from './PhoneOperatorInput';
+import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
-import { formatIDR } from '../../utils/currency';
 import { detectOperatorFromPhone } from '../../utils/detectOperator';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
+import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 
 /**
  * Mobile Pulsa pre-checkout — mirrors Web PulsaPage:
@@ -70,8 +69,10 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
 
   const listed = useMemo(() => {
     if (!operator) return [];
-    return allProducts.filter(
-      (p) => isCatalogListed(p) && operatorsMatch(p.operatorName || p.providerDetails?.name, operator)
+    return sortProductsByPriceAsc(
+      allProducts.filter(
+        (p) => isCatalogListed(p) && operatorsMatch(p.operatorName || p.providerDetails?.name, operator)
+      )
     );
   }, [allProducts, operator]);
 
@@ -116,31 +117,15 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
           {!phoneReady ? (
             <Text style={styles.hintWarn}>Lengkapi nomor HP (minimal 10 digit) sebelum memilih nominal.</Text>
           ) : null}
-          {listed.map((product) => {
-            const unavailable = !isProductPurchasable(product);
-            const brandName = product.operatorName || product.providerDetails?.name || '';
-            return (
-              <TouchableOpacity
-                key={product.id}
-                activeOpacity={0.7}
-                disabled={unavailable || !phoneReady || !purchaseEnabled}
-                onPress={() => onSelect(product)}
-              >
-                <Card style={[styles.card, (unavailable || !phoneReady) && styles.cardDisabled]}>
-                  <View style={styles.row}>
-                    <BrandLogo name={brandName || 'Brand'} logo={product.providerDetails?.logo} size={40} />
-                    <View style={styles.info}>
-                      <Text style={styles.name} numberOfLines={2}>
-                        {product.name}
-                      </Text>
-                      {unavailable ? <Text style={styles.meta}>Tidak tersedia</Text> : null}
-                    </View>
-                    <Text style={styles.price}>{formatIDR(product.price)}</Text>
-                  </View>
-                </Card>
-              </TouchableOpacity>
-            );
-          })}
+          <ProductCatalogGrid
+            products={listed}
+            columns={2}
+            onPress={onSelect}
+            isDisabled={(p) => !isProductPurchasable(p) || !phoneReady || !purchaseEnabled}
+            renderMeta={(p) =>
+              !isProductPurchasable(p) ? <Text style={styles.meta}>Tidak tersedia</Text> : null
+            }
+          />
         </View>
       )}
     </View>
@@ -163,11 +148,5 @@ const styles = StyleSheet.create({
   },
   hintWarn: { fontSize: typography.size.xs, color: colors.status.pending },
   list: { gap: spacing.sm },
-  card: { padding: spacing.md },
-  cardDisabled: { opacity: 0.55 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  info: { flex: 1, gap: 2 },
-  name: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.gray[900] },
-  meta: { fontSize: typography.size.xs, color: colors.gray[500] },
-  price: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
+  meta: { fontSize: 10, color: colors.gray[500] },
 });

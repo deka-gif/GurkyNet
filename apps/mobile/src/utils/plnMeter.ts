@@ -23,3 +23,35 @@ export function plnMeterError(value: string): string | null {
   }
   return null;
 }
+
+/**
+ * Map provider/raw inquiry failures (e.g. Digiflazz "Transaksi Gagal")
+ * to a clear counter-staff message for wrong / unknown meter numbers.
+ */
+export function friendlyPlnInquiryError(raw?: string | null): string {
+  const msg = String(raw || '').trim();
+  const lower = msg.toLowerCase();
+
+  // Keep network / config issues as-is.
+  if (
+    /gagal menghubungi|timeout|jaringan|koneksi|belum dikonfigurasi|server sedang/i.test(lower)
+  ) {
+    return msg;
+  }
+
+  if (
+    !msg ||
+    /transaksi gagal/i.test(lower) ||
+    /tidak (ditemukan|terdaftar)/i.test(lower) ||
+    /not found/i.test(lower) ||
+    /nomor.*(salah|tidak|invalid)/i.test(lower) ||
+    /meter.*(salah|tidak|invalid)/i.test(lower) ||
+    /customer.*(salah|tidak|invalid)/i.test(lower) ||
+    /gagal cek meteran/i.test(lower) ||
+    /gagal melakukan inquiry/i.test(lower)
+  ) {
+    return 'No Meteran Tidak Ditemukan, Periksa Kembali';
+  }
+
+  return msg;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { catalogService, Product } from '../../services/catalog.service';
 import { plnService, PlnInquiryResult } from '../../services/pln.service';
 import { useCheckoutStore } from '../../store/checkout.store';
@@ -15,10 +16,12 @@ import {
   EmptyState,
   PurchaseFlowNotice,
 } from '../ui';
+import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
-import { isValidPlnMeter, plnMeterError, sanitizePlnMeter } from '../../utils/plnMeter';
+import { isValidPlnMeter, plnMeterError, sanitizePlnMeter, friendlyPlnInquiryError } from '../../utils/plnMeter';
+import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 
 /**
  * Mobile Token PLN prepaid — mirrors Web TokenPlnPage:
@@ -48,6 +51,7 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Product | null>(null);
+  const [balancePopupVisible, setBalancePopupVisible] = useState(false);
 
   const meterValid = isValidPlnMeter(meter);
   const meterErr = meter.length > 0 ? plnMeterError(meter) : null;
@@ -84,10 +88,7 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
   }, [loadProducts]);
 
   const displayProducts = useMemo(() => {
-    return products
-      .filter((p) => isCatalogListed(p))
-      .slice()
-      .sort((a, b) => a.price - b.price);
+    return sortProductsByPriceAsc(products.filter((p) => isCatalogListed(p)));
   }, [products]);
 
   const onMeterChange = (value: string) => {
@@ -119,7 +120,7 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
       if (!res.success || !res.data) {
         setInquiry(null);
         setInquiredFor(null);
-        setInquiryError(res.message || 'Gagal cek meteran. Silakan coba lagi.');
+        setInquiryError(friendlyPlnInquiryError(res.message));
         return;
       }
       setInquiry(res.data);
@@ -132,7 +133,7 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
         parsed.errors?.inquiry?.[0] ||
         parsed.errors?.customer_no?.[0] ||
         parsed.message;
-      setInquiryError(fieldMsg || 'Gagal cek meteran. Silakan coba lagi.');
+      setInquiryError(friendlyPlnInquiryError(fieldMsg));
     } finally {
       setInquiring(false);
     }
@@ -145,7 +146,7 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
 
     const balance = overview?.wallet?.balance;
     if (typeof balance === 'number' && balance < selected.price) {
-      setInquiryError('Saldo GurkyPay Anda tidak mencukupi untuk pembelian token PLN ini.');
+      setBalancePopupVisible(true);
       return;
     }
 
@@ -172,121 +173,201 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
     router.push({ pathname: '/checkout/[sku]', params: { sku: selected.code } });
   };
 
+  const canConfirm =
+    inquiryReady &&
+    !!selected &&
+    isProductPurchasable(selected) &&
+    purchaseEnabled;
+
   return (
-    <View style={styles.wrap}>
-      <View style={styles.field}>
-        <Text style={styles.label}>Nomor Meter / ID Pelanggan PLN</Text>
-        <TextInput
-          value={meter}
-          onChangeText={onMeterChange}
-          placeholder="11–12 digit angka"
-          keyboardType="number-pad"
-          placeholderTextColor={colors.gray[400]}
-          style={styles.input}
-        />
-        {meterErr ? <Text style={styles.error}>{meterErr}</Text> : null}
-        <Button
-          label={inquiring ? 'Mengecek meteran...' : 'Cek Meteran'}
-          onPress={() => void handleCekMeteran()}
-          disabled={!meterValid || inquiring || !purchaseEnabled}
-          loading={inquiring}
-        />
-        {inquiryError ? <Text style={styles.error}>{inquiryError}</Text> : null}
-      </View>
-
-      {purchaseBanner ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{purchaseBanner}</Text>
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.field}>
+          <Text style={styles.label}>Nomor Meter / ID Pelanggan PLN</Text>
+          <TextInput
+            value={meter}
+            onChangeText={onMeterChange}
+            placeholder="11–12 digit angka"
+            keyboardType="number-pad"
+            placeholderTextColor={colors.gray[400]}
+            style={styles.input}
+          />
+          {meterErr ? <Text style={styles.error}>{meterErr}</Text> : null}
+          <Button
+            label={inquiring ? 'Mengecek meteran...' : 'Cek Meteran'}
+            onPress={() => void handleCekMeteran()}
+            disabled={!meterValid || inquiring || !purchaseEnabled}
+            loading={inquiring}
+          />
+          {inquiryError ? <Text style={styles.error}>{inquiryError}</Text> : null}
         </View>
-      ) : null}
 
-      {!purchaseEnabled ? (
-        <PurchaseFlowNotice
-          icon="time-outline"
-          title="Pembelian Belum Aktif"
-          message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
-        />
-      ) : inquiryReady && inquiry ? (
-        <Card style={styles.inquiryCard}>
-          <Text style={styles.inquiryTitle}>Hasil Pengecekan</Text>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>ID Pelanggan</Text>
-            <Text style={styles.rowValue}>{inquiry.customer_no}</Text>
+        {purchaseBanner ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{purchaseBanner}</Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Atas Nama</Text>
-            <Text style={[styles.rowValue, styles.rowValueUpper]}>{inquiry.customer_name}</Text>
-          </View>
-          {inquiry.segment_power ? (
+        ) : null}
+
+        {!purchaseEnabled ? (
+          <PurchaseFlowNotice
+            icon="time-outline"
+            title="Pembelian Belum Aktif"
+            message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
+          />
+        ) : inquiryReady && inquiry ? (
+          <Card style={styles.inquiryCard}>
+            <Text style={styles.inquiryTitle}>Hasil Pengecekan</Text>
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Tarif / Daya</Text>
-              <Text style={styles.rowValue}>{inquiry.segment_power}</Text>
+              <Text style={styles.rowLabel}>ID Pelanggan</Text>
+              <Text style={styles.rowValue}>{inquiry.customer_no}</Text>
             </View>
-          ) : null}
-          {inquiry.meter_no && inquiry.meter_no !== inquiry.customer_no ? (
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>No. Meter</Text>
-              <Text style={styles.rowValue}>{inquiry.meter_no}</Text>
+              <Text style={styles.rowLabel}>Atas Nama</Text>
+              <Text style={[styles.rowValue, styles.rowValueUpper]}>{inquiry.customer_name}</Text>
             </View>
-          ) : null}
-          <Text style={styles.inquiryHint}>
-            Pastikan nama pelanggan sudah sesuai sebelum memilih nominal token.
+            {inquiry.segment_power ? (
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>Tarif / Daya</Text>
+                <Text style={styles.rowValue}>{inquiry.segment_power}</Text>
+              </View>
+            ) : null}
+            {inquiry.meter_no && inquiry.meter_no !== inquiry.customer_no ? (
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>No. Meter</Text>
+                <Text style={styles.rowValue}>{inquiry.meter_no}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.inquiryHint}>
+              Pastikan nama pelanggan sudah sesuai sebelum memilih nominal token.
+            </Text>
+          </Card>
+        ) : null}
+
+        <Text style={styles.sectionTitle}>Pilih Nominal Token</Text>
+
+        {!inquiryReady ? (
+          <EmptyState
+            title="Cek Meteran Dulu"
+            message="Pilihan nominal terkunci. Tekan Cek Meteran terlebih dahulu."
+          />
+        ) : productsLoading && displayProducts.length === 0 ? (
+          <LoadingState label="Memuat daftar token PLN..." />
+        ) : productsError ? (
+          <ErrorState message={productsError} onRetry={loadProducts} />
+        ) : displayProducts.length === 0 ? (
+          <EmptyState title="Belum Ada Produk" message="Produk token PLN tidak tersedia di katalog." />
+        ) : (
+          <ProductCatalogGrid
+            products={displayProducts}
+            columns={2}
+            selectedCode={selected?.code ?? null}
+            onPress={setSelected}
+            isDisabled={(p) => !isProductPurchasable(p)}
+            renderMeta={(p) =>
+              !isProductPurchasable(p) ? (
+                <Text style={styles.maint}>Sedang maintenance</Text>
+              ) : (
+                <Text style={styles.productTag}>PLN Prabayar</Text>
+              )
+            }
+          />
+        )}
+
+        {/* Spacer so last products are not hidden behind sticky bar */}
+        {canConfirm ? <View style={styles.stickySpacer} /> : null}
+      </ScrollView>
+
+      {canConfirm ? (
+        <View style={styles.stickyBar}>
+          <Text style={styles.stickyMeta} numberOfLines={1}>
+            {selected!.name} · {formatIDR(selected!.price)}
           </Text>
-        </Card>
-      ) : null}
-
-      <Text style={styles.sectionTitle}>Pilih Nominal Token</Text>
-
-      {!inquiryReady ? (
-        <EmptyState
-          title="Cek Meteran Dulu"
-          message="Pilihan nominal terkunci. Tekan Cek Meteran terlebih dahulu."
-        />
-      ) : productsLoading && displayProducts.length === 0 ? (
-        <LoadingState label="Memuat daftar token PLN..." />
-      ) : productsError ? (
-        <ErrorState message={productsError} onRetry={loadProducts} />
-      ) : displayProducts.length === 0 ? (
-        <EmptyState title="Belum Ada Produk" message="Produk token PLN tidak tersedia di katalog." />
-      ) : (
-        <View style={styles.list}>
-          {displayProducts.map((product) => {
-            const unavailable = !isProductPurchasable(product);
-            const active = selected?.id === product.id;
-            return (
-              <TouchableOpacity
-                key={product.id}
-                activeOpacity={0.7}
-                disabled={unavailable}
-                onPress={() => setSelected(product)}
-              >
-                <Card style={[styles.productCard, active && styles.productCardActive, unavailable && styles.disabled]}>
-                  <Text style={styles.productTag}>PLN Prabayar</Text>
-                  <Text style={styles.productName} numberOfLines={2}>
-                    {product.name}
-                  </Text>
-                  {unavailable ? <Text style={styles.maint}>Sedang maintenance</Text> : null}
-                  <Text style={styles.price}>{formatIDR(product.price)}</Text>
-                </Card>
-              </TouchableOpacity>
-            );
-          })}
+          <Button label="Lanjut Konfirmasi" onPress={handleBeli} />
         </View>
-      )}
-
-      {inquiryReady ? (
-        <Button
-          label="Lanjut Konfirmasi"
-          onPress={handleBeli}
-          disabled={!selected || !isProductPurchasable(selected) || !purchaseEnabled}
-        />
       ) : null}
+
+      <Modal
+        visible={balancePopupVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBalancePopupVisible(false)}
+      >
+        <Pressable style={styles.popupBackdrop} onPress={() => setBalancePopupVisible(false)}>
+          <Pressable style={styles.popupCard} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.popupIconWrap}>
+              <Ionicons name="wallet-outline" size={28} color={colors.status.failed} />
+            </View>
+            <Text style={styles.popupTitle}>Saldo GurkyPay Kurang</Text>
+            <Text style={styles.popupMessage}>
+              Saldo tidak cukup untuk membeli {selected?.name || 'token PLN'} (
+              {selected ? formatIDR(selected.price) : '—'}). Silakan isi ulang saldo.
+            </Text>
+            <Button label="Mengerti" onPress={() => setBalancePopupVisible(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.md },
+  root: { flex: 1 },
+  scrollContent: { gap: spacing.md, paddingBottom: spacing.lg },
+  stickySpacer: { height: 110 },
+  stickyBar: {
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[200],
+    backgroundColor: colors.white,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  stickyMeta: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.gray[600],
+    textAlign: 'center',
+  },
+  popupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing['2xl'],
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    gap: spacing.md,
+    alignItems: 'center',
+  },
+  popupIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.status.failedBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popupTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+    textAlign: 'center',
+  },
+  popupMessage: {
+    fontSize: typography.size.sm,
+    color: colors.gray[600],
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   banner: {
     backgroundColor: colors.status.pendingBg,
     borderRadius: radius.lg,
@@ -337,21 +418,11 @@ const styles = StyleSheet.create({
   rowValueUpper: { textTransform: 'uppercase' },
   inquiryHint: { fontSize: typography.size.xs, color: colors.primary[700], marginTop: spacing.xs },
   sectionTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
-  list: { gap: spacing.sm },
-  productCard: { padding: spacing.md, gap: 4 },
-  productCardActive: {
-    borderColor: colors.accent[500],
-    borderWidth: 2,
-    backgroundColor: '#fffbeb',
-  },
-  disabled: { opacity: 0.55 },
   productTag: {
     fontSize: 10,
     fontWeight: typography.weight.bold,
     color: colors.gray[400],
     textTransform: 'uppercase',
   },
-  productName: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.gray[900] },
   maint: { fontSize: typography.size.xs, color: colors.status.pending, fontWeight: typography.weight.bold },
-  price: { fontSize: typography.size.sm, fontWeight: typography.weight.black, color: colors.gray[800], marginTop: spacing.xs },
 });
