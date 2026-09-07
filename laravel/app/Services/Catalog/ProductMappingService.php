@@ -29,6 +29,15 @@ class ProductMappingService
         // real category Digiflazz/VIP reports — that's how a product named "Voucher Data
         // XYZ" from an unrelated category could get misfiled ahead of its true category.
         $brandHit = $this->matchBrandOverride($brand, $productName);
+        // Telco brands (Telkomsel, Tri, XL, …) must never be forced into Game or Langganan
+        // Digital by title overrides like "Free Fire" / "YouTube" / "Vidio" — those are
+        // Paket Data under Telekomunikasi, not diamond top-up or streaming subscriptions.
+        if (
+            ($brandHit === 'game' || $brandHit === 'langganan-digital')
+            && $this->isTelcoBrand($brand)
+        ) {
+            $brandHit = null;
+        }
         if ($brandHit !== null) {
             $slug = $brandHit;
             $source = 'brand_override';
@@ -39,7 +48,7 @@ class ProductMappingService
             $source = $slug !== null ? 'provider_category' : 'fallback';
         }
 
-        if ($slug === null && $isGameHint) {
+        if ($slug === null && $isGameHint && ! $this->isTelcoBrand($brand)) {
             $slug = 'game';
             $source = 'game_hint';
         }
@@ -58,6 +67,17 @@ class ProductMappingService
         }
 
         $slug = $this->canonicalizeSlug($slug);
+
+        // Final guard: telco operators never belong in Game or Langganan Digital —
+        // Digiflazz may label operator data packs as Games / Streaming / Aplikasi.
+        if ($slug === 'game' && $this->isTelcoBrand($brand)) {
+            $slug = 'data';
+            $source = 'telco_not_game';
+        }
+        if ($slug === 'langganan-digital' && $this->isTelcoBrand($brand)) {
+            $slug = 'data';
+            $source = 'telco_not_langganan';
+        }
         $meta = config('gurky_catalog.categories.'.$slug, [
             'name' => Str::title(str_replace('-', ' ', $slug)),
             'hub' => null,
@@ -186,6 +206,43 @@ class ProductMappingService
         }
 
         return null;
+    }
+
+    /**
+     * True when brand is a known Indonesian prepaid operator (Telekomunikasi).
+     * Used so GamesMAX / game-titled data packages never land in hub Game.
+     */
+    public function isTelcoBrand(string $brand): bool
+    {
+        $raw = Str::lower(preg_replace('/[^a-z0-9]+/i', '', $brand) ?? '');
+        if ($raw === '') {
+            return false;
+        }
+
+        // Mirror mobile/web operatorMatch keys — exact-ish, no bare substring traps.
+        if (str_contains($raw, 'telkomsel') || $raw === 'tsel') {
+            return true;
+        }
+        if (str_contains($raw, 'indosat') || $raw === 'im3') {
+            return true;
+        }
+        if ($raw === 'xl' || str_contains($raw, 'xlaxiata')) {
+            return true;
+        }
+        if ($raw === 'tri' || $raw === 'three' || $raw === '3') {
+            return true;
+        }
+        if ($raw === 'axis') {
+            return true;
+        }
+        if (str_contains($raw, 'smartfren')) {
+            return true;
+        }
+        if (str_contains($raw, 'byu')) {
+            return true;
+        }
+
+        return false;
     }
 
     protected function matchNameKeywords(string $text): ?string

@@ -115,6 +115,98 @@ class ProductMappingServiceTest extends TestCase
         $this->assertSame('brand_override', $m['source']);
     }
 
+    /**
+     * Regression: Telkomsel GamesMAX / Free Fire data packages must stay in Paket Data,
+     * never Layanan Game (brand_override "free fire" must not win for telco brands).
+     */
+    public function test_telkomsel_gamesmax_free_fire_maps_to_data_not_game(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Data',
+            'Telkomsel',
+            'GamesMAX Free Fire 1.5GB 3 Hari'
+        );
+        $this->assertSame('data', $m['slug']);
+        $this->assertNotSame('game', $m['slug']);
+    }
+
+    /** Digi mislabels as Games but brand is Telkomsel → still Paket Data. */
+    public function test_telkomsel_never_stays_in_game_even_if_provider_says_games(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Games',
+            'Telkomsel',
+            'Free Fire Combo 2GB 3 Hari'
+        );
+        $this->assertSame('data', $m['slug']);
+        $this->assertSame('telco_not_game', $m['source']);
+    }
+
+    /**
+     * Telkomsel data packs titled after streaming apps must stay in Paket Data,
+     * not Langganan Digital (brand_override "youtube" must not win for telco).
+     */
+    public function test_telkomsel_youtube_pack_maps_to_data_not_langganan(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Data',
+            'Telkomsel',
+            'YouTube 2GB 3 Hari'
+        );
+        $this->assertSame('data', $m['slug']);
+        $this->assertNotSame('langganan-digital', $m['slug']);
+    }
+
+    /** Digi mislabels Telkomsel as Streaming → Paket Data under Telkomsel. */
+    public function test_telkomsel_streaming_category_maps_to_data_not_langganan(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Streaming',
+            'Telkomsel',
+            'Paket Streaming 5GB'
+        );
+        $this->assertSame('data', $m['slug']);
+        $this->assertSame('telco_not_langganan', $m['source']);
+    }
+
+    /** Tri + Vidio-named pack → Paket Data (Tri), not Langganan Digital. */
+    public function test_tri_vidio_pack_maps_to_data_not_langganan(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map(
+            'digiflazz',
+            'Streaming',
+            'Tri',
+            'Vidio 1GB 7 Hari'
+        );
+        $this->assertSame('data', $m['slug']);
+        $this->assertSame('telco_not_langganan', $m['source']);
+    }
+
+    /** Real streaming subscription brands still map to Langganan Digital. */
+    public function test_real_vidio_brand_still_maps_to_langganan(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Streaming', 'Vidio', 'Vidio Platinum 30 Hari');
+        $this->assertSame('langganan-digital', $m['slug']);
+    }
+
+    /** Real game top-up brands still map to Game. */
+    public function test_real_free_fire_brand_still_maps_to_game(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Games', 'Free Fire', 'Free Fire 70 Diamond');
+        $this->assertSame('game', $m['slug']);
+    }
+
     public function test_dana_ewallet_still_maps_to_topup_digital(): void
     {
         $svc = app(ProductMappingService::class);
