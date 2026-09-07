@@ -229,6 +229,16 @@ class LanggananDigitalFlowTest extends TestCase
             ->assertJsonPath('data.fields', []);
     }
 
+    public function test_langganan_account_schema_vidio_digi_sku_is_phone(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $this->getJson('/api/v1/langganan/account-schema?brand=Vidio&sku=pre33615183')
+            ->assertOk()
+            ->assertJsonPath('data.delivery', 'account')
+            ->assertJsonPath('data.fields.0.key', 'phone');
+    }
+
     public function test_langganan_account_delivery_stores_email_target(): void
     {
         Http::fake([

@@ -98,11 +98,41 @@ class GameTopUpFlowTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('success', true)
-            ->assertJsonPath('data.code', 'mobile-legends');
+            ->assertJsonPath('data.code', 'mobile-legends')
+            ->assertJsonPath('data.delivery', 'account');
 
         $keys = collect($response->json('data.fields'))->pluck('key')->all();
         $this->assertContains('user_id', $keys);
         $this->assertContains('zone_id', $keys);
+    }
+
+    public function test_account_schema_mlweek_sku_is_unknown(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $response = $this->getJson('/api/v1/game/account-schema?brand=Mobile%20Legends&sku=mlweek');
+
+        $response->assertOk()
+            ->assertJsonPath('data.delivery', 'unknown')
+            ->assertJsonPath('data.fields', []);
+    }
+
+    public function test_inquiry_rejected_when_schema_unknown(): void
+    {
+        $this->product->update(['sku_code' => 'mlweek']);
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/game/inquiry', [
+            'sku_code' => 'mlweek',
+            'account' => [
+                'user_id' => '12345678',
+                'zone_id' => '1234',
+            ],
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertFalse((bool) $response->json('data.found'));
     }
 
     public function test_game_inquiry_uses_vip_get_nickname_and_returns_provider_nick(): void

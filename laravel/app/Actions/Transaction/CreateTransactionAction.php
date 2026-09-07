@@ -379,7 +379,7 @@ class CreateTransactionAction
 
                 $itemMeta['is_langganan'] = true;
                 $itemMeta['langganan_brand'] = $brand !== '' ? $brand : null;
-                $itemMeta['langganan_delivery'] = $schema['delivery'] ?? 'voucher';
+                $itemMeta['langganan_delivery'] = $schema['delivery'] ?? 'unknown';
                 if (($schema['delivery'] ?? '') === 'account' && ($schema['fields'] ?? []) !== []) {
                     $itemMeta['langganan_target_display'] = $targetNumber;
                 }

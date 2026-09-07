@@ -66,6 +66,8 @@ final class VipPrepaidServicePayload
             'category' => $category !== '' ? $category : null,
             'prepost' => $prepost !== '' ? $prepost : null,
             'type' => $type !== '' ? $type : null,
+            // Persist note for account-schema resolvers (not exposed to customers).
+            'note' => $note !== '' ? $note : null,
         ];
 
         return [

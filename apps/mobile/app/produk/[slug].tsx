@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../src/store/catalog.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../src/store/features.store';
 import {
   ScreenContainer,
-  Card,
   LoadingState,
   ErrorState,
   EmptyState,
-  BrandLogo,
   PurchaseFlowNotice,
 } from '../../src/components/ui';
 import { PulsaCatalogFlow } from '../../src/components/catalog/PulsaCatalogFlow';
@@ -17,25 +15,30 @@ import { PaketDataCatalogFlow } from '../../src/components/catalog/PaketDataCata
 import { PlnTokenCatalogFlow } from '../../src/components/catalog/PlnTokenCatalogFlow';
 import { VoucherInternetHubFlow } from '../../src/components/catalog/VoucherInternetHubFlow';
 import { ProviderCatalogBrowseFlow } from '../../src/components/catalog/ProviderCatalogBrowseFlow';
+import { GameCatalogFlow } from '../../src/components/catalog/GameCatalogFlow';
+import { LanggananCatalogFlow } from '../../src/components/catalog/LanggananCatalogFlow';
+import { ProductCatalogGrid } from '../../src/components/catalog/ProductCatalogGrid';
 import { EwalletBrandList } from '../../src/components/catalog/EwalletBrandList';
 import { useEwalletTransferStore } from '../../src/store/ewalletTransfer.store';
 import { EwalletBrandGroup } from '../../src/utils/ewalletBrand';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import { formatIDR } from '../../src/utils/currency';
 import {
   INQUIRY_FLOW_NOTICE,
+  isGameCategory,
   isInquiryRequiredCategory,
+  isLanggananCategory,
   isPlnPrepaidCategory,
   isProviderBrowseCategory,
   isVoucherInternetCategory,
   normalizeCategorySlug,
   resolveProviderBrowseCategory,
 } from '../../src/utils/purchaseCategory';
+import { sortProductsByPriceAsc } from '../../src/utils/sortProductsByPrice';
 
 /**
- * Category product entry — dedicated flows for pulsa/data/pln;
- * provider browse for E-Wallet/Game/Langganan (Tahap 3B);
- * generic list otherwise. Inquiry gate is purchase-only (detail/checkout).
+ * Category product entry — dedicated flows for pulsa/data/pln/game/langganan;
+ * E-Wallet brand list; generic list otherwise.
+ * Inquiry gate is purchase-only (detail/checkout) for categories without a dedicated flow.
  *
  * Category name is shown only in Stack header (← [Nama]) — not duplicated in content.
  */
@@ -66,12 +69,23 @@ export default function ProductListScreen() {
   const isVoucherInternetFlow = isVoucherInternetCategory(slug);
   const providerBrowseCategory = resolveProviderBrowseCategory(slug);
   const isEwalletFlow = providerBrowseCategory === 'topup-digital';
-  const isProviderBrowse = isProviderBrowseCategory(slug) && !isEwalletFlow;
+  const isGameFlow = providerBrowseCategory === 'game' || isGameCategory(slug);
+  const isLanggananFlow =
+    providerBrowseCategory === 'langganan-digital' || isLanggananCategory(slug);
+  const isProviderBrowse =
+    isProviderBrowseCategory(slug) && !isEwalletFlow && !isGameFlow && !isLanggananFlow;
   // Tagihan / other inquiry cats without provider-browse: still show honest notice (no fake catalog).
   const inquiryBrowseBlocked =
-    isInquiryRequiredCategory(slug) && !isProviderBrowse && !isEwalletFlow && !isPlnFlow;
+    isInquiryRequiredCategory(slug) &&
+    !isProviderBrowse &&
+    !isEwalletFlow &&
+    !isGameFlow &&
+    !isLanggananFlow &&
+    !isPlnFlow;
 
   const beginBrand = useEwalletTransferStore((s) => s.beginBrand);
+
+  const sortedProducts = useMemo(() => sortProductsByPriceAsc(products), [products]);
 
   const openEwalletBrand = (brand: EwalletBrandGroup) => {
     beginBrand({
@@ -92,6 +106,8 @@ export default function ProductListScreen() {
       !isVoucherInternetFlow &&
       !isProviderBrowse &&
       !isEwalletFlow &&
+      !isGameFlow &&
+      !isLanggananFlow &&
       !inquiryBrowseBlocked
     ) {
       fetchProducts(slug, keyword.trim() || undefined);
@@ -106,6 +122,8 @@ export default function ProductListScreen() {
     isVoucherInternetFlow,
     isProviderBrowse,
     isEwalletFlow,
+    isGameFlow,
+    isLanggananFlow,
     inquiryBrowseBlocked,
   ]);
 
@@ -122,6 +140,8 @@ export default function ProductListScreen() {
       !isVoucherInternetFlow &&
       !isProviderBrowse &&
       !isEwalletFlow &&
+      !isGameFlow &&
+      !isLanggananFlow &&
       !inquiryBrowseBlocked
     ) {
       fetchProducts(slug);
@@ -135,6 +155,8 @@ export default function ProductListScreen() {
     isVoucherInternetFlow,
     isProviderBrowse,
     isEwalletFlow,
+    isGameFlow,
+    isLanggananFlow,
     inquiryBrowseBlocked,
   ]);
 
@@ -149,6 +171,8 @@ export default function ProductListScreen() {
       isVoucherInternetFlow ||
       isProviderBrowse ||
       isEwalletFlow ||
+      isGameFlow ||
+      isLanggananFlow ||
       inquiryBrowseBlocked
     ) {
       return fetchFeatures();
@@ -157,7 +181,12 @@ export default function ProductListScreen() {
   };
 
   return (
-    <ScreenContainer belowHeader onRefresh={onRefresh} refreshing={productsLoading || flagsLoading}>
+    <ScreenContainer
+      belowHeader
+      scroll={!isPlnFlow}
+      onRefresh={isPlnFlow ? undefined : onRefresh}
+      refreshing={isPlnFlow ? false : productsLoading || flagsLoading}
+    >
       <Stack.Screen
         options={{
           headerShown: true,
@@ -194,6 +223,10 @@ export default function ProductListScreen() {
             onSelect={openEwalletBrand}
           />
         </View>
+      ) : isGameFlow ? (
+        <GameCatalogFlow purchaseBanner={purchaseBanner} />
+      ) : isLanggananFlow ? (
+        <LanggananCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isProviderBrowse && providerBrowseCategory ? (
         <ProviderCatalogBrowseFlow
           category={providerBrowseCategory}
@@ -227,64 +260,25 @@ export default function ProductListScreen() {
               message="Produk untuk kategori ini belum tersedia saat ini."
             />
           ) : (
-            <View style={styles.list}>
-              {products.map((product) => {
-                const unavailable = product.status !== 'tersedia';
-                const brandName = product.operatorName || product.providerDetails?.name || '';
-                return (
-                  <TouchableOpacity
-                    key={product.id}
-                    activeOpacity={0.7}
-                    onPress={() =>
-                      router.push({ pathname: '/produk/detail/[sku]', params: { sku: product.code } })
-                    }
-                  >
-                    <Card style={styles.productCard}>
-                      <View style={styles.productRow}>
-                        <BrandLogo
-                          name={brandName || 'Brand'}
-                          logo={product.providerDetails?.logo}
-                          size={40}
-                          style={styles.brandLogo}
-                        />
-                        <View style={styles.productInfo}>
-                          {brandName ? (
-                            <Text style={styles.productOperator} numberOfLines={1}>
-                              {brandName}
-                            </Text>
-                          ) : null}
-                          <Text style={styles.productName} numberOfLines={2}>
-                            {product.name}
-                          </Text>
-                          {(product.quota || product.validity) && (
-                            <Text style={styles.productMeta} numberOfLines={1}>
-                              {[product.quota, product.validity].filter(Boolean).join(' · ')}
-                            </Text>
-                          )}
-                        </View>
-                        <View style={styles.productPriceWrap}>
-                          <Text style={styles.productPrice}>{formatIDR(product.price)}</Text>
-                          {unavailable && (
-                            <View
-                              style={[
-                                styles.statusBadge,
-                                product.status === 'maintenance'
-                                  ? styles.statusMaintenance
-                                  : styles.statusGangguan,
-                              ]}
-                            >
-                              <Text style={styles.statusText}>
-                                {product.status === 'maintenance' ? 'Maintenance' : 'Gangguan'}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <ProductCatalogGrid
+              products={sortedProducts}
+              columns={normalized === 'game' ? 5 : 2}
+              onPress={(product) =>
+                router.push({ pathname: '/produk/detail/[sku]', params: { sku: product.code } })
+              }
+              isDisabled={(p) => p.status !== 'tersedia'}
+              renderMeta={(p) =>
+                p.status !== 'tersedia' ? (
+                  <Text style={styles.productMeta}>
+                    {p.status === 'maintenance' ? 'Maintenance' : 'Gangguan'}
+                  </Text>
+                ) : (p.quota || p.validity) ? (
+                  <Text style={styles.productMeta} numberOfLines={1}>
+                    {[p.quota, p.validity].filter(Boolean).join(' · ')}
+                  </Text>
+                ) : null
+              }
+            />
           )}
         </>
       )}
@@ -322,23 +316,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     color: colors.gray[900],
   },
-  list: { gap: spacing.sm },
-  productCard: { padding: spacing.md },
-  productRow: { flexDirection: 'row', alignItems: 'center' },
-  brandLogo: { marginRight: spacing.md },
-  productInfo: { flex: 1, marginRight: spacing.sm, gap: 2 },
-  productName: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.gray[900] },
   productMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
-  productOperator: {
-    fontSize: typography.size.xs,
-    color: colors.primary[600],
-    fontWeight: typography.weight.medium,
-    textTransform: 'uppercase',
-  },
-  productPriceWrap: { alignItems: 'flex-end', gap: spacing.xs },
-  productPrice: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
-  statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full },
-  statusMaintenance: { backgroundColor: colors.status.pendingBg },
-  statusGangguan: { backgroundColor: colors.status.failedBg },
-  statusText: { fontSize: 10, fontWeight: typography.weight.bold, color: colors.gray[700] },
 });

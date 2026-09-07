@@ -17,6 +17,7 @@ class GameController extends Controller
     public function accountSchema(Request $request, GameInquiryService $inquiryService): JsonResponse
     {
         $brand = trim((string) $request->query('brand', ''));
+        $sku = trim((string) $request->query('sku', ''));
         if ($brand === '') {
             return response()->json([
                 'success' => false,
@@ -27,7 +28,7 @@ class GameController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Schema akun game.',
-            'data' => $inquiryService->accountSchema($brand),
+            'data' => $inquiryService->accountSchema($brand, $sku !== '' ? $sku : null),
         ]);
     }
 

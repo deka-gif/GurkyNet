@@ -2,10 +2,55 @@
 
 /**
  * Game account / nickname mapping for VIP Payment get-nickname.
- * Fields describe provider account parameters (not hard-coded UI per title).
- * Codes align with VIP Reseller game-feature nickname API.
+ *
+ * Resolve priority (GameNicknameResolver) — provider-isolated:
+ *   sku_schemas (Digi) / vip_sku_schemas (VIP)
+ *   → Digiflazz desc (Digi only) / VIP note (VIP only)
+ *   → nickname_codes (VIP brand / get-nickname — NOT Digi category heuristic)
+ *   → UNKNOWN
+ *
+ * Digi products without clear Digi evidence do NOT inherit VIP brand fields.
  */
 return [
+    /**
+     * DigiFlazz buyer_sku_code overrides (verified production).
+     * Free Fire Digi diamond-only SKUs → unknown (desc does not prove player_id).
+     */
+    'sku_schemas' => [
+        'mlweek' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'pre33639299' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'ff12' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'ff50' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'ff140' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'ff355' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+    ],
+
+    /** VIP provider_sku / VIP-{code} overrides (empty until verified per-SKU). */
+    'vip_sku_schemas' => [],
+
+    /**
+     * Explicit VIP get-nickname brand mapping (not Digi category heuristic).
+     * Free Fire → player_id is VIP nickname API mapping, applied only for VIP /
+     * brand-only resolve — never as Digi default when Digi desc is unclear.
+     */
     'nickname_codes' => [
         'mobile-legends' => [
             'label' => 'Mobile Legends',
@@ -144,9 +189,9 @@ return [
         ],
     ],
 
-    /** Fallback when brand is not in nickname_codes — still try VIP with slugified code. */
-    'default_fields' => [
-        ['key' => 'player_id', 'label' => 'Player ID', 'required' => true],
-        ['key' => 'zone_id', 'label' => 'Zone / Server ID', 'required' => false],
-    ],
+    /**
+     * @deprecated Unused — unknown brands return delivery=unknown (fail-closed).
+     * Kept empty so accidental reads never invent player_id.
+     */
+    'default_fields' => [],
 ];

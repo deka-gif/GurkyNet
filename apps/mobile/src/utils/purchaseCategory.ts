@@ -5,7 +5,9 @@
  * Tahap 3B: inquiry-required blocks PURCHASE via generic product detail/checkout.
  * E-Wallet (topup-digital) has a dedicated Transfer/Layanan flow:
  * brand → nomor + nominal manual → inquiry → confirm → PIN → POST /transactions.
- * Game / Langganan remain provider→product browse until their inquiry flows exist.
+ * Game has GameCatalogFlow: game → product → account → inquiry → checkout/PIN.
+ * Langganan/Streaming has LanggananCatalogFlow: brand → product → schema → PIN
+ * (no upstream inquiry; voucher uses target LANGGANAN).
  *
  * Direct: may use generic checkout (SKU + target + PIN → POST /transactions).
  * PLN prepaid: dedicated inquiry flow (POST /pln/inquiry) then same purchase pipe
@@ -22,6 +24,12 @@ const DIRECT_PURCHASE_SLUGS = new Set([
 
 /** Token PLN prepaid — uses PlnTokenCatalogFlow, not generic checkout. */
 const PLN_PREPAID_SLUGS = new Set(['pln', 'token-pln']);
+
+/** Game top-up — uses GameCatalogFlow + game inquiry session (no inquiry_ref_id). */
+const GAME_SLUGS = new Set(['game', 'games', 'topup-game', 'top-up-game', 'game-feature']);
+
+/** Langganan Digital / Streaming — uses LanggananCatalogFlow (schema, no inquiry). */
+const LANGGANAN_SLUGS = new Set(['langganan-digital', 'langganan', 'streaming']);
 
 /**
  * Provider-first browse catalogs (Web ProviderCatalogFlow).
@@ -45,9 +53,9 @@ const INQUIRY_REQUIRED_SLUGS = new Set([
   'topup-digital',
   'ewallet',
   'e-money',
-  // Game
+  // Game — still inquiry-required; purchase only via GameCatalogFlow + valid gameContext
   'game',
-  // Streaming / langganan
+  // Streaming / langganan — schema-aware LanggananCatalogFlow (not generic checkout)
   'langganan-digital',
   'langganan',
   'streaming',
@@ -77,6 +85,16 @@ export function isDirectPurchaseCategory(slug: string | null | undefined): boole
 
 export function isPlnPrepaidCategory(slug: string | null | undefined): boolean {
   return PLN_PREPAID_SLUGS.has(normalizeCategorySlug(slug));
+}
+
+/** Game top-up category (dedicated GameCatalogFlow). */
+export function isGameCategory(slug: string | null | undefined): boolean {
+  return GAME_SLUGS.has(normalizeCategorySlug(slug));
+}
+
+/** Langganan Digital / Streaming (dedicated LanggananCatalogFlow). */
+export function isLanggananCategory(slug: string | null | undefined): boolean {
+  return LANGGANAN_SLUGS.has(normalizeCategorySlug(slug));
 }
 
 /** Purchase gate only — does NOT block browsing/product list. */

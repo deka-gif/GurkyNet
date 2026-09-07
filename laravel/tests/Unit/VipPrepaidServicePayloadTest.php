@@ -42,6 +42,8 @@ class VipPrepaidServicePayloadTest extends TestCase
         $this->assertSame(48175.0, $normalized['price']['special']);
         $this->assertArrayHasKey('price_tiers', $normalized['meta']);
         $this->assertSame('23:44 - 00:16', $normalized['meta']['maintenace']);
+        $this->assertSame('-', $normalized['meta']['note']);
+        $this->assertSame('-', $normalized['note']);
     }
 
     public function test_resolves_premium_when_basic_missing(): void

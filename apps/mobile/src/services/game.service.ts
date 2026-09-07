@@ -1,5 +1,14 @@
-import { apiClient } from '../api';
-import { ApiResponse } from '../../types';
+import { apiClient } from '../api/client';
+import { ApiResponse } from '../api/types';
+
+/**
+ * Mirror of web `src/services/game/game.service.ts`.
+ * Schema: GET /game/account-schema?brand=&sku=
+ * Inquiry: POST /game/inquiry { sku_code, account }
+ * Purchase uses target_number = customer_no (no inquiry_ref_id).
+ *
+ * delivery=unknown → fail-closed (no fake player_id form).
+ */
 
 export type GameAccountField = {
   key: string;
@@ -12,7 +21,7 @@ export type GameAccountSchema = {
   sku?: string | null;
   code: string;
   label: string;
-  delivery?: 'account' | 'unknown' | string;
+  delivery: 'account' | 'unknown' | string;
   fields: GameAccountField[];
 };
 

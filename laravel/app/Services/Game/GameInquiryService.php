@@ -14,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * Real VIP Payment game nickname inquiry (game-feature type=get-nickname).
  * Inquiry only — does not debit wallet or place an order.
+ *
+ * Account schema: Digi/VIP isolated SKU → provider metadata → VIP brand → UNKNOWN.
  */
 class GameInquiryService
 {
@@ -28,16 +30,19 @@ class GameInquiryService
     ) {}
 
     /**
-     * @return array{brand:string,code:string,label:string,fields:list<array{key:string,label:string,required:bool}>}
+     * @return array{brand:string,sku:?string,code:string,label:string,delivery:string,fields:list<array{key:string,label:string,required:bool}>}
      */
-    public function accountSchema(string $brand): array
+    public function accountSchema(string $brand, ?string $skuCode = null): array
     {
-        $resolved = $this->resolver->resolve($brand);
+        $sku = trim((string) $skuCode);
+        $resolved = $this->resolver->resolveForProduct($brand, $sku !== '' ? $sku : null);
 
         return [
             'brand' => trim($brand),
+            'sku' => $sku !== '' ? $sku : null,
             'code' => $resolved['code'],
             'label' => $resolved['label'],
+            'delivery' => $resolved['delivery'],
             'fields' => $resolved['fields'],
         ];
     }
@@ -73,7 +78,13 @@ class GameInquiryService
             $brand = 'Game';
         }
 
-        $resolved = $this->resolver->resolve($brand);
+        $resolved = $this->resolver->resolveForProduct($brand, $product->sku_code);
+        if (($resolved['delivery'] ?? '') !== 'account' || ($resolved['fields'] ?? []) === []) {
+            throw ValidationException::withMessages([
+                'sku_code' => ['Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.'],
+            ]);
+        }
+
         $parsed = $this->parseAccountFields($resolved['fields'], $account);
         $target = $parsed['target'];
         $zone = $parsed['zone'];

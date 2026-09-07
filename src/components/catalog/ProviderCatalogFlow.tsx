@@ -144,7 +144,7 @@ export function ProviderCatalogFlow({
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [langgananFields, setLanggananFields] = useState<LanggananAccountField[]>([]);
   const [langgananAccount, setLanggananAccount] = useState<Record<string, string>>({});
-  const [langgananDelivery, setLanggananDelivery] = useState<string>('voucher');
+  const [langgananDelivery, setLanggananDelivery] = useState<string>('unknown');
   const [langgananSchemaLoading, setLanggananSchemaLoading] = useState(false);
 
   useEffect(() => {
@@ -158,31 +158,31 @@ export function ProviderCatalogFlow({
   }, [fetchWallet, fetchCategoryProviders, category, returnPath]);
 
   useEffect(() => {
-    if (!isGameInquiry || !selectedProvider || step !== 'products') return;
+    if (!isGameInquiry || !selectedProvider || !selectedProduct || step !== 'products') {
+      if (!selectedProduct && isGameInquiry) {
+        setGameFields([]);
+        setGameAccount({});
+      }
+      return;
+    }
     let cancelled = false;
     setSchemaLoading(true);
     setGameFields([]);
     setGameAccount({});
     void gameService
-      .accountSchema(selectedProvider)
+      .accountSchema(selectedProvider, selectedProduct.code)
       .then((res) => {
         if (cancelled) return;
-        if (res.success && res.data?.fields?.length) {
-          setGameFields(res.data.fields);
+        const delivery = String(res.data?.delivery ?? '').trim().toLowerCase();
+        const fields = Array.isArray(res.data?.fields) ? res.data.fields : [];
+        if (res.success && delivery === 'account' && fields.length > 0) {
+          setGameFields(fields);
         } else {
-          setGameFields([
-            { key: 'player_id', label: 'Player ID', required: true },
-            { key: 'zone_id', label: 'Zone / Server ID', required: false },
-          ]);
+          setGameFields([]);
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setGameFields([
-            { key: 'player_id', label: 'Player ID', required: true },
-            { key: 'zone_id', label: 'Zone / Server ID', required: false },
-          ]);
-        }
+        if (!cancelled) setGameFields([]);
       })
       .finally(() => {
         if (!cancelled) setSchemaLoading(false);
@@ -190,14 +190,14 @@ export function ProviderCatalogFlow({
     return () => {
       cancelled = true;
     };
-  }, [isGameInquiry, selectedProvider, step]);
+  }, [isGameInquiry, selectedProvider, selectedProduct, step]);
 
   useEffect(() => {
     if (!isLanggananMode || !selectedProvider || !selectedProduct || step !== 'products') {
       if (!selectedProduct && isLanggananMode) {
         setLanggananFields([]);
         setLanggananAccount({});
-        setLanggananDelivery('voucher');
+        setLanggananDelivery('unknown');
       }
       return;
     }
@@ -210,17 +210,18 @@ export function ProviderCatalogFlow({
       .then((res) => {
         if (cancelled) return;
         if (res.success && res.data) {
+          const d = String(res.data.delivery ?? '').trim().toLowerCase();
           setLanggananFields(res.data.fields || []);
-          setLanggananDelivery(res.data.delivery || 'voucher');
+          setLanggananDelivery(d || 'unknown');
         } else {
           setLanggananFields([]);
-          setLanggananDelivery('voucher');
+          setLanggananDelivery('unknown');
         }
       })
       .catch(() => {
         if (!cancelled) {
           setLanggananFields([]);
-          setLanggananDelivery('voucher');
+          setLanggananDelivery('unknown');
         }
       })
       .finally(() => {
@@ -265,11 +266,17 @@ export function ProviderCatalogFlow({
   const langgananReady =
     !isLanggananMode ||
     !selectedProduct ||
-    langgananSchemaLoading ||
-    langgananFields.length === 0 ||
-    isLanggananAccountReady(langgananFields, langgananAccount);
-  const showProducts =
-    (!isEwalletInquiry || phoneReady) && (!isGameInquiry || gameAccountReady);
+    (
+      !langgananSchemaLoading &&
+      (
+        langgananDelivery === 'voucher' ||
+        (langgananDelivery === 'account' &&
+          langgananFields.length > 0 &&
+          isLanggananAccountReady(langgananFields, langgananAccount))
+      )
+    );
+  // Game schema is SKU-specific — always show products; gate Lanjut via gameAccountReady.
+  const showProducts = !isEwalletInquiry || phoneReady;
 
   const resolvedTargetLabel =
     targetLabel ||
@@ -299,7 +306,7 @@ export function ProviderCatalogFlow({
     setGameAccount({});
     setLanggananFields([]);
     setLanggananAccount({});
-    setLanggananDelivery('voucher');
+    setLanggananDelivery('unknown');
     setStep('products');
     void fetchProducts({ category, provider_id: providerId });
   };
@@ -314,7 +321,7 @@ export function ProviderCatalogFlow({
     setGameAccount({});
     setLanggananFields([]);
     setLanggananAccount({});
-    setLanggananDelivery('voucher');
+    setLanggananDelivery('unknown');
   };
 
   const handleCheckout = () => {
@@ -504,7 +511,14 @@ export function ProviderCatalogFlow({
 
   const handleLanggananLanjutBayar = () => {
     if (!selectedProduct || !selectedProvider) return;
-    if (!isLanggananAccountReady(langgananFields, langgananAccount)) {
+    if (langgananDelivery !== 'voucher' && langgananDelivery !== 'account') {
+      showFlowError('Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.');
+      return;
+    }
+    if (
+      langgananDelivery === 'account' &&
+      (langgananFields.length === 0 || !isLanggananAccountReady(langgananFields, langgananAccount))
+    ) {
       showFlowError('Lengkapi data tujuan langganan terlebih dahulu.');
       return;
     }
@@ -514,6 +528,10 @@ export function ProviderCatalogFlow({
     }
 
     const target = buildLanggananCustomerNo(langgananFields, langgananAccount, langgananDelivery);
+    if (!target) {
+      showFlowError('Tujuan transaksi tidak valid.');
+      return;
+    }
     const customDetails: Record<string, string> = {
       Kategori: 'LANGGANAN DIGITAL',
       Aplikasi: selectedProvider,
@@ -653,8 +671,10 @@ export function ProviderCatalogFlow({
                 value={(langgananAccount[f.key] || '').trim() || '-'}
               />
             ))
-          ) : (
+          ) : langgananDelivery === 'voucher' ? (
             <SummaryRow label="Pengiriman" value="Kode aktivasi via provider" />
+          ) : (
+            <SummaryRow label="Status" value="Format akun belum tersedia" />
           )}
           <SummaryRow label="Harga" value={formatIDR(selectedProduct.price)} large />
           <PanelActions>
@@ -966,10 +986,18 @@ export function ProviderCatalogFlow({
 
               {isSummaryCheckoutMode ? null : isLanggananMode ? null : isGameInquiry ? (
                 <div className="space-y-3">
-                  {schemaLoading ? (
+                  {!selectedProduct ? (
+                    <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
+                      Pilih produk terlebih dahulu untuk menampilkan form akun.
+                    </p>
+                  ) : schemaLoading ? (
                     <div className="py-6 text-center">
                       <RefreshCw className="w-5 h-5 mx-auto text-gray-300 animate-spin" />
                     </div>
+                  ) : gameFields.length === 0 ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 font-semibold">
+                      Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.
+                    </p>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {gameFields.map((field) => (
@@ -983,7 +1011,6 @@ export function ProviderCatalogFlow({
                             value={gameAccount[field.key] || ''}
                             onChange={(e) => {
                               setGameAccount((prev) => ({ ...prev, [field.key]: e.target.value }));
-                              setSelectedProduct(null);
                               setGameInquiry(null);
                             }}
                             placeholder={field.label}
@@ -1147,10 +1174,14 @@ export function ProviderCatalogFlow({
                         </div>
                       ))}
                     </div>
-                  ) : (
+                  ) : langgananDelivery === 'voucher' ? (
                     <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
                       Paket ini mengirim kode aktivasi otomatis setelah pembayaran — tidak perlu mengisi
                       email, nomor HP, atau ID tujuan.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 font-semibold">
+                      Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.
                     </p>
                   )}
                 </div>

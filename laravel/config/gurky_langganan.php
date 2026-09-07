@@ -2,19 +2,61 @@
 
 /**
  * Langganan Digital — account field schema per brand/provider.
- * delivery=voucher → no customer input; provider returns SN/code after payment.
- * delivery=account → user must fill fields; values compose customer_no for Digiflazz/VIP.
+ *
+ * Priority (LanggananAccountResolver) — provider-isolated:
+ *   Digi sku_schemas / VIP vip_sku_schemas
+ *   → Digi desc (Digi only) / VIP note (VIP only)
+ *   → brand_schemas (explicit business mappings)
+ *   → UNKNOWN (never invent voucher)
+ *
+ * Vidio brand=voucher: explicit business fallback for non-Digi-phone SKUs
+ * (VIP / legacy catalog). Digi SKUs pre33615183–86 override to phone.
  */
 return [
-    /** Per-SKU overrides (buyer_sku_code) — takes priority over brand schema. */
+    /**
+     * DigiFlazz buyer_sku_code overrides (verified production).
+     */
     'sku_schemas' => [
-        // 'NFLX30' => [
-        //     'delivery' => 'account',
-        //     'fields' => [
-        //         ['key' => 'email', 'label' => 'Email Akun Netflix', 'required' => true, 'input' => 'email'],
-        //     ],
-        // ],
+        'pre33615183' => [
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'phone', 'label' => 'Nomor HP Vidio', 'required' => true, 'input' => 'phone'],
+            ],
+        ],
+        'pre33615184' => [
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'phone', 'label' => 'Nomor HP Vidio', 'required' => true, 'input' => 'phone'],
+            ],
+        ],
+        'pre33615185' => [
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'phone', 'label' => 'Nomor HP Vidio', 'required' => true, 'input' => 'phone'],
+            ],
+        ],
+        'pre33615186' => [
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'phone', 'label' => 'Nomor HP Vidio', 'required' => true, 'input' => 'phone'],
+            ],
+        ],
+        'pre33615053' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'kvision180d' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+        'kvision30d' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
     ],
+
+    /** VIP provider_sku overrides (empty until verified per-SKU). */
+    'vip_sku_schemas' => [],
 
     'brand_schemas' => [
         'netflix' => [
@@ -124,6 +166,8 @@ return [
         'vidio' => [
             'label' => 'Vidio',
             'aliases' => ['vidio'],
+            // Explicit business fallback (voucher/SN) for non-Digi-phone SKUs.
+            // Digi SKUs pre33615183–86 override via sku_schemas → phone.
             'delivery' => 'voucher',
             'fields' => [],
         ],
@@ -159,8 +203,11 @@ return [
         ],
     ],
 
-    /** Unmapped brands default to voucher delivery (code via SN, no account input). */
-    'default_delivery' => 'voucher',
+    /**
+     * Unmapped brands / unclear Digi desc → UNKNOWN (fail-closed).
+     * Never invent voucher or account fields without evidence.
+     */
+    'default_delivery' => 'unknown',
     'default_fields' => [],
 
     /** customer_no sent to provider when delivery=voucher (Digiflazz prepaid requires a value). */

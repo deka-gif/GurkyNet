@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../src/store/catalog.store';
-import { isPlnContextValid, useCheckoutStore } from '../../src/store/checkout.store';
+import { isGameContextValid, isPlnContextValid, useCheckoutStore } from '../../src/store/checkout.store';
 import { useWalletStore } from '../../src/store/wallet.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../src/store/features.store';
 import { transactionService } from '../../src/services/transaction.service';
@@ -21,12 +21,14 @@ import { formatIDR } from '../../src/utils/currency';
 import {
   INQUIRY_FLOW_NOTICE,
   isDirectPurchaseCategory,
+  isGameCategory,
   isInquiryRequiredCategory,
   isPhoneTargetCategory,
   isPlnPrepaidCategory,
   isVoucherInternetCategory,
 } from '../../src/utils/purchaseCategory';
-import { isValidPhoneTarget, phoneTargetError, sanitizePhoneDigits } from '../../src/utils/targetValidation';
+import { isValidPhoneTarget, phoneTargetError } from '../../src/utils/targetValidation';
+import { stripGameProductDisplayName } from '../../src/utils/stripGameProductDisplayName';
 
 export default function CheckoutScreen() {
   const params = useLocalSearchParams<{ sku: string }>();
@@ -43,9 +45,10 @@ export default function CheckoutScreen() {
   const operatorLabel = useCheckoutStore((s) => s.operatorLabel);
   const selectedRegion = useCheckoutStore((s) => s.selectedRegion);
   const plnContext = useCheckoutStore((s) => s.plnContext);
+  const gameContext = useCheckoutStore((s) => s.gameContext);
   const voucherInternetMode = useCheckoutStore((s) => s.voucherInternetMode);
   const clearPlnContext = useCheckoutStore((s) => s.clearPlnContext);
-  const setTarget = useCheckoutStore((s) => s.setTarget);
+  const clearGameContext = useCheckoutStore((s) => s.clearGameContext);
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
   const idempotencyKey = useCheckoutStore((s) => s.idempotencyKey);
   const submitting = useCheckoutStore((s) => s.submitting);
@@ -78,18 +81,24 @@ export default function CheckoutScreen() {
   }, [productDetail, sku, skuCode, startCheckout]);
 
   const categorySlug = productDetail?.category || storeCategorySlug;
-  const inquiryBlocked = isInquiryRequiredCategory(categorySlug);
-  const directAllowed = isDirectPurchaseCategory(categorySlug);
   const plnPrepaid = isPlnPrepaidCategory(categorySlug);
   const plnValid = isPlnContextValid(plnContext, targetNumber);
   const plnExpired = !!plnContext && Date.now() >= (plnContext.expiresAt || 0);
+  const gameCat = isGameCategory(categorySlug);
+  const gameValid = isGameContextValid(gameContext, targetNumber, sku || skuCode);
+  const gameExpired = !!gameContext && Date.now() >= (gameContext.expiresAt || 0);
+  // Game stays in INQUIRY_REQUIRED — unlock only with valid game inquiry session (like PLN).
+  const inquiryBlocked =
+    isInquiryRequiredCategory(categorySlug) && !(gameCat && gameValid);
+  const directAllowed = isDirectPurchaseCategory(categorySlug);
   const viTembak = isVoucherInternetCategory(categorySlug) && voucherInternetMode === 'tembak';
   const viElektronik = isVoucherInternetCategory(categorySlug) && voucherInternetMode === 'elektronik';
 
   const categoryBlocked =
     inquiryBlocked ||
-    (!!categorySlug && !directAllowed && !plnPrepaid) ||
-    (plnPrepaid && !plnValid);
+    (!!categorySlug && !directAllowed && !plnPrepaid && !(gameCat && gameValid)) ||
+    (plnPrepaid && !plnValid) ||
+    (gameCat && !gameValid);
 
   const phoneCategory = isPhoneTargetCategory(categorySlug) || viTembak;
 
@@ -105,23 +114,31 @@ export default function CheckoutScreen() {
         ? 'Sesi cek meteran sudah kedaluwarsa. Silakan cek meteran ulang.'
         : 'Silakan cek meteran terlebih dahulu dari menu Token PLN.'
       : null
-    : viElektronik
-      ? targetNumber.trim().length === 0
-        ? 'Tujuan transaksi tidak valid. Kembali dan mulai ulang.'
+    : gameCat
+      ? !gameValid
+        ? gameExpired
+          ? 'Sesi validasi akun game sudah kedaluwarsa. Validasi ulang dari menu Game.'
+          : 'Silakan validasi akun game terlebih dahulu dari menu Game.'
         : null
-      : phoneCategory
-        ? phoneTargetError(targetNumber)
-        : targetNumber.trim().length === 0
-          ? 'Nomor tujuan wajib diisi.'
-          : null;
+      : viElektronik
+        ? targetNumber.trim().length === 0
+          ? 'Tujuan transaksi tidak valid. Kembali dan mulai ulang.'
+          : null
+        : phoneCategory
+          ? phoneTargetError(targetNumber)
+          : targetNumber.trim().length === 0
+            ? 'Nomor tujuan wajib diisi.'
+            : null;
 
   const targetOk = plnPrepaid
     ? plnValid
-    : viElektronik
-      ? targetNumber.trim().length > 0
-      : phoneCategory
-        ? isValidPhoneTarget(targetNumber)
-        : targetNumber.trim().length > 0;
+    : gameCat
+      ? gameValid
+      : viElektronik
+        ? targetNumber.trim().length > 0
+        : phoneCategory
+          ? isValidPhoneTarget(targetNumber)
+          : targetNumber.trim().length > 0;
 
   const canContinue =
     purchaseEnabled &&
@@ -131,15 +148,14 @@ export default function CheckoutScreen() {
     !insufficientBalance &&
     !!productDetail;
 
-  const onTargetChange = (text: string) => {
-    if (plnPrepaid || viElektronik) return;
-    setTarget(phoneCategory ? sanitizePhoneDigits(text) : text);
-  };
-
   const openPinModal = () => {
     if (!canContinue) return;
     if (plnPrepaid && !isPlnContextValid(plnContext, targetNumber)) {
       clearPlnContext();
+      return;
+    }
+    if (gameCat && !isGameContextValid(gameContext, targetNumber, sku || skuCode)) {
+      clearGameContext();
       return;
     }
     setPinError(null);
@@ -190,9 +206,12 @@ export default function CheckoutScreen() {
         typeof parsed.message === 'string' &&
         (parsed.message.toLowerCase().includes('cek meteran') ||
           parsed.message.toLowerCase().includes('kedaluwarsa') ||
-          parsed.message.toLowerCase().includes('inquiry'))
+          parsed.message.toLowerCase().includes('inquiry') ||
+          parsed.message.toLowerCase().includes('validasi akun game') ||
+          parsed.message.toLowerCase().includes('akun game'))
       ) {
         clearPlnContext();
+        clearGameContext();
       }
     } finally {
       pinLockRef.current = false;
@@ -242,7 +261,24 @@ export default function CheckoutScreen() {
     );
   }
 
-  if (productDetail && categoryBlocked && !inquiryBlocked && !plnPrepaid) {
+  if (productDetail && gameCat && !gameValid) {
+    return (
+      <ScreenContainer>
+        <Stack.Screen options={{ headerShown: true, title: 'Konfirmasi', headerBackTitle: 'Kembali' }} />
+        <PurchaseFlowNotice
+          icon="game-controller-outline"
+          title={gameExpired ? 'Sesi Validasi Kedaluwarsa' : 'Validasi Akun Diperlukan'}
+          message={
+            gameExpired
+              ? 'Sesi validasi akun game sudah habis. Silakan kembali ke menu Game, pilih produk, dan validasi akun ulang.'
+              : 'Pembelian game membutuhkan validasi akun (nickname) terlebih dahulu. Buka menu Game, pilih produk, isi User ID, lalu validasi.'
+          }
+        />
+      </ScreenContainer>
+    );
+  }
+
+  if (productDetail && categoryBlocked && !inquiryBlocked && !plnPrepaid && !gameCat) {
     return (
       <ScreenContainer>
         <Stack.Screen options={{ headerShown: true, title: 'Konfirmasi', headerBackTitle: 'Kembali' }} />
@@ -256,9 +292,11 @@ export default function CheckoutScreen() {
   }
 
   const plnInquiry = plnContext?.inquiry;
+  const gameInquiry = gameContext?.inquiry;
+  const gameBrand = gameContext?.brand || operatorLabel || productDetail?.operatorName || '';
 
   return (
-    <ScreenContainer>
+    <ScreenContainer belowHeader>
       <Stack.Screen options={{ headerShown: true, title: 'Konfirmasi', headerBackTitle: 'Kembali' }} />
 
       {productDetailLoading && !productDetail ? (
@@ -268,12 +306,16 @@ export default function CheckoutScreen() {
       ) : !productDetail ? (
         <ErrorState message="Produk tidak ditemukan." />
       ) : (
-        <>
-          <Card>
-            {(operatorLabel || productDetail.operatorName) ? (
-              <Text style={styles.operator}>{operatorLabel || productDetail.operatorName}</Text>
+        <View style={styles.contentUp}>
+          <Card style={styles.productCard}>
+            {(gameBrand || productDetail.operatorName) ? (
+              <Text style={styles.operator}>{gameBrand || productDetail.operatorName}</Text>
             ) : null}
-            <Text style={styles.name}>{productDetail.name}</Text>
+            <Text style={styles.name}>
+              {gameCat
+                ? stripGameProductDisplayName(productDetail.name, gameBrand)
+                : productDetail.name}
+            </Text>
             {(productDetail.quota || productDetail.validity) && (
               <Text style={styles.meta}>
                 {[productDetail.quota, productDetail.validity].filter(Boolean).join(' · ')}
@@ -285,42 +327,45 @@ export default function CheckoutScreen() {
             <Text style={styles.label}>
               {plnPrepaid
                 ? 'ID Pelanggan PLN'
-                : viElektronik
-                  ? 'Tujuan (kode voucher)'
-                  : viTembak
-                    ? 'Nomor Tujuan'
+                : gameCat
+                  ? 'Akun Game'
+                  : viElektronik
+                    ? 'Tujuan (kode voucher)'
                     : 'Nomor Tujuan'}
             </Text>
             <TextInput
               value={
-                viElektronik
-                  ? targetNumber.startsWith('08') && targetNumber.length >= 10
-                    ? targetNumber
-                    : 'Kode voucher ke akun Anda'
-                  : targetNumber
+                gameCat && gameInquiry
+                  ? gameInquiry.nickname
+                    ? `${gameInquiry.nickname} (${gameInquiry.id_zone_label || gameInquiry.customer_no})`
+                    : gameInquiry.customer_no
+                  : viElektronik
+                    ? targetNumber.startsWith('08') && targetNumber.length >= 10
+                      ? targetNumber
+                      : 'Kode voucher ke akun Anda'
+                    : targetNumber
               }
-              onChangeText={onTargetChange}
-              placeholder={plnPrepaid ? 'Dari hasil cek meteran' : 'Contoh: 081234567890'}
-              keyboardType="number-pad"
-              editable={!plnPrepaid && !viElektronik && !viTembak}
+              editable={false}
+              selectTextOnFocus={false}
+              placeholder={
+                plnPrepaid
+                  ? 'Dari hasil cek meteran'
+                  : gameCat
+                    ? 'Dari hasil validasi akun'
+                    : 'Nomor tujuan'
+              }
               placeholderTextColor={colors.gray[400]}
-              style={[styles.input, (plnPrepaid || viElektronik || viTembak) && styles.inputLocked]}
+              style={[styles.input, styles.inputLocked]}
             />
-            {plnPrepaid ? (
-              <Text style={styles.lockHint}>
-                Nomor terkunci dari hasil cek meteran. Ubah meter di layar sebelumnya dan cek ulang jika perlu.
-              </Text>
-            ) : null}
-            {viElektronik ? (
-              <Text style={styles.lockHint}>
-                Kode voucher akan ditampilkan setelah transaksi berhasil dan tersimpan di Riwayat.
-              </Text>
-            ) : null}
-            {viTembak ? (
-              <Text style={styles.lockHint}>
-                Nomor terkunci dari langkah Tembak Langsung. Kembali jika perlu mengubah nomor atau wilayah.
-              </Text>
-            ) : null}
+            <Text style={styles.lockHint}>
+              {plnPrepaid
+                ? 'Nomor terkunci dari hasil cek meteran. Ubah meter di layar sebelumnya dan cek ulang jika perlu.'
+                : gameCat
+                  ? 'Akun terkunci dari hasil validasi nickname. Tekan Kembali untuk mengubah User ID.'
+                  : viElektronik
+                    ? 'Kode voucher akan ditampilkan setelah transaksi berhasil dan tersimpan di Riwayat.'
+                    : 'Nomor tujuan tidak bisa diubah di sini. Tekan Kembali untuk mengubah nomor.'}
+            </Text>
             {targetError ? <Text style={styles.fieldError}>{targetError}</Text> : null}
           </View>
 
@@ -351,16 +396,41 @@ export default function CheckoutScreen() {
                   </View>
                 ) : null}
               </>
-            ) : (
+            ) : gameInquiry ? (
               <>
-                {(operatorLabel || productDetail.operatorName) ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Game</Text>
+                  <Text style={styles.summaryValue}>
+                    {gameInquiry.game || gameBrand || '—'}
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Nickname</Text>
+                  <Text style={[styles.summaryValue, styles.summaryValueFlex]} numberOfLines={2}>
+                    {gameInquiry.nickname}
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>User ID</Text>
+                  <Text style={styles.summaryValue}>
+                    {gameInquiry.user_id || gameInquiry.id_zone_label || '—'}
+                  </Text>
+                </View>
+                {gameInquiry.zone_id ? (
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Operator</Text>
-                    <Text style={styles.summaryValue}>
-                      {operatorLabel || productDetail.operatorName}
-                    </Text>
+                    <Text style={styles.summaryLabel}>Zone ID</Text>
+                    <Text style={styles.summaryValue}>{gameInquiry.zone_id}</Text>
                   </View>
                 ) : null}
+              </>
+            ) : (
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Operator</Text>
+                  <Text style={styles.summaryValue}>
+                    {operatorLabel || productDetail.operatorName || '—'}
+                  </Text>
+                </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
                     {viElektronik ? 'Mode' : 'Nomor Tujuan'}
@@ -386,39 +456,43 @@ export default function CheckoutScreen() {
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Produk</Text>
               <Text style={[styles.summaryValue, styles.summaryValueFlex]} numberOfLines={2}>
-                {productDetail.name}
+                {gameCat
+                  ? stripGameProductDisplayName(productDetail.name, gameBrand)
+                  : productDetail.name}
               </Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Harga</Text>
               <Text style={styles.summaryValue}>{formatIDR(productDetail.price)}</Text>
             </View>
-            {productDetail.adminFee > 0 && (
+            {productDetail.adminFee > 0 ? (
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Biaya Admin</Text>
                 <Text style={styles.summaryValue}>{formatIDR(productDetail.adminFee)}</Text>
               </View>
-            )}
+            ) : null}
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabelBold}>Perkiraan Total</Text>
+              <Text style={styles.summaryLabelBold}>Total</Text>
               <Text style={styles.summaryValueBold}>{formatIDR(estimatedTotal)}</Text>
             </View>
-            <Text style={styles.summaryNote}>
-              Total akhir akan dikonfirmasi oleh sistem saat pembayaran. Saldo di bawah hanya
-              pengecekan awal — backend tetap sumber kebenaran.
-            </Text>
-            {typeof balance === 'number' && (
+            {typeof balance === 'number' ? (
               <View style={[styles.summaryRow, styles.balanceRow]}>
                 <Text style={styles.balanceLabel}>Saldo GurkyPay</Text>
-                <Text style={styles.balanceValue}>{formatIDR(balance)}</Text>
+                <Text
+                  style={[
+                    styles.balanceValue,
+                    insufficientBalance && styles.balanceValueWarn,
+                  ]}
+                >
+                  {formatIDR(balance)}
+                </Text>
               </View>
-            )}
-            {insufficientBalance && (
-              <Text style={styles.fieldError}>
-                Saldo tidak mencukupi untuk perkiraan total {formatIDR(estimatedTotal)}. Silakan top
-                up terlebih dahulu.
+            ) : null}
+            {insufficientBalance ? (
+              <Text style={styles.balanceHint}>
+                Saldo GurkyPay kurang, lakukan isi ulang saldo
               </Text>
-            )}
+            ) : null}
           </Card>
 
           <Button
@@ -455,26 +529,34 @@ export default function CheckoutScreen() {
               router.push('/akun/pin/forgot');
             }}
           />
-        </>
+        </View>
       )}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  // Sedikit naik (tidak terlalu tinggi).
+  contentUp: {
+    marginTop: -8,
+    gap: spacing.md,
+  },
+  productCard: {
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+  },
   operator: {
-    fontSize: typography.size.xs,
+    fontSize: 11,
     color: colors.primary[600],
     fontWeight: typography.weight.bold,
     textTransform: 'uppercase',
   },
   name: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.black,
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
     color: colors.gray[900],
-    marginTop: spacing.xs,
   },
-  meta: { fontSize: typography.size.sm, color: colors.gray[500], marginTop: spacing.xs },
+  meta: { fontSize: typography.size.xs, color: colors.gray[500] },
   field: { gap: spacing.xs },
   label: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[700] },
   input: {
@@ -488,7 +570,7 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
   },
   inputLocked: { backgroundColor: colors.gray[50], color: colors.gray[700] },
-  lockHint: { fontSize: typography.size.xs, color: colors.gray[500] },
+  lockHint: { fontSize: typography.size.xs, color: colors.gray[500], lineHeight: 16 },
   fieldError: { fontSize: typography.size.xs, color: colors.status.failed, marginTop: 2 },
   summaryCard: { gap: spacing.sm },
   summaryTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
@@ -502,13 +584,26 @@ const styles = StyleSheet.create({
     color: colors.primary[700],
   },
   summaryValueFlex: { flex: 1, textAlign: 'right' },
-  summaryNote: { fontSize: typography.size.xs, color: colors.gray[400] },
   balanceRow: {
     borderTopWidth: 1,
     borderTopColor: colors.gray[100],
     paddingTop: spacing.sm,
     marginTop: spacing.xs,
   },
-  balanceLabel: { fontSize: typography.size.xs, color: colors.gray[500] },
-  balanceValue: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.gray[700] },
+  balanceLabel: { fontSize: typography.size.sm, color: colors.gray[600] },
+  balanceValue: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  balanceValueWarn: { color: colors.status.failed },
+  balanceHint: {
+    fontSize: typography.size.xs,
+    color: colors.status.failed,
+    backgroundColor: colors.status.failedBg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    lineHeight: 16,
+  },
 });

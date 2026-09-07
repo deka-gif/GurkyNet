@@ -29,7 +29,7 @@ class LanggananDigiflazzHintReader
         }
 
         $desc = trim((string) ($row->desc ?? ''));
-        if ($desc === '') {
+        if ($desc === '' || $desc === '-') {
             return null;
         }
 
@@ -43,13 +43,14 @@ class LanggananDigiflazzHintReader
     {
         $hay = strtolower(trim($desc));
 
-        if ($hay === '') {
+        if ($hay === '' || $hay === '-') {
             return null;
         }
 
         $fields = [];
 
-        if (preg_match('/\b(email|e-mail|gmail)\b/u', $hay)) {
+        // Specific: email / e-mail (avoid bare "mail")
+        if (preg_match('/\b(email|e-mail)\b/u', $hay) || preg_match('/\bgmail\b/u', $hay)) {
             $fields[] = [
                 'key' => 'email',
                 'label' => 'Email Akun',
@@ -58,7 +59,10 @@ class LanggananDigiflazzHintReader
             ];
         }
 
-        if (preg_match('/\b(nomor hp|no hp|no\. hp|nohp|phone|whatsapp|wa)\b/u', $hay)) {
+        // Specific phone phrases — not bare "nomor" / "id"
+        if (preg_match('/\b(nomor hp|no hp|no\. hp|nohp|phone|whatsapp)\b/u', $hay)
+            || preg_match('/\bno\s*hp\s+yang\s+terdaftar\b/u', $hay)
+        ) {
             $fields[] = [
                 'key' => 'phone',
                 'label' => 'Nomor HP',
@@ -67,7 +71,10 @@ class LanggananDigiflazzHintReader
             ];
         }
 
-        if (preg_match('/\b(user id|userid|player id|customer id|id pelanggan|id akun|uid)\b/u', $hay)) {
+        // User/account id — require explicit phrases (not bare "id")
+        if (preg_match('/\b(user id|userid|player id|customer id|id pelanggan|id akun)\b/u', $hay)
+            || preg_match('/masukkan\s+uid\b/u', $hay)
+        ) {
             $fields[] = [
                 'key' => 'user_id',
                 'label' => 'User ID / ID Akun',

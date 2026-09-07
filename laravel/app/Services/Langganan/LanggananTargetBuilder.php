@@ -6,6 +6,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Builds and validates customer_no / target display for Langganan Digital.
+ * delivery=unknown → fail-closed (never invent LANGGANAN / account fields).
  */
 class LanggananTargetBuilder
 {
@@ -15,9 +16,23 @@ class LanggananTargetBuilder
      */
     public function buildCustomerNo(array $account, array $schema): string
     {
-        $fields = $schema['fields'] ?? [];
-        if ($fields === [] || ($schema['delivery'] ?? '') === 'voucher') {
+        $delivery = strtolower(trim((string) ($schema['delivery'] ?? '')));
+
+        if ($delivery === 'unknown' || $delivery === '' || ! in_array($delivery, ['account', 'voucher'], true)) {
+            throw ValidationException::withMessages([
+                'target_number' => ['Format akun produk belum tersedia. Pembelian tidak dapat dilanjutkan.'],
+            ]);
+        }
+
+        if ($delivery === 'voucher') {
             return (string) config('gurky_langganan.voucher_customer_placeholder', 'LANGGANAN');
+        }
+
+        $fields = $schema['fields'] ?? [];
+        if ($fields === []) {
+            throw ValidationException::withMessages([
+                'target_number' => ['Format akun produk belum tersedia. Pembelian tidak dapat dilanjutkan.'],
+            ]);
         }
 
         $values = $this->parseAccountValues($fields, $account);
@@ -35,10 +50,16 @@ class LanggananTargetBuilder
     public function assertValidTarget(string $targetNumber, array $schema): void
     {
         $fields = $schema['fields'] ?? [];
-        $delivery = (string) ($schema['delivery'] ?? 'voucher');
+        $delivery = strtolower(trim((string) ($schema['delivery'] ?? '')));
         $placeholder = (string) config('gurky_langganan.voucher_customer_placeholder', 'LANGGANAN');
 
-        if ($fields === [] || $delivery === 'voucher') {
+        if ($delivery === 'unknown' || $delivery === '' || ! in_array($delivery, ['account', 'voucher'], true)) {
+            throw ValidationException::withMessages([
+                'target_number' => ['Format akun produk belum tersedia. Pembelian tidak dapat dilanjutkan.'],
+            ]);
+        }
+
+        if ($delivery === 'voucher') {
             if (trim($targetNumber) === '') {
                 throw ValidationException::withMessages([
                     'target_number' => ['Nomor tujuan wajib diisi.'],
@@ -46,6 +67,12 @@ class LanggananTargetBuilder
             }
 
             return;
+        }
+
+        if ($fields === []) {
+            throw ValidationException::withMessages([
+                'target_number' => ['Format akun produk belum tersedia. Pembelian tidak dapat dilanjutkan.'],
+            ]);
         }
 
         if (strcasecmp(trim($targetNumber), $placeholder) === 0) {
@@ -62,7 +89,7 @@ class LanggananTargetBuilder
             $input = $field['input'] ?? 'text';
             $label = $field['label'] ?? $key;
 
-            if ($input === 'email' && !filter_var($targetNumber, FILTER_VALIDATE_EMAIL)) {
+            if ($input === 'email' && ! filter_var($targetNumber, FILTER_VALIDATE_EMAIL)) {
                 if (count($fields) === 1) {
                     throw ValidationException::withMessages([
                         'target_number' => ["{$label} tidak valid."],
@@ -98,7 +125,7 @@ class LanggananTargetBuilder
                 continue;
             }
 
-            if ($input === 'email' && !filter_var($raw, FILTER_VALIDATE_EMAIL)) {
+            if ($input === 'email' && ! filter_var($raw, FILTER_VALIDATE_EMAIL)) {
                 $errors[$key] = ["{$label} tidak valid."];
                 continue;
             }
@@ -124,8 +151,13 @@ class LanggananTargetBuilder
      */
     public function displayTarget(string $targetNumber, array $schema, array $account = []): string
     {
+        $delivery = strtolower(trim((string) ($schema['delivery'] ?? '')));
+        if ($delivery === 'unknown') {
+            return 'Format akun belum tersedia';
+        }
+
         $fields = $schema['fields'] ?? [];
-        if ($fields === []) {
+        if ($fields === [] || $delivery === 'voucher') {
             return 'Kode aktivasi via provider';
         }
 
