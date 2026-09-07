@@ -1,8 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { PinConfirmModal } from '../../src/components/ui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import { PlatformLogo } from '../../src/components/ui';
 import { useAuthStore } from '../../src/store/auth.store';
 import { useWebsiteStore } from '../../src/store/website.store';
 import {
@@ -13,32 +27,66 @@ import {
 import { storageService } from '../../src/services/storage.service';
 import { colors, spacing, typography } from '../../src/theme';
 
+const PIN_LEN = 6;
+const KEY_ROWS: Array<Array<'bio' | 'backspace' | string>> = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['bio', '0', 'backspace'],
+];
+
 /**
- * Returning-user unlock — checkout master PIN UI (PinConfirmModal).
- * PIN → POST /auth/login/pin; 2FA challenge → existing login 2FA UI.
- * Biometric unlocks existing SecureStore session only (after explicit consent).
+ * App unlock — OVO-style vertical rhythm (air gaps + sticky footer), GurkyNet brand.
+ * Auth logic unchanged from a86a324.
  */
 export default function UnlockScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_700Bold,
+  });
   const fetchSettings = useWebsiteStore((s) => s.fetchSettings);
+  const logo = useWebsiteStore((s) => s.logo);
+  const websiteName = useWebsiteStore((s) => s.websiteName);
+
   const pinLogin = useAuthStore((s) => s.pinLogin);
   const unlockWithExistingSession = useAuthStore((s) => s.unlockWithExistingSession);
   const switchAccount = useAuthStore((s) => s.switchAccount);
   const rememberedIdentity = useAuthStore((s) => s.rememberedIdentity);
+  const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const loading = useAuthStore((s) => s.loading);
   const storeError = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
 
+  const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [bioLabel, setBioLabel] = useState('Fingerprint');
   const [bioHardware, setBioHardware] = useState(false);
   const [bioEnabled, setBioEnabled] = useState(false);
   const [bioBusy, setBioBusy] = useState(false);
   const lockRef = useRef(false);
-  const bioTriedRef = useRef(false);
+  const submittingRef = useRef(false);
 
   const canUseBioUnlock = bioHardware && bioEnabled && !!token;
+  const locked = loading || bioBusy;
+
+  const displayName = useMemo(() => {
+    const fromUser = user?.name?.trim();
+    if (fromUser) return fromUser;
+    if (rememberedIdentity?.includes('@')) {
+      const local = rememberedIdentity.split('@')[0]?.trim();
+      if (local) return local;
+    }
+    return 'kamu';
+  }, [user?.name, rememberedIdentity]);
+
+  // Keypad: gap kolom lebih lebar → 1/4/7/bio ke kiri, 3/6/9 ke kanan.
+  const keyHit = Math.min(68, Math.max(56, Math.round(windowWidth * 0.15)));
+  const colGap = Math.max(36, Math.round(windowWidth * 0.14));
+  const rowGap = Math.max(18, Math.min(34, Math.round(windowHeight * 0.032)));
 
   useEffect(() => {
     void fetchSettings();
@@ -55,13 +103,18 @@ export default function UnlockScreen() {
   }, [token]);
 
   const goHome = useCallback(async () => {
-    const user = useAuthStore.getState().user;
-    if (user && !user.hasPin) {
+    const nextUser = useAuthStore.getState().user;
+    if (nextUser && !nextUser.hasPin) {
       router.replace('/(auth)/setup-pin');
       return;
     }
     router.replace('/(tabs)/home');
   }, [router]);
+
+  const clearPinDigits = () => {
+    setPin('');
+    submittingRef.current = false;
+  };
 
   const submitPin = async (entered: string) => {
     if (lockRef.current || loading) return;
@@ -74,15 +127,40 @@ export default function UnlockScreen() {
         await goHome();
         return;
       }
-      // Reuse existing login 2FA UI — store already set twoFactorChallenge + gate.
       if (useAuthStore.getState().twoFactorChallenge) {
         router.replace('/(auth)/login');
         return;
       }
-      setError(useAuthStore.getState().error || 'PIN tidak valid.');
+      setError('PIN SALAH');
+      clearPinDigits();
     } finally {
       lockRef.current = false;
+      submittingRef.current = false;
     }
+  };
+
+  const appendDigit = (digit: string) => {
+    if (locked || submittingRef.current) return;
+    if (!/^\d$/.test(digit)) return;
+    if (pin.length >= PIN_LEN) return;
+    const next = `${pin}${digit}`.slice(0, PIN_LEN);
+    setPin(next);
+    setError(null);
+    clearError();
+    if (next.length === PIN_LEN) {
+      submittingRef.current = true;
+      requestAnimationFrame(() => {
+        void submitPin(next);
+      });
+    }
+  };
+
+  const backspace = () => {
+    if (locked || submittingRef.current) return;
+    if (!pin) return;
+    setPin(pin.slice(0, -1));
+    setError(null);
+    clearError();
   };
 
   const tryBiometric = useCallback(async () => {
@@ -91,10 +169,8 @@ export default function UnlockScreen() {
     setError(null);
     try {
       const ok = await promptBiometric('Masuk ke GurkyPay');
-      if (!ok) {
-        setError('Autentikasi biometrik gagal atau dibatalkan.');
-        return;
-      }
+      // Batal / gagal biometrik: diam saja, user bisa lanjut pakai PIN.
+      if (!ok) return;
       const sessionOk = await unlockWithExistingSession();
       if (sessionOk) {
         await goHome();
@@ -122,95 +198,357 @@ export default function UnlockScreen() {
     }
   };
 
-  useEffect(() => {
-    if (!canUseBioUnlock || bioTriedRef.current) return;
-    bioTriedRef.current = true;
-    void tryBiometric();
-  }, [canUseBioUnlock, tryBiometric]);
+  const onSwitchAccount = () => {
+    void switchAccount().then(() => router.replace('/(auth)/login'));
+  };
+
+  // Account PIN recovery — destinasi sama dengan Lupa PIN di area Akun.
+  const onForgotPin = () => {
+    router.push('/akun/pin/forgot');
+  };
 
   const displayError = error || storeError;
-  const masked =
-    rememberedIdentity && rememberedIdentity.includes('@')
-      ? rememberedIdentity.replace(/(.{2}).+(@.+)/, '$1***$2')
-      : rememberedIdentity
-        ? rememberedIdentity.replace(/(\d{4})\d+(\d{3})/, '$1****$2')
-        : 'akun kamu';
+  const pinFilled = Math.min(PIN_LEN, pin.replace(/\D/g, '').length);
+  const slotStyle = { width: keyHit, height: keyHit };
+  // Lebar kolom = keyHit agar sidik jari / teks sejajar pusat dengan 1·4·7 (dan 3·6·9).
+  const sideColStyle = { width: keyHit, alignItems: 'center' as const };
 
   return (
     <View style={styles.fill}>
-      <PinConfirmModal
-        visible
-        title="Selamat datang kembali 👋"
-        subtitle={`Masukkan PIN untuk melanjutkan\n${masked}`}
-        loading={loading || bioBusy}
-        error={displayError}
-        hideForgotPin
-        dismissible={false}
-        onClose={() => {
-          void switchAccount().then(() => router.replace('/(auth)/login'));
-        }}
-        onEditing={() => {
-          setError(null);
-          clearError();
-        }}
-        onSubmit={(entered) => void submitPin(entered)}
-        footer={
-          <View style={styles.footerCol}>
-            {canUseBioUnlock ? (
-              <Pressable
-                onPress={() => void tryBiometric()}
-                disabled={bioBusy || loading}
-                hitSlop={8}
-                style={styles.bioBtn}
-                accessibilityRole="button"
-                accessibilityLabel={`Masuk dengan ${bioLabel}`}
-              >
-                <Ionicons name="finger-print-outline" size={22} color={colors.primary[700]} />
-                <Text style={styles.bioText}>Masuk dengan {bioLabel}</Text>
-              </Pressable>
-            ) : bioHardware ? (
-              <Pressable
-                onPress={() => void consentEnableBiometric()}
-                disabled={bioBusy || loading}
-                hitSlop={8}
-                style={styles.bioBtn}
-                accessibilityRole="button"
-                accessibilityLabel={`Aktifkan ${bioLabel}`}
-              >
-                <Ionicons name="finger-print-outline" size={22} color={colors.primary[700]} />
-                <Text style={styles.bioText}>Aktifkan {bioLabel}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={() => void switchAccount().then(() => router.replace('/(auth)/login'))}
-              hitSlop={8}
-            >
-              <Text style={styles.switchText}>Gunakan akun lain</Text>
-            </Pressable>
+      <View
+        style={[
+          styles.body,
+          {
+            paddingTop: Math.max(insets.top, spacing['2xl']),
+            paddingBottom: Math.max(insets.bottom, spacing.lg),
+          },
+        ]}
+      >
+        {/* Top cluster — logo + greeting + PIN dots (OVO upper block) */}
+        <View style={styles.upper}>
+          <View style={styles.logoWrap}>
+            {logo ? (
+              <PlatformLogo logo={logo} height={72} contentScale={1.22} />
+            ) : (
+              <Image
+                source={require('../../assets/splash-icon.png')}
+                style={styles.logoFallback}
+                resizeMode="contain"
+                accessibilityLabel={websiteName || 'GurkyPay'}
+              />
+            )}
           </View>
-        }
-      />
+
+          <Text
+            style={[styles.greeting, fontsLoaded && styles.greetingModern]}
+            accessibilityRole="header"
+          >
+            Halo, {displayName}
+          </Text>
+          <Text style={[styles.subtitle, fontsLoaded && styles.subtitleModern]}>
+            Masukkan PIN
+          </Text>
+
+          <View
+            style={styles.dotsWrap}
+            accessibilityRole="text"
+            accessibilityLabel={`PIN ${pinFilled} dari ${PIN_LEN} digit`}
+          >
+            {Array.from({ length: PIN_LEN }).map((_, i) => {
+              const filled = i < pinFilled;
+              return (
+                <View
+                  key={`dot-${i}`}
+                  style={[styles.dot, filled ? styles.dotFilled : styles.dotEmpty]}
+                />
+              );
+            })}
+          </View>
+
+          {bioHardware && !bioEnabled ? (
+            <Pressable
+              onPress={() => void consentEnableBiometric()}
+              disabled={locked}
+              hitSlop={8}
+              style={styles.consentWrap}
+              accessibilityRole="button"
+              accessibilityLabel={`Aktifkan ${bioLabel}`}
+            >
+              <Text style={styles.consentText}>Aktifkan {bioLabel}</Text>
+            </Pressable>
+          ) : null}
+
+          {locked ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.primary[600]} />
+            </View>
+          ) : null}
+
+          {displayError && !locked ? <Text style={styles.error}>{displayError}</Text> : null}
+        </View>
+
+        {/* Gap antara bulatan PIN dan keypad — sedikit lebih pendek agar keypad naik. */}
+        <View style={styles.midSpacer} />
+
+        {/* Airy keypad */}
+        <View style={[styles.keypad, { gap: rowGap }]}>
+          {KEY_ROWS.map((row, rowIndex) => (
+            <View key={`row-${rowIndex}`} style={[styles.keypadRow, { gap: colGap }]}>
+              {row.map((key) => {
+                if (key === 'bio') {
+                  return (
+                    <View key="bio-col" style={sideColStyle}>
+                      {canUseBioUnlock ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Masuk dengan ${bioLabel}`}
+                          disabled={locked}
+                          hitSlop={12}
+                          onPress={() => void tryBiometric()}
+                          style={({ pressed }) => [
+                            styles.iconSlot,
+                            slotStyle,
+                            pressed && !locked && styles.pressed,
+                            locked && styles.disabled,
+                          ]}
+                        >
+                          <Ionicons
+                            name="finger-print-outline"
+                            size={30}
+                            color={colors.primary[600]}
+                          />
+                        </Pressable>
+                      ) : (
+                        <View
+                          style={slotStyle}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                        />
+                      )}
+                      <Pressable
+                        onPress={onSwitchAccount}
+                        accessibilityRole="button"
+                        accessibilityLabel="Gunakan akun lain"
+                        hitSlop={6}
+                        style={[styles.sideLinkWrap, { width: keyHit }]}
+                      >
+                        <Text style={styles.sideLinkText} numberOfLines={2}>
+                          Gunakan akun lain
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                }
+
+                if (key === 'backspace') {
+                  return (
+                    <View key="backspace-col" style={sideColStyle}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Hapus"
+                        disabled={locked}
+                        hitSlop={12}
+                        onPress={backspace}
+                        style={({ pressed }) => [
+                          styles.iconSlot,
+                          slotStyle,
+                          pressed && !locked && styles.pressed,
+                          locked && styles.disabled,
+                        ]}
+                      >
+                        <Ionicons name="backspace-outline" size={26} color={colors.gray[600]} />
+                      </Pressable>
+                      <Pressable
+                        onPress={onForgotPin}
+                        accessibilityRole="button"
+                        accessibilityLabel="Lupa PIN"
+                        hitSlop={6}
+                        style={[styles.sideLinkWrap, { width: keyHit }]}
+                      >
+                        <Text style={styles.sideLinkText}>LUPA PIN</Text>
+                      </Pressable>
+                    </View>
+                  );
+                }
+
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Angka ${key}`}
+                    disabled={locked}
+                    hitSlop={8}
+                    onPress={() => appendDigit(key)}
+                    style={({ pressed }) => [
+                      styles.digitSlot,
+                      slotStyle,
+                      { borderRadius: keyHit / 2 },
+                      pressed && !locked && styles.digitPressed,
+                      locked && styles.disabled,
+                    ]}
+                  >
+                    <Text style={styles.digit}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.lowerSpacer} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: colors.gray[50] },
-  footerCol: { alignItems: 'center', gap: spacing.md },
-  bioBtn: {
+  fill: {
+    flex: 1,
+    backgroundColor: colors.white,
+  },
+  body: {
+    flex: 1,
+    paddingHorizontal: spacing['2xl'],
+  },
+  upper: {
+    alignItems: 'center',
+    // Turunkan blok Halo + Masukkan PIN ~2cm.
+    paddingTop: spacing.lg + 76,
+  },
+  logoWrap: {
+    marginBottom: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 80,
+  },
+  logoFallback: {
+    width: 80,
+    height: 80,
+  },
+  greeting: {
+    fontSize: 24,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+    textAlign: 'center',
+    letterSpacing: -0.35,
+  },
+  greetingModern: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    // Weight baked into the font file — avoid Android synthetic bold miss.
+    fontWeight: '400',
+  },
+  subtitle: {
+    marginTop: spacing.sm,
+    fontSize: 15,
+    fontWeight: typography.weight.medium,
+    color: colors.gray[600],
+    textAlign: 'center',
+    letterSpacing: 0.15,
+  },
+  subtitleModern: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontWeight: '400',
+  },
+  dotsWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'center',
+    gap: 16,
+    // Naikkan bulatan PIN ~2cm dari posisi terakhir.
+    marginTop: spacing['3xl'] + spacing.md,
+    minHeight: 22,
+  },
+  dot: {
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
+  },
+  dotEmpty: {
+    borderWidth: 1.5,
+    borderColor: colors.gray[300],
+    backgroundColor: 'transparent',
+  },
+  dotFilled: {
+    borderWidth: 1.5,
+    borderColor: colors.primary[600],
+    backgroundColor: colors.primary[600],
+  },
+  consentWrap: {
+    marginTop: spacing.md,
     paddingVertical: spacing.sm,
   },
-  bioText: {
+  consentText: {
+    fontSize: 13,
+    fontWeight: typography.weight.medium,
+    color: colors.primary[700],
+    textAlign: 'center',
+  },
+  loadingRow: {
+    marginTop: spacing.md,
+  },
+  error: {
+    marginTop: spacing.md,
     fontSize: typography.size.sm,
+    color: colors.status.failed,
+    backgroundColor: colors.status.failedBg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  midSpacer: {
+    flexGrow: 0.45,
+    minHeight: 16,
+  },
+  lowerSpacer: {
+    flexGrow: 0.55,
+    minHeight: 8,
+  },
+  keypad: {
+    alignSelf: 'center',
+    // Turunkan keypad angka ~1cm lagi.
+    marginTop: 38,
+  },
+  keypadRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  digitSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gray[100],
+  },
+  digit: {
+    fontSize: 32,
+    fontWeight: typography.weight.medium,
+    color: colors.gray[900],
+  },
+  iconSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  sideLinkWrap: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sideLinkText: {
+    fontSize: 11,
     fontWeight: typography.weight.bold,
     color: colors.primary[700],
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  switchText: {
-    fontSize: typography.size.sm,
-    color: colors.gray[500],
-    fontWeight: typography.weight.medium,
+  pressed: {
+    opacity: 0.55,
+  },
+  digitPressed: {
+    backgroundColor: colors.gray[200],
+  },
+  disabled: {
+    opacity: 0.35,
   },
 });

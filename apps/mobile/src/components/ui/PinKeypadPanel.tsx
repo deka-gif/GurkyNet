@@ -29,8 +29,8 @@ type Props = {
 };
 
 /**
- * Compatibility wrapper — ALL PIN entry uses checkout master UI (`PinConfirmModal`).
- * Do not reintroduce a separate keypad layout here. Do not change PIN visuals.
+ * Compatibility wrapper — ALL PIN entry uses master UI (`PinConfirmModal`).
+ * Full-screen unlock/OTP layout (not bottom sheet).
  */
 export function PinKeypadPanel({
   onChange,
@@ -75,7 +75,7 @@ export function PinKeypadPanel({
 const styles = StyleSheet.create({
   fill: {
     flex: 1,
-    backgroundColor: colors.gray[50],
+    backgroundColor: colors.white,
     minHeight: 280,
   },
 });

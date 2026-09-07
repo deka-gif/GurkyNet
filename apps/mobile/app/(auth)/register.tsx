@@ -11,9 +11,41 @@ import {
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useAuthStore } from '../../src/store/auth.store';
-import { Button, AuthBrandHeader } from '../../src/components/ui';
+import { Button } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
+
+/** Ikon orang + tanda daftar (person add) realistis. */
+function PersonAddIcon({ size = 44 }: { size?: number }) {
+  const body = colors.primary[600];
+  const dark = colors.primary[800];
+  const light = colors.primary[400];
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64" accessibilityLabel="Daftar akun">
+      {/* Head */}
+      <Circle cx="26" cy="18" r="11" fill={body} />
+      <Circle cx="26" cy="16" r="4" fill={light} opacity={0.4} />
+      {/* Shoulders / torso */}
+      <Path
+        d="M8 52 C8 38 16 32 26 32 C36 32 44 38 44 52 Z"
+        fill={body}
+      />
+      <Path
+        d="M14 48 C16 40 20 36 26 36 C32 36 36 40 38 48"
+        stroke={light}
+        strokeWidth={3}
+        fill="none"
+        opacity={0.45}
+      />
+      {/* Plus badge */}
+      <Circle cx="48" cy="44" r="13" fill={colors.white} />
+      <Circle cx="48" cy="44" r="11" fill={dark} />
+      <Rect x="45" y="37.5" width="6" height="13" rx="2" fill={colors.white} />
+      <Rect x="41.5" y="41" width="13" height="6" rx="2" fill={colors.white} />
+    </Svg>
+  );
+}
 
 /**
  * Daftar akun — name / email / phone / password → OTP onboarding.
@@ -90,8 +122,13 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <AuthBrandHeader subtitle="Buat akun konter untuk mulai transaksi" />
-        <Text style={styles.heading}>Daftar Akun GurkyNet</Text>
+        <View style={styles.header}>
+          <View style={styles.iconWrap}>
+            <PersonAddIcon size={44} />
+          </View>
+          <Text style={styles.title}>Daftar Akun</Text>
+          <Text style={styles.lead}>Buat Akun Untuk Memulai Transaksi</Text>
+        </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Nama Lengkap</Text>
@@ -225,12 +262,33 @@ const styles = StyleSheet.create({
     padding: spacing['2xl'],
     gap: spacing.md,
   },
-  heading: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.bold,
+  header: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primary[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  title: {
+    fontSize: typography.size['2xl'],
+    fontWeight: typography.weight.black,
     color: colors.gray[900],
     textAlign: 'center',
-    marginBottom: spacing.xs,
+    letterSpacing: -0.3,
+  },
+  lead: {
+    fontSize: typography.size.base,
+    color: colors.gray[500],
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: spacing.md,
   },
   field: { gap: spacing.xs },
   label: {

@@ -252,7 +252,8 @@ export default function LoginScreen() {
           loading={googleBusy}
           disabled={loading || googleBusy}
           onPress={() => void handleGoogle()}
-          icon={<Ionicons name="logo-google" size={18} color={colors.primary[700]} />}
+          labelStyle={{ color: colors.gray[900] }}
+          icon={<Ionicons name="logo-google" size={18} color={colors.gray[900]} />}
         />
 
         <Text style={styles.footer}>

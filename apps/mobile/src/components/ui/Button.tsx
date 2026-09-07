@@ -1,5 +1,12 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextStyle,
+  View,
+} from 'react-native';
 import { colors, radius, spacing, typography } from '../../theme';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -12,6 +19,8 @@ interface ButtonProps {
   disabled?: boolean;
   fullWidth?: boolean;
   icon?: React.ReactNode;
+  /** Optional override for label color/weight (e.g. Google button → hitam). */
+  labelStyle?: TextStyle;
 }
 
 /**
@@ -21,7 +30,16 @@ interface ButtonProps {
  * double-submit guard for "Beli Sekarang" and similar actions lives at the call site
  * (disable via `loading`/`disabled`), this component just renders that state clearly.
  */
-export function Button({ label, onPress, variant = 'primary', loading = false, disabled = false, fullWidth = true, icon }: ButtonProps) {
+export function Button({
+  label,
+  onPress,
+  variant = 'primary',
+  loading = false,
+  disabled = false,
+  fullWidth = true,
+  icon,
+  labelStyle,
+}: ButtonProps) {
   const isDisabled = disabled || loading;
 
   return (
@@ -41,7 +59,7 @@ export function Button({ label, onPress, variant = 'primary', loading = false, d
       ) : (
         <View style={styles.content}>
           {icon}
-          <Text style={[styles.label, textVariantStyles[variant]]}>{label}</Text>
+          <Text style={[styles.label, textVariantStyles[variant], labelStyle]}>{label}</Text>
         </View>
       )}
     </Pressable>

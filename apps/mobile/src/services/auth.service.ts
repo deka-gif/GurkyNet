@@ -95,6 +95,8 @@ export const authService = {
     const response = await apiClient.post<ApiResponse<OtpVerifyResponse>>('/auth/otp/verify', {
       onboarding_id: payload.onboarding_id,
       code: payload.code,
+      // Wajib — VerifyOtpRequest; sama kontrak web RegisterPage.
+      action: 'onboarding_registration',
     });
     return response.data;
   },

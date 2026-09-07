@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from './Button';
-import { AuthBrandHeader } from './AuthBrandHeader';
 import { colors, spacing, typography } from '../../theme';
 
 type Props = {
@@ -14,7 +13,7 @@ type Props = {
 };
 
 /**
- * Lightweight success animation (RN Animated) — no network GIF.
+ * Success screen — checkmark pop animation (RN Animated), no brand header.
  */
 export function AuthSuccessView({
   title = 'Berhasil!',
@@ -23,25 +22,47 @@ export function AuthSuccessView({
   onContinue,
   autoContinueMs,
 }: Props) {
-  const scale = useRef(new Animated.Value(0.6)).current;
+  const scale = useRef(new Animated.Value(0.2)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const ringScale = useRef(new Animated.Value(0.4)).current;
+  const ringOpacity = useRef(new Animated.Value(0.55)).current;
 
   useEffect(() => {
-    Animated.parallel([
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(scale, {
+          toValue: 1.12,
+          friction: 5,
+          tension: 120,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringScale, {
+          toValue: 1.55,
+          duration: 520,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringOpacity, {
+          toValue: 0,
+          duration: 520,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
       Animated.spring(scale, {
         toValue: 1,
         friction: 6,
-        tension: 80,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 420,
-        easing: Easing.out(Easing.cubic),
+        tension: 90,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [opacity, scale]);
+  }, [opacity, ringOpacity, ringScale, scale]);
 
   useEffect(() => {
     if (!autoContinueMs) return;
@@ -51,10 +72,20 @@ export function AuthSuccessView({
 
   return (
     <View style={styles.wrap}>
-      <AuthBrandHeader compact />
-      <Animated.View style={[styles.iconWrap, { opacity, transform: [{ scale }] }]}>
-        <Ionicons name="checkmark-circle" size={72} color={colors.primary[600]} />
-      </Animated.View>
+      <View style={styles.iconStage}>
+        <Animated.View
+          style={[
+            styles.ring,
+            {
+              opacity: ringOpacity,
+              transform: [{ scale: ringScale }],
+            },
+          ]}
+        />
+        <Animated.View style={{ opacity, transform: [{ scale }] }}>
+          <Ionicons name="checkmark-circle" size={88} color={colors.primary[600]} />
+        </Animated.View>
+      </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
       <Button label={buttonLabel} onPress={onContinue} />
@@ -70,9 +101,21 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.white,
   },
-  iconWrap: {
+  iconStage: {
     alignSelf: 'center',
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginVertical: spacing.md,
+  },
+  ring: {
+    position: 'absolute',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: colors.primary[300],
   },
   title: {
     fontSize: typography.size.xl,
