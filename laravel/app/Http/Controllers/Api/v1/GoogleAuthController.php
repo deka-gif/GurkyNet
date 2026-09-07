@@ -5,35 +5,66 @@ namespace App\Http\Controllers\Api\v1;
 use App\Actions\Auth\RegisterUserAction;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserDevice;
 use App\Support\TokenPolicy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
+/**
+ * Google OAuth — Web (FRONTEND_URL) + Mobile deep-link (gurkypay:// / Expo Linking).
+ * Mobile: GET /auth/google/redirect?client=mobile&redirect_uri=gurkypay://auth/google
+ * Web unchanged when client omitted / client=web.
+ */
 class GoogleAuthController extends Controller
 {
-    public function redirect(): RedirectResponse
+    public function redirect(Request $request): RedirectResponse
     {
-        return Socialite::driver('google')->stateless()->redirect();
+        $client = strtolower((string) $request->query('client', 'web'));
+        if (!in_array($client, ['web', 'mobile'], true)) {
+            $client = 'web';
+        }
+
+        $redirectUri = (string) $request->query('redirect_uri', '');
+        if ($client === 'mobile' && !$this->isAllowedMobileRedirect($redirectUri)) {
+            $frontendUrl = rtrim((string) config('services.frontend_url', env('FRONTEND_URL', '/')), '/');
+            return redirect()->away($frontendUrl . '/login?google_error=' . urlencode('Redirect URI Mobile tidak valid.'));
+        }
+
+        $stateKey = Str::random(40);
+        Cache::put('google_oauth_ctx:' . $stateKey, [
+            'client' => $client,
+            'redirect_uri' => $client === 'mobile' ? $redirectUri : null,
+            'issued_at' => now()->timestamp,
+        ], now()->addMinutes(15));
+
+        return Socialite::driver('google')
+            ->stateless()
+            ->with(['state' => $stateKey])
+            ->redirect();
     }
 
     public function callback(Request $request, RegisterUserAction $registerAction): RedirectResponse
     {
         $frontendUrl = rtrim((string) config('services.frontend_url', env('FRONTEND_URL', '/')), '/');
+        $ctx = $this->resolveOAuthContext($request);
+        $client = $ctx['client'] ?? 'web';
+        $mobileRedirect = $ctx['redirect_uri'] ?? null;
 
         try {
             $googleUser = Socialite::driver('google')->stateless()->user();
         } catch (\Throwable $e) {
             Log::warning('Google OAuth callback failed', ['error' => $e->getMessage()]);
-            return redirect()->away($frontendUrl . '/login?google_error=' . urlencode('Login Google gagal, coba lagi.'));
+            return $this->oauthErrorRedirect($client, $mobileRedirect, $frontendUrl, 'Login Google gagal, coba lagi.');
         }
 
         $email = $googleUser->getEmail();
         if (!$email) {
-            return redirect()->away($frontendUrl . '/login?google_error=' . urlencode('Akun Google tidak memiliki email publik.'));
+            return $this->oauthErrorRedirect($client, $mobileRedirect, $frontendUrl, 'Akun Google tidak memiliki email publik.');
         }
 
         $user = User::query()->where('google_id', $googleUser->getId())->first();
@@ -47,6 +78,14 @@ class GoogleAuthController extends Controller
 
         if ($user) {
             $token = $user->createToken('google-oauth', ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
+            $this->rememberTrustedDeviceFromHeaders($user, $request);
+
+            if ($client === 'mobile' && $mobileRedirect) {
+                return redirect()->away($this->appendQuery($mobileRedirect, [
+                    'token' => $token,
+                ]));
+            }
+
             return redirect()->away($frontendUrl . '/auth/google/landing?token=' . urlencode($token));
         }
 
@@ -58,6 +97,12 @@ class GoogleAuthController extends Controller
             'issued_at' => now()->timestamp,
         ];
         $googleToken = Crypt::encryptString(json_encode($payload));
+
+        if ($client === 'mobile' && $mobileRedirect) {
+            return redirect()->away($this->appendQuery($mobileRedirect, [
+                'google_token' => $googleToken,
+            ]));
+        }
 
         return redirect()->away($frontendUrl . '/register/google-complete?google_token=' . urlencode($googleToken));
     }
@@ -103,6 +148,7 @@ class GoogleAuthController extends Controller
         ]);
 
         $token = $user->createToken('google-oauth', ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
+        $this->rememberTrustedDeviceFromHeaders($user, $request);
 
         return response()->json([
             'success' => true,
@@ -112,5 +158,91 @@ class GoogleAuthController extends Controller
                 'user' => new \App\Http\Resources\ProfileResource($user->fresh(['wallet'])),
             ],
         ]);
+    }
+
+    /**
+     * @return array{client: string, redirect_uri: ?string}
+     */
+    protected function resolveOAuthContext(Request $request): array
+    {
+        $state = (string) $request->query('state', '');
+        if ($state !== '') {
+            $ctx = Cache::pull('google_oauth_ctx:' . $state);
+            if (is_array($ctx) && !empty($ctx['client'])) {
+                return [
+                    'client' => (string) $ctx['client'],
+                    'redirect_uri' => isset($ctx['redirect_uri']) ? (string) $ctx['redirect_uri'] : null,
+                ];
+            }
+        }
+
+        return ['client' => 'web', 'redirect_uri' => null];
+    }
+
+    protected function isAllowedMobileRedirect(string $uri): bool
+    {
+        if ($uri === '' || strlen($uri) > 512) {
+            return false;
+        }
+
+        $allowed = config('services.google.mobile_redirect_prefixes', [
+            'gurkypay://',
+            'exp://',
+        ]);
+
+        foreach ($allowed as $prefix) {
+            if (str_starts_with($uri, (string) $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function oauthErrorRedirect(string $client, ?string $mobileRedirect, string $frontendUrl, string $message): RedirectResponse
+    {
+        if ($client === 'mobile' && $mobileRedirect) {
+            return redirect()->away($this->appendQuery($mobileRedirect, [
+                'google_error' => $message,
+            ]));
+        }
+
+        return redirect()->away($frontendUrl . '/login?google_error=' . urlencode($message));
+    }
+
+    /**
+     * @param array<string, string> $params
+     */
+    protected function appendQuery(string $base, array $params): string
+    {
+        $sep = str_contains($base, '?') ? '&' : '?';
+        return $base . $sep . http_build_query($params);
+    }
+
+    protected function rememberTrustedDeviceFromHeaders(User $user, Request $request): void
+    {
+        $deviceUuid = $request->header('X-Device-UUID', $request->input('device_uuid'));
+        // Browser OAuth callback usually has no Mobile device headers — skip silently.
+        if (!$deviceUuid) {
+            return;
+        }
+
+        $platform = strtolower((string) $request->header('X-Platform', $request->input('platform', 'android')));
+        if (!in_array($platform, ['android', 'ios', 'web', 'pwa'], true)) {
+            $platform = 'android';
+        }
+
+        UserDevice::updateOrCreate(
+            ['device_uuid' => $deviceUuid, 'platform' => $platform],
+            [
+                'user_id' => $user->id,
+                'app_version' => $request->header('X-App-Version'),
+                'device_model' => substr((string) $request->header('X-Device-Model', ''), 0, 128) ?: null,
+                'os_version' => substr((string) $request->header('X-Os-Version', ''), 0, 64) ?: null,
+                'user_agent' => substr((string) $request->userAgent(), 0, 512),
+                'is_active' => true,
+                'last_seen_at' => now(),
+            ]
+        );
     }
 }

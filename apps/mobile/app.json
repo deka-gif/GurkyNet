@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gurkynet.gurkypay"
+      "bundleIdentifier": "com.gurkynet.gurkypay",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "GurkyPay menggunakan Face ID untuk membuka aplikasi dengan aman di perangkat ini."
+      }
     },
     "android": {
       "package": "com.gurkynet.gurkypay",
@@ -40,6 +43,7 @@
       ],
       "expo-sharing",
       "expo-web-browser",
+      "expo-local-authentication",
       [
         "expo-image-picker",
         {

@@ -163,6 +163,10 @@ class AuthController extends Controller
                 ]);
             }
 
+            // Trust this device for subsequent PIN login (Mobile returning-user unlock).
+            // Web without X-Device-UUID is a no-op inside rememberTrustedDevice.
+            $this->rememberTrustedDevice($result['user'], $request, true);
+
             $result['user'] = new \App\Http\Resources\ProfileResource($result['user']);
             $this->writeSecurityAudit($result['user']->resource ?? $result['user'], 'login_password');
 
@@ -208,6 +212,7 @@ class AuthController extends Controller
 
             $tokenName = $this->deviceTokenName($request);
             $token = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
+            $this->rememberTrustedDevice($user, $request, true);
             $this->writeSecurityAudit($user, 'login_2fa_verified');
 
             return $this->successResponse('Verifikasi 2FA berhasil. Login selesai.', [

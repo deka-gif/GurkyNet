@@ -30,6 +30,13 @@ export type PinConfirmModalProps = {
    * When omitted, "Lupa PIN?" stays non-interactive (safe default).
    */
   onForgotPin?: () => void;
+  /**
+   * Optional secondary UI under error / Lupa PIN (e.g. biometric, resend OTP).
+   * Does not change keypad/dots — checkout master layout preserved.
+   */
+  footer?: React.ReactNode;
+  /** Hide the "Lupa PIN?" row entirely (auth create/confirm flows). */
+  hideForgotPin?: boolean;
 };
 
 const KEYS: Array<Array<string | 'backspace' | 'blank'>> = [
@@ -40,8 +47,8 @@ const KEYS: Array<Array<string | 'backspace' | 'blank'>> = [
 ];
 
 /**
- * Shared PIN confirmation sheet — visual matches wallet PIN reference:
- * title, subtitle, 6 dots, Lupa PIN?, custom numeric keypad (no system keyboard).
+ * MASTER PIN UI (checkout reference) — bottom sheet + 6 dots + numeric keypad.
+ * Reused for transaction, transfer, login unlock, create/confirm/change/forgot PIN.
  * PIN lives only in local component state. Never Zustand / SecureStore / logs.
  */
 export function PinConfirmModal({
@@ -55,6 +62,8 @@ export function PinConfirmModal({
   onEditing,
   dismissible = true,
   onForgotPin,
+  footer,
+  hideForgotPin = false,
 }: PinConfirmModalProps) {
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
@@ -101,6 +110,7 @@ export function PinConfirmModal({
   };
 
   const canDismiss = dismissible && !loading;
+  const showForgot = !hideForgotPin;
 
   return (
     <Modal
@@ -108,7 +118,10 @@ export function PinConfirmModal({
       transparent
       animationType="slide"
       onRequestClose={() => {
-        if (canDismiss) onClose();
+        // Android hardware/gesture back must not get stuck when sheet is open.
+        // Backdrop still respects `dismissible`; visuals unchanged.
+        if (loading) return;
+        onClose();
       }}
     >
       <View style={styles.flex}>
@@ -135,20 +148,22 @@ export function PinConfirmModal({
             <PinInput value={pin} disabled={locked} />
           </View>
 
-          <Pressable
-            disabled={locked || !onForgotPin}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: locked || !onForgotPin }}
-            accessibilityLabel={onForgotPin ? 'Lupa PIN' : 'Lupa PIN (belum tersedia)'}
-            style={[styles.forgotWrap, !onForgotPin && styles.forgotDisabled]}
-            onPress={() => {
-              if (!onForgotPin || locked) return;
-              setPin('');
-              onForgotPin();
-            }}
-          >
-            <Text style={styles.forgotText}>Lupa PIN?</Text>
-          </Pressable>
+          {showForgot ? (
+            <Pressable
+              disabled={locked || !onForgotPin}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: locked || !onForgotPin }}
+              accessibilityLabel={onForgotPin ? 'Lupa PIN' : 'Lupa PIN (belum tersedia)'}
+              style={[styles.forgotWrap, !onForgotPin && styles.forgotDisabled]}
+              onPress={() => {
+                if (!onForgotPin || locked) return;
+                setPin('');
+                onForgotPin();
+              }}
+            >
+              <Text style={styles.forgotText}>Lupa PIN?</Text>
+            </Pressable>
+          ) : null}
 
           {loading ? (
             <View style={styles.loadingRow}>
@@ -158,6 +173,8 @@ export function PinConfirmModal({
           ) : null}
 
           {error && !loading ? <Text style={styles.error}>{error}</Text> : null}
+
+          {footer ? <View style={styles.footerWrap}>{footer}</View> : null}
 
           <View style={styles.spacer} />
 
@@ -292,6 +309,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  footerWrap: {
+    marginTop: spacing.sm,
+    alignItems: 'center',
   },
   spacer: {
     flexGrow: 1,

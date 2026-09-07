@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Modal,
   Pressable,
   StyleSheet,
@@ -22,9 +23,8 @@ type Step = 'old' | 'enter' | 'confirm' | 'success';
  * PUT /pin/change { old_pin, pin, pin_confirmation }
  * Web tetap boleh memakai /account-security/pin/change/* (OTP).
  *
- * UX: 6 bulatan + keypad GurkyPay, auto-submit digit ke-6.
+ * UX: checkout master PIN UI (PinConfirmModal via PinKeypadPanel).
  * PIN hanya di local state/ref — tidak di Zustand/SecureStore/log.
- * Tidak menyentuh PinConfirmModal checkout/transfer.
  */
 export default function ChangePinScreen() {
   const router = useRouter();
@@ -49,18 +49,25 @@ export default function ChangePinScreen() {
     setConfirm('');
   };
 
-  const goHome = () => {
+  const finishSuccess = useCallback(() => {
     clearSensitive();
     setError(null);
-    router.replace('/(tabs)/home');
-  };
+    // Leave change-PIN flow — prefer Security (prior screen), not a forced Home jump.
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/akun/security');
+  }, [router]);
 
-  const onHeaderBack = () => {
+  /** One level back in change-PIN flow (header ← and Android back while sheet open). */
+  const onFlowBack = useCallback(() => {
     if (busy) return;
     setError(null);
     if (step === 'old') {
       clearSensitive();
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace('/akun/security');
       return;
     }
     if (step === 'enter') {
@@ -78,9 +85,18 @@ export default function ChangePinScreen() {
       return;
     }
     if (step === 'success') {
-      goHome();
+      finishSuccess();
     }
-  };
+  }, [busy, finishSuccess, router, step]);
+
+  useEffect(() => {
+    if (step !== 'success') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      finishSuccess();
+      return true;
+    });
+    return () => sub.remove();
+  }, [finishSuccess, step]);
 
   /** Step 1 — hold old PIN in memory, advance to create new PIN. */
   const acceptOldPin = (entered: string) => {
@@ -169,7 +185,7 @@ export default function ChangePinScreen() {
           headerBackVisible: false,
           headerLeft: () => (
             <Pressable
-              onPress={onHeaderBack}
+              onPress={onFlowBack}
               disabled={busy && step !== 'success'}
               hitSlop={12}
               accessibilityRole="button"
@@ -192,6 +208,7 @@ export default function ChangePinScreen() {
 
         {step === 'old' ? (
           <PinKeypadPanel
+            key="old"
             title="Masukkan PIN lama"
             subtitle="Masukkan 6 digit PIN lama kamu"
             value={oldPin}
@@ -201,12 +218,16 @@ export default function ChangePinScreen() {
             }}
             disabled={busy}
             error={error}
+            showForgotPin
+            onForgotPin={() => router.push('/akun/pin/forgot')}
+            onClose={onFlowBack}
             onComplete={(entered) => acceptOldPin(entered)}
           />
         ) : null}
 
         {step === 'enter' ? (
           <PinKeypadPanel
+            key="enter"
             title="Buat PIN baru"
             subtitle="Buat 6 digit PIN baru kamu"
             value={pin}
@@ -216,6 +237,7 @@ export default function ChangePinScreen() {
             }}
             disabled={busy}
             error={error}
+            onClose={onFlowBack}
             onComplete={(entered) => {
               newPinRef.current = entered;
               setPin('');
@@ -228,6 +250,7 @@ export default function ChangePinScreen() {
 
         {step === 'confirm' ? (
           <PinKeypadPanel
+            key="confirm"
             title="Konfirmasi PIN baru"
             subtitle="Masukkan kembali PIN baru kamu"
             value={confirm}
@@ -237,6 +260,7 @@ export default function ChangePinScreen() {
             }}
             disabled={busy}
             error={error}
+            onClose={onFlowBack}
             onComplete={(entered) => {
               void submitChange(entered);
             }}
@@ -254,7 +278,7 @@ export default function ChangePinScreen() {
             <Text style={styles.successMessage}>
               PIN transaksi kamu sudah berhasil diperbarui.
             </Text>
-            <Button label="Selesai" onPress={goHome} />
+            <Button label="Selesai" onPress={finishSuccess} />
           </View>
         </View>
       </Modal>

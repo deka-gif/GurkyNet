@@ -1,13 +1,17 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { authService, LoginPayload } from '../services/auth.service';
+import {
+  authService,
+  LoginPayload,
+  RegisterPayload,
+} from '../services/auth.service';
 import { storageService } from '../services/storage.service';
 import { profileService } from '../services/profile.service';
 import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
 import { User } from '../api/types';
+import { parseApiError } from '../api/client';
 
-/** Same role-label mapping as src/store/auth.store.ts on web. */
 function normalizeRole(role: string | undefined | null): string {
   if (!role) return 'User';
   const map: Record<string, string> = {
@@ -22,8 +26,6 @@ function normalizeRole(role: string | undefined | null): string {
   return map[role.toLowerCase()] ?? role;
 }
 
-/** Same nested-payload flattening as web's normalizeUserPayload — server responses for
- * /auth/login and /auth/me shape the user object slightly differently. */
 function normalizeUserPayload(raw: any): User {
   const profile =
     raw?.user && typeof raw.user === 'object' && (raw.name || raw.hasPin !== undefined || raw.wallet)
@@ -50,7 +52,6 @@ function normalizeUserPayload(raw: any): User {
   };
 }
 
-/** Best-effort device upsert for session display — never blocks login. */
 async function syncDeviceRegistration(): Promise<void> {
   try {
     const device_uuid = await storageService.getDeviceUuid();
@@ -63,7 +64,7 @@ async function syncDeviceRegistration(): Promise<void> {
       app_version: Constants.expoConfig?.version ?? undefined,
     });
   } catch {
-    // ignore — sessions still work; display may fall back to platform label
+    // ignore
   }
 }
 
@@ -73,45 +74,109 @@ export type TwoFactorChallenge = {
   resendAvailableAt?: string | null;
 };
 
+/** Bootstrap gate — set after hydrate, before first navigation. */
+export type AuthGate = 'booting' | 'login' | 'unlock' | 'authenticated';
+
 interface AuthState {
   user: User | null;
   token: string | null;
-  /** True until the initial secure-storage read (hydrate()) completes — gates the
-   * splash/redirect logic so the app never flashes the login screen for an already
-   * logged-in user. */
   hydrated: boolean;
+  gate: AuthGate;
+  rememberedIdentity: string | null;
   loading: boolean;
   error: string | null;
   validationErrors: Record<string, string[]> | null;
   twoFactorChallenge: TwoFactorChallenge | null;
   hydrate: () => Promise<void>;
+  applySession: (token: string, userRaw: unknown, identity?: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<'ok' | '2fa' | false>;
+  pinLogin: (pin: string) => Promise<boolean>;
   verifyLogin2fa: (code: string) => Promise<boolean>;
   clearTwoFactorChallenge: () => void;
+  registerStart: (payload: RegisterPayload) => Promise<{ onboardingId: number; email: string } | null>;
+  finalizeRegistration: (payload: {
+    onboarding_id: number;
+    pin: string;
+    pin_confirmation: string;
+  }) => Promise<boolean>;
   logout: () => Promise<void>;
+  switchAccount: () => Promise<void>;
   fetchUser: () => Promise<void>;
+  unlockWithExistingSession: () => Promise<boolean>;
+  setGate: (gate: AuthGate) => void;
+  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   hydrated: false,
+  gate: 'booting',
+  rememberedIdentity: null,
   loading: false,
   error: null,
   validationErrors: null,
   twoFactorChallenge: null,
 
-  /** Called once from the root layout on app start — reads the persisted session. */
+  setGate: (gate) => set({ gate }),
+  clearError: () => set({ error: null, validationErrors: null }),
+
   hydrate: async () => {
-    const [token, storedUser] = await Promise.all([storageService.getToken(), storageService.getUser()]);
+    const [token, storedUser, identity, returning] = await Promise.all([
+      storageService.getToken(),
+      storageService.getUser(),
+      storageService.getRememberedIdentity(),
+      storageService.isReturningUser(),
+    ]);
     const user = storedUser ? normalizeUserPayload(storedUser) : null;
-    set({ token, user, hydrated: true });
+
+    let gate: AuthGate = 'login';
+    if (returning || identity) {
+      gate = 'unlock';
+    } else if (token && user) {
+      // Session present but no returning flag — still require unlock if hasPin path preferred.
+      // Cold start with token: validate later on unlock / or go home if unlocked this session.
+      gate = 'unlock';
+    }
+
+    set({
+      token,
+      user,
+      rememberedIdentity: identity,
+      hydrated: true,
+      gate,
+    });
+
     if (token) {
       void syncDeviceRegistration();
     }
   },
 
-  clearTwoFactorChallenge: () => set({ twoFactorChallenge: null }),
+  applySession: async (token, userRaw, identity) => {
+    const normalizedUser = normalizeUserPayload(userRaw);
+    const id =
+      identity ||
+      normalizedUser.email ||
+      normalizedUser.phone ||
+      (await storageService.getRememberedIdentity()) ||
+      '';
+    await storageService.setToken(token);
+    await storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
+    if (id) {
+      await storageService.setRememberedIdentity(id);
+      await storageService.markTrustedIdentity(id);
+    }
+    set({
+      token,
+      user: normalizedUser,
+      rememberedIdentity: id || null,
+      loading: false,
+      twoFactorChallenge: null,
+      error: null,
+      gate: 'authenticated',
+    });
+    void syncDeviceRegistration();
+  },
 
   login: async (payload) => {
     set({ loading: true, error: null, validationErrors: null, twoFactorChallenge: null });
@@ -130,29 +195,92 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           });
           return '2fa';
         }
-
         if (!data.token) {
           set({ error: response.message || 'Login gagal.', loading: false });
           return false;
         }
-
-        const normalizedUser = normalizeUserPayload(data.user);
-        await storageService.setToken(data.token);
-        await storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
-        await storageService.setRememberedIdentity(payload.identity);
-        await storageService.markTrustedIdentity(payload.identity);
-        set({ token: data.token, user: normalizedUser, loading: false, twoFactorChallenge: null });
-        void syncDeviceRegistration();
+        await get().applySession(data.token, data.user, payload.identity);
         return 'ok';
       }
       set({ error: response.message, loading: false });
       return false;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const parsed = parseApiError(err);
       set({
-        error: err?.message || 'Gagal login. Periksa koneksi Anda.',
-        validationErrors: err?.errors || null,
+        error: parsed.message || 'Gagal login. Periksa koneksi Anda.',
+        validationErrors: parsed.errors || null,
         loading: false,
       });
+      return false;
+    }
+  },
+
+  pinLogin: async (pin) => {
+    const identity = get().rememberedIdentity;
+    if (!identity) {
+      set({ error: 'Sesi perangkat tidak ditemukan. Masuk dengan email/password.' });
+      return false;
+    }
+    set({ loading: true, error: null, validationErrors: null });
+    try {
+      const response = await authService.pinLogin({ identity, pin });
+      if (response.success && response.data?.requires_2fa) {
+        set({
+          loading: false,
+          twoFactorChallenge: {
+            identifier: response.data.identifier || identity,
+            expiresAt: response.data.expires_at,
+            resendAvailableAt: response.data.resend_available_at,
+          },
+          gate: 'login',
+        });
+        return false;
+      }
+      if (response.success && response.data?.token) {
+        await get().applySession(response.data.token, response.data.user, identity);
+        return true;
+      }
+      set({
+        error: response.message || 'PIN tidak valid.',
+        loading: false,
+      });
+      return false;
+    } catch (err: unknown) {
+      const parsed = parseApiError(err);
+      set({
+        error: parsed.message || 'PIN tidak valid.',
+        validationErrors: parsed.errors || null,
+        loading: false,
+      });
+      return false;
+    }
+  },
+
+  unlockWithExistingSession: async () => {
+    const token = get().token || (await storageService.getToken());
+    if (!token) return false;
+    set({ loading: true, error: null });
+    try {
+      const response = await authService.me();
+      if (response.success) {
+        const payload: any = response.data;
+        const normalizedUser = normalizeUserPayload(payload?.user ?? payload);
+        await storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
+        set({
+          token,
+          user: normalizedUser,
+          loading: false,
+          gate: 'authenticated',
+          error: null,
+        });
+        void syncDeviceRegistration();
+        return true;
+      }
+      await storageService.clear();
+      set({ token: null, user: null, loading: false });
+      return false;
+    } catch {
+      set({ loading: false });
       return false;
     }
   },
@@ -165,20 +293,70 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     set({ loading: true, error: null, validationErrors: null });
     try {
-      const response = await authService.verifyLogin2fa({ identity: challenge.identifier, code });
+      const response = await authService.verifyLogin2fa({
+        identity: challenge.identifier,
+        code,
+      });
       if (response.success && response.data?.token) {
-        const normalizedUser = normalizeUserPayload(response.data.user);
-        await storageService.setToken(response.data.token);
-        await storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
-        await storageService.markTrustedIdentity(challenge.identifier);
-        set({ token: response.data.token, user: normalizedUser, loading: false, twoFactorChallenge: null });
-        void syncDeviceRegistration();
+        await get().applySession(response.data.token, response.data.user, challenge.identifier);
         return true;
       }
       set({ error: response.message || 'Kode verifikasi tidak valid.', loading: false });
       return false;
-    } catch (err: any) {
-      set({ error: err?.message || 'Gagal verifikasi.', loading: false });
+    } catch (err: unknown) {
+      const parsed = parseApiError(err);
+      set({ error: parsed.message || 'Gagal verifikasi.', loading: false });
+      return false;
+    }
+  },
+
+  clearTwoFactorChallenge: () => set({ twoFactorChallenge: null }),
+
+  registerStart: async (payload) => {
+    set({ loading: true, error: null, validationErrors: null });
+    try {
+      const response = await authService.register(payload);
+      if (response.success && response.data?.onboarding_id) {
+        set({ loading: false });
+        return {
+          onboardingId: response.data.onboarding_id,
+          email: response.data.email || payload.email,
+        };
+      }
+      set({ error: response.message || 'Registrasi gagal.', loading: false });
+      return null;
+    } catch (err: unknown) {
+      const parsed = parseApiError(err);
+      set({
+        error: parsed.message || 'Registrasi gagal.',
+        validationErrors: parsed.errors || null,
+        loading: false,
+      });
+      return null;
+    }
+  },
+
+  finalizeRegistration: async (payload) => {
+    set({ loading: true, error: null, validationErrors: null });
+    try {
+      const response = await authService.finalizeRegistration({
+        ...payload,
+        accept_policies: true,
+        remember_device: true,
+      });
+      if (response.success && response.data?.token) {
+        await get().applySession(response.data.token, response.data.user);
+        return true;
+      }
+      set({ error: response.message || 'Gagal menyelesaikan registrasi.', loading: false });
+      return false;
+    } catch (err: unknown) {
+      const parsed = parseApiError(err);
+      set({
+        error: parsed.message || 'Gagal menyelesaikan registrasi.',
+        validationErrors: parsed.errors || null,
+        loading: false,
+      });
       return false;
     }
   },
@@ -191,15 +369,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await authService.logout();
       }
     } catch {
-      // Ignore API logout failure — still clear local session below.
+      // ignore
     } finally {
       await storageService.clear();
-      set({ user: null, token: null, loading: false, error: null, twoFactorChallenge: null });
+      const identity = await storageService.getRememberedIdentity();
+      set({
+        user: null,
+        token: null,
+        loading: false,
+        error: null,
+        twoFactorChallenge: null,
+        rememberedIdentity: identity,
+        gate: identity ? 'unlock' : 'login',
+      });
     }
   },
 
-  /** Never clears the session on a non-401 failure (timeout/5xx/cancelled) — only the
-   * apiClient 401 interceptor is allowed to do that. Same invariant as web's fetchUser(). */
+  switchAccount: async () => {
+    try {
+      const token = await storageService.getToken();
+      if (token) {
+        try {
+          await authService.logout();
+        } catch {
+          // ignore
+        }
+      }
+    } finally {
+      await storageService.clearAuthIdentity();
+      set({
+        user: null,
+        token: null,
+        rememberedIdentity: null,
+        loading: false,
+        error: null,
+        twoFactorChallenge: null,
+        gate: 'login',
+      });
+    }
+  },
+
   fetchUser: async () => {
     const token = await storageService.getToken();
     if (!token) return;

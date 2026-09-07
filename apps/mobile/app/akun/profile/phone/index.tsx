@@ -174,6 +174,12 @@ export default function ChangePhoneScreen() {
           }}
           disabled={busy}
           error={error}
+          onClose={() => {
+            if (busy) return;
+            setPin('');
+            setStep('form');
+            setError(null);
+          }}
           onComplete={(entered) => void submitRequest(entered)}
         />
       )}

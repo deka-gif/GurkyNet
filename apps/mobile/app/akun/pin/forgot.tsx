@@ -325,6 +325,7 @@ export default function ForgotPinScreen() {
 
           {step === 'otp' ? (
             <PinKeypadPanel
+              key="otp"
               title="Masukkan kode verifikasi"
               subtitle="Masukkan 6 digit kode yang dikirim ke email kamu"
               value={otp}
@@ -334,6 +335,7 @@ export default function ForgotPinScreen() {
               }}
               disabled={busy}
               error={error}
+              onClose={onHeaderBack}
               onComplete={(entered) => void submitOtpGate(entered)}
               footer={
                 <Pressable
@@ -360,6 +362,7 @@ export default function ForgotPinScreen() {
 
           {step === 'enter' ? (
             <PinKeypadPanel
+              key="enter"
               title="Buat PIN baru"
               subtitle="Buat 6 digit PIN baru kamu"
               value={pin}
@@ -369,6 +372,7 @@ export default function ForgotPinScreen() {
               }}
               disabled={busy}
               error={error}
+              onClose={onHeaderBack}
               onComplete={(entered) => {
                 if (!otpBackendOkRef.current) {
                   setError('Kode verifikasi belum tervalidasi.');
@@ -386,6 +390,7 @@ export default function ForgotPinScreen() {
 
           {step === 'confirm' ? (
             <PinKeypadPanel
+              key="confirm"
               title="Konfirmasi PIN baru"
               subtitle="Masukkan kembali PIN baru kamu"
               value={confirm}
@@ -395,6 +400,7 @@ export default function ForgotPinScreen() {
               }}
               disabled={busy}
               error={error}
+              onClose={onHeaderBack}
               onComplete={(entered) => {
                 void finish(entered);
               }}

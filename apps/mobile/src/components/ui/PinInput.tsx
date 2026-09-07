@@ -11,9 +11,8 @@ interface PinInputProps {
 const DOT = 14;
 
 /**
- * 6-slot PIN visual only (empty ○ / filled ● primary green).
- * Digits are never shown. Keypad lives in PinConfirmModal — no native keyboard.
- * Caller owns `value` in local state — never Zustand / SecureStore. Never log PIN.
+ * Digits are never shown. Keypad lives in PinConfirmModal (checkout master UI).
+ * Caller owns display state only when needed — never Zustand / SecureStore. Never log PIN.
  */
 export function PinInput({ value, disabled }: PinInputProps) {
   const length = Math.min(6, (value || '').replace(/\D/g, '').length);

@@ -83,6 +83,11 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL', 'http://localhost') . '/api/v1/auth/google/callback'),
+        // Allowed deep-link prefixes for Mobile Google OAuth return (client=mobile).
+        'mobile_redirect_prefixes' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('GOOGLE_MOBILE_REDIRECT_PREFIXES', 'gurkypay://,exp://'))
+        ))),
     ],
 
     'whatsapp_otp' => [

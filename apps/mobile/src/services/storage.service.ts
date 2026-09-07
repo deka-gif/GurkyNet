@@ -3,27 +3,16 @@ import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
 /**
- * Same key names as src/services/storage.service.ts on web, now backed by
- * expo-secure-store (iOS Keychain / Android Keystore) instead of localStorage — spec
- * section 22/25: never store the token/PIN insecurely.
- *
- * expo-secure-store is synchronous-looking in the web API shape below (async wrapper)
- * but SecureStore itself is inherently async on native — every method here returns a
- * Promise, unlike the web version. Callers (the auth store) already account for this.
- *
- * expo-secure-store has no web implementation at all (its web module is a stub that
- * throws on every call — see node_modules/expo-secure-store/build/ExpoSecureStore.web.js),
- * so every get/set silently failed on the `expo start --web` preview and every
- * authenticated request 401'd immediately after login. react-native-web is only a
- * preview target here (not a shipped platform — see apps/mobile/README.md), so
- * Keychain/Keystore-grade storage isn't a concern there; falling back to localStorage
- * keeps that preview usable without weakening anything on-device.
+ * Session/device keys via expo-secure-store (Keychain/Keystore).
+ * Never store password or PIN here.
  */
 const TOKEN_KEY = 'gurkynet_auth_token';
 const USER_KEY = 'gurkynet_user_data';
 const REMEMBERED_IDENTITY_KEY = 'gurkynet_remembered_identity';
 const DEVICE_UUID_KEY = 'gurkynet_device_uuid';
 const TRUSTED_DEVICE_IDENTITIES_KEY = 'gurkynet_trusted_device_identities';
+const BIOMETRIC_ENABLED_KEY = 'gurkynet_biometric_enabled';
+const RETURNING_USER_KEY = 'gurkynet_returning_user';
 
 async function safeGet(key: string): Promise<string | null> {
   try {
@@ -42,8 +31,7 @@ async function safeSet(key: string, value: string): Promise<void> {
     }
     await SecureStore.setItemAsync(key, value);
   } catch {
-    // Keychain/Keystore unavailable — fail silently, matching the web service's
-    // try/catch-and-ignore convention rather than crashing a checkout flow.
+    // ignore
   }
 }
 
@@ -81,16 +69,30 @@ export const storageService = {
       return null;
     }
   },
-  setUser: (user: Record<string, unknown>): Promise<void> => safeSet(USER_KEY, JSON.stringify(user)),
+  setUser: (user: Record<string, unknown>): Promise<void> =>
+    safeSet(USER_KEY, JSON.stringify(user)),
   removeUser: (): Promise<void> => safeDelete(USER_KEY),
 
   getRememberedIdentity: (): Promise<string | null> => safeGet(REMEMBERED_IDENTITY_KEY),
   setRememberedIdentity: async (identity: string): Promise<void> => {
     if (identity) {
       await safeSet(REMEMBERED_IDENTITY_KEY, identity);
+      await safeSet(RETURNING_USER_KEY, '1');
     } else {
       await safeDelete(REMEMBERED_IDENTITY_KEY);
     }
+  },
+
+  /** Device previously completed a successful auth — show PIN unlock, not password form. */
+  isReturningUser: async (): Promise<boolean> => {
+    const flag = await safeGet(RETURNING_USER_KEY);
+    if (flag === '1') return true;
+    const identity = await safeGet(REMEMBERED_IDENTITY_KEY);
+    return !!identity;
+  },
+  clearReturningUser: async (): Promise<void> => {
+    await safeDelete(RETURNING_USER_KEY);
+    await safeDelete(REMEMBERED_IDENTITY_KEY);
   },
 
   getTrustedDeviceIdentities: async (): Promise<string[]> => {
@@ -104,7 +106,9 @@ export const storageService = {
     }
   },
   markTrustedIdentity: async (identity: string): Promise<void> => {
-    const current = new Set((await storageService.getTrustedDeviceIdentities()).map((item) => item.toLowerCase()));
+    const current = new Set(
+      (await storageService.getTrustedDeviceIdentities()).map((item) => item.toLowerCase())
+    );
     if (identity) current.add(identity.toLowerCase());
     await safeSet(TRUSTED_DEVICE_IDENTITIES_KEY, JSON.stringify([...current]));
   },
@@ -113,10 +117,26 @@ export const storageService = {
     return list.includes(identity.toLowerCase());
   },
 
+  getBiometricEnabled: async (): Promise<boolean> => {
+    return (await safeGet(BIOMETRIC_ENABLED_KEY)) === '1';
+  },
+  setBiometricEnabled: async (enabled: boolean): Promise<void> => {
+    if (enabled) await safeSet(BIOMETRIC_ENABLED_KEY, '1');
+    else await safeDelete(BIOMETRIC_ENABLED_KEY);
+  },
+
+  /** Clears session token/user. Keeps device UUID, returning identity, biometric pref. */
   clear: async (): Promise<void> => {
     await safeDelete(TOKEN_KEY);
     await safeDelete(USER_KEY);
-    // Device UUID and trusted-identity list intentionally survive a forced logout —
-    // mirrors web's storageService.clear() exactly (spec section 22).
+  },
+
+  /** Full sign-out of returning-user state (e.g. "Gunakan akun lain"). */
+  clearAuthIdentity: async (): Promise<void> => {
+    await safeDelete(TOKEN_KEY);
+    await safeDelete(USER_KEY);
+    await safeDelete(REMEMBERED_IDENTITY_KEY);
+    await safeDelete(RETURNING_USER_KEY);
+    await safeDelete(BIOMETRIC_ENABLED_KEY);
   },
 };

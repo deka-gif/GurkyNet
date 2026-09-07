@@ -1,86 +1,89 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { PinKeypadPanel, Button } from '../../../src/components/ui';
-import { useAuthStore } from '../../../src/store/auth.store';
-import { profileService } from '../../../src/services/profile.service';
-import { parseApiError } from '../../../src/api/client';
-import { colors } from '../../../src/theme';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { PinKeypadPanel, Button } from '../../src/components/ui';
+import { useAuthStore } from '../../src/store/auth.store';
+import { colors } from '../../src/theme';
 
 type Step = 'enter' | 'confirm';
 
 /**
- * Buat PIN transaksi — checkout master PIN UI. POST /pin/create.
+ * Buat PIN onboarding — checkout master PIN UI via PinKeypadPanel → PinConfirmModal.
+ * PIN only in local refs. Success → register-success.
  */
-export default function CreatePinScreen() {
+export default function RegisterPinScreen() {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const fetchUser = useAuthStore((s) => s.fetchUser);
+  const params = useLocalSearchParams<{ onboarding_id?: string }>();
+  const onboardingId = Number(params.onboarding_id);
+
+  const finalizeRegistration = useAuthStore((s) => s.finalizeRegistration);
+  const loading = useAuthStore((s) => s.loading);
+  const storeError = useAuthStore((s) => s.error);
+  const clearError = useAuthStore((s) => s.clearError);
 
   const [step, setStep] = useState<Step>('enter');
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const lockRef = useRef(false);
   const firstPinRef = useRef('');
+  const lockRef = useRef(false);
 
   useEffect(() => {
-    void fetchUser();
-  }, [fetchUser]);
-
-  useEffect(() => {
-    if (user?.hasPin) {
-      router.replace('/akun/pin/change');
+    if (!onboardingId) {
+      router.replace('/(auth)/register');
     }
-  }, [user?.hasPin, router]);
+  }, [onboardingId, router]);
 
   const submit = async (pinValue: string, confirmValue: string) => {
-    if (lockRef.current || busy) return;
+    if (lockRef.current || loading) return;
     if (pinValue !== confirmValue) {
       setError('PIN tidak sama.');
       setStep('confirm');
       return;
     }
+    if (!onboardingId) {
+      setError('Sesi registrasi tidak valid. Silakan daftar ulang.');
+      return;
+    }
+
     lockRef.current = true;
-    setBusy(true);
+    clearError();
     setError(null);
     try {
-      const res = await profileService.createPin(pinValue, confirmValue);
+      const ok = await finalizeRegistration({
+        onboarding_id: onboardingId,
+        pin: pinValue,
+        pin_confirmation: confirmValue,
+      });
       firstPinRef.current = '';
-      if (res.success) {
-        await fetchUser();
-        router.replace('/akun/security');
+      if (ok) {
+        router.replace('/(auth)/register-success');
         return;
       }
-      setError(res.message || 'Gagal membuat PIN.');
-      setStep('enter');
-    } catch (err: unknown) {
-      const parsed = parseApiError(err);
-      setError(parsed.message || 'Gagal membuat PIN.');
+      setError(useAuthStore.getState().error || 'Gagal menyelesaikan registrasi.');
       setStep('enter');
     } finally {
-      setBusy(false);
       lockRef.current = false;
     }
   };
 
+  const displayError = error || storeError;
+
   return (
     <View style={styles.fill}>
-      <Stack.Screen
-        options={{ headerShown: true, title: 'Buat PIN', headerBackTitle: 'Kembali' }}
-      />
-
       {step === 'enter' ? (
         <PinKeypadPanel
           key="enter"
           title="Buat PIN"
           subtitle="Gunakan 6 digit PIN untuk mengamankan akun kamu."
-          disabled={busy}
-          error={error}
-          onChange={() => setError(null)}
+          disabled={loading}
+          error={displayError}
+          onChange={() => {
+            setError(null);
+            clearError();
+          }}
           onClose={() => {
-            if (busy) return;
+            if (loading) return;
             if (router.canGoBack()) router.back();
-            else router.replace('/akun/security');
+            else router.replace('/(auth)/register');
           }}
           onComplete={(entered) => {
             firstPinRef.current = entered;
@@ -93,14 +96,18 @@ export default function CreatePinScreen() {
           key="confirm"
           title="Konfirmasi PIN"
           subtitle="Masukkan kembali PIN kamu."
-          disabled={busy}
-          error={error}
-          onChange={() => setError(null)}
+          disabled={loading}
+          error={displayError}
+          onChange={() => {
+            setError(null);
+            clearError();
+          }}
           onClose={() => {
-            if (busy) return;
+            if (loading) return;
             firstPinRef.current = '';
             setStep('enter');
             setError(null);
+            clearError();
           }}
           onComplete={(entered) => {
             void submit(firstPinRef.current, entered);
@@ -109,11 +116,12 @@ export default function CreatePinScreen() {
             <Button
               label="Kembali"
               variant="ghost"
-              disabled={busy}
+              disabled={loading}
               onPress={() => {
                 firstPinRef.current = '';
                 setStep('enter');
                 setError(null);
+                clearError();
               }}
             />
           }

@@ -1,37 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { PinKeypadPanel, Button } from '../../../src/components/ui';
-import { useAuthStore } from '../../../src/store/auth.store';
-import { profileService } from '../../../src/services/profile.service';
-import { parseApiError } from '../../../src/api/client';
-import { colors } from '../../../src/theme';
+import { useRouter } from 'expo-router';
+import { PinKeypadPanel, AuthSuccessView, Button } from '../../src/components/ui';
+import { useAuthStore } from '../../src/store/auth.store';
+import { profileService } from '../../src/services/profile.service';
+import { parseApiError } from '../../src/api/client';
+import { colors } from '../../src/theme';
 
-type Step = 'enter' | 'confirm';
+type Step = 'enter' | 'confirm' | 'success';
 
 /**
- * Buat PIN transaksi — checkout master PIN UI. POST /pin/create.
+ * Setup PIN — checkout master PIN UI. POST /pin/create.
  */
-export default function CreatePinScreen() {
+export default function SetupPinScreen() {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
   const fetchUser = useAuthStore((s) => s.fetchUser);
 
   const [step, setStep] = useState<Step>('enter');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const lockRef = useRef(false);
   const firstPinRef = useRef('');
+  const lockRef = useRef(false);
 
-  useEffect(() => {
-    void fetchUser();
-  }, [fetchUser]);
-
-  useEffect(() => {
-    if (user?.hasPin) {
-      router.replace('/akun/pin/change');
-    }
-  }, [user?.hasPin, router]);
+  const goHome = useCallback(async () => {
+    router.replace('/(tabs)/home');
+  }, [router]);
 
   const submit = async (pinValue: string, confirmValue: string) => {
     if (lockRef.current || busy) return;
@@ -40,6 +33,7 @@ export default function CreatePinScreen() {
       setStep('confirm');
       return;
     }
+
     lockRef.current = true;
     setBusy(true);
     setError(null);
@@ -48,12 +42,13 @@ export default function CreatePinScreen() {
       firstPinRef.current = '';
       if (res.success) {
         await fetchUser();
-        router.replace('/akun/security');
+        setStep('success');
         return;
       }
       setError(res.message || 'Gagal membuat PIN.');
       setStep('enter');
     } catch (err: unknown) {
+      firstPinRef.current = '';
       const parsed = parseApiError(err);
       setError(parsed.message || 'Gagal membuat PIN.');
       setStep('enter');
@@ -63,12 +58,19 @@ export default function CreatePinScreen() {
     }
   };
 
+  if (step === 'success') {
+    return (
+      <AuthSuccessView
+        title="PIN Berhasil Dibuat"
+        message="PIN transaksi kamu sudah aktif. Gunakan untuk otorisasi pembelian dan transfer."
+        buttonLabel="Lanjut ke Beranda"
+        onContinue={() => void goHome()}
+      />
+    );
+  }
+
   return (
     <View style={styles.fill}>
-      <Stack.Screen
-        options={{ headerShown: true, title: 'Buat PIN', headerBackTitle: 'Kembali' }}
-      />
-
       {step === 'enter' ? (
         <PinKeypadPanel
           key="enter"
@@ -80,7 +82,7 @@ export default function CreatePinScreen() {
           onClose={() => {
             if (busy) return;
             if (router.canGoBack()) router.back();
-            else router.replace('/akun/security');
+            else router.replace('/(tabs)/home');
           }}
           onComplete={(entered) => {
             firstPinRef.current = entered;

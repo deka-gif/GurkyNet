@@ -29,8 +29,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     const unsubscribe = appEvents.on(AUTH_UNAUTHORIZED_EVENT, () => {
-      useAuthStore.setState({ user: null, token: null });
-      router.replace('/(auth)/login');
+      void (async () => {
+        const { storageService } = await import('../src/services/storage.service');
+        await storageService.clear();
+        const identity = await storageService.getRememberedIdentity();
+        useAuthStore.setState({
+          user: null,
+          token: null,
+          rememberedIdentity: identity,
+          gate: identity ? 'unlock' : 'login',
+        });
+        router.replace(identity ? '/(auth)/unlock' : '/(auth)/login');
+      })();
     });
     return unsubscribe;
   }, [router]);

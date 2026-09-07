@@ -19,7 +19,13 @@ export default function TabsLayout() {
 
   useEffect(() => {
     if (hydrated && !token) {
-      router.replace('/(auth)/login');
+      const gate = useAuthStore.getState().gate;
+      const identity = useAuthStore.getState().rememberedIdentity;
+      if (gate === 'unlock' || identity) {
+        router.replace('/(auth)/unlock');
+      } else {
+        router.replace('/(auth)/login');
+      }
     }
   }, [hydrated, token, router]);
 

@@ -12,5 +12,7 @@ export { ConfirmSheet } from './ConfirmSheet';
 export { BrandLogo } from './BrandLogo';
 export { CategoryMarketingIcon } from './CategoryMarketingIcon';
 export { PlatformLogo } from './PlatformLogo';
+export { AuthBrandHeader } from './AuthBrandHeader';
+export { AuthSuccessView } from './AuthSuccessView';
 export { PromoBannerCarousel } from './PromoBannerCarousel';
 export { AnnouncementTicker } from './AnnouncementTicker';
