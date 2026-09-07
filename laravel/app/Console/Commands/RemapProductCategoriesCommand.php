@@ -95,7 +95,17 @@ class RemapProductCategoriesCommand extends Command
 
         if ($isVip) {
             $rawCategory = (string) ($product->category?->slug ?? $product->category?->name ?? 'prepaid');
-            $isGame = Str::contains(Str::lower($brand.' '.$product->name), ['diamond', 'game', 'mlbb', 'free fire']);
+            $isGame = ! app(ProductMappingService::class)->isTelcoBrand($brand)
+                && Str::contains(Str::lower($brand.' '.$product->name), [
+                    'diamond',
+                    'mlbb',
+                    'free fire',
+                    'mobile legends',
+                    'mobile legend',
+                    'pubg',
+                    'valorant',
+                    'genshin',
+                ]);
 
             return ['vip', $rawCategory, $brand, $isGame];
         }

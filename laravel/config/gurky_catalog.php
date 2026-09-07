@@ -215,6 +215,9 @@ return [
         // Telekomunikasi — must outrank generic e-wallet substring hits (e.g. "dana" inside "perdana")
         'aktivasi perdana' => 'aktivasi-perdana',
         'perdana' => 'aktivasi-perdana',
+        // Telkomsel GamesMAX / game-named data packages → Paket Data (not hub Game)
+        'gamesmax' => 'data',
+        'games max' => 'data',
         'voucher telkomsel' => 'voucher-internet',
         'voucher axis' => 'voucher-internet',
         'voucher xl' => 'voucher-internet',
