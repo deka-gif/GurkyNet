@@ -95,7 +95,7 @@ export type OperatorDataTaxonomy = {
 export type CategoryIconMap = Record<string, string>;
 
 export const catalogService = {
-  /** GET /categories — public, returns all categories regardless of product count. */
+  /** GET /categories — customer-facing Digi-backed categories only (raw/legacy filtered). */
   getCategories: async (): Promise<ApiResponse<Category[]>> => {
     const response = await apiClient.get<ApiResponse<Category[]>>('/categories');
     return response.data;

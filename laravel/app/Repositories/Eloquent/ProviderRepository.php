@@ -124,11 +124,14 @@ class ProviderRepository implements ProviderRepositoryInterface
             );
 
             // 2. Map Digiflazz category/brand → GurkyNet IA category (never store raw Digi trees for UI)
+            // list_type (prepaid|pasca) required so PLN Token vs PLN Pascabayar do not mix.
             $mapped = app(\App\Services\Catalog\ProductMappingService::class)->map(
                 'digiflazz',
                 (string) ($dp['category'] ?? 'Umum'),
                 (string) ($dp['brand'] ?? ''),
-                (string) ($dp['product_name'] ?? '')
+                (string) ($dp['product_name'] ?? ''),
+                false,
+                isset($dp['list_type']) ? (string) $dp['list_type'] : null,
             );
             $category = ProductCategory::updateOrCreate(
                 ['slug' => $mapped['slug']],

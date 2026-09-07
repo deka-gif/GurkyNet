@@ -36,6 +36,15 @@ class ProductCatalogCache
             Cache::forget('products_active_all');
             Cache::forget('products_active_all_v'.$previous);
             Cache::forget(self::activeAllKey());
+            Cache::forget('product_categories_all');
+            Cache::forget('product_categories_cf_v'.$previous);
+            Cache::forget(self::categoriesKey());
+
+            try {
+                Cache::tags(['categories'])->flush();
+            } catch (\BadMethodCallException) {
+                // File/array drivers do not support tags.
+            }
         } catch (\Throwable $e) {
             // Cache driver permission issues must not fail catalog sync (post-upsert).
             Log::warning('Product catalog cache bump unavailable — continuing without invalidation', [
@@ -52,6 +61,11 @@ class ProductCatalogCache
     public static function activeAllKey(): string
     {
         return 'products_active_all_v'.self::version();
+    }
+
+    public static function categoriesKey(): string
+    {
+        return 'product_categories_cf_v'.self::version();
     }
 
     public static function providerSummaryKey(string $category): string

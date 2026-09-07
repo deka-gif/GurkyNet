@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 class ProductMappingService
 {
     /**
+     * @param  string|null  $listType  Digiflazz cmd / digiflazz_products.list_type (`prepaid`|`pasca`).
      * @return array{slug:string,name:string,hub:?string,source:string}
      */
     public function map(
@@ -18,7 +19,8 @@ class ProductMappingService
         string $providerCategory,
         string $brand = '',
         string $productName = '',
-        bool $isGameHint = false
+        bool $isGameHint = false,
+        ?string $listType = null,
     ): array {
         $slug = null;
         $source = 'fallback';
@@ -78,6 +80,11 @@ class ProductMappingService
             $slug = 'data';
             $source = 'telco_not_langganan';
         }
+
+        // Digiflazz PLN: brand "PLN" alone must not decide Token vs Pascabayar —
+        // list_type (prepaid|pasca) is authoritative when present.
+        $slug = $this->resolvePlnByListType($slug, $providerCategory, $brand, $listType, $source);
+
         $meta = config('gurky_catalog.categories.'.$slug, [
             'name' => Str::title(str_replace('-', ' ', $slug)),
             'hub' => null,
@@ -93,6 +100,73 @@ class ProductMappingService
         ];
     }
 
+    /**
+     * Split Digiflazz Token PLN (`pln`) vs PLN Pascabayar (`pln-pascabayar`).
+     * brand_overrides['pln'] historically forced both into Token PLN.
+     */
+    protected function resolvePlnByListType(
+        string $slug,
+        string $providerCategory,
+        string $brand,
+        ?string $listType,
+        string &$source,
+    ): string {
+        if (! $this->isPlnElectricityCandidate($slug, $providerCategory, $brand)) {
+            return $slug;
+        }
+
+        $lt = Str::lower(trim((string) $listType));
+        $cat = Str::lower(trim($providerCategory));
+        $brandL = Str::lower(trim($brand));
+
+        // Primary: Digiflazz price-list cmd stored as digiflazz_products.list_type
+        if (in_array($lt, ['pasca', 'pascabayar', 'postpaid'], true)) {
+            $source = 'pln_list_type_pasca';
+
+            return 'pln-pascabayar';
+        }
+        if ($lt === 'prepaid') {
+            $source = 'pln_list_type_prepaid';
+
+            return 'pln';
+        }
+
+        // Fallback when list_type missing (legacy callers): Digi category / brand signals.
+        if ($cat === 'pascabayar' || str_contains($brandL, 'pascabayar')) {
+            $source = 'pln_pasca_signal';
+
+            return 'pln-pascabayar';
+        }
+
+        $source = $cat === 'pln' ? 'pln_prepaid_signal' : $source;
+
+        return 'pln';
+    }
+
+    protected function isPlnElectricityCandidate(string $slug, string $providerCategory, string $brand): bool
+    {
+        if (in_array($slug, ['pln', 'pln-pascabayar'], true)) {
+            return true;
+        }
+
+        $cat = Str::lower(trim($providerCategory));
+        if ($cat === 'pln') {
+            return true;
+        }
+
+        $brandL = Str::lower(trim($brand));
+        // Digi pasca: category=Pascabayar + brand PLN / PLN PASCABAYAR (not PDAM/HP/…)
+        if ($cat === 'pascabayar' && (
+            $brandL === 'pln'
+            || str_starts_with($brandL, 'pln ')
+            || str_contains($brandL, 'pln pascabayar')
+        )) {
+            return true;
+        }
+
+        return false;
+    }
+
     public function canonicalizeSlug(string $slug): string
     {
         $slug = Str::lower(trim($slug));
@@ -100,12 +174,26 @@ class ProductMappingService
         $direct = match ($slug) {
             'ewallet', 'e-wallet', 'emoney', 'e-money', 'saldo-emoney' => 'topup-digital',
             'voucher' => 'voucher-digital',
-            'games', 'game-feature', 'voucher-game' => 'game',
+            'games', 'game-feature', 'voucher-game', 'gamed', 'topup-game', 'top-up-game' => 'game',
             'streaming', 'streaming-tv', 'apps', 'aplikasi' => 'langganan-digital',
+            'token-pln', 'token_pln' => 'pln',
+            'paket-data', 'paket_data' => 'data',
             default => null,
         };
         if ($direct !== null) {
             return $direct;
+        }
+
+        // Digi/VIP legacy prefix families — never leave as customer-facing slugs.
+        if (str_starts_with($slug, 'pulsa-')) {
+            return 'pulsa';
+        }
+        if (str_starts_with($slug, 'paket-')) {
+            if (str_contains($slug, 'sms') || str_contains($slug, 'telepon') || str_contains($slug, 'telpon')) {
+                return 'sms-telepon';
+            }
+
+            return 'data';
         }
 
         $aliasMap = config('gurky_catalog.filter_aliases', []);
@@ -137,17 +225,22 @@ class ProductMappingService
      */
     public function filterSlugs(string $category): array
     {
+        $raw = Str::lower(trim($category));
         $family = $this->canonicalizeSlug($category);
         $aliases = config('gurky_catalog.filter_aliases.'.$family);
 
-        if (is_array($aliases) && $aliases !== []) {
-            return array_values(array_unique(array_map(
-                fn ($s) => Str::lower((string) $s),
-                $aliases
-            )));
-        }
+        $slugs = is_array($aliases) && $aliases !== []
+            ? array_map(fn ($s) => Str::lower((string) $s), $aliases)
+            : [$family];
 
-        return [$family];
+        // Keep the request slug so legacy ProductCategory rows (e.g. pulsa-seluler)
+        // remain findable until remapped — without exposing them as CF menu items.
+        if ($raw !== '') {
+            $slugs[] = $raw;
+        }
+        $slugs[] = $family;
+
+        return array_values(array_unique($slugs));
     }
 
     /**

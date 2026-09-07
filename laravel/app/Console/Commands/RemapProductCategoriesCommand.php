@@ -37,9 +37,16 @@ class RemapProductCategoriesCommand extends Command
 
         Product::with(['category', 'provider', 'productProvider'])->chunkById(200, function ($products) use ($mapping, $dry, &$changed, &$unchanged, &$unmapped, $vipProviderIds) {
             foreach ($products as $product) {
-                [$providerHint, $rawCategory, $brand, $isGameHint] = $this->resolveMappingInputs($product, $vipProviderIds);
+                [$providerHint, $rawCategory, $brand, $isGameHint, $listType] = $this->resolveMappingInputs($product, $vipProviderIds);
 
-                $mapped = $mapping->map($providerHint, $rawCategory, $brand, (string) ($product->name ?? ''), $isGameHint);
+                $mapped = $mapping->map(
+                    $providerHint,
+                    $rawCategory,
+                    $brand,
+                    (string) ($product->name ?? ''),
+                    $isGameHint,
+                    $listType,
+                );
                 if (($mapped['source'] ?? '') === 'unmapped_fallback') {
                     $unmapped[$rawCategory.'|'.$brand] = ($unmapped[$rawCategory.'|'.$brand] ?? 0) + 1;
                 }
@@ -83,7 +90,7 @@ class RemapProductCategoriesCommand extends Command
     }
 
     /**
-     * @return array{0:string,1:string,2:string,3:bool}
+     * @return array{0:string,1:string,2:string,3:bool,4:?string}
      */
     protected function resolveMappingInputs(Product $product, array $vipProviderIds): array
     {
@@ -107,16 +114,21 @@ class RemapProductCategoriesCommand extends Command
                     'genshin',
                 ]);
 
-            return ['vip', $rawCategory, $brand, $isGame];
+            return ['vip', $rawCategory, $brand, $isGame, null];
         }
 
         $digi = DigiflazzProduct::query()->where('buyer_sku_code', $sku)->first();
         if ($digi) {
+            $listType = $digi->list_type !== null && $digi->list_type !== ''
+                ? (string) $digi->list_type
+                : null;
+
             return [
                 'digiflazz',
                 (string) ($digi->category ?? 'Umum'),
                 (string) ($digi->brand ?: $brand),
                 false,
+                $listType,
             ];
         }
 
@@ -126,6 +138,7 @@ class RemapProductCategoriesCommand extends Command
             (string) ($product->category?->slug ?? $product->category?->name ?? ''),
             $brand,
             false,
+            null,
         ];
     }
 }

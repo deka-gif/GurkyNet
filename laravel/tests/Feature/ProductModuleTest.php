@@ -208,8 +208,11 @@ class ProductModuleTest extends TestCase
         $response1 = $this->getJson('/api/v1/categories');
         $response1->assertStatus(200);
 
-        // Verify cache contains categories list (stored under cache tags when supported)
-        $this->assertTrue($this->cacheKeyExists('product_categories_all', ['categories']));
+        // Verify cache contains customer-facing categories list
+        $this->assertTrue($this->cacheKeyExists(
+            \App\Services\ProductProviders\ProductCatalogCache::categoriesKey(),
+            ['categories', 'products', 'active_products']
+        ));
 
         // Trigger cache creation for providers
         $response2 = $this->getJson('/api/v1/providers');
@@ -226,16 +229,18 @@ class ProductModuleTest extends TestCase
 
         // 1. Warm cache
         $this->getJson('/api/v1/categories');
-        $this->assertTrue($this->cacheKeyExists('product_categories_all', ['categories']));
+        $cfKey = \App\Services\ProductProviders\ProductCatalogCache::categoriesKey();
+        $this->assertTrue($this->cacheKeyExists($cfKey, ['categories', 'products', 'active_products']));
 
         // 2. Clear / Refresh cache tags or keys explicitly to simulate updates
         try {
             Cache::tags(['categories'])->flush();
         } catch (\BadMethodCallException $e) {
+            Cache::forget($cfKey);
             Cache::forget('product_categories_all');
         }
 
-        $this->assertFalse($this->cacheKeyExists('product_categories_all', ['categories']));
+        $this->assertFalse($this->cacheKeyExists($cfKey, ['categories', 'products', 'active_products']));
     }
 
     private function cacheKeyExists(string $key, array $tags = []): bool

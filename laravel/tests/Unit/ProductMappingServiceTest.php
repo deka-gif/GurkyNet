@@ -212,13 +212,69 @@ class ProductMappingServiceTest extends TestCase
         $svc = app(ProductMappingService::class);
         $m = $svc->map('digiflazz', 'E-Money', 'DANA', 'DANA 50.000');
         $this->assertSame('topup-digital', $m['slug']);
+        $this->assertSame('E-Wallet', $m['name']);
+    }
+
+    public function test_pln_prepaid_is_token_pln_slug(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'PLN', 'PLN', 'Token Listrik 20rb', false, 'prepaid');
+        $this->assertSame('pln', $m['slug']);
+        $this->assertSame('Token PLN', $m['name']);
+        $this->assertSame('pln_list_type_prepaid', $m['source']);
+    }
+
+    public function test_pln_prepaid_without_list_type_stays_token_pln(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'PLN', 'PLN', 'Token Listrik 20rb');
+        $this->assertSame('pln', $m['slug']);
+        $this->assertSame('Token PLN', $m['name']);
+    }
+
+    public function test_pln_pasca_brand_pln_maps_to_pln_pascabayar(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pascabayar', 'PLN', 'Tagihan Listrik', false, 'pasca');
+        $this->assertSame('pln-pascabayar', $m['slug']);
+        $this->assertSame('PLN Pascabayar', $m['name']);
+        $this->assertSame('pln_list_type_pasca', $m['source']);
+    }
+
+    public function test_pln_pasca_brand_pln_pascabayar_maps_to_pln_pascabayar(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pascabayar', 'PLN PASCABAYAR', 'PLN Pascabayar', false, 'pasca');
+        $this->assertSame('pln-pascabayar', $m['slug']);
+        $this->assertSame('PLN Pascabayar', $m['name']);
+    }
+
+    public function test_aktivasi_voucher_maps_to_voucher_internet(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Aktivasi Voucher', 'XL', 'Aktivasi Voucher XL');
+        $this->assertSame('voucher-internet', $m['slug']);
+    }
+
+    public function test_canonicalize_raw_aliases(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $this->assertSame('game', $svc->canonicalizeSlug('game-feature'));
+        $this->assertSame('game', $svc->canonicalizeSlug('gamed'));
+        $this->assertSame('game', $svc->canonicalizeSlug('voucher-game'));
+        $this->assertSame('topup-digital', $svc->canonicalizeSlug('saldo-emoney'));
+        $this->assertSame('topup-digital', $svc->canonicalizeSlug('e-money'));
+        $this->assertSame('langganan-digital', $svc->canonicalizeSlug('streaming-tv'));
+        $this->assertSame('pulsa', $svc->canonicalizeSlug('pulsa-reguler'));
+        $this->assertSame('data', $svc->canonicalizeSlug('paket-lainnya'));
+        $this->assertSame('voucher-digital', $svc->canonicalizeSlug('voucher'));
     }
 
     /** Digiflazz pascabayar sub-types resolve via brand_overrides (category is always Pascabayar). */
     public function test_pascabayar_internet_brand_maps_to_internet_pascabayar(): void
     {
         $svc = app(ProductMappingService::class);
-        $m = $svc->map('digiflazz', 'Pascabayar', 'INTERNET PASCABAYAR', 'XL HOME');
+        $m = $svc->map('digiflazz', 'Pascabayar', 'INTERNET PASCABAYAR', 'XL HOME', false, 'pasca');
         $this->assertSame('internet-pascabayar', $m['slug']);
         $this->assertSame('brand_override', $m['source']);
     }
@@ -226,7 +282,7 @@ class ProductMappingServiceTest extends TestCase
     public function test_pascabayar_hp_brand_stays_on_generic_tagihan(): void
     {
         $svc = app(ProductMappingService::class);
-        $m = $svc->map('digiflazz', 'Pascabayar', 'HP PASCABAYAR', 'Halo Postpaid');
+        $m = $svc->map('digiflazz', 'Pascabayar', 'HP PASCABAYAR', 'Halo Postpaid', false, 'pasca');
         $this->assertSame('tagihan', $m['slug']);
         $this->assertSame('provider_category', $m['source']);
     }
@@ -234,8 +290,29 @@ class ProductMappingServiceTest extends TestCase
     public function test_pascabayar_gas_negara_brand_maps_to_gas(): void
     {
         $svc = app(ProductMappingService::class);
-        $m = $svc->map('digiflazz', 'Pascabayar', 'GAS NEGARA', 'Gas Negara');
+        $m = $svc->map('digiflazz', 'Pascabayar', 'GAS NEGARA', 'Gas Negara', false, 'pasca');
         $this->assertSame('gas', $m['slug']);
         $this->assertSame('brand_override', $m['source']);
+    }
+
+    public function test_ewallet_and_voucher_unaffected_by_pln_list_type_guard(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $this->assertSame(
+            'topup-digital',
+            $svc->map('digiflazz', 'E-Money', 'DANA', 'DANA 50.000', false, 'prepaid')['slug']
+        );
+        $this->assertSame(
+            'voucher-digital',
+            $svc->map('digiflazz', 'Voucher', 'Alfamart', 'Alfamart 50rb', false, 'prepaid')['slug']
+        );
+        $this->assertSame(
+            'game',
+            $svc->map('digiflazz', 'Games', 'Free Fire', 'Free Fire 70 Diamond', false, 'prepaid')['slug']
+        );
+        $this->assertSame(
+            'data',
+            $svc->map('digiflazz', 'Data', 'XL', 'Xtra Combo', false, 'prepaid')['slug']
+        );
     }
 }

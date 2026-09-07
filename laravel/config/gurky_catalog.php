@@ -46,7 +46,7 @@ return [
             ],
         ],
         'topup-digital' => [
-            'label' => 'Top Up Digital',
+            'label' => 'E-Wallet',
             'icon' => 'credit-card',
             'path' => '/dashboard/topup-digital',
             'children' => [],
@@ -104,8 +104,8 @@ return [
         'multifinance' => ['name' => 'Multifinance', 'hub' => 'pembayaran-tagihan'],
         'tagihan' => ['name' => 'Tagihan Lainnya', 'hub' => 'pembayaran-tagihan'],
 
-        'topup-digital' => ['name' => 'Top Up Digital', 'hub' => 'topup-digital'],
-        'ewallet' => ['name' => 'Top Up Digital', 'hub' => 'topup-digital'], // legacy alias slug
+        'topup-digital' => ['name' => 'E-Wallet', 'hub' => 'topup-digital'],
+        'ewallet' => ['name' => 'E-Wallet', 'hub' => 'topup-digital'], // legacy alias slug
 
         'game' => ['name' => 'Game', 'hub' => 'game'],
         'voucher-digital' => ['name' => 'Voucher Digital', 'hub' => 'voucher-digital'],

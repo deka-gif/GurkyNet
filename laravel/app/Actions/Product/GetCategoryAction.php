@@ -3,17 +3,14 @@
 namespace App\Actions\Product;
 
 use App\Repositories\Contracts\CategoryRepositoryInterface;
-use Illuminate\Database\Eloquent\Collection;
-use App\Models\ProductCategory;
+use App\Services\Catalog\CustomerFacingCategoryLister;
 
 class GetCategoryAction
 {
-    protected CategoryRepositoryInterface $categoryRepository;
-
-    public function __construct(CategoryRepositoryInterface $categoryRepository)
-    {
-        $this->categoryRepository = $categoryRepository;
-    }
+    public function __construct(
+        protected CategoryRepositoryInterface $categoryRepository,
+        protected CustomerFacingCategoryLister $customerFacingCategories,
+    ) {}
 
     public function execute(?int $id = null, ?string $slug = null): mixed
     {
@@ -22,20 +19,22 @@ class GetCategoryAction
         }
 
         if ($slug !== null) {
-            return $this->categoryRepository->findBySlug($slug);
+            $category = $this->categoryRepository->findBySlug($slug);
+            // Hide raw/legacy provider taxonomy from direct slug lookup for menus.
+            if ($category && $this->customerFacingCategories->isHiddenRawSlug((string) $category->slug)) {
+                return null;
+            }
+            if ($category) {
+                $meta = config('gurky_catalog.categories.'.$category->slug);
+                if (is_array($meta) && ! empty($meta['name'])) {
+                    $category->name = (string) $meta['name'];
+                }
+            }
+
+            return $category;
         }
 
-        $cacheKey = 'product_categories_all';
-        $ttl = 3600; // 1 hour
-
-        try {
-            return \Illuminate\Support\Facades\Cache::tags(['categories'])->remember($cacheKey, $ttl, function () {
-                return $this->categoryRepository->all();
-            });
-        } catch (\BadMethodCallException $e) {
-            return \Illuminate\Support\Facades\Cache::remember($cacheKey, $ttl, function () {
-                return $this->categoryRepository->all();
-            });
-        }
+        // Digi-backed customer-facing list (no raw orphan rows in "Lainnya").
+        return $this->customerFacingCategories->list();
     }
 }

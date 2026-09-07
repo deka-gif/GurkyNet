@@ -6,6 +6,8 @@ import type { Category } from '../services/catalog.service';
  * `DASHBOARD_SERVICE_CATEGORIES` / `laravel/config/category_icon_keys.php`.
  *
  * Does not invent product categories: only groups existing GET /categories rows.
+ * Raw/legacy provider slugs are never dumped into "Lainnya" (backend should already
+ * filter; this is a customer-facing safety net).
  */
 
 export type CatalogGroupId =
@@ -30,6 +32,72 @@ export type CatalogGroupDef = {
   iconKeysForSlug: (slug: string) => string[];
 };
 
+/** Canonical customer-facing slugs (must stay in sync with backend allowlist). */
+export const CUSTOMER_FACING_SLUGS = new Set([
+  'pulsa',
+  'data',
+  'voucher-internet',
+  'sms-telepon',
+  'masa-aktif',
+  'aktivasi-perdana',
+  'esim',
+  'pln',
+  'pln-pascabayar',
+  'pdam',
+  'bpjs-kesehatan',
+  'bpjs-tk',
+  'internet-pascabayar',
+  'tv-pascabayar',
+  'gas',
+  'pbb',
+  'samsat',
+  'multifinance',
+  'tagihan',
+  'topup-digital',
+  'game',
+  'voucher-digital',
+  'langganan-digital',
+  'international',
+  'transfer',
+]);
+
+/** Known raw/legacy aliases — never show as their own tile in Lainnya. */
+const HIDDEN_RAW_SLUGS = new Set([
+  'game-feature',
+  'gamed',
+  'voucher-game',
+  'topup-game',
+  'top-up-game',
+  'games',
+  'saldo-emoney',
+  'emoney',
+  'e-money',
+  'e-wallet',
+  'ewallet',
+  'streaming-tv',
+  'streaming',
+  'aplikasi',
+  'apps',
+  'voucher',
+  'prepaid',
+  'paket-data',
+  'paket_data',
+  'token-pln',
+  'bpjs',
+  'langganan',
+]);
+
+export function isHiddenRawCategorySlug(slug: string): boolean {
+  const s = String(slug ?? '')
+    .trim()
+    .toLowerCase();
+  if (!s) return true;
+  if (HIDDEN_RAW_SLUGS.has(s)) return true;
+  if (s.startsWith('pulsa-') || s.startsWith('paket-')) return true;
+  if (!CUSTOMER_FACING_SLUGS.has(s)) return true;
+  return false;
+}
+
 /** Same order as Web Home hubs (excluding transfer / semua-produk index). */
 export const CATALOG_GROUPS: CatalogGroupDef[] = [
   {
@@ -38,7 +106,6 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
     slugOrder: [
       'pulsa',
       'data',
-      'paket-data',
       'voucher-internet',
       'sms-telepon',
       'masa-aktif',
@@ -55,12 +122,10 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
     title: 'Tagihan',
     slugOrder: [
       'pln',
-      'token-pln',
       'pln-pascabayar',
       'pdam',
       'bpjs-kesehatan',
       'bpjs-tk',
-      'bpjs',
       'internet-pascabayar',
       'tv-pascabayar',
       'gas',
@@ -72,12 +137,10 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
     iconKeysForSlug: (slug) => {
       const childMap: Record<string, string> = {
         pln: 'pln',
-        'token-pln': 'pln',
         'pln-pascabayar': 'pln-pascabayar',
         pdam: 'pdam',
         'bpjs-kesehatan': 'bpjs',
         'bpjs-tk': 'bpjs',
-        bpjs: 'bpjs',
         'internet-pascabayar': 'internet',
         'tv-pascabayar': 'tv',
         gas: 'gas',
@@ -93,7 +156,8 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
   {
     id: 'topup-digital',
     title: 'E-Wallet',
-    slugOrder: ['topup-digital', 'ewallet', 'e-money'],
+    // Only canonical slug — never surface e-money / ewallet as separate menus.
+    slugOrder: ['topup-digital'],
     iconKeysForSlug: () => ['hub:topup-digital'],
   },
   {
@@ -105,13 +169,14 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
   {
     id: 'voucher',
     title: 'Voucher Digital',
-    slugOrder: ['voucher-digital', 'voucher'],
+    // Keep separate from voucher-internet (telco).
+    slugOrder: ['voucher-digital'],
     iconKeysForSlug: () => ['hub:voucher'],
   },
   {
     id: 'langganan',
     title: 'Langganan',
-    slugOrder: ['langganan-digital', 'langganan', 'streaming'],
+    slugOrder: ['langganan-digital'],
     iconKeysForSlug: () => ['hub:langganan'],
   },
   {
@@ -130,12 +195,15 @@ export type CatalogGroupSection = {
 };
 
 /**
- * Partition API categories into Web hub groups. Unmapped slugs go to "Lainnya"
- * (presentation fallback — same idea as Web Marketing brand "Lainnya" bucket).
- * Empty groups are omitted. No category is dropped.
+ * Partition API categories into Web hub groups.
+ * "Lainnya" only receives real CF slugs (e.g. transfer) — never raw provider taxonomy.
  */
 export function groupCategoriesForCatalog(categories: Category[]): CatalogGroupSection[] {
-  const remaining = new Map(categories.map((c) => [c.slug, c]));
+  const remaining = new Map(
+    categories
+      .filter((c) => !isHiddenRawCategorySlug(c.slug))
+      .map((c) => [c.slug, c])
+  );
   const sections: CatalogGroupSection[] = [];
 
   for (const group of CATALOG_GROUPS) {
@@ -157,9 +225,10 @@ export function groupCategoriesForCatalog(categories: Category[]): CatalogGroupS
     }
   }
 
-  const leftovers = Array.from(remaining.values()).sort((a, b) =>
-    a.name.localeCompare(b.name, 'id')
-  );
+  const leftovers = Array.from(remaining.values())
+    .filter((c) => CUSTOMER_FACING_SLUGS.has(c.slug) && !isHiddenRawCategorySlug(c.slug))
+    .sort((a, b) => a.name.localeCompare(b.name, 'id'));
+
   if (leftovers.length > 0) {
     sections.push({
       id: 'lainnya',
