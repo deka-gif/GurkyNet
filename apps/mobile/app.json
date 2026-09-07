@@ -46,7 +46,16 @@
           "photosPermission": "GurkyPay membutuhkan akses galeri untuk mengganti foto profil.",
           "cameraPermission": "GurkyPay membutuhkan akses kamera hanya saat kamu memilih ambil foto profil."
         }
-      ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "GurkyPay membutuhkan akses kamera untuk memindai barcode atau QR nomor seri voucher fisik.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      "expo-audio"
     ]
   }
 }

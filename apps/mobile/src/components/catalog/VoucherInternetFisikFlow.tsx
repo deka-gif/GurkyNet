@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -43,11 +44,18 @@ import {
   telkomselNeedsZoneGate,
 } from '../../utils/telkomselVoucherZone';
 import {
-  toScannedSerials,
+  addCodesToScan,
+  normalizeScanPayloadToSerial,
+  removeScannedSerial,
+  UNRECOGNIZED_SCAN_CODE_MESSAGE,
   validateSnInput,
   type ScannedSerial,
 } from '../../utils/voucherPhysicalScan';
 import { parseApiError } from '../../api/client';
+import {
+  VoucherPhysicalCameraScan,
+  type CameraScanOutcome,
+} from './VoucherPhysicalCameraScan';
 
 /**
  * Voucher Internet — Fisik.
@@ -63,6 +71,7 @@ type Props = {
 
 type Step = 'brands' | 'type' | 'zone' | 'scan' | 'products' | 'review' | 'result';
 type PhysicalType = 'nasional' | 'perWilayah';
+type ScanInputTab = 'camera' | 'manual';
 type BrandRow = { name: string; count: number; logo: string | null };
 
 const ITEM_STATUS_LABEL: Record<string, string> = {
@@ -105,6 +114,11 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   const [rawSnInput, setRawSnInput] = useState('');
   const [scannedList, setScannedList] = useState<ScannedSerial[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const [scanTab, setScanTab] = useState<ScanInputTab>('camera');
+  const [manualEditIndex, setManualEditIndex] = useState<number | null>(null);
+  const [manualEditValue, setManualEditValue] = useState('');
+  const [manualEditError, setManualEditError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Product | null>(null);
   const [zoneAck, setZoneAck] = useState(false);
@@ -178,7 +192,8 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
 
   const snLimitKind = physicalType === 'perWilayah' ? 'perWilayah' : 'nasional';
   const snMax = physicalVoucherSnLimit(snLimitKind);
-  const snValidation = useMemo(() => validateSnInput(rawSnInput, snMax), [rawSnInput, snMax]);
+  const snDraftValidation = useMemo(() => validateSnInput(rawSnInput, snMax), [rawSnInput, snMax]);
+  const atSnCapacity = scannedList.length >= snMax;
 
   const catalogProducts = useMemo(() => {
     if (!brand) return [];
@@ -248,6 +263,8 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setSelected(null);
     setZoneAck(false);
     setScanError(null);
+    setScanNotice(null);
+    setScanTab('camera');
     setFormError(null);
     setSubmitError(null);
     setBatch(null);
@@ -273,6 +290,8 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
       setRawSnInput('');
       setScannedList([]);
       setScanError(null);
+      setScanNotice(null);
+      setScanTab('camera');
       if (physicalType === 'perWilayah') {
         setStep('zone');
       } else if (brandNeedsType) {
@@ -338,6 +357,9 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setZoneLabel(null);
     setRawSnInput('');
     setScannedList([]);
+    setScanError(null);
+    setScanNotice(null);
+    setScanTab('camera');
     setSelected(null);
     setZoneAck(false);
     setStep('scan');
@@ -348,6 +370,9 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setZoneLabel(null);
     setRawSnInput('');
     setScannedList([]);
+    setScanError(null);
+    setScanNotice(null);
+    setScanTab('camera');
     setSelected(null);
     setZoneAck(false);
     setStep('zone');
@@ -357,27 +382,150 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setZoneLabel(label);
     setRawSnInput('');
     setScannedList([]);
+    setScanError(null);
+    setScanNotice(null);
+    setScanTab('camera');
     setSelected(null);
     setZoneAck(false);
     setStep('scan');
   };
 
-  const continueFromScan = () => {
+  const handleCameraDetected = useCallback(
+    (serial: string): CameraScanOutcome => {
+      // Defensive: camera already canonicalizes; keep shared path safe.
+      const normalized = normalizeScanPayloadToSerial(serial);
+      if (!normalized.ok) {
+        setScanNotice(normalized.message || UNRECOGNIZED_SCAN_CODE_MESSAGE);
+        setScanError(normalized.message || UNRECOGNIZED_SCAN_CODE_MESSAGE);
+        return 'unrecognized';
+      }
+
+      let outcome: CameraScanOutcome = 'ignored';
+      setScannedList((prev) => {
+        const result = addCodesToScan(prev, [normalized.serial], snMax);
+        if (result.unrecognized > 0 && result.added === 0 && result.duplicates === 0) {
+          outcome = 'unrecognized';
+          setScanNotice(UNRECOGNIZED_SCAN_CODE_MESSAGE);
+          setScanError(UNRECOGNIZED_SCAN_CODE_MESSAGE);
+          return prev;
+        }
+        if (result.atCapacity && result.added === 0) {
+          outcome = 'at_capacity';
+          setScanNotice('Batas SN sudah tercapai');
+          return prev;
+        }
+        if (result.added > 0) {
+          outcome = 'added';
+          setScanNotice(result.noticeParts.length ? result.noticeParts.join(', ') + '.' : null);
+          setScanError(null);
+          return result.list;
+        }
+        if (result.duplicates > 0) {
+          outcome = 'duplicate';
+          return prev;
+        }
+        return prev;
+      });
+      return outcome;
+    },
+    [snMax]
+  );
+
+  const handleUnrecognizedScanCode = useCallback((message: string) => {
+    setScanNotice(message);
+    setScanError(message);
+  }, []);
+
+  const handleRemoveScanned = (serial: string) => {
+    setScannedList((prev) => removeScannedSerial(prev, serial));
+    setScanNotice(null);
     setScanError(null);
-    if (snValidation.empty) {
+  };
+
+  const handleEditScanned = (
+    index: number,
+    nextRaw: string
+  ): { ok: true } | { ok: false; error: string } => {
+    const normalized = normalizeScanPayloadToSerial(nextRaw);
+    if (!normalized.ok) {
+      return {
+        ok: false,
+        error:
+          normalized.reason === 'empty'
+            ? 'SN tidak boleh kosong.'
+            : normalized.message || UNRECOGNIZED_SCAN_CODE_MESSAGE,
+      };
+    }
+    const next = normalized.serial;
+    const dup = scannedList.some((s, i) => i !== index && s.serial === next);
+    if (dup) {
+      return { ok: false, error: 'SN sudah ada di daftar. Perubahan tidak disimpan.' };
+    }
+    setScannedList((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, serial: next } : item))
+    );
+    setScanError(null);
+    return { ok: true };
+  };
+
+  const addManualDraftToList = () => {
+    setScanError(null);
+    setScanNotice(null);
+    if (snDraftValidation.empty) {
       setScanError('Masukkan minimal 1 nomor seri voucher.');
       return;
     }
-    if (snValidation.duplicates.length > 0) {
-      setScanError(snValidation.duplicateMessages[0] || 'Terdapat SN duplikat.');
+    if (snDraftValidation.duplicates.length > 0) {
+      setScanError(snDraftValidation.duplicateMessages[0] || 'Terdapat SN duplikat.');
       return;
     }
-    if (snValidation.overLimit) {
-      setScanError(`Maksimal ${snMax} SN untuk batch ini. Saat ini ${snValidation.count} SN.`);
+    if (snDraftValidation.overLimit) {
+      setScanError(`Maksimal ${snMax} SN untuk batch ini. Saat ini ${snDraftValidation.count} SN.`);
       return;
     }
-    if (!snValidation.ok) return;
-    setScannedList(toScannedSerials(snValidation.uniqueSerials));
+    const result = addCodesToScan(scannedList, snDraftValidation.uniqueSerials, snMax);
+    setScannedList(result.list);
+    setRawSnInput('');
+    if (result.noticeParts.length) {
+      setScanNotice(result.noticeParts.join(', ') + '.');
+    }
+    if (result.atCapacity && result.added === 0) {
+      setScanError('Batas SN sudah tercapai');
+    }
+  };
+
+  const continueFromScan = () => {
+    setScanError(null);
+    let list = scannedList;
+
+    if (rawSnInput.trim()) {
+      if (snDraftValidation.duplicates.length > 0) {
+        setScanError(snDraftValidation.duplicateMessages[0] || 'Terdapat SN duplikat.');
+        return;
+      }
+      if (!snDraftValidation.empty) {
+        if (snDraftValidation.overLimit && list.length === 0) {
+          setScanError(`Maksimal ${snMax} SN untuk batch ini. Saat ini ${snDraftValidation.count} SN.`);
+          return;
+        }
+        const result = addCodesToScan(list, snDraftValidation.uniqueSerials, snMax);
+        list = result.list;
+        setScannedList(list);
+        setRawSnInput('');
+        if (result.noticeParts.length) {
+          setScanNotice(result.noticeParts.join(', ') + '.');
+        }
+      }
+    }
+
+    if (list.length === 0) {
+      setScanError('Masukkan minimal 1 nomor seri voucher.');
+      return;
+    }
+    if (list.length > snMax) {
+      setScanError(`Maksimal ${snMax} SN untuk batch ini. Saat ini ${list.length} SN.`);
+      return;
+    }
     setSelected(null);
     setStep('products');
   };
@@ -601,41 +749,167 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
             </View>
           ) : null}
 
-          <Text style={[styles.counter, snValidation.overLimit && styles.counterError]}>
-            {snValidation.count}/{snMax} SN
+          <View style={styles.scanTabRow}>
+            <TouchableOpacity
+              style={[styles.scanTab, scanTab === 'camera' && styles.scanTabOn]}
+              onPress={() => setScanTab('camera')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.scanTabText, scanTab === 'camera' && styles.scanTabTextOn]}>
+                Scan Kamera
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scanTab, scanTab === 'manual' && styles.scanTabOn]}
+              onPress={() => setScanTab('manual')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.scanTabText, scanTab === 'manual' && styles.scanTabTextOn]}>
+                Input Manual
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.counter, atSnCapacity && styles.counterError]}>
+            {scannedList.length}/{snMax} SN
           </Text>
-
-          <TextInput
-            value={rawSnInput}
-            onChangeText={(t) => {
-              setRawSnInput(t);
-              setScanError(null);
-            }}
-            placeholder={'Satu SN per baris, atau dipisah koma.\nContoh range: ABC001-ABC010'}
-            placeholderTextColor={colors.gray[400]}
-            style={[styles.search, styles.scanInput]}
-            multiline
-            autoCapitalize="characters"
-            autoCorrect={false}
-            textAlignVertical="top"
-          />
-
-          {snValidation.duplicateMessages.map((msg) => (
-            <Text key={msg} style={styles.error}>
-              {msg}
-            </Text>
-          ))}
-          {snValidation.overLimit ? (
-            <Text style={styles.error}>
-              Melebihi batas {snMax} SN. Kurangi jumlah SN — tidak dipotong otomatis.
-            </Text>
+          {atSnCapacity ? (
+            <Text style={styles.error}>Batas SN sudah tercapai</Text>
           ) : null}
-          {scanError ? <Text style={styles.error}>{scanError}</Text> : null}
+          {scanNotice ? <Text style={styles.notice}>{scanNotice}</Text> : null}
 
-          <Button
-            label="Lanjut Pilih Produk"
-            onPress={continueFromScan}
-            disabled={!snValidation.ok}
+          {scanTab === 'manual' ? (
+            <>
+              <TextInput
+                value={rawSnInput}
+                onChangeText={(t) => {
+                  setRawSnInput(t);
+                  setScanError(null);
+                }}
+                placeholder={'Satu SN per baris, atau dipisah koma.\nContoh range: ABC001-ABC010'}
+                placeholderTextColor={colors.gray[400]}
+                style={[styles.search, styles.scanInput]}
+                multiline
+                autoCapitalize="characters"
+                autoCorrect={false}
+                textAlignVertical="top"
+              />
+
+              {snDraftValidation.duplicateMessages.map((msg) => (
+                <Text key={msg} style={styles.error}>
+                  {msg}
+                </Text>
+              ))}
+              {snDraftValidation.overLimit ? (
+                <Text style={styles.error}>
+                  Melebihi batas {snMax} SN. Kurangi jumlah SN — tidak dipotong otomatis.
+                </Text>
+              ) : null}
+              {scanError ? <Text style={styles.error}>{scanError}</Text> : null}
+
+              <Button
+                label="Tambahkan ke Daftar"
+                variant="secondary"
+                onPress={addManualDraftToList}
+                disabled={snDraftValidation.empty || snDraftValidation.duplicates.length > 0}
+              />
+
+              {scannedList.length > 0 ? (
+                <View style={styles.snListBox}>
+                  <ScrollView style={styles.snListScroll} nestedScrollEnabled>
+                    {scannedList.map((item, index) => (
+                      <View key={`${item.serial}-${index}`} style={styles.snListRow}>
+                        <TouchableOpacity
+                          style={styles.snListMain}
+                          onPress={() => {
+                            setManualEditIndex(index);
+                            setManualEditValue(item.serial);
+                            setManualEditError(null);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.snListIndex}>{index + 1}.</Text>
+                          <Text style={styles.snListSerial} numberOfLines={1}>
+                            {item.serial}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleRemoveScanned(item.serial)} hitSlop={8}>
+                          <Ionicons name="trash-outline" size={18} color={colors.status.failed} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              <Button
+                label="Lanjut Pilih Produk"
+                onPress={continueFromScan}
+                disabled={scannedList.length === 0 && snDraftValidation.empty}
+              />
+
+              <Modal
+                visible={manualEditIndex !== null}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setManualEditIndex(null)}
+              >
+                <View style={styles.editBackdrop}>
+                  <View style={styles.editSheet}>
+                    <Text style={styles.editTitle}>Edit SN #{(manualEditIndex ?? 0) + 1}</Text>
+                    <TextInput
+                      value={manualEditValue}
+                      onChangeText={(t) => {
+                        setManualEditValue(t);
+                        setManualEditError(null);
+                      }}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      style={styles.editInput}
+                    />
+                    {manualEditError ? <Text style={styles.error}>{manualEditError}</Text> : null}
+                    <Button
+                      label="Simpan"
+                      onPress={() => {
+                        if (manualEditIndex === null) return;
+                        const result = handleEditScanned(manualEditIndex, manualEditValue);
+                        if (!result.ok) {
+                          setManualEditError(result.error);
+                          return;
+                        }
+                        setManualEditIndex(null);
+                      }}
+                    />
+                    <Button
+                      label="Batal"
+                      variant="secondary"
+                      onPress={() => setManualEditIndex(null)}
+                    />
+                  </View>
+                </View>
+              </Modal>
+            </>
+          ) : (
+            <Text style={styles.hint}>
+              Kamera terbuka penuh layar. Gunakan Input Manual jika izin ditolak atau kamera tidak
+              tersedia.
+            </Text>
+          )}
+
+          <VoucherPhysicalCameraScan
+            visible={step === 'scan' && scanTab === 'camera'}
+            list={scannedList}
+            maxItems={snMax}
+            scanningEnabled={!atSnCapacity}
+            limitReached={atSnCapacity}
+            notice={scanNotice}
+            onDetected={handleCameraDetected}
+            onUnrecognizedCode={handleUnrecognizedScanCode}
+            onRemove={handleRemoveScanned}
+            onEditSave={handleEditScanned}
+            onConfirm={continueFromScan}
+            onSwitchManual={() => setScanTab('manual')}
+            onClose={() => setScanTab('manual')}
           />
         </>
       ) : step === 'products' ? (
@@ -917,6 +1191,86 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
   scanInput: { minHeight: 140 },
+  scanTabRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  scanTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    backgroundColor: colors.gray[50],
+  },
+  scanTabOn: {
+    borderColor: colors.primary[500],
+    backgroundColor: colors.primary[50],
+  },
+  scanTabText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[600],
+  },
+  scanTabTextOn: { color: colors.primary[700] },
+  snListBox: {
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    borderRadius: radius.lg,
+    backgroundColor: colors.gray[50],
+    maxHeight: 180,
+  },
+  snListScroll: { maxHeight: 180 },
+  snListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.gray[200],
+  },
+  snListMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  snListIndex: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[500],
+    minWidth: 22,
+  },
+  snListSerial: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  editBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  editSheet: {
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  editTitle: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
   counter: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,

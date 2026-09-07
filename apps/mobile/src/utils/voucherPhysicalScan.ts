@@ -172,19 +172,100 @@ export function toScannedSerials(
   return serials.map((serial) => ({ serial, scannedAt: nowIso() }));
 }
 
+/** User-facing copy when HTTP(S) payload has no usable `sn` query param. */
+export const UNRECOGNIZED_SCAN_CODE_MESSAGE =
+  'Format kode tidak dikenali, silakan gunakan input manual';
+
+export type NormalizeScanPayloadResult =
+  | { ok: true; serial: string }
+  | { ok: false; reason: 'empty' | 'unrecognized_url'; message: string };
+
+function isHttpOrHttpsUrl(trimmed: string): boolean {
+  return /^https?:\/\//i.test(trimmed);
+}
+
+function extractSnQueryValue(url: URL): string | null {
+  for (const [key, value] of url.searchParams.entries()) {
+    if (key.toLowerCase() === 'sn') return value;
+  }
+  return null;
+}
+
+/**
+ * Canonicalize a single camera/manual scan token to a physical voucher serial.
+ * - HTTP(S) URLs: extract case-insensitive query param `sn` via URL parser.
+ * - Non-URL: return trimmed plain serial (existing plain-SN semantics).
+ * Provider-agnostic — does not hardcode domains.
+ */
+export function normalizeScanPayloadToSerial(raw: string): NormalizeScanPayloadResult {
+  const trimmed = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!trimmed) {
+    return { ok: false, reason: 'empty', message: 'SN tidak boleh kosong.' };
+  }
+
+  if (!isHttpOrHttpsUrl(trimmed)) {
+    return { ok: true, serial: trimmed };
+  }
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return {
+      ok: false,
+      reason: 'unrecognized_url',
+      message: UNRECOGNIZED_SCAN_CODE_MESSAGE,
+    };
+  }
+
+  const snRaw = extractSnQueryValue(url);
+  if (snRaw === null) {
+    return {
+      ok: false,
+      reason: 'unrecognized_url',
+      message: UNRECOGNIZED_SCAN_CODE_MESSAGE,
+    };
+  }
+
+  const serial = snRaw.trim();
+  if (!serial) {
+    return {
+      ok: false,
+      reason: 'unrecognized_url',
+      message: UNRECOGNIZED_SCAN_CODE_MESSAGE,
+    };
+  }
+
+  return { ok: true, serial };
+}
+
 // --- Legacy add-to-list helpers (camera / incremental path) — kept for parity ---
 
 export type AddScanResult =
   | { ok: true; list: ScannedSerial[] }
-  | { ok: false; reason: 'duplicate' | 'empty'; list: ScannedSerial[] };
+  | {
+      ok: false;
+      reason: 'duplicate' | 'empty' | 'unrecognized';
+      list: ScannedSerial[];
+      message?: string;
+    };
 
 export function addScannedSerial(
   list: ScannedSerial[],
   raw: string,
   nowIso: () => string = () => new Date().toISOString()
 ): AddScanResult {
-  const serial = raw.trim();
-  if (!serial) return { ok: false, reason: 'empty', list };
+  const normalized = normalizeScanPayloadToSerial(raw);
+  if (!normalized.ok) {
+    if (normalized.reason === 'empty') return { ok: false, reason: 'empty', list };
+    return {
+      ok: false,
+      reason: 'unrecognized',
+      list,
+      message: normalized.message,
+    };
+  }
+  const serial = normalized.serial;
   if (list.some((s) => s.serial === serial)) return { ok: false, reason: 'duplicate', list };
   return { ok: true, list: [...list, { serial, scannedAt: nowIso() }] };
 }
@@ -214,6 +295,7 @@ export type AddCodesToScanResult = {
   added: number;
   duplicates: number;
   overflow: number;
+  unrecognized: number;
   atCapacity: boolean;
   noticeParts: string[];
 };
@@ -224,15 +306,29 @@ export function addCodesToScan(
   maxItems: number,
   nowIso: () => string = () => new Date().toISOString()
 ): AddCodesToScanResult {
-  const trimmed = codes.map((c) => c.trim()).filter(Boolean);
-  if (trimmed.length === 0) {
+  // Canonicalize each token first (URL?sn= → SN) before room/dedup math.
+  const prepared: string[] = [];
+  let unrecognized = 0;
+  for (const code of codes) {
+    const normalized = normalizeScanPayloadToSerial(code);
+    if (!normalized.ok) {
+      if (normalized.reason === 'unrecognized_url') unrecognized++;
+      continue;
+    }
+    prepared.push(normalized.serial);
+  }
+
+  if (prepared.length === 0) {
+    const parts: string[] = [];
+    if (unrecognized > 0) parts.push(UNRECOGNIZED_SCAN_CODE_MESSAGE);
     return {
       list,
       added: 0,
       duplicates: 0,
       overflow: 0,
+      unrecognized,
       atCapacity: list.length >= maxItems,
-      noticeParts: [],
+      noticeParts: parts,
     };
   }
   const room = maxItems - list.length;
@@ -241,23 +337,26 @@ export function addCodesToScan(
       list,
       added: 0,
       duplicates: 0,
-      overflow: trimmed.length,
+      overflow: prepared.length,
+      unrecognized,
       atCapacity: true,
       noticeParts: [`Batch sudah mencapai maksimal ${maxItems} SN.`],
     };
   }
-  const overflow = Math.max(0, trimmed.length - room);
-  const toAdd = trimmed.slice(0, room);
+  const overflow = Math.max(0, prepared.length - room);
+  const toAdd = prepared.slice(0, room);
   const result = addScannedSerials(list, toAdd, nowIso);
   const parts: string[] = [];
   if (result.added > 0) parts.push(`${result.added} SN ditambahkan`);
   if (result.duplicates > 0) parts.push(`${result.duplicates} SN sudah pernah discan (dilewati)`);
   if (overflow > 0) parts.push(`${overflow} SN dilewati (melebihi maksimal ${maxItems})`);
+  if (unrecognized > 0) parts.push(UNRECOGNIZED_SCAN_CODE_MESSAGE);
   return {
     list: result.list,
     added: result.added,
     duplicates: result.duplicates,
     overflow,
+    unrecognized,
     atCapacity: result.list.length >= maxItems,
     noticeParts: parts,
   };
