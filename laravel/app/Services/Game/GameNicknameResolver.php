@@ -89,6 +89,28 @@ class GameNicknameResolver
         return $this->resolveForProduct($brand, null);
     }
 
+    /** Digi lookup/utility SKUs (e.g. Cek Username) — not top-up purchase products. */
+    public function isNonPurchaseSku(?string $skuCode): bool
+    {
+        $sku = trim((string) $skuCode);
+        if ($sku === '') {
+            return false;
+        }
+
+        $list = config('gurky_game.non_purchase_skus', []);
+        if (! is_array($list)) {
+            return false;
+        }
+
+        foreach ($list as $code) {
+            if (strcasecmp((string) $code, $sku) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @return 'digiflazz'|'vip'|null
      */

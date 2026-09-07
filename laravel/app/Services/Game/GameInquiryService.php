@@ -12,10 +12,10 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Real VIP Payment game nickname inquiry (game-feature type=get-nickname).
- * Inquiry only — does not debit wallet or place an order.
+ * Real VIP Payment game nickname inquiry (optional UX lookup).
+ * Inquiry does not debit wallet or place an order.
  *
- * Account schema: Digi/VIP isolated SKU → provider metadata → VIP brand → UNKNOWN.
+ * Digi purchase path: Digi schema → customer_no → PIN → CreateTransaction (no VIP session required).
  */
 class GameInquiryService
 {
@@ -48,17 +48,16 @@ class GameInquiryService
     }
 
     /**
+     * Optional VIP get-nickname lookup for UX/review.
+     * Digi purchase must NOT depend on this — use GameTargetBuilder + CreateTransactionAction.
+     * When VIP is unavailable or lookup fails, still returns customer_no from Digi schema
+     * with nickname=null and found=false (purchase may continue).
+     *
      * @param  array<string, mixed>  $account
      * @return array<string, mixed>
      */
     public function inquire(User $user, string $skuCode, array $account): array
     {
-        if (!$this->vip->isConfigured()) {
-            throw ValidationException::withMessages([
-                'provider' => ['Layanan validasi game (VIP Payment) belum dikonfigurasi.'],
-            ]);
-        }
-
         $product = $this->selection->findProductByInternalSku($skuCode);
         if (!$product) {
             throw ValidationException::withMessages([
@@ -70,6 +69,12 @@ class GameInquiryService
         if (!$this->availability->isAvailable($product)) {
             throw ValidationException::withMessages([
                 'sku_code' => ['Produk sedang tidak tersedia.'],
+            ]);
+        }
+
+        if ($this->resolver->isNonPurchaseSku($product->sku_code)) {
+            throw ValidationException::withMessages([
+                'sku_code' => ['Produk ini bukan produk top-up. Pembelian tidak tersedia.'],
             ]);
         }
 
@@ -85,62 +90,55 @@ class GameInquiryService
             ]);
         }
 
-        $parsed = $this->parseAccountFields($resolved['fields'], $account);
+        $builder = app(GameTargetBuilder::class);
+        $parsed = $builder->parseAccountFields($resolved['fields'], $account);
         $target = $parsed['target'];
         $zone = $parsed['zone'];
-        $customerNo = $this->buildCustomerNo($target, $zone);
-
-        try {
-            $response = $this->vip->getNickname($resolved['code'], $target, $zone);
-        } catch (\Throwable $e) {
-            throw ValidationException::withMessages([
-                'inquiry' => ['Gagal menghubungi provider. Silakan coba lagi.'],
-            ]);
-        }
-
-        if (empty($response['success'])) {
-            $message = trim((string) ($response['message'] ?? ''));
-            if ($message === '') {
-                $message = 'Player ID Tidak Ditemukan. Periksa kembali data akun Anda.';
-            }
-            throw ValidationException::withMessages([
-                'inquiry' => [$message],
-            ]);
-        }
-
-        $nickname = $this->extractNickname($response);
-        if ($nickname === '') {
-            throw ValidationException::withMessages([
-                'inquiry' => ['Player ID Tidak Ditemukan. Periksa kembali data akun Anda.'],
-            ]);
-        }
+        $customerNo = $builder->composeCustomerNo($target, $zone);
 
         $pricing = $this->pricing->calculateForProduct($product);
         $sellPrice = (float) ($pricing['sell_price'] ?? $product->sell_price);
         $adminFee = (float) ($pricing['admin_fee'] ?? 0);
         $total = $sellPrice + $adminFee;
+        $idZoneLabel = $zone !== null && $zone !== ''
+            ? $target.' ('.$zone.')'
+            : $target;
 
-        $inquiryRef = 'GNI' . Str::upper(Str::random(18));
-        $session = [
-            'inquiry_ref_id' => $inquiryRef,
-            'sku_code' => $product->sku_code,
-            'product_name' => $product->name,
-            'brand' => $brand,
-            'game_label' => $resolved['label'],
-            'nickname_code' => $resolved['code'],
-            'user_id' => $target,
-            'zone_id' => $zone,
-            'customer_no' => $customerNo,
-            'nickname' => $nickname,
-            'sell_price' => $sellPrice,
-            'admin_fee' => $adminFee,
-            'total_payment' => $total,
-            'id_zone_label' => $zone !== null && $zone !== ''
-                ? $target . ' (' . $zone . ')'
-                : $target,
-        ];
+        $nickname = '';
+        $inquiryRef = null;
+        $found = false;
 
-        $this->storeSession($user->id, $customerNo, $session);
+        // Optional VIP nickname — never blocks Digi purchase path.
+        if ($this->vip->isConfigured()) {
+            try {
+                $response = $this->vip->getNickname($resolved['code'], $target, $zone);
+                if (! empty($response['success'])) {
+                    $nickname = $this->extractNickname($response);
+                    if ($nickname !== '') {
+                        $found = true;
+                        $inquiryRef = 'GNI'.Str::upper(Str::random(18));
+                        $this->storeSession($user->id, $customerNo, [
+                            'inquiry_ref_id' => $inquiryRef,
+                            'sku_code' => $product->sku_code,
+                            'product_name' => $product->name,
+                            'brand' => $brand,
+                            'game_label' => $resolved['label'],
+                            'nickname_code' => $resolved['code'],
+                            'user_id' => $target,
+                            'zone_id' => $zone,
+                            'customer_no' => $customerNo,
+                            'nickname' => $nickname,
+                            'sell_price' => $sellPrice,
+                            'admin_fee' => $adminFee,
+                            'total_payment' => $total,
+                            'id_zone_label' => $idZoneLabel,
+                        ]);
+                    }
+                }
+            } catch (\Throwable) {
+                // Ignore VIP lookup failures — Digi purchase continues without nickname.
+            }
+        }
 
         return [
             'inquiry_ref_id' => $inquiryRef,
@@ -151,13 +149,14 @@ class GameInquiryService
             'user_id' => $target,
             'zone_id' => $zone,
             'customer_no' => $customerNo,
-            'id_zone_label' => $session['id_zone_label'],
-            'nickname' => $nickname,
+            'id_zone_label' => $idZoneLabel,
+            'nickname' => $nickname !== '' ? $nickname : null,
             'item' => $product->name,
             'price' => $total,
             'sell_price' => $sellPrice,
             'admin_fee' => $adminFee,
-            'found' => true,
+            'found' => $found,
+            'nickname_optional' => true,
             'expires_in_seconds' => self::CACHE_TTL_MINUTES * 60,
         ];
     }

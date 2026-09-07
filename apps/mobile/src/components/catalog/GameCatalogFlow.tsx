@@ -13,9 +13,11 @@ import {
   Product,
 } from '../../services/catalog.service';
 import {
+  buildGameCustomerNo,
   gameService,
   GameAccountField,
   GameInquiryResult,
+  isGameNonPurchaseSku,
 } from '../../services/game.service';
 import { transactionService } from '../../services/transaction.service';
 import { useCheckoutStore } from '../../store/checkout.store';
@@ -40,11 +42,12 @@ import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
 import { stripGameProductDisplayName } from '../../utils/stripGameProductDisplayName';
 
 /**
- * Mobile Game catalog + purchase (DigiFlazz schema SoT — FR catalog game).
+ * Mobile Game catalog + DigiFlazz purchase (FR catalog game).
  *
- * Flow: game list → buy (target inputs ABOVE products) → Lanjut → inquiry
- * → confirm → PinConfirmModal → POST /transactions → result.
- * VIPPayment SKUs filtered from active UI; schema never driven by VIP.
+ * Flow: game list → buy (target ABOVE products) → Lanjut → review → PIN
+ * → POST /transactions → result.
+ * VIP get-nickname is optional UX only — never a purchase gate.
+ * Schema is Digi/SKU evidence; VIP SKUs and Cek Username utility SKUs are hidden.
  */
 
 type Props = {
@@ -170,9 +173,12 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     return sortProvidersByNameAsc(list);
   }, [providers, providerQuery]);
 
-  // DigiFlazz-only active catalog listing (VIP SKUs hidden from purchase UI).
+  // DigiFlazz-only top-up listing (VIP + Cek Username utility SKUs hidden).
   const listedProducts = useMemo(
-    () => products.filter((p) => isCatalogListed(p) && !isVipSku(p.code)),
+    () =>
+      products.filter(
+        (p) => isCatalogListed(p) && !isVipSku(p.code) && !isGameNonPurchaseSku(p.code)
+      ),
     [products]
   );
 
@@ -188,6 +194,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     !!selectedProduct &&
     isProductPurchasable(selectedProduct) &&
     !isVipSku(selectedProduct.code) &&
+    !isGameNonPurchaseSku(selectedProduct.code) &&
     schemaOk &&
     accountReady &&
     !productsLoading &&
@@ -297,7 +304,9 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   /** Load first Digi SKU with proven Digi account schema (fail-closed if none). */
   const loadBrandDigiSchema = useCallback(
     async (brand: string, list: Product[]) => {
-      const digi = list.filter((p) => isCatalogListed(p) && !isVipSku(p.code));
+      const digi = list.filter(
+        (p) => isCatalogListed(p) && !isVipSku(p.code) && !isGameNonPurchaseSku(p.code)
+      );
       const purchasable = digi.filter((p) => isProductPurchasable(p));
       const pool = (purchasable.length > 0 ? purchasable : digi).slice(0, 12);
       if (pool.length === 0) {
@@ -394,7 +403,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
 
   const onSelectProduct = (product: Product) => {
     if (!isProductPurchasable(product) || !purchaseEnabled || !selectedGame) return;
-    if (isVipSku(product.code)) return;
+    if (isVipSku(product.code) || isGameNonPurchaseSku(product.code)) return;
     if (selectedProduct?.code !== product.code) {
       invalidateInquiry();
     }
@@ -403,7 +412,8 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     void loadSchemaForSku(selectedGame.name, product.code, true);
   };
 
-  const runInquiryAndConfirm = async () => {
+  /** Digi path: build customer_no locally; optional VIP nickname for review only. */
+  const runReviewAndConfirm = async () => {
     if (!canLanjut || !selectedProduct || !selectedGame) return;
 
     setInquiring(true);
@@ -416,27 +426,67 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
         const v = String(account[f.key] ?? '').trim();
         if (v) payload[f.key] = v;
       }
-      const res = await gameService.inquire(selectedProduct.code, payload);
-      if (res.success && res.data) {
-        if (!res.data.customer_no) {
-          setInquiryError('Validasi akun gagal (customer_no kosong). Coba lagi.');
-          return;
-        }
-        if (!res.data.nickname) {
-          setInquiryError('Nickname tidak ditemukan. Periksa User ID / Zone ID.');
-          return;
-        }
-        if (res.data.sku_code && res.data.sku_code !== selectedProduct.code) {
-          setInquiryError('Hasil validasi tidak cocok dengan produk yang dipilih.');
-          return;
-        }
-        setInquiry(res.data);
-        setStep('confirm');
-      } else {
-        setInquiryError(res.message || 'Validasi akun game gagal.');
+
+      let customerNo: string;
+      try {
+        customerNo = buildGameCustomerNo(schemaFields, payload);
+      } catch (e: unknown) {
+        setFormError(e instanceof Error ? e.message : 'Data akun game wajib diisi.');
+        return;
       }
+
+      const zone =
+        payload.zone_id || payload.server_id
+          ? String(payload.zone_id || payload.server_id).trim()
+          : null;
+      const userId =
+        payload.user_id ||
+        payload.player_id ||
+        payload.uid ||
+        payload.garena_id ||
+        customerNo.split('|')[0];
+
+      let nickname: string | null = null;
+      let inquiryRef: string | null = null;
+      // Optional VIP lookup — failure must not block Digi purchase.
+      try {
+        const res = await gameService.inquire(selectedProduct.code, payload);
+        if (res.success && res.data) {
+          if (res.data.customer_no) {
+            customerNo = res.data.customer_no;
+          }
+          if (res.data.nickname) {
+            nickname = res.data.nickname;
+          }
+          if (res.data.inquiry_ref_id) {
+            inquiryRef = res.data.inquiry_ref_id;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      const draft: GameInquiryResult = {
+        inquiry_ref_id: inquiryRef,
+        sku_code: selectedProduct.code,
+        product_name: selectedProduct.name,
+        game: selectedGame.name,
+        brand: selectedGame.name,
+        user_id: userId,
+        zone_id: zone,
+        customer_no: customerNo,
+        id_zone_label: zone ? `${userId} (${zone})` : userId,
+        nickname,
+        item: selectedProduct.name,
+        price: selectedProduct.price,
+        found: !!nickname,
+        nickname_optional: true,
+        expires_in_seconds: 20 * 60,
+      };
+      setInquiry(draft);
+      setStep('confirm');
     } catch (err: unknown) {
-      setInquiryError(parseApiError(err).message || 'Validasi akun game gagal.');
+      setInquiryError(parseApiError(err).message || 'Gagal menyiapkan review pembelian.');
     } finally {
       setInquiring(false);
     }
@@ -445,24 +495,12 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   const openPin = () => {
     if (!inquiry || !selectedProduct || !selectedGame) return;
     if (!inquiry.customer_no) {
-      setFormError('Validasi akun belum lengkap. Tekan Kembali dan Lanjut ulang.');
-      return;
-    }
-    if (!inquiry.nickname) {
-      setFormError('Nickname tidak tersedia. Periksa User ID / Zone ID lalu validasi ulang.');
+      setFormError('Data akun belum lengkap. Tekan Kembali dan Lanjut ulang.');
       return;
     }
     if (inquiry.sku_code !== selectedProduct.code) {
-      setFormError('Produk berubah. Validasi ulang akun.');
+      setFormError('Produk berubah. Isi ulang akun.');
       invalidateInquiry();
-      setStep('buy');
-      return;
-    }
-
-    const expiresAt = Date.now() + Math.max(0, (inquiry.expires_in_seconds || 0) * 1000);
-    if (expiresAt <= Date.now()) {
-      invalidateInquiry();
-      setInquiryError('Sesi validasi akun sudah kedaluwarsa. Tekan Lanjut ulang.');
       setStep('buy');
       return;
     }
@@ -487,7 +525,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
       gameContext: {
         inquiry,
         brand: selectedGame.name,
-        expiresAt,
+        expiresAt: Date.now() + 20 * 60 * 1000,
       },
     });
     setPinError(null);
@@ -684,7 +722,12 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
             columns={3}
             selectedCode={selectedProduct?.code ?? null}
             onPress={onSelectProduct}
-            isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
+            isDisabled={(p) =>
+              !isProductPurchasable(p) ||
+              !purchaseEnabled ||
+              isVipSku(p.code) ||
+              isGameNonPurchaseSku(p.code)
+            }
             getDisplayName={(p) =>
               stripGameProductDisplayName(p.name, selectedGame.name || p.operatorName)
             }
@@ -702,8 +745,8 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
         {formError ? <Text style={styles.error}>{formError}</Text> : null}
 
         <Button
-          label={inquiring ? 'Memvalidasi...' : 'Lanjut'}
-          onPress={() => void runInquiryAndConfirm()}
+          label={inquiring ? 'Menyiapkan...' : 'Lanjut'}
+          onPress={() => void runReviewAndConfirm()}
           loading={inquiring}
           disabled={!canLanjut}
         />
@@ -711,7 +754,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     );
   }
 
-  // ——— Confirm after inquiry ———
+  // ——— Confirm (Digi customer_no; nickname optional) ———
   if (step === 'confirm' && inquiry && selectedProduct && selectedGame) {
     const displayProduct =
       inquiry.item ||
@@ -729,7 +772,10 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
             const fromInquiry =
               field.key === 'zone_id' || field.key.includes('zone') || field.key.includes('server')
                 ? inquiry.zone_id
-                : field.key === 'user_id' || field.key === 'player_id'
+                : field.key === 'user_id' ||
+                    field.key === 'player_id' ||
+                    field.key === 'uid' ||
+                    field.key === 'garena_id'
                   ? inquiry.user_id
                   : null;
             return (

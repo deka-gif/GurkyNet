@@ -94,14 +94,13 @@ export function isPlnContextValid(ctx: PlnCheckoutContext | null, targetNumber: 
   return true;
 }
 
-/** True when Game inquiry context matches SKU + target and is not client-expired. */
+/** True when Digi Game purchase context matches SKU + target (VIP nickname optional). */
 export function isGameContextValid(
   ctx: GameCheckoutContext | null,
   targetNumber: string,
   skuCode: string | null | undefined
 ): boolean {
   if (!ctx?.inquiry) return false;
-  if (!ctx.inquiry.nickname) return false;
   if (!ctx.inquiry.customer_no) return false;
   if (ctx.inquiry.customer_no !== targetNumber) return false;
   if (skuCode && ctx.inquiry.sku_code !== skuCode) return false;

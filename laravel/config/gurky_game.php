@@ -1,22 +1,64 @@
 <?php
 
 /**
- * Game account / nickname mapping for VIP Payment get-nickname.
+ * Game account / nickname mapping.
  *
  * Resolve priority (GameNicknameResolver) — provider-isolated:
  *   sku_schemas (Digi) / vip_sku_schemas (VIP)
  *   → Digiflazz desc (Digi only) / VIP note (VIP only)
- *   → nickname_codes (VIP brand / get-nickname — NOT Digi category heuristic)
+ *   → nickname_codes (VIP get-nickname helpers — NOT Digi purchase schema)
  *   → UNKNOWN
  *
  * Digi products without clear Digi evidence do NOT inherit VIP brand fields.
+ * VIP get-nickname is optional UX lookup — never a Digi purchase gate.
+ *
+ * sku_schemas below: production Digi evidence only (2026-09 VPS audit).
  */
 return [
     /**
-     * DigiFlazz buyer_sku_code overrides (verified production).
-     * Free Fire Digi diamond-only SKUs → unknown (desc does not prove player_id).
+     * DigiFlazz buyer_sku_code overrides (verified production desc / type).
      */
     'sku_schemas' => [
+        // FC Mobile — Digi desc "Masukkan UID"
+        'pre33639303' => [
+            'delivery' => 'account',
+            'code' => 'fc-mobile',
+            'label' => 'FC Mobile',
+            'fields' => [
+                ['key' => 'user_id', 'label' => 'UID', 'required' => true],
+            ],
+        ],
+        'pre33639304' => [
+            'delivery' => 'account',
+            'code' => 'fc-mobile',
+            'label' => 'FC Mobile',
+            'fields' => [
+                ['key' => 'user_id', 'label' => 'UID', 'required' => true],
+            ],
+        ],
+
+        // Garena Shell — Digi desc "Tujuan = ID garena"
+        'pre33817227' => [
+            'delivery' => 'account',
+            'code' => 'garena',
+            'label' => 'Garena',
+            'fields' => [
+                ['key' => 'garena_id', 'label' => 'Garena ID', 'required' => true],
+            ],
+        ],
+
+        // Mobile Legends diamond — Digi desc "no pelanggan = gabungan antara user_id dan zone_id"
+        'pre33639301' => [
+            'delivery' => 'account',
+            'code' => 'mobile-legends',
+            'label' => 'Mobile Legends',
+            'fields' => [
+                ['key' => 'user_id', 'label' => 'User ID', 'required' => true],
+                ['key' => 'zone_id', 'label' => 'Zone ID', 'required' => true],
+            ],
+        ],
+
+        // Digi active but desc does not prove target format
         'mlweek' => [
             'delivery' => 'unknown',
             'fields' => [],
@@ -41,15 +83,29 @@ return [
             'delivery' => 'unknown',
             'fields' => [],
         ],
+        'pre33817245' => [
+            'delivery' => 'unknown',
+            'fields' => [],
+        ],
+    ],
+
+    /**
+     * Digi SKUs that are lookup/utility rows — not top-up purchase products.
+     * (Production: "Cek Username" style products.)
+     *
+     * @var list<string>
+     */
+    'non_purchase_skus' => [
+        'pre33639299', // Mobile Legends Cek Username
+        'pre33817254', // PUBG MOBILE Cek Username
     ],
 
     /** VIP provider_sku / VIP-{code} overrides (empty until verified per-SKU). */
     'vip_sku_schemas' => [],
 
     /**
-     * Explicit VIP get-nickname brand mapping (not Digi category heuristic).
-     * Free Fire → player_id is VIP nickname API mapping, applied only for VIP /
-     * brand-only resolve — never as Digi default when Digi desc is unclear.
+     * Explicit VIP get-nickname brand mapping (optional UX lookup only).
+     * Never applied as Digi purchase schema when Digi evidence is missing.
      */
     'nickname_codes' => [
         'mobile-legends' => [
@@ -191,7 +247,6 @@ return [
 
     /**
      * @deprecated Unused — unknown brands return delivery=unknown (fail-closed).
-     * Kept empty so accidental reads never invent player_id.
      */
     'default_fields' => [],
 ];

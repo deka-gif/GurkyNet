@@ -337,27 +337,45 @@ class CreateTransactionAction
                 $itemMeta['subscriber_id'] = $plnSession['subscriber_id'] ?? null;
             }
 
+            // Digi Game: schema + customer_no validation only — VIP nickname session is optional UX.
             $gameSession = null;
             if (!$isPasca && $this->isGameProduct($product)) {
-                $gameSession = $this->gameInquiryService->getSession($user->id, $targetNumber);
-                if (!$gameSession) {
-                    throw ValidationException::withMessages([
-                        'target_number' => ['Silakan validasi akun game terlebih dahulu sebelum top up.'],
-                    ]);
+                $brand = trim((string) ($product->provider?->name ?? ''));
+                if ($brand === '') {
+                    $brand = 'Game';
                 }
-                if (($gameSession['sku_code'] ?? null) !== $product->sku_code) {
-                    throw ValidationException::withMessages([
-                        'target_number' => ['SKU tidak sesuai dengan hasil validasi game.'],
-                    ]);
-                }
+                $gameResolver = app(\App\Services\Game\GameNicknameResolver::class);
+                $gameBuilder = app(\App\Services\Game\GameTargetBuilder::class);
+                $gameSchema = $gameResolver->resolveForProduct($brand, $product->sku_code);
+                $gameBuilder->assertValidCustomerNo($targetNumber, $gameSchema);
+
                 $itemMeta['is_game'] = true;
-                $itemMeta['nickname'] = $gameSession['nickname'] ?? null;
-                $itemMeta['customer_name'] = $gameSession['nickname'] ?? null;
-                $itemMeta['game_brand'] = $gameSession['brand'] ?? ($product->provider->name ?? null);
-                $itemMeta['game_label'] = $gameSession['game_label'] ?? null;
-                $itemMeta['user_id'] = $gameSession['user_id'] ?? null;
-                $itemMeta['zone_id'] = $gameSession['zone_id'] ?? null;
-                $itemMeta['game_inquiry_ref_id'] = $gameSession['inquiry_ref_id'] ?? null;
+                $itemMeta['game_brand'] = $brand;
+                $itemMeta['game_label'] = $gameSchema['label'] ?? $brand;
+                $itemMeta['game_schema_source'] = $gameSchema['source'] ?? null;
+
+                // Optional VIP lookup session (never required for Digi purchase).
+                $gameSession = $this->gameInquiryService->getSession($user->id, $targetNumber);
+                if (
+                    is_array($gameSession)
+                    && ($gameSession['sku_code'] ?? null) === $product->sku_code
+                ) {
+                    $itemMeta['nickname'] = $gameSession['nickname'] ?? null;
+                    $itemMeta['customer_name'] = $gameSession['nickname'] ?? null;
+                    $itemMeta['user_id'] = $gameSession['user_id'] ?? null;
+                    $itemMeta['zone_id'] = $gameSession['zone_id'] ?? null;
+                    $itemMeta['game_inquiry_ref_id'] = $gameSession['inquiry_ref_id'] ?? null;
+                } else {
+                    $gameSession = null;
+                    if (str_contains($targetNumber, '|')) {
+                        [$uid, $zid] = array_pad(explode('|', $targetNumber, 2), 2, '');
+                        $itemMeta['user_id'] = trim($uid) !== '' ? trim($uid) : null;
+                        $itemMeta['zone_id'] = trim($zid) !== '' ? trim($zid) : null;
+                    } else {
+                        $itemMeta['user_id'] = $targetNumber;
+                        $itemMeta['zone_id'] = null;
+                    }
+                }
             }
 
             if (!$isPasca && $this->isVoucherDigitalProduct($product)) {

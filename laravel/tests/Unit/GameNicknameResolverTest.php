@@ -28,21 +28,14 @@ class GameNicknameResolverTest extends TestCase
 
     public function test_digiflazz_uid_hint_for_fc_mobile_sku(): void
     {
-        DigiflazzProduct::create([
-            'buyer_sku_code' => 'pre33639303',
-            'product_name' => 'FC Mobile 40',
-            'category' => 'Games',
-            'brand' => 'FC Mobile',
-            'seller_price' => 10000,
-            'desc' => '40 + 8 Bonus. Masukkan UID.',
-        ]);
-
+        // Explicit production sku_schema wins (Digi desc also says Masukkan UID).
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('FC Mobile', 'pre33639303');
 
         $this->assertSame('account', $schema['delivery']);
-        $this->assertSame('digiflazz_desc', $schema['source']);
+        $this->assertSame('sku_schema', $schema['source']);
         $this->assertSame(['user_id'], collect($schema['fields'])->pluck('key')->all());
+        $this->assertSame('UID', $schema['fields'][0]['label']);
     }
 
     public function test_ml_combo_from_desc(): void
@@ -61,6 +54,17 @@ class GameNicknameResolverTest extends TestCase
 
         $this->assertSame('account', $schema['delivery']);
         $this->assertSame(['user_id', 'zone_id'], collect($schema['fields'])->pluck('key')->all());
+    }
+
+    public function test_ml_proven_sku_schema_product_level(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+        $proven = $resolver->resolveForProduct('MOBILE LEGENDS', 'pre33639301');
+        $this->assertSame('account', $proven['delivery']);
+        $this->assertSame(['user_id', 'zone_id'], collect($proven['fields'])->pluck('key')->all());
+
+        $week = $resolver->resolveForProduct('MOBILE LEGENDS', 'mlweek');
+        $this->assertSame('unknown', $week['delivery']);
     }
 
     public function test_free_fire_digi_without_explicit_target_is_unknown(): void

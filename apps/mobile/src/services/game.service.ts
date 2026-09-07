@@ -2,12 +2,8 @@ import { apiClient } from '../api/client';
 import { ApiResponse } from '../api/types';
 
 /**
- * Mirror of web `src/services/game/game.service.ts`.
- * Schema: GET /game/account-schema?brand=&sku=
- * Inquiry: POST /game/inquiry { sku_code, account }
- * Purchase uses target_number = customer_no (no inquiry_ref_id).
- *
- * delivery=unknown → fail-closed (no fake player_id form).
+ * DigiFlazz Game schema + optional VIP nickname lookup.
+ * Purchase: Digi schema → customer_no → PIN → POST /transactions (VIP not required).
  */
 
 export type GameAccountField = {
@@ -26,7 +22,7 @@ export type GameAccountSchema = {
 };
 
 export type GameInquiryResult = {
-  inquiry_ref_id: string;
+  inquiry_ref_id?: string | null;
   sku_code: string;
   product_name: string;
   game: string;
@@ -35,14 +31,54 @@ export type GameInquiryResult = {
   zone_id?: string | null;
   customer_no: string;
   id_zone_label: string;
-  nickname: string;
+  nickname?: string | null;
   item: string;
   price: number;
-  sell_price: number;
-  admin_fee: number;
-  found: boolean;
+  sell_price?: number;
+  admin_fee?: number;
+  found?: boolean;
+  nickname_optional?: boolean;
   expires_in_seconds: number;
 };
+
+/** Digi lookup/utility SKUs — not top-up purchase (prod evidence). */
+export const GAME_NON_PURCHASE_SKUS = new Set([
+  'pre33639299', // ML Cek Username
+  'pre33817254', // PUBG Cek Username
+]);
+
+export function isGameNonPurchaseSku(code: string | null | undefined): boolean {
+  return GAME_NON_PURCHASE_SKUS.has(String(code ?? '').trim());
+}
+
+/** Digi customer_no: single id, or user_id|zone_id when zone present. */
+export function buildGameCustomerNo(
+  fields: GameAccountField[],
+  account: Record<string, string>
+): string {
+  const values: Record<string, string> = {};
+  for (const f of fields) {
+    const v = String(account[f.key] ?? '').trim();
+    if (f.required && !v) {
+      throw new Error(`${f.label} wajib diisi.`);
+    }
+    if (v) values[f.key] = v;
+  }
+
+  const target =
+    values.user_id ??
+    values.player_id ??
+    values.uid ??
+    values.garena_id ??
+    Object.values(values)[0];
+
+  if (!target) {
+    throw new Error('Data akun game wajib diisi.');
+  }
+
+  const zone = values.zone_id ?? values.server_id;
+  return zone ? `${target}|${zone}` : target;
+}
 
 export const gameService = {
   accountSchema: async (
@@ -58,6 +94,7 @@ export const gameService = {
     return response.data;
   },
 
+  /** Optional VIP nickname lookup — Digi purchase does not require success. */
   inquire: async (
     skuCode: string,
     account: Record<string, string>

@@ -270,8 +270,8 @@ export default function CheckoutScreen() {
           title={gameExpired ? 'Sesi Validasi Kedaluwarsa' : 'Validasi Akun Diperlukan'}
           message={
             gameExpired
-              ? 'Sesi validasi akun game sudah habis. Silakan kembali ke menu Game, pilih produk, dan validasi akun ulang.'
-              : 'Pembelian game membutuhkan validasi akun (nickname) terlebih dahulu. Buka menu Game, pilih produk, isi User ID, lalu validasi.'
+              ? 'Sesi pembelian game sudah habis. Silakan kembali ke menu Game, pilih produk, isi akun, lalu lanjutkan.'
+              : 'Pembelian game dilakukan dari menu Game: pilih game, isi akun sesuai schema DigiFlazz, lalu konfirmasi & PIN.'
           }
         />
       </ScreenContainer>
