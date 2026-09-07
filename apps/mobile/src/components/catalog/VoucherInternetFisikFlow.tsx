@@ -30,6 +30,7 @@ import {
   LoadingState,
   PinConfirmModal,
 } from '../ui';
+import { VoucherInternetProductList } from './VoucherInternetProductList';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { createIdempotencyKey } from '../../utils/idempotency';
@@ -924,34 +925,18 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
               message="Belum ada voucher tersedia untuk wilayah ini."
             />
           ) : (
-            <View style={styles.list}>
-              {catalogProducts.map((product) => {
-                const unavailable = !isProductPurchasable(product);
-                return (
-                  <TouchableOpacity
-                    key={product.code}
-                    activeOpacity={0.7}
-                    disabled={unavailable}
-                    onPress={() => selectProduct(product)}
-                  >
-                    <Card style={[styles.rowCard, unavailable && styles.disabled]}>
-                      <View style={styles.rowBody}>
-                        <Text style={styles.rowTitle} numberOfLines={2}>
-                          {product.name}
-                        </Text>
-                        {product.zoneLabel ? (
-                          <Text style={styles.rowMeta}>{product.zoneLabel}</Text>
-                        ) : physicalType === 'nasional' ? (
-                          <Text style={styles.rowMeta}>Nasional</Text>
-                        ) : null}
-                        {unavailable ? <Text style={styles.rowMeta}>Tidak tersedia</Text> : null}
-                      </View>
-                      <Text style={styles.price}>{formatIDR(product.price)}</Text>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <VoucherInternetProductList
+              products={catalogProducts}
+              onSelect={selectProduct}
+              isDisabled={(p) => !isProductPurchasable(p)}
+              getMetaLabel={(p) =>
+                p.zoneLabel
+                  ? p.zoneLabel
+                  : physicalType === 'nasional'
+                    ? 'Nasional'
+                    : null
+              }
+            />
           )}
         </>
       ) : step === 'review' && selected ? (

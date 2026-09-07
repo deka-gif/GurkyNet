@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { catalogService, Product } from '../../services/catalog.service';
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
@@ -14,8 +15,8 @@ import {
   PurchaseFlowNotice,
 } from '../ui';
 import { PhoneOperatorInput } from './PhoneOperatorInput';
+import { VoucherInternetProductList } from './VoucherInternetProductList';
 import { colors, radius, spacing, typography } from '../../theme';
-import { formatIDR } from '../../utils/currency';
 import { detectOperatorFromPhone } from '../../utils/detectOperator';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
@@ -233,7 +234,7 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
         </View>
       ) : null}
 
-      <Text style={styles.modeTag}>Tembak Langsung</Text>
+      {step !== 'zone' ? <Text style={styles.modeTag}>Tembak Langsung</Text> : null}
 
       {loading && allProducts.length === 0 ? (
         <LoadingState label="Memuat voucher internet..." />
@@ -254,36 +255,52 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
         </>
       ) : step === 'zone' ? (
         <>
-          <Text style={styles.lead}>Pilih wilayah</Text>
+          <Text style={styles.kategoriLabel}>Kategori</Text>
+          <Text style={styles.kategoriValue}>Tembak Langsung</Text>
           <Text style={styles.phoneMeta}>
             {sanitizePhoneDigits(phoneNo)} · {operator}
           </Text>
 
+          {hasNational ? (
+            <TouchableOpacity activeOpacity={0.7} onPress={selectNational}>
+              <Card style={[styles.nationalCard, nationalSelected && styles.zoneCardActive]}>
+                <View style={styles.nationalHeader}>
+                  <Text style={styles.nationalTitle}>Nasional</Text>
+                  <View style={styles.recommendBadge}>
+                    <Text style={styles.recommendBadgeText}>Direkomendasikan</Text>
+                  </View>
+                </View>
+                <Text style={styles.nationalMeta}>
+                  Berlaku semua wilayah · {nationalProducts.length} produk
+                </Text>
+              </Card>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={styles.zoneWarn}>
-            <Text style={styles.zoneWarnText}>
-              Paket Telkomsel dibagi per wilayah. Pastikan pilih wilayah yang sesuai kartu kamu, kalau
-              salah paket tidak akan aktif.
-            </Text>
+            <View style={styles.zoneWarnRow}>
+              <Ionicons name="warning" size={22} color={colors.status.pending} />
+              <Text style={styles.zoneWarnText}>
+                Paket Telkomsel dibagi per wilayah. Pastikan pilih wilayah yang sesuai kartu kamu. Kalau
+                salah paket tidak akan aktif.
+              </Text>
+            </View>
             <Pressable onPress={openHelpWilayah} hitSlop={8}>
               <Text style={styles.helpLink}>Cara cek wilayah kartu saya</Text>
             </Pressable>
           </View>
 
-          <Text style={styles.section}>Pilih Wilayah</Text>
-
-          {hasNational ? (
-            <TouchableOpacity activeOpacity={0.7} onPress={selectNational}>
-              <Card style={[styles.zoneCard, nationalSelected && styles.zoneCardActive]}>
-                <Text style={[styles.zoneTitle, nationalSelected && styles.zoneTitleActive]}>Nasional</Text>
-                <Text style={styles.zoneMeta}>Berlaku semua wilayah · {nationalProducts.length} produk</Text>
-              </Card>
-            </TouchableOpacity>
-          ) : null}
+          <Text style={styles.section}>Voucher per wilayah</Text>
 
           {zoneLabels.length === 0 && !hasNational ? (
             <EmptyState
               title="Belum Ada Wilayah"
               message="Belum ada paket tersedia untuk wilayah ini."
+            />
+          ) : zoneLabels.length === 0 ? (
+            <EmptyState
+              title="Belum Ada Wilayah"
+              message="Belum ada paket per wilayah untuk operator ini."
             />
           ) : (
             <View style={styles.list}>
@@ -328,34 +345,14 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
               message="Belum ada paket tersedia untuk wilayah ini."
             />
           ) : (
-            <View style={styles.list}>
-              {catalogProducts.map((product) => {
-                const unavailable = !isProductPurchasable(product);
-                return (
-                  <TouchableOpacity
-                    key={product.id}
-                    activeOpacity={0.7}
-                    disabled={unavailable || !purchaseEnabled}
-                    onPress={() => selectProduct(product)}
-                  >
-                    <Card style={[styles.rowCard, unavailable && styles.disabled]}>
-                      <View style={styles.rowBody}>
-                        <Text style={styles.rowTitle} numberOfLines={2}>
-                          {product.name}
-                        </Text>
-                        {product.zoneLabel ? (
-                          <Text style={styles.rowMeta}>{product.zoneLabel}</Text>
-                        ) : displayZone === 'Nasional' ? (
-                          <Text style={styles.rowMeta}>Nasional</Text>
-                        ) : null}
-                        {unavailable ? <Text style={styles.rowMeta}>Tidak tersedia</Text> : null}
-                      </View>
-                      <Text style={styles.price}>{formatIDR(product.price)}</Text>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <VoucherInternetProductList
+              products={catalogProducts}
+              onSelect={selectProduct}
+              isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled}
+              getMetaLabel={(p) =>
+                p.zoneLabel ? p.zoneLabel : displayZone === 'Nasional' ? 'Nasional' : null
+              }
+            />
           )}
         </>
       )}
@@ -384,6 +381,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  kategoriLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[500],
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  kategoriValue: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
   lead: {
     fontSize: typography.size.base,
     fontWeight: typography.weight.bold,
@@ -398,10 +407,18 @@ const styles = StyleSheet.create({
   zoneWarn: {
     backgroundColor: colors.status.pendingBg,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.accent[400],
     padding: spacing.md,
     gap: spacing.sm,
   },
+  zoneWarnRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
   zoneWarnText: {
+    flex: 1,
     fontSize: typography.size.xs,
     color: colors.gray[800],
     lineHeight: 18,
@@ -412,16 +429,53 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.primary[700],
     textDecorationLine: 'underline',
+    marginLeft: 30,
   },
   list: { gap: spacing.sm },
+  nationalCard: {
+    padding: spacing.md,
+    gap: 6,
+    backgroundColor: colors.primary[100],
+    borderWidth: 1.5,
+    borderColor: colors.primary[500],
+  },
+  nationalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  nationalTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[800],
+  },
+  nationalMeta: {
+    fontSize: typography.size.xs,
+    color: colors.primary[700],
+    fontWeight: typography.weight.medium,
+  },
+  recommendBadge: {
+    backgroundColor: colors.primary[600],
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  recommendBadgeText: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
+    letterSpacing: 0.2,
+  },
   zoneCard: {
     padding: spacing.md,
     gap: 4,
   },
   zoneCardActive: {
-    borderWidth: 1,
-    borderColor: colors.primary[500],
-    backgroundColor: colors.primary[50],
+    borderWidth: 1.5,
+    borderColor: colors.primary[600],
+    backgroundColor: colors.primary[100],
   },
   zoneTitle: {
     fontSize: typography.size.sm,
