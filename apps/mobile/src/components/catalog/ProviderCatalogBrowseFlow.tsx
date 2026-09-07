@@ -13,8 +13,8 @@ import {
   EmptyState,
   BrandLogo,
 } from '../ui';
+import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
-import { formatIDR } from '../../utils/currency';
 import { isCatalogListed } from '../../utils/catalogAvailability';
 
 /**
@@ -101,11 +101,10 @@ export function ProviderCatalogBrowseFlow({
   }, [providers, providerQuery]);
 
   const listedProducts = useMemo(() => {
-    return products
-      .filter((p) => isCatalogListed(p))
-      .slice()
-      .sort((a, b) => a.price - b.price);
+    return products.filter((p) => isCatalogListed(p));
   }, [products]);
+
+  const productColumns = category === 'game' ? 5 : 2;
 
   const selectProvider = async (provider: CategoryProviderSummary) => {
     setSelected(provider);
@@ -204,31 +203,19 @@ export function ProviderCatalogBrowseFlow({
       ) : listedProducts.length === 0 ? (
         <EmptyState title="Belum Ada Produk" message="Produk untuk provider ini belum tersedia." />
       ) : (
-        <View style={styles.productGrid}>
-          {listedProducts.map((product) => {
-            const unavailable = product.status !== 'tersedia';
-            return (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.productTile}
-                activeOpacity={0.7}
-                onPress={() => openProduct(product)}
-              >
-                <Card style={styles.productCard}>
-                  <Text style={styles.productName} numberOfLines={2}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.productPrice}>{formatIDR(product.price)}</Text>
-                  {unavailable ? (
-                    <Text style={styles.productStatus}>
-                      {product.status === 'maintenance' ? 'Maintenance' : 'Gangguan'}
-                    </Text>
-                  ) : null}
-                </Card>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <ProductCatalogGrid
+          products={listedProducts}
+          columns={productColumns}
+          onPress={openProduct}
+          isDisabled={(p) => p.status !== 'tersedia'}
+          renderMeta={(p) =>
+            p.status !== 'tersedia' ? (
+              <Text style={styles.productStatus}>
+                {p.status === 'maintenance' ? 'Maintenance' : 'Gangguan'}
+              </Text>
+            ) : null
+          }
+        />
       )}
     </View>
   );
@@ -274,23 +261,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
     marginBottom: spacing.xs,
-  },
-  productGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  productTile: { width: '48%' },
-  productCard: { padding: spacing.md, minHeight: 88, justifyContent: 'space-between', gap: spacing.xs },
-  productName: {
-    fontSize: typography.size.xs,
-    color: colors.gray[700],
-    fontWeight: typography.weight.medium,
-  },
-  productPrice: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.gray[900],
   },
   productStatus: {
     fontSize: 10,
