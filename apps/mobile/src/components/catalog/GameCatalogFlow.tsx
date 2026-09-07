@@ -40,11 +40,11 @@ import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
 import { stripGameProductDisplayName } from '../../utils/stripGameProductDisplayName';
 
 /**
- * Mobile Game catalog + purchase (Stage 2 revision — Blu-style buy page).
+ * Mobile Game catalog + purchase (DigiFlazz schema SoT — FR catalog game).
  *
- * Flow: game list → buy page (account top + products) → Lanjut → inquiry
- * → confirm detail → Konfirmasi → PinConfirmModal → POST /transactions → result.
- * target_number = inquiry.customer_no; no inquiry_ref_id.
+ * Flow: game list → buy (target inputs ABOVE products) → Lanjut → inquiry
+ * → confirm → PinConfirmModal → POST /transactions → result.
+ * VIPPayment SKUs filtered from active UI; schema never driven by VIP.
  */
 
 type Props = {
@@ -57,11 +57,37 @@ function isBackAction(action: { type: string }): boolean {
   return action.type === 'GO_BACK' || action.type === 'POP' || action.type === 'POP_TO_TOP';
 }
 
+function isVipSku(code: string): boolean {
+  return String(code ?? '')
+    .trim()
+    .toUpperCase()
+    .startsWith('VIP-');
+}
+
 function isAccountReady(fields: GameAccountField[], account: Record<string, string>): boolean {
   return fields.every((f) => {
     if (!f.required) return true;
     return String(account[f.key] ?? '').trim().length > 0;
   });
+}
+
+function fieldKeysEqual(a: GameAccountField[], b: GameAccountField[]): boolean {
+  if (a.length !== b.length) return false;
+  const keysA = a.map((f) => f.key).sort();
+  const keysB = b.map((f) => f.key).sort();
+  return keysA.every((k, i) => k === keysB[i]);
+}
+
+function mergeAccount(
+  fields: GameAccountField[],
+  prev: Record<string, string>,
+  preserve: boolean
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const f of fields) {
+    next[f.key] = preserve ? String(prev[f.key] ?? '') : '';
+  }
+  return next;
 }
 
 export function GameCatalogFlow({ purchaseBanner }: Props) {
@@ -97,6 +123,10 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [account, setAccount] = useState<Record<string, string>>({});
+  const accountRef = useRef(account);
+  accountRef.current = account;
+  const schemaFieldsRef = useRef(schemaFields);
+  schemaFieldsRef.current = schemaFields;
 
   const [inquiry, setInquiry] = useState<GameInquiryResult | null>(null);
   const [inquiring, setInquiring] = useState(false);
@@ -106,6 +136,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   const [pinOpen, setPinOpen] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const pinLockRef = useRef(false);
+  const schemaRequestRef = useRef(0);
 
   const loadProviders = useCallback(async () => {
     setProvidersLoading(true);
@@ -139,7 +170,11 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     return sortProvidersByNameAsc(list);
   }, [providers, providerQuery]);
 
-  const listedProducts = useMemo(() => products.filter((p) => isCatalogListed(p)), [products]);
+  // DigiFlazz-only active catalog listing (VIP SKUs hidden from purchase UI).
+  const listedProducts = useMemo(
+    () => products.filter((p) => isCatalogListed(p) && !isVipSku(p.code)),
+    [products]
+  );
 
   const accountReady = isAccountReady(schemaFields, account);
   const schemaOk =
@@ -152,6 +187,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     purchaseEnabled &&
     !!selectedProduct &&
     isProductPurchasable(selectedProduct) &&
+    !isVipSku(selectedProduct.code) &&
     schemaOk &&
     accountReady &&
     !productsLoading &&
@@ -195,43 +231,122 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     return unsub;
   }, [navigation, step, goBackStep]);
 
-  const loadSchema = async (brand: string, sku?: string | null) => {
-    setSchemaLoading(true);
-    setSchemaError(null);
-    setSchemaFields([]);
-    setSchemaDelivery(null);
-    setAccount({});
-    try {
-      const res = await gameService.accountSchema(brand, sku);
-      if (!res.success || !res.data) {
-        setSchemaError(res.message || 'Format akun produk belum tersedia. Silakan coba lagi.');
-        return;
-      }
-      const delivery = String(res.data.delivery ?? '').trim().toLowerCase();
-      const fields = Array.isArray(res.data.fields) ? res.data.fields : [];
+  const applySchemaResponse = useCallback(
+    (
+      brand: string,
+      sku: string,
+      data: { delivery?: string; fields?: GameAccountField[] },
+      preserveAccount: boolean
+    ) => {
+      const delivery = String(data.delivery ?? '').trim().toLowerCase();
+      const fields = Array.isArray(data.fields) ? data.fields : [];
       if (delivery !== 'account' || fields.length === 0) {
         setSchemaDelivery(delivery || 'unknown');
         setSchemaFields([]);
+        setAccount({});
         setSchemaError(
           delivery === 'unknown' || delivery === ''
             ? 'Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.'
-            : `Format akun produk tidak didukung (${res.data.delivery || 'kosong'}).`
+            : `Format akun produk tidak didukung (${data.delivery || 'kosong'}).`
         );
         return;
       }
+      const prevFields = schemaFieldsRef.current;
+      const preserve = preserveAccount && fieldKeysEqual(prevFields, fields);
       setSchemaDelivery('account');
       setSchemaFields(fields);
-      const initial: Record<string, string> = {};
-      for (const f of fields) initial[f.key] = '';
-      setAccount(initial);
-    } catch (err: unknown) {
-      setSchemaDelivery(null);
-      setSchemaFields([]);
-      setSchemaError(parseApiError(err).message || 'Gagal memuat form akun game. Silakan coba lagi.');
-    } finally {
-      setSchemaLoading(false);
-    }
-  };
+      setSchemaError(null);
+      setAccount(mergeAccount(fields, accountRef.current, preserve));
+      void brand;
+      void sku;
+    },
+    []
+  );
+
+  const loadSchemaForSku = useCallback(
+    async (brand: string, sku: string, preserveAccount: boolean) => {
+      const reqId = ++schemaRequestRef.current;
+      setSchemaLoading(true);
+      setSchemaError(null);
+      try {
+        const res = await gameService.accountSchema(brand, sku);
+        if (reqId !== schemaRequestRef.current) return;
+        if (!res.success || !res.data) {
+          setSchemaDelivery(null);
+          setSchemaFields([]);
+          setAccount({});
+          setSchemaError(res.message || 'Format akun produk belum tersedia. Silakan coba lagi.');
+          return;
+        }
+        applySchemaResponse(brand, sku, res.data, preserveAccount);
+      } catch (err: unknown) {
+        if (reqId !== schemaRequestRef.current) return;
+        setSchemaDelivery(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(parseApiError(err).message || 'Gagal memuat form akun game. Silakan coba lagi.');
+      } finally {
+        if (reqId === schemaRequestRef.current) {
+          setSchemaLoading(false);
+        }
+      }
+    },
+    [applySchemaResponse]
+  );
+
+  /** Load first Digi SKU with proven Digi account schema (fail-closed if none). */
+  const loadBrandDigiSchema = useCallback(
+    async (brand: string, list: Product[]) => {
+      const digi = list.filter((p) => isCatalogListed(p) && !isVipSku(p.code));
+      const purchasable = digi.filter((p) => isProductPurchasable(p));
+      const pool = (purchasable.length > 0 ? purchasable : digi).slice(0, 12);
+      if (pool.length === 0) {
+        setSchemaDelivery('unknown');
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          'Tidak ada produk DigiFlazz aktif untuk game ini. Pembelian tidak dapat dilanjutkan.'
+        );
+        setSchemaLoading(false);
+        return;
+      }
+
+      const reqId = ++schemaRequestRef.current;
+      setSchemaLoading(true);
+      setSchemaError(null);
+      try {
+        for (const p of pool) {
+          if (reqId !== schemaRequestRef.current) return;
+          const res = await gameService.accountSchema(brand, p.code);
+          if (reqId !== schemaRequestRef.current) return;
+          if (!res.success || !res.data) continue;
+          const delivery = String(res.data.delivery ?? '').trim().toLowerCase();
+          const fields = Array.isArray(res.data.fields) ? res.data.fields : [];
+          if (delivery === 'account' && fields.length > 0) {
+            applySchemaResponse(brand, p.code, res.data, false);
+            return;
+          }
+        }
+        setSchemaDelivery('unknown');
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          'Format akun DigiFlazz untuk game ini belum terbukti. Pembelian tidak dapat dilanjutkan.'
+        );
+      } catch (err: unknown) {
+        if (reqId !== schemaRequestRef.current) return;
+        setSchemaDelivery(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(parseApiError(err).message || 'Gagal memuat form akun game. Silakan coba lagi.');
+      } finally {
+        if (reqId === schemaRequestRef.current) {
+          setSchemaLoading(false);
+        }
+      }
+    },
+    [applySchemaResponse]
+  );
 
   const selectGame = async (game: CategoryProviderSummary) => {
     setSelectedGame(game);
@@ -246,6 +361,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     invalidateInquiry();
     setFormError(null);
     setProductsLoading(true);
+    setSchemaLoading(true);
     try {
       const res = await catalogService.getProducts({
         category: 'game',
@@ -254,13 +370,16 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
       });
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data);
+        await loadBrandDigiSchema(game.name, res.data);
       } else {
         setProducts([]);
         setProductsError(res.message || 'Gagal memuat produk game.');
+        setSchemaLoading(false);
       }
     } catch (err: unknown) {
       setProducts([]);
       setProductsError(parseApiError(err).message || 'Gagal memuat produk game.');
+      setSchemaLoading(false);
     } finally {
       setProductsLoading(false);
     }
@@ -275,12 +394,13 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
 
   const onSelectProduct = (product: Product) => {
     if (!isProductPurchasable(product) || !purchaseEnabled || !selectedGame) return;
+    if (isVipSku(product.code)) return;
     if (selectedProduct?.code !== product.code) {
       invalidateInquiry();
     }
     setSelectedProduct(product);
     setFormError(null);
-    void loadSchema(selectedGame.name, product.code);
+    void loadSchemaForSku(selectedGame.name, product.code, true);
   };
 
   const runInquiryAndConfirm = async () => {
@@ -468,7 +588,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     );
   }
 
-  // ——— Buy page: account top + products ———
+  // ——— Buy page: Digi target inputs ABOVE products ———
   if (step === 'buy' && selectedGame) {
     return (
       <View style={styles.wrap}>
@@ -490,42 +610,61 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
 
         {schemaLoading ? (
           <LoadingState label="Memuat form akun..." />
-        ) : !selectedProduct ? (
-          <Text style={styles.hintWarn}>Pilih produk terlebih dahulu untuk menampilkan form akun.</Text>
         ) : schemaError ? (
           <ErrorState
             message={schemaError}
-            onRetry={() =>
-              selectedGame &&
-              selectedProduct &&
-              void loadSchema(selectedGame.name, selectedProduct.code)
-            }
+            onRetry={() => {
+              if (!selectedGame) return;
+              if (selectedProduct) {
+                void loadSchemaForSku(selectedGame.name, selectedProduct.code, true);
+              } else {
+                void loadBrandDigiSchema(selectedGame.name, products);
+              }
+            }}
           />
-        ) : (
-          <View style={styles.accountRow}>
-            {schemaFields.map((field) => (
-              <View
-                key={field.key}
-                style={[
-                  styles.accountField,
-                  schemaFields.length === 1 ? styles.accountFieldSingle : styles.accountFieldHalf,
-                ]}
-              >
-                <TextInput
-                  value={account[field.key] ?? ''}
-                  onChangeText={(t) => onAccountChange(field.key, t)}
-                  placeholder={
-                    field.required ? field.label : `${field.label} (opsional)`
-                  }
-                  placeholderTextColor={colors.gray[400]}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!inquiring}
-                  style={styles.underlineInput}
-                />
-              </View>
-            ))}
+        ) : schemaOk ? (
+          <View style={styles.accountBlock}>
+            <View style={styles.accountLabels}>
+              {schemaFields.map((field) => (
+                <Text
+                  key={`label-${field.key}`}
+                  style={[
+                    styles.accountLabel,
+                    schemaFields.length === 1 ? styles.accountFieldSingle : styles.accountFieldHalf,
+                  ]}
+                >
+                  {field.label}
+                  {field.required ? '' : ' (opsional)'}
+                </Text>
+              ))}
+            </View>
+            <View style={styles.accountRow}>
+              {schemaFields.map((field) => (
+                <View
+                  key={field.key}
+                  style={[
+                    styles.accountField,
+                    schemaFields.length === 1 ? styles.accountFieldSingle : styles.accountFieldHalf,
+                  ]}
+                >
+                  <TextInput
+                    value={account[field.key] ?? ''}
+                    onChangeText={(t) => onAccountChange(field.key, t)}
+                    placeholder={field.label}
+                    placeholderTextColor={colors.gray[400]}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!inquiring}
+                    style={styles.underlineInput}
+                  />
+                </View>
+              ))}
+            </View>
           </View>
+        ) : (
+          <Text style={styles.hintWarn}>
+            Menunggu schema DigiFlazz untuk menampilkan form target…
+          </Text>
         )}
 
         <Text style={styles.sectionTitle}>Jenis Voucher</Text>
@@ -538,14 +677,14 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
             onRetry={() => selectedGame && void selectGame(selectedGame)}
           />
         ) : listedProducts.length === 0 ? (
-          <EmptyState title="Belum Ada Produk" message="Produk untuk game ini belum tersedia." />
+          <EmptyState title="Belum Ada Produk" message="Produk DigiFlazz untuk game ini belum tersedia." />
         ) : (
           <ProductCatalogGrid
             products={listedProducts}
             columns={3}
             selectedCode={selectedProduct?.code ?? null}
             onPress={onSelectProduct}
-            isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled}
+            isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
             getDisplayName={(p) =>
               stripGameProductDisplayName(p.name, selectedGame.name || p.operatorName)
             }
@@ -702,6 +841,17 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
   },
+  accountBlock: { gap: spacing.xs },
+  accountLabels: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  accountLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[700],
+    minWidth: 0,
+  },
   accountRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -715,7 +865,7 @@ const styles = StyleSheet.create({
   },
   accountFieldSingle: {
     flex: 1,
-    maxWidth: '55%',
+    maxWidth: '100%',
   },
   underlineInput: {
     borderBottomWidth: 1,

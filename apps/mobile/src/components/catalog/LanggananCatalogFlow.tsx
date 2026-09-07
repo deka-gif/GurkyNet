@@ -41,9 +41,9 @@ import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvaila
 import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
 
 /**
- * Streaming / Langganan Digital purchase (Stage 2).
+ * Streaming / Langganan Digital (DigiFlazz schema SoT).
  * Category API: langganan-digital. No inquiry — schema → customer_no → PIN → POST /transactions.
- * Voucher delivery uses target_number "LANGGANAN" (Web parity).
+ * Target inputs ABOVE product grid. VIP SKUs excluded from active UI.
  */
 
 type Props = {
@@ -54,6 +54,32 @@ type Step = 'brands' | 'buy' | 'confirm';
 
 function isBackAction(action: { type: string }): boolean {
   return action.type === 'GO_BACK' || action.type === 'POP' || action.type === 'POP_TO_TOP';
+}
+
+function isVipSku(code: string): boolean {
+  return String(code ?? '')
+    .trim()
+    .toUpperCase()
+    .startsWith('VIP-');
+}
+
+function fieldKeysEqual(a: LanggananAccountField[], b: LanggananAccountField[]): boolean {
+  if (a.length !== b.length) return false;
+  const keysA = a.map((f) => f.key).sort();
+  const keysB = b.map((f) => f.key).sort();
+  return keysA.every((k, i) => k === keysB[i]);
+}
+
+function mergeAccount(
+  fields: LanggananAccountField[],
+  prev: Record<string, string>,
+  preserve: boolean
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const f of fields) {
+    next[f.key] = preserve ? String(prev[f.key] ?? '') : '';
+  }
+  return next;
 }
 
 export function LanggananCatalogFlow({ purchaseBanner }: Props) {
@@ -89,6 +115,11 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [account, setAccount] = useState<Record<string, string>>({});
+  const accountRef = useRef(account);
+  accountRef.current = account;
+  const schemaFieldsRef = useRef(schemaFields);
+  schemaFieldsRef.current = schemaFields;
+  const schemaRequestRef = useRef(0);
 
   const [formError, setFormError] = useState<string | null>(null);
   const [pinOpen, setPinOpen] = useState(false);
@@ -102,7 +133,8 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
   const accountReady =
     isVoucher ||
     (isAccount && schemaFields.length > 0 && langgananAccountReady(schemaFields, account));
-  const schemaReady = !!schema && !schemaError && isKnownDelivery && (isVoucher || schemaFields.length > 0);
+  const schemaReady =
+    !!schema && !schemaError && isKnownDelivery && (isVoucher || schemaFields.length > 0);
 
   const loadBrands = useCallback(async () => {
     setBrandsLoading(true);
@@ -136,18 +168,22 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     return sortProvidersByNameAsc(list);
   }, [brands, brandQuery]);
 
-  const listedProducts = useMemo(() => products.filter((p) => isCatalogListed(p)), [products]);
+  const listedProducts = useMemo(
+    () => products.filter((p) => isCatalogListed(p) && !isVipSku(p.code)),
+    [products]
+  );
 
   const canLanjut =
     purchaseEnabled &&
     !!selectedProduct &&
     isProductPurchasable(selectedProduct) &&
+    !isVipSku(selectedProduct.code) &&
     schemaReady &&
     accountReady &&
     !schemaLoading &&
     !productsLoading;
 
-  const clearProductSchema = useCallback(() => {
+  const clearSchemaState = useCallback(() => {
     setSelectedProduct(null);
     setSchema(null);
     setSchemaFields([]);
@@ -168,10 +204,10 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
       setSelectedBrand(null);
       setProducts([]);
       setProductsError(null);
-      clearProductSchema();
+      clearSchemaState();
       setStep('brands');
     }
-  }, [step, clearProductSchema]);
+  }, [step, clearSchemaState]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
@@ -183,13 +219,147 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     return unsub;
   }, [navigation, step, goBackStep]);
 
+  const applySchemaData = useCallback(
+    (data: LanggananAccountSchema, preserveAccount: boolean) => {
+      const d = String(data.delivery ?? '').trim().toLowerCase();
+      if (d !== 'account' && d !== 'voucher') {
+        setSchema(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          d === 'unknown' || d === ''
+            ? 'Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.'
+            : `Tipe pengiriman produk tidak didukung (${data.delivery || 'kosong'}).`
+        );
+        return;
+      }
+      const fields = Array.isArray(data.fields) ? data.fields : [];
+      if (d === 'account' && fields.length === 0) {
+        setSchema(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          'Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.'
+        );
+        return;
+      }
+      const prevFields = schemaFieldsRef.current;
+      const preserve =
+        preserveAccount && d === 'account' && fieldKeysEqual(prevFields, fields);
+      setSchema({ ...data, delivery: d });
+      setSchemaFields(fields);
+      setSchemaError(null);
+      setAccount(d === 'voucher' ? {} : mergeAccount(fields, accountRef.current, preserve));
+    },
+    []
+  );
+
+  const loadSchemaForSku = useCallback(
+    async (brandName: string, sku: string, preserveAccount: boolean) => {
+      const reqId = ++schemaRequestRef.current;
+      setSchemaLoading(true);
+      setSchemaError(null);
+      try {
+        const res = await langgananService.accountSchema(brandName, sku);
+        if (reqId !== schemaRequestRef.current) return;
+        if (res.success && res.data) {
+          applySchemaData(res.data, preserveAccount);
+        } else {
+          setSchema(null);
+          setSchemaFields([]);
+          setAccount({});
+          setSchemaError(res.message || 'Gagal memuat kebutuhan input produk. Silakan coba lagi.');
+        }
+      } catch (err: unknown) {
+        if (reqId !== schemaRequestRef.current) return;
+        setSchema(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          parseApiError(err).message || 'Gagal memuat kebutuhan input produk. Silakan coba lagi.'
+        );
+      } finally {
+        if (reqId === schemaRequestRef.current) {
+          setSchemaLoading(false);
+        }
+      }
+    },
+    [applySchemaData]
+  );
+
+  /** First Digi SKU with proven schema (account or voucher). Fail-closed if none. */
+  const loadBrandDigiSchema = useCallback(
+    async (brandName: string, list: Product[]) => {
+      const digi = list.filter((p) => isCatalogListed(p) && !isVipSku(p.code));
+      const purchasable = digi.filter((p) => isProductPurchasable(p));
+      const pool = (purchasable.length > 0 ? purchasable : digi).slice(0, 12);
+      if (pool.length === 0) {
+        setSchema(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          'Tidak ada produk DigiFlazz aktif untuk layanan ini. Pembelian tidak dapat dilanjutkan.'
+        );
+        setSchemaLoading(false);
+        return;
+      }
+
+      const reqId = ++schemaRequestRef.current;
+      setSchemaLoading(true);
+      setSchemaError(null);
+      try {
+        // Prefer Digi account schema (phone/email/…) for target-first UX; voucher only if none.
+        let voucherFallback: LanggananAccountSchema | null = null;
+        for (const p of pool) {
+          if (reqId !== schemaRequestRef.current) return;
+          const res = await langgananService.accountSchema(brandName, p.code);
+          if (reqId !== schemaRequestRef.current) return;
+          if (!res.success || !res.data) continue;
+          const d = String(res.data.delivery ?? '').trim().toLowerCase();
+          const fields = Array.isArray(res.data.fields) ? res.data.fields : [];
+          if (d === 'account' && fields.length > 0) {
+            applySchemaData(res.data, false);
+            return;
+          }
+          if (d === 'voucher' && !voucherFallback) {
+            voucherFallback = res.data;
+          }
+        }
+        if (voucherFallback) {
+          applySchemaData(voucherFallback, false);
+          return;
+        }
+        setSchema(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          'Format target DigiFlazz untuk layanan ini belum terbukti. Pembelian tidak dapat dilanjutkan.'
+        );
+      } catch (err: unknown) {
+        if (reqId !== schemaRequestRef.current) return;
+        setSchema(null);
+        setSchemaFields([]);
+        setAccount({});
+        setSchemaError(
+          parseApiError(err).message || 'Gagal memuat kebutuhan input produk. Silakan coba lagi.'
+        );
+      } finally {
+        if (reqId === schemaRequestRef.current) {
+          setSchemaLoading(false);
+        }
+      }
+    },
+    [applySchemaData]
+  );
+
   const selectBrand = async (brand: CategoryProviderSummary) => {
     setSelectedBrand(brand);
     setStep('buy');
     setProducts([]);
     setProductsError(null);
-    clearProductSchema();
+    clearSchemaState();
     setProductsLoading(true);
+    setSchemaLoading(true);
     try {
       const res = await catalogService.getProducts({
         category: 'langganan-digital',
@@ -198,73 +368,27 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
       });
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data);
+        await loadBrandDigiSchema(brand.name, res.data);
       } else {
         setProducts([]);
         setProductsError(res.message || 'Gagal memuat paket.');
+        setSchemaLoading(false);
       }
     } catch (err: unknown) {
       setProducts([]);
       setProductsError(parseApiError(err).message || 'Gagal memuat paket.');
+      setSchemaLoading(false);
     } finally {
       setProductsLoading(false);
     }
   };
 
-  const loadSchema = async (brandName: string, sku: string) => {
-    setSchemaLoading(true);
-    setSchemaError(null);
-    setSchema(null);
-    setSchemaFields([]);
-    setAccount({});
-    try {
-      const res = await langgananService.accountSchema(brandName, sku);
-      if (res.success && res.data) {
-        const d = String(res.data.delivery ?? '').trim().toLowerCase();
-        if (d !== 'account' && d !== 'voucher') {
-          setSchema(null);
-          setSchemaFields([]);
-          setSchemaError(
-            d === 'unknown' || d === ''
-              ? 'Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.'
-              : `Tipe pengiriman produk tidak didukung (${res.data.delivery || 'kosong'}).`
-          );
-          return;
-        }
-        const fields = Array.isArray(res.data.fields) ? res.data.fields : [];
-        if (d === 'account' && fields.length === 0) {
-          setSchema(null);
-          setSchemaFields([]);
-          setSchemaError(
-            'Format akun untuk produk ini belum tersedia. Pembelian tidak dapat dilanjutkan.'
-          );
-          return;
-        }
-        setSchema({ ...res.data, delivery: d });
-        setSchemaFields(fields);
-        const initial: Record<string, string> = {};
-        for (const f of fields) initial[f.key] = '';
-        setAccount(initial);
-      } else {
-        setSchema(null);
-        setSchemaFields([]);
-        setSchemaError(res.message || 'Gagal memuat kebutuhan input produk. Silakan coba lagi.');
-      }
-    } catch (err: unknown) {
-      setSchema(null);
-      setSchemaFields([]);
-      setSchemaError(
-        parseApiError(err).message || 'Gagal memuat kebutuhan input produk. Silakan coba lagi.'
-      );
-    } finally {
-      setSchemaLoading(false);
-    }
-  };
-
   const onSelectProduct = (product: Product) => {
     if (!isProductPurchasable(product) || !purchaseEnabled || !selectedBrand) return;
+    if (isVipSku(product.code)) return;
     setSelectedProduct(product);
     setFormError(null);
-    void loadSchema(selectedBrand.name, product.code);
+    void loadSchemaForSku(selectedBrand.name, product.code, true);
   };
 
   const onAccountChange = (key: string, value: string, input: string) => {
@@ -411,7 +535,7 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     );
   }
 
-  // ——— Buy: products + schema ———
+  // ——— Buy: Digi target ABOVE products ———
   if (step === 'buy' && selectedBrand) {
     return (
       <View style={styles.wrap}>
@@ -431,7 +555,59 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
           />
         ) : null}
 
-        <Text style={styles.sectionTitle}>Pilih Paket</Text>
+        {schemaLoading ? (
+          <LoadingState label="Memuat kebutuhan input..." />
+        ) : schemaError ? (
+          <ErrorState
+            message={schemaError}
+            onRetry={() => {
+              if (!selectedBrand) return;
+              if (selectedProduct) {
+                void loadSchemaForSku(selectedBrand.name, selectedProduct.code, true);
+              } else {
+                void loadBrandDigiSchema(selectedBrand.name, products);
+              }
+            }}
+          />
+        ) : isVoucher ? (
+          <Text style={styles.voucherHint}>
+            Paket ini mengirim kode aktivasi otomatis setelah pembayaran — tidak perlu mengisi
+            email, nomor HP, atau ID tujuan.
+          </Text>
+        ) : isAccount && schemaFields.length > 0 ? (
+          <View style={styles.fields}>
+            {schemaFields.map((field) => (
+              <View key={field.key} style={styles.field}>
+                <Text style={styles.label}>
+                  {field.label}
+                  {field.required ? '' : ' (opsional)'}
+                </Text>
+                <TextInput
+                  value={account[field.key] ?? ''}
+                  onChangeText={(t) => onAccountChange(field.key, t, field.input)}
+                  placeholder={field.label}
+                  placeholderTextColor={colors.gray[400]}
+                  keyboardType={
+                    field.input === 'email'
+                      ? 'email-address'
+                      : field.input === 'phone'
+                        ? 'phone-pad'
+                        : 'default'
+                  }
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.underlineInput}
+                />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.hintWarn}>
+            Menunggu schema DigiFlazz untuk menampilkan form target…
+          </Text>
+        )}
+
+        <Text style={styles.sectionTitle}>Jenis Voucher</Text>
 
         {productsLoading ? (
           <LoadingState label="Memuat paket..." />
@@ -441,14 +617,17 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
             onRetry={() => selectedBrand && void selectBrand(selectedBrand)}
           />
         ) : listedProducts.length === 0 ? (
-          <EmptyState title="Belum Ada Paket" message="Paket untuk layanan ini belum tersedia." />
+          <EmptyState
+            title="Belum Ada Paket"
+            message="Paket DigiFlazz untuk layanan ini belum tersedia."
+          />
         ) : (
           <ProductCatalogGrid
             products={listedProducts}
-            columns={2}
+            columns={3}
             selectedCode={selectedProduct?.code ?? null}
             onPress={onSelectProduct}
-            isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled}
+            isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
             renderMeta={(p) =>
               !isProductPurchasable(p) ? (
                 <Text style={styles.productStatus}>
@@ -458,60 +637,6 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
             }
           />
         )}
-
-        {selectedProduct ? (
-          <View style={styles.schemaBlock}>
-            <Text style={styles.sectionTitle}>Data Tujuan — {selectedProduct.name}</Text>
-            {schemaLoading ? (
-              <LoadingState label="Memuat kebutuhan input..." />
-            ) : schemaError ? (
-              <ErrorState
-                message={schemaError}
-                onRetry={() =>
-                  selectedBrand &&
-                  selectedProduct &&
-                  void loadSchema(selectedBrand.name, selectedProduct.code)
-                }
-              />
-            ) : isVoucher ? (
-              <Text style={styles.voucherHint}>
-                Paket ini mengirim kode aktivasi otomatis setelah pembayaran — tidak perlu mengisi
-                email, nomor HP, atau ID tujuan.
-              </Text>
-            ) : isAccount && schemaFields.length > 0 ? (
-              <View style={styles.fields}>
-                {schemaFields.map((field) => (
-                  <View key={field.key} style={styles.field}>
-                    <Text style={styles.label}>
-                      {field.label}
-                      {field.required ? '' : ' (opsional)'}
-                    </Text>
-                    <TextInput
-                      value={account[field.key] ?? ''}
-                      onChangeText={(t) => onAccountChange(field.key, t, field.input)}
-                      placeholder={field.label}
-                      placeholderTextColor={colors.gray[400]}
-                      keyboardType={
-                        field.input === 'email'
-                          ? 'email-address'
-                          : field.input === 'phone'
-                            ? 'phone-pad'
-                            : 'default'
-                      }
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      style={styles.searchInput}
-                    />
-                  </View>
-                ))}
-              </View>
-            ) : isAccount ? (
-              <Text style={styles.hintWarn}>
-                Schema akun kosong untuk produk ini. Hubungi support jika masalah berlanjut.
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
 
         {formError ? <Text style={styles.error}>{formError}</Text> : null}
 
@@ -620,6 +745,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     color: colors.gray[900],
   },
+  underlineInput: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[300],
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 0,
+    fontSize: typography.size.base,
+    color: colors.gray[900],
+    backgroundColor: 'transparent',
+  },
   brandGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -646,16 +780,16 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
   },
   sectionTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.base,
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
+    marginTop: spacing.xs,
   },
   productStatus: {
     fontSize: 10,
     color: colors.gray[500],
     fontWeight: typography.weight.bold,
   },
-  schemaBlock: { gap: spacing.sm, marginTop: spacing.xs },
   fields: { gap: spacing.md },
   field: { gap: spacing.xs },
   label: {

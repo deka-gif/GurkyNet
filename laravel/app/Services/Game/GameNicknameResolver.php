@@ -61,22 +61,14 @@ class GameNicknameResolver
             }
         }
 
-        if ($sku !== '' && $catalog === self::CATALOG_VIP) {
-            $fromNote = app(GameVipNoteHintReader::class)->read($sku);
-            if ($fromNote !== null) {
-                $brandResolved = $this->resolveBrandOnly($brandTrim);
-
-                return [
-                    'code' => $brandResolved['code'],
-                    'label' => $brandResolved['label'],
-                    'delivery' => (string) ($fromNote['delivery'] ?? 'account'),
-                    'fields' => $this->normalizeFields($fromNote['fields'] ?? []),
-                    'source' => 'vip_note',
-                ];
-            }
+        // VIPPayment temporarily OFF for customer schema/UI (DigiFlazz = sole active SoT).
+        // Keep VIP note/brand helpers in codebase for future failover — do not drive forms now.
+        if ($catalog === self::CATALOG_VIP) {
+            return $this->unknownSchema($brandTrim);
         }
 
-        // Brand nickname_codes = VIP get-nickname explicit mapping — not Digi category heuristic.
+        // Brand nickname_codes remain available for Digi nickname-code resolution helpers
+        // and brand-only legacy calls without SKU — not for VIP catalog products.
         if ($catalog !== self::CATALOG_DIGI) {
             $brandHit = $this->matchBrand($brandTrim);
             if ($brandHit !== null) {

@@ -160,8 +160,8 @@ class LanggananAccountResolverTest extends TestCase
         $resolver = app(LanggananAccountResolver::class);
         $schema = $resolver->resolveForProduct('Vidio', 'VIP-pre33615183');
 
-        // Digi phone SKU map must not leak; VIP falls to Vidio brand voucher.
-        $this->assertSame('voucher', $schema['delivery']);
+        // Digi phone SKU map must not leak; VIP catalog schema OFF → unknown.
+        $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
     }
 

@@ -50,20 +50,17 @@ class LanggananAccountResolver
                 ];
             }
 
-            // Digi product/row without clear desc: still allow verified brand fallback
-            // (e.g. Vidio VIP-style brand voucher) only when not forced unknown by sku map.
+            // Digi product/row without clear desc: allow verified Digi brand_schemas fallback.
         }
 
-        if ($skuRaw !== '' && $catalog === self::CATALOG_VIP) {
-            $fromNote = app(LanggananVipNoteHintReader::class)->read($skuRaw);
-            if ($fromNote !== null) {
-                return [
-                    'code' => Str::slug($skuRaw),
-                    'label' => trim($brand) !== '' ? trim($brand) : 'Langganan Digital',
-                    'delivery' => (string) ($fromNote['delivery'] ?? 'unknown'),
-                    'fields' => $this->normalizeFields($fromNote['fields'] ?? []),
-                ];
-            }
+        // VIPPayment temporarily OFF for customer schema/UI (DigiFlazz = sole active SoT).
+        if ($catalog === self::CATALOG_VIP) {
+            return [
+                'code' => Str::slug($skuRaw !== '' ? $skuRaw : 'langganan'),
+                'label' => trim($brand) !== '' ? trim($brand) : 'Langganan Digital',
+                'delivery' => 'unknown',
+                'fields' => [],
+            ];
         }
 
         return $this->resolve($brand);

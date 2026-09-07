@@ -82,7 +82,7 @@ class GameNicknameResolverTest extends TestCase
         $this->assertNotSame('brand', $schema['source']);
     }
 
-    public function test_free_fire_vip_brand_mapping_is_player_id(): void
+    public function test_free_fire_vip_catalog_schema_is_unknown_while_vip_off(): void
     {
         $vip = ProductProvider::vip() ?? ProductProvider::create([
             'code' => 'vip',
@@ -121,9 +121,10 @@ class GameNicknameResolverTest extends TestCase
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('Free Fire', 'VIP-FFDIAMOND50');
 
-        $this->assertSame('account', $schema['delivery']);
-        $this->assertSame('brand', $schema['source']);
-        $this->assertSame('player_id', $schema['fields'][0]['key']);
+        // VIPPayment OFF for active schema/UI — fail-closed (DigiFlazz sole SoT).
+        $this->assertSame('unknown', $schema['delivery']);
+        $this->assertSame([], $schema['fields']);
+        $this->assertSame('unknown', $schema['source']);
     }
 
     public function test_digi_desc_does_not_apply_to_vip_sku(): void
@@ -162,9 +163,10 @@ class GameNicknameResolverTest extends TestCase
         $schema = $resolver->resolveForProduct('FC Mobile', 'VIP-pre33639303');
 
         $this->assertNotSame('digiflazz_desc', $schema['source']);
-        // VIP brand mapping for FC Mobile → player_id (not Digi user_id from desc)
-        $this->assertSame('brand', $schema['source']);
-        $this->assertSame('player_id', $schema['fields'][0]['key'] ?? null);
+        // VIP catalog schema OFF — not Digi desc, not VIP brand player_id.
+        $this->assertSame('unknown', $schema['source']);
+        $this->assertSame('unknown', $schema['delivery']);
+        $this->assertSame([], $schema['fields']);
     }
 
     public function test_unknown_brand_fail_closed(): void
@@ -232,7 +234,9 @@ class GameNicknameResolverTest extends TestCase
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('Mystery Game', 'VIP-MYST01');
 
-        $this->assertSame('vip_note', $schema['source']);
-        $this->assertSame(['user_id'], collect($schema['fields'])->pluck('key')->all());
+        // VIP note reader remains in codebase but is not used while VIP schema is OFF.
+        $this->assertSame('unknown', $schema['source']);
+        $this->assertSame('unknown', $schema['delivery']);
+        $this->assertSame([], $schema['fields']);
     }
 }
