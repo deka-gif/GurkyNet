@@ -1,5 +1,5 @@
 /**
- * Slice 1–3 — Tagihan brand grouping (TV Pascabayar + PDAM + Internet Pascabayar evidence).
+ * Slice 1–4 — Tagihan brand grouping (TV + PDAM + Internet + Multifinance evidence).
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
@@ -186,5 +186,61 @@ assert.equal(internetDup[0].boundSkuCode, null);
 const internetAmb = resolveTagihanBrandSelection(internetDup[0]);
 assert.equal(internetAmb.ok, false);
 if (!internetAmb.ok) assert.equal(internetAmb.reason, 'ambiguous');
+
+// --- Slice 4 Multifinance production fixtures (test-only; not hardcoded in UI) ---
+const productionMultifinance = [
+  stubProduct('post733488', 'Columbia Finance', {
+    category: 'multifinance',
+    operatorName: 'MULTIFINANCE',
+  }),
+  stubProduct('post733489', 'Bussan Auto Finance', {
+    category: 'multifinance',
+    operatorName: 'MULTIFINANCE',
+  }),
+  stubProduct('post733490', 'PT Aeon Credit Service Indonesia', {
+    category: 'multifinance',
+    operatorName: 'MULTIFINANCE',
+  }),
+];
+
+const mfBrands = groupTagihanBrandsByProductName(productionMultifinance);
+assert.equal(mfBrands.length, 3, 'expected 3 Multifinance brand tiles');
+
+const mfByLabel = Object.fromEntries(mfBrands.map((g) => [g.label, g]));
+assert.ok(mfByLabel['Columbia Finance']);
+assert.ok(mfByLabel['Bussan Auto Finance']);
+assert.ok(mfByLabel['PT Aeon Credit Service Indonesia']);
+
+assert.equal(mfByLabel['Columbia Finance'].boundSkuCode, 'post733488');
+assert.equal(mfByLabel['Bussan Auto Finance'].boundSkuCode, 'post733489');
+assert.equal(mfByLabel['PT Aeon Credit Service Indonesia'].boundSkuCode, 'post733490');
+
+const columbiaResolve = resolveTagihanBrandSelection(mfByLabel['Columbia Finance']);
+assert.equal(columbiaResolve.ok, true);
+if (columbiaResolve.ok) assert.equal(columbiaResolve.product.code, 'post733488');
+
+// Deterministic sort (localeCompare id)
+assert.deepEqual(
+  mfBrands.map((g) => g.label),
+  ['Bussan Auto Finance', 'Columbia Finance', 'PT Aeon Credit Service Indonesia']
+);
+
+// Duplicate Multifinance display name → fail-closed
+const mfDup = groupTagihanBrandsByProductName([
+  stubProduct('post733488', 'Columbia Finance', {
+    category: 'multifinance',
+    operatorName: 'MULTIFINANCE',
+  }),
+  stubProduct('post999996', '  Columbia Finance  ', {
+    category: 'multifinance',
+    operatorName: 'MULTIFINANCE',
+  }),
+]);
+assert.equal(mfDup.length, 1);
+assert.equal(mfDup[0].isAmbiguous, true);
+assert.equal(mfDup[0].boundSkuCode, null);
+const mfAmb = resolveTagihanBrandSelection(mfDup[0]);
+assert.equal(mfAmb.ok, false);
+if (!mfAmb.ok) assert.equal(mfAmb.reason, 'ambiguous');
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');
