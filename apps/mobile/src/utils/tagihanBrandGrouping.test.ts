@@ -1,5 +1,5 @@
 /**
- * Slice 1–5 — Tagihan brand grouping (TV + PDAM + Internet + Multifinance + BPJS Kesehatan).
+ * Tagihan brand grouping fixtures (TV + PDAM + Internet + Multifinance + BPJS Kes + Gas).
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
@@ -279,5 +279,36 @@ assert.equal(bpjsKesDup[0].boundSkuCode, null);
 const bpjsKesAmb = resolveTagihanBrandSelection(bpjsKesDup[0]);
 assert.equal(bpjsKesAmb.ok, false);
 if (!bpjsKesAmb.ok) assert.equal(bpjsKesAmb.reason, 'ambiguous');
+
+// --- Gas Negara production fixture (test-only; not hardcoded in UI) ---
+const productionGas = [
+  stubProduct('post733494', 'Gas Negara', {
+    category: 'gas',
+    operatorName: 'GAS NEGARA',
+  }),
+];
+
+const gasBrands = groupTagihanBrandsByProductName(productionGas);
+assert.equal(gasBrands.length, 1, 'expected 1 Gas Negara brand tile');
+assert.equal(gasBrands[0].label, 'Gas Negara');
+assert.equal(gasBrands[0].boundSkuCode, 'post733494');
+assert.equal(gasBrands[0].isAmbiguous, false);
+assert.equal(Object.prototype.hasOwnProperty.call(gasBrands[0], 'price'), false);
+
+const gasResolve = resolveTagihanBrandSelection(gasBrands[0]);
+assert.equal(gasResolve.ok, true);
+if (gasResolve.ok) assert.equal(gasResolve.product.code, 'post733494');
+
+// Duplicate Gas Negara display name → fail-closed
+const gasDup = groupTagihanBrandsByProductName([
+  stubProduct('post733494', 'Gas Negara', { category: 'gas', operatorName: 'GAS NEGARA' }),
+  stubProduct('post999994', '  Gas Negara  ', { category: 'gas', operatorName: 'GAS NEGARA' }),
+]);
+assert.equal(gasDup.length, 1);
+assert.equal(gasDup[0].isAmbiguous, true);
+assert.equal(gasDup[0].boundSkuCode, null);
+const gasAmb = resolveTagihanBrandSelection(gasDup[0]);
+assert.equal(gasAmb.ok, false);
+if (!gasAmb.ok) assert.equal(gasAmb.reason, 'ambiguous');
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');
