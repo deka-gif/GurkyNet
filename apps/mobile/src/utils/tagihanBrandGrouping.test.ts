@@ -1,5 +1,5 @@
 /**
- * Slice 1 — Tagihan brand grouping (TV Pascabayar evidence).
+ * Slice 1–2 — Tagihan brand grouping (TV Pascabayar + PDAM evidence).
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
@@ -10,7 +10,11 @@ import {
   resolveTagihanBrandSelection,
 } from './tagihanBrandGrouping';
 
-function stubProduct(code: string, name: string, price = 1500): Product {
+function stubProduct(
+  code: string,
+  name: string,
+  opts?: { category?: string; operatorName?: string; price?: number }
+): Product {
   return {
     id: 1,
     code,
@@ -20,12 +24,12 @@ function stubProduct(code: string, name: string, price = 1500): Product {
     quota: null,
     validity: null,
     badge: null,
-    price,
+    price: opts?.price ?? 1500,
     adminFee: 0,
     status: 'tersedia',
     isPurchasable: true,
-    category: 'tv-pascabayar',
-    operatorName: 'TV PASCABAYAR',
+    category: opts?.category ?? 'tv-pascabayar',
+    operatorName: opts?.operatorName ?? 'TV PASCABAYAR',
   };
 }
 
@@ -85,5 +89,46 @@ if (!amb.ok) assert.equal(amb.reason, 'ambiguous');
 // normalize key
 assert.equal(normalizeTagihanBrandKey('  BIG TV  '), 'big tv');
 assert.equal(normalizeTagihanBrandKey('Biznet Home TV Pascabayar'), 'biznet home tv pascabayar');
+
+// --- Slice 2 PDAM production fixtures (test-only; not hardcoded in UI) ---
+const productionPdam = [
+  stubProduct('post733471', 'PDAM Aetra', { category: 'pdam', operatorName: 'PDAM' }),
+  stubProduct('post733472', 'PDAM Batam', { category: 'pdam', operatorName: 'PDAM' }),
+  stubProduct('post733514', 'PDAM Kota Bitung', { category: 'pdam', operatorName: 'PDAM' }),
+];
+
+const pdamBrands = groupTagihanBrandsByProductName(productionPdam);
+assert.equal(pdamBrands.length, 3, 'expected 3 PDAM brand tiles');
+
+const pdamByLabel = Object.fromEntries(pdamBrands.map((g) => [g.label, g]));
+assert.ok(pdamByLabel['PDAM Aetra']);
+assert.ok(pdamByLabel['PDAM Batam']);
+assert.ok(pdamByLabel['PDAM Kota Bitung']);
+
+assert.equal(pdamByLabel['PDAM Aetra'].boundSkuCode, 'post733471');
+assert.equal(pdamByLabel['PDAM Batam'].boundSkuCode, 'post733472');
+assert.equal(pdamByLabel['PDAM Kota Bitung'].boundSkuCode, 'post733514');
+
+const aetraResolve = resolveTagihanBrandSelection(pdamByLabel['PDAM Aetra']);
+assert.equal(aetraResolve.ok, true);
+if (aetraResolve.ok) assert.equal(aetraResolve.product.code, 'post733471');
+
+// Deterministic sort (localeCompare id): Aetra → Batam → Kota Bitung
+assert.deepEqual(
+  pdamBrands.map((g) => g.label),
+  ['PDAM Aetra', 'PDAM Batam', 'PDAM Kota Bitung']
+);
+
+// Duplicate PDAM display name → fail-closed
+const pdamDup = groupTagihanBrandsByProductName([
+  stubProduct('post733471', 'PDAM Aetra', { category: 'pdam', operatorName: 'PDAM' }),
+  stubProduct('post999998', '  PDAM Aetra  ', { category: 'pdam', operatorName: 'PDAM' }),
+]);
+assert.equal(pdamDup.length, 1);
+assert.equal(pdamDup[0].isAmbiguous, true);
+assert.equal(pdamDup[0].boundSkuCode, null);
+const pdamAmb = resolveTagihanBrandSelection(pdamDup[0]);
+assert.equal(pdamAmb.ok, false);
+if (!pdamAmb.ok) assert.equal(pdamAmb.reason, 'ambiguous');
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');
