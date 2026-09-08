@@ -114,6 +114,16 @@ export const TagihanSubPage = lazyNamed(
   'TagihanSubPage'
 );
 
+export const GasPrepaidPage = lazyNamed(
+  () => import('../pages/dashboard/MappedCatalogPages'),
+  'GasPrepaidPage'
+);
+
+export const HpPascabayarPage = lazyNamed(
+  () => import('../pages/dashboard/MappedCatalogPages'),
+  'HpPascabayarPage'
+);
+
 /* —— Account —— */
 export const AccountHubPage = lazyNamed(
   () => import('../pages/dashboard/account'),
