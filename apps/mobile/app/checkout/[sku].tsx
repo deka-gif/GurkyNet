@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCatalogStore } from '../../src/store/catalog.store';
-import { isGameContextValid, isPlnContextValid, useCheckoutStore } from '../../src/store/checkout.store';
+import {
+  isPlnContextValid,
+  isGameContextValid,
+  isTagihanContextValid,
+  useCheckoutStore,
+} from '../../src/store/checkout.store';
 import { useWalletStore } from '../../src/store/wallet.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../src/store/features.store';
 import { transactionService } from '../../src/services/transaction.service';
@@ -23,9 +28,13 @@ import {
   isDirectPurchaseCategory,
   isGameCategory,
   isInquiryRequiredCategory,
+  isLiteralTargetCategory,
   isPhoneTargetCategory,
   isPlnPrepaidCategory,
+  isSerialTargetCategory,
+  isTagihanBillCategory,
   isVoucherInternetCategory,
+  literalTargetForCategory,
 } from '../../src/utils/purchaseCategory';
 import { isValidPhoneTarget, phoneTargetError } from '../../src/utils/targetValidation';
 import { stripGameProductDisplayName } from '../../src/utils/stripGameProductDisplayName';
@@ -42,13 +51,16 @@ export default function CheckoutScreen() {
   const skuCode = useCheckoutStore((s) => s.skuCode);
   const storeCategorySlug = useCheckoutStore((s) => s.categorySlug);
   const targetNumber = useCheckoutStore((s) => s.targetNumber);
+  const setTarget = useCheckoutStore((s) => s.setTarget);
   const operatorLabel = useCheckoutStore((s) => s.operatorLabel);
   const selectedRegion = useCheckoutStore((s) => s.selectedRegion);
   const plnContext = useCheckoutStore((s) => s.plnContext);
   const gameContext = useCheckoutStore((s) => s.gameContext);
+  const tagihanContext = useCheckoutStore((s) => s.tagihanContext);
   const voucherInternetMode = useCheckoutStore((s) => s.voucherInternetMode);
   const clearPlnContext = useCheckoutStore((s) => s.clearPlnContext);
   const clearGameContext = useCheckoutStore((s) => s.clearGameContext);
+  const clearTagihanContext = useCheckoutStore((s) => s.clearTagihanContext);
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
   const idempotencyKey = useCheckoutStore((s) => s.idempotencyKey);
   const submitting = useCheckoutStore((s) => s.submitting);
@@ -87,23 +99,46 @@ export default function CheckoutScreen() {
   const gameCat = isGameCategory(categorySlug);
   const gameValid = isGameContextValid(gameContext, targetNumber, sku || skuCode);
   const gameExpired = !!gameContext && Date.now() >= (gameContext.expiresAt || 0);
-  // Game stays in INQUIRY_REQUIRED — unlock only with valid game inquiry session (like PLN).
+  const tagihanCat = isTagihanBillCategory(categorySlug);
+  const tagihanValid = isTagihanContextValid(tagihanContext, targetNumber, sku || skuCode);
+  const tagihanExpired = !!tagihanContext && Date.now() >= (tagihanContext.expiresAt || 0);
+  const literalCat = isLiteralTargetCategory(categorySlug);
+  const serialCat = isSerialTargetCategory(categorySlug);
+
+  useEffect(() => {
+    if (literalCat && !targetNumber) {
+      setTarget(literalTargetForCategory(categorySlug));
+    }
+  }, [literalCat, categorySlug, targetNumber, setTarget]);
+
   const inquiryBlocked =
-    isInquiryRequiredCategory(categorySlug) && !(gameCat && gameValid);
-  const directAllowed = isDirectPurchaseCategory(categorySlug);
+    isInquiryRequiredCategory(categorySlug) &&
+    !(gameCat && gameValid) &&
+    !(tagihanCat && tagihanValid);
+  const directAllowed =
+    isDirectPurchaseCategory(categorySlug) || literalCat || serialCat;
   const viTembak = isVoucherInternetCategory(categorySlug) && voucherInternetMode === 'tembak';
   const viElektronik = isVoucherInternetCategory(categorySlug) && voucherInternetMode === 'elektronik';
 
   const categoryBlocked =
     inquiryBlocked ||
-    (!!categorySlug && !directAllowed && !plnPrepaid && !(gameCat && gameValid)) ||
+    (!!categorySlug &&
+      !directAllowed &&
+      !plnPrepaid &&
+      !(gameCat && gameValid) &&
+      !(tagihanCat && tagihanValid)) ||
     (plnPrepaid && !plnValid) ||
-    (gameCat && !gameValid);
+    (gameCat && !gameValid) ||
+    (tagihanCat && !tagihanValid);
 
   const phoneCategory = isPhoneTargetCategory(categorySlug) || viTembak;
 
   const estimatedTotal =
-    productDetail != null ? productDetail.price + (productDetail.adminFee || 0) : 0;
+    tagihanCat && tagihanContext?.inquiry?.selling_price != null
+      ? Number(tagihanContext.inquiry.selling_price)
+      : productDetail != null
+        ? productDetail.price + (productDetail.adminFee || 0)
+        : 0;
   const balance = overview?.wallet?.balance;
   const insufficientBalance =
     typeof balance === 'number' && productDetail != null && balance < estimatedTotal;
@@ -120,25 +155,41 @@ export default function CheckoutScreen() {
           ? 'Sesi validasi akun game sudah kedaluwarsa. Validasi ulang dari menu Game.'
           : 'Silakan validasi akun game terlebih dahulu dari menu Game.'
         : null
-      : viElektronik
-        ? targetNumber.trim().length === 0
-          ? 'Tujuan transaksi tidak valid. Kembali dan mulai ulang.'
+      : tagihanCat
+        ? !tagihanValid
+          ? tagihanExpired
+            ? 'Sesi inquiry tagihan sudah kedaluwarsa. Cek tagihan ulang.'
+            : 'Silakan cek tagihan terlebih dahulu.'
           : null
-        : phoneCategory
-          ? phoneTargetError(targetNumber)
-          : targetNumber.trim().length === 0
-            ? 'Nomor tujuan wajib diisi.'
-            : null;
+        : literalCat || viElektronik
+          ? targetNumber.trim().length === 0
+            ? 'Tujuan transaksi tidak valid. Kembali dan mulai ulang.'
+            : null
+          : serialCat
+            ? targetNumber.trim().length < 4
+              ? 'Nomor serial / barcode wajib diisi.'
+              : null
+            : phoneCategory
+              ? phoneTargetError(targetNumber)
+              : targetNumber.trim().length === 0
+                ? 'Nomor tujuan wajib diisi.'
+                : null;
 
   const targetOk = plnPrepaid
     ? plnValid
     : gameCat
       ? gameValid
-      : viElektronik
-        ? targetNumber.trim().length > 0
-        : phoneCategory
-          ? isValidPhoneTarget(targetNumber)
-          : targetNumber.trim().length > 0;
+      : tagihanCat
+        ? tagihanValid
+        : literalCat || viElektronik
+          ? targetNumber.trim().length > 0
+          : serialCat
+            ? targetNumber.trim().length >= 4
+            : phoneCategory
+              ? categorySlug === 'international'
+                ? targetNumber.replace(/\D/g, '').length >= 8
+                : isValidPhoneTarget(targetNumber)
+              : targetNumber.trim().length > 0;
 
   const canContinue =
     purchaseEnabled &&
@@ -156,6 +207,10 @@ export default function CheckoutScreen() {
     }
     if (gameCat && !isGameContextValid(gameContext, targetNumber, sku || skuCode)) {
       clearGameContext();
+      return;
+    }
+    if (tagihanCat && !isTagihanContextValid(tagihanContext, targetNumber, sku || skuCode)) {
+      clearTagihanContext();
       return;
     }
     setPinError(null);
@@ -179,6 +234,9 @@ export default function CheckoutScreen() {
         target_number: targetNumber,
         pin: enteredPin,
         idempotency_key: idempotencyKey,
+        ...(tagihanCat && tagihanContext?.inquiry?.inquiry_ref_id
+          ? { inquiry_ref_id: tagihanContext.inquiry.inquiry_ref_id }
+          : {}),
       });
 
       if (response.success && response.data) {
@@ -212,6 +270,7 @@ export default function CheckoutScreen() {
       ) {
         clearPlnContext();
         clearGameContext();
+        clearTagihanContext();
       }
     } finally {
       pinLockRef.current = false;

@@ -43,6 +43,8 @@ import {
   TelcoAktivasiPerdanaPage,
   TelcoEsimPage,
   TagihanSubPage,
+  GasPrepaidPage,
+  HpPascabayarPage,
   AccountHubPage,
   AccountSettingsPage,
   AccountEditPage,
@@ -752,6 +754,14 @@ export const router = createBrowserRouter([
             path="/dashboard/tagihan/gas"
           />
         ),
+      },
+      {
+        path: 'tagihan/gas-prepaid',
+        element: <GasPrepaidPage />,
+      },
+      {
+        path: 'tagihan/hp-pascabayar',
+        element: <HpPascabayarPage />,
       },
       {
         path: 'tagihan/pbb',

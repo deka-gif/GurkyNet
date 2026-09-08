@@ -19,12 +19,17 @@ import {
   INQUIRY_FLOW_NOTICE,
   isDirectPurchaseCategory,
   isInquiryRequiredCategory,
+  isLiteralTargetCategory,
   isPlnPrepaidCategory,
+  isSerialTargetCategory,
+  isTagihanBillCategory,
+  literalTargetForCategory,
 } from '../../../src/utils/purchaseCategory';
 
 /**
  * Customer-facing product detail. Inquiry-required categories may be browsed
- * (Tahap 3B) but purchase stays gated — never PIN / POST without inquiry.
+ * but purchase stays gated — never PIN / POST without inquiry.
+ * Literal/serial/direct categories use generic checkout.
  */
 export default function ProductDetailScreen() {
   const params = useLocalSearchParams<{ sku: string }>();
@@ -33,6 +38,7 @@ export default function ProductDetailScreen() {
     useCatalogStore();
   const router = useRouter();
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const setTarget = useCheckoutStore((s) => s.setTarget);
   const flags = useFeaturesStore((s) => s.flags);
   const flagsLoading = useFeaturesStore((s) => s.loading);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
@@ -50,10 +56,13 @@ export default function ProductDetailScreen() {
   const unavailable = productDetail && productDetail.status !== 'tersedia';
   const brandName = productDetail?.operatorName || productDetail?.providerDetails?.name || '';
   const categorySlug = productDetail?.category;
-  const inquiryBlocked = isInquiryRequiredCategory(categorySlug);
+  const inquiryBlocked =
+    isInquiryRequiredCategory(categorySlug) && !isTagihanBillCategory(categorySlug);
   const plnPrepaid = isPlnPrepaidCategory(categorySlug);
-  const directAllowed = isDirectPurchaseCategory(categorySlug);
-  // Unknown / PLN (must use inquiry flow) / inquiry-required: not generic buy.
+  const directAllowed =
+    isDirectPurchaseCategory(categorySlug) ||
+    isLiteralTargetCategory(categorySlug) ||
+    isSerialTargetCategory(categorySlug);
   const categoryBlocked = inquiryBlocked || plnPrepaid || (!!categorySlug && !directAllowed);
 
   const canBuy = purchaseEnabled && !unavailable && !categoryBlocked && !flagsLoading;
@@ -61,6 +70,9 @@ export default function ProductDetailScreen() {
   const onBuy = () => {
     if (!productDetail || !canBuy) return;
     startCheckout(productDetail);
+    if (isLiteralTargetCategory(categorySlug)) {
+      setTarget(literalTargetForCategory(categorySlug));
+    }
     router.push({ pathname: '/checkout/[sku]', params: { sku: productDetail.code } });
   };
 

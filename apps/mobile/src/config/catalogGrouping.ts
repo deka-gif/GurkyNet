@@ -49,10 +49,12 @@ export const CUSTOMER_FACING_SLUGS = new Set([
   'internet-pascabayar',
   'tv-pascabayar',
   'gas',
+  'gas-prepaid',
   'pbb',
   'samsat',
   'multifinance',
   'tagihan',
+  'hp-pascabayar',
   'topup-digital',
   'game',
   'voucher-digital',
@@ -129,10 +131,12 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
       'internet-pascabayar',
       'tv-pascabayar',
       'gas',
+      'gas-prepaid',
       'pbb',
       'samsat',
       'multifinance',
       'tagihan',
+      'hp-pascabayar',
     ],
     iconKeysForSlug: (slug) => {
       const childMap: Record<string, string> = {
@@ -144,10 +148,12 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
         'internet-pascabayar': 'internet',
         'tv-pascabayar': 'tv',
         gas: 'gas',
+        'gas-prepaid': 'gas',
         pbb: 'pbb',
         samsat: 'samsat',
         multifinance: 'multifinance',
         tagihan: 'lainnya',
+        'hp-pascabayar': 'lainnya',
       };
       const child = childMap[slug] || slug;
       return [`sub:tagihan:${child}`, 'hub:tagihan'];

@@ -40,9 +40,11 @@ return [
                 'internet-pascabayar' => ['label' => 'Internet Pascabayar', 'path' => '/dashboard/tagihan/internet'],
                 'tv-pascabayar' => ['label' => 'TV Pascabayar', 'path' => '/dashboard/tagihan/tv'],
                 'gas' => ['label' => 'Gas Negara', 'path' => '/dashboard/tagihan/gas'],
+                'gas-prepaid' => ['label' => 'Gas Prepaid', 'path' => '/dashboard/tagihan/gas-prepaid'],
                 'pbb' => ['label' => 'PBB', 'path' => '/dashboard/tagihan/pbb'],
                 'samsat' => ['label' => 'SAMSAT', 'path' => '/dashboard/tagihan/samsat'],
                 'multifinance' => ['label' => 'Multifinance', 'path' => '/dashboard/tagihan/multifinance'],
+                'hp-pascabayar' => ['label' => 'HP Pascabayar', 'path' => '/dashboard/tagihan/hp-pascabayar'],
             ],
         ],
         'topup-digital' => [
@@ -99,10 +101,12 @@ return [
         'internet-pascabayar' => ['name' => 'Internet Pascabayar', 'hub' => 'pembayaran-tagihan'],
         'tv-pascabayar' => ['name' => 'TV Pascabayar', 'hub' => 'pembayaran-tagihan'],
         'gas' => ['name' => 'Gas Negara', 'hub' => 'pembayaran-tagihan'],
+        'gas-prepaid' => ['name' => 'Gas Prepaid', 'hub' => 'pembayaran-tagihan'],
         'pbb' => ['name' => 'PBB', 'hub' => 'pembayaran-tagihan'],
         'samsat' => ['name' => 'SAMSAT', 'hub' => 'pembayaran-tagihan'],
         'multifinance' => ['name' => 'Multifinance', 'hub' => 'pembayaran-tagihan'],
         'tagihan' => ['name' => 'Tagihan Lainnya', 'hub' => 'pembayaran-tagihan'],
+        'hp-pascabayar' => ['name' => 'HP Pascabayar', 'hub' => 'pembayaran-tagihan'],
 
         'topup-digital' => ['name' => 'E-Wallet', 'hub' => 'topup-digital'],
         'ewallet' => ['name' => 'E-Wallet', 'hub' => 'topup-digital'], // legacy alias slug
@@ -164,6 +168,8 @@ return [
 
         'pulsa internasional' => 'international',
         'international' => 'international',
+        'singapore topup' => 'international',
+        'thailand topup' => 'international',
         'bundling' => 'data',
         'hotel' => 'tagihan',
         'gas' => 'gas',
@@ -340,6 +346,7 @@ return [
         'multifinance' => 'multifinance',
         'pbb' => 'pbb',
         'gas negara' => 'gas',
+        'hp pascabayar' => 'hp-pascabayar',
     ],
 
     /*
@@ -394,10 +401,12 @@ return [
         'internet-pascabayar' => ['internet-pascabayar', 'internet'],
         'tv-pascabayar' => ['tv-pascabayar', 'tv', 'tv-kabel'],
         'gas' => ['gas', 'gas-negara', 'pgn'],
+        'gas-prepaid' => ['gas-prepaid', 'pertagas'],
+        'hp-pascabayar' => ['hp-pascabayar', 'hp-postpaid', 'pulsa-pascabayar'],
         'pbb' => ['pbb'],
         'samsat' => ['samsat'],
         'multifinance' => ['multifinance', 'angsuran-kredit'],
-        'tagihan' => ['tagihan', 'pascabayar', 'pdam', 'bpjs', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'pbb', 'samsat', 'multifinance', 'pln-pascabayar'],
+        'tagihan' => ['tagihan', 'pascabayar', 'pdam', 'bpjs', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'pbb', 'samsat', 'multifinance', 'pln-pascabayar', 'hp-pascabayar'],
 
         'topup-digital' => ['topup-digital', 'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money'],
         'ewallet' => ['topup-digital', 'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money'],

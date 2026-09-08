@@ -87,11 +87,23 @@ class GameTargetBuilderTest extends TestCase
     public function test_unproven_skus_remain_unknown(): void
     {
         $resolver = app(GameNicknameResolver::class);
-        foreach (['mlweek', 'pre33817245'] as $sku) {
+        foreach (['mlweek'] as $sku) {
             $schema = $resolver->resolveForProduct('Mobile Legends', $sku);
             $this->assertSame('unknown', $schema['delivery'], $sku);
             $this->assertSame([], $schema['fields'], $sku);
         }
+    }
+
+    public function test_pre33817245_inherits_free_fire_player_id(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+        $builder = app(GameTargetBuilder::class);
+        $schema = $resolver->resolveForProduct('Free Fire', 'pre33817245');
+
+        $this->assertSame('account', $schema['delivery']);
+        $this->assertSame('PLAYER_ID', $schema['schema_key'] ?? null);
+        $customerNo = $builder->buildCustomerNo(['player_id' => '112233'], $schema);
+        $this->assertSame('112233', $customerNo);
     }
 
     public function test_cek_username_is_non_purchase(): void

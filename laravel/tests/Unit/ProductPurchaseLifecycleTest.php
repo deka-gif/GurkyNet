@@ -30,7 +30,7 @@ class ProductPurchaseLifecycleTest extends TestCase
 
         $tagihan = $reg->forCategorySlug('pdam');
         $this->assertSame('POSTPAID_INQUIRY_PAYMENT', $tagihan['mode']);
-        $this->assertFalse($tagihan['mobile_purchase']);
+        $this->assertTrue($tagihan['mobile_purchase']);
         $this->assertTrue($tagihan['web_purchase']);
     }
 
@@ -300,13 +300,31 @@ class ProductPurchaseLifecycleTest extends TestCase
         $this->assertSame(ProductPurchaseLifecycleService::REASON_UNKNOWN_SCHEMA, $life['reason']);
     }
 
-    public function test_postpaid_capability_keeps_mobile_purchase_false(): void
+    public function test_postpaid_capability_enables_mobile_purchase(): void
     {
         $reg = app(ProductTransactionCapabilityRegistry::class);
-        foreach (['pln-pascabayar', 'pdam', 'bpjs-kesehatan', 'bpjs-tk', 'pbb', 'samsat', 'multifinance', 'tagihan'] as $slug) {
+        foreach ([
+            'pln-pascabayar',
+            'pdam',
+            'bpjs-kesehatan',
+            'bpjs-tk',
+            'pbb',
+            'samsat',
+            'multifinance',
+            'tagihan',
+            'hp-pascabayar',
+            'gas',
+            'sms-telepon',
+            'masa-aktif',
+            'aktivasi-perdana',
+            'esim',
+            'voucher-digital',
+            'international',
+            'gas-prepaid',
+        ] as $slug) {
             $cap = $reg->forCategorySlug($slug);
             $this->assertNotNull($cap, $slug);
-            $this->assertFalse($cap['mobile_purchase'], $slug.' must stay mobile_purchase=false');
+            $this->assertTrue($cap['mobile_purchase'], $slug.' must allow mobile_purchase');
             $this->assertTrue($cap['web_purchase'], $slug);
         }
     }

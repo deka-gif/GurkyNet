@@ -17,18 +17,19 @@ import { VoucherInternetHubFlow } from '../../src/components/catalog/VoucherInte
 import { ProviderCatalogBrowseFlow } from '../../src/components/catalog/ProviderCatalogBrowseFlow';
 import { GameCatalogFlow } from '../../src/components/catalog/GameCatalogFlow';
 import { LanggananCatalogFlow } from '../../src/components/catalog/LanggananCatalogFlow';
+import { TagihanBillCatalogFlow } from '../../src/components/catalog/TagihanBillCatalogFlow';
 import { ProductCatalogGrid } from '../../src/components/catalog/ProductCatalogGrid';
 import { EwalletBrandList } from '../../src/components/catalog/EwalletBrandList';
 import { useEwalletTransferStore } from '../../src/store/ewalletTransfer.store';
 import { EwalletBrandGroup } from '../../src/utils/ewalletBrand';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import {
-  INQUIRY_FLOW_NOTICE,
   isGameCategory,
-  isInquiryRequiredCategory,
   isLanggananCategory,
+  isPhoneOperatorCatalogCategory,
   isPlnPrepaidCategory,
   isProviderBrowseCategory,
+  isTagihanBillCategory,
   isVoucherInternetCategory,
   normalizeCategorySlug,
   resolveProviderBrowseCategory,
@@ -36,17 +37,16 @@ import {
 import { sortProductsByPriceAsc } from '../../src/utils/sortProductsByPrice';
 
 /**
- * Category product entry — dedicated flows for pulsa/data/pln/game/langganan;
+ * Category product entry — dedicated flows for pulsa/data/pln/game/langganan/tagihan;
  * E-Wallet brand list; generic list otherwise.
- * Inquiry gate is purchase-only (detail/checkout) for categories without a dedicated flow.
- *
- * Category name is shown only in Stack header (← [Nama]) — not duplicated in content.
  */
 
 function browseSearchPlaceholder(canonical: string): string {
   if (canonical === 'game') return 'Ketik nama game yang ingin Anda top up...';
   if (canonical === 'langganan-digital') return 'Ketik nama aplikasi streaming atau produktivitas...';
   if (canonical === 'topup-digital') return 'Cari e-wallet...';
+  if (canonical === 'voucher-digital') return 'Cari voucher...';
+  if (canonical === 'international') return 'Cari negara / operator...';
   return 'Cari provider...';
 }
 
@@ -63,25 +63,37 @@ export default function ProductListScreen() {
   const [keyword, setKeyword] = useState('');
 
   const normalized = normalizeCategorySlug(slug);
+  const isPhoneOpFlow = isPhoneOperatorCatalogCategory(slug) && normalized !== 'pulsa';
   const isPulsaFlow = normalized === 'pulsa';
+  const isIntlFlow = normalized === 'international';
   const isPaketDataFlow = normalized === 'data' || normalized === 'paket-data';
   const isPlnFlow = isPlnPrepaidCategory(slug);
   const isVoucherInternetFlow = isVoucherInternetCategory(slug);
+  const isTagihanFlow = isTagihanBillCategory(slug);
   const providerBrowseCategory = resolveProviderBrowseCategory(slug);
   const isEwalletFlow = providerBrowseCategory === 'topup-digital';
   const isGameFlow = providerBrowseCategory === 'game' || isGameCategory(slug);
   const isLanggananFlow =
     providerBrowseCategory === 'langganan-digital' || isLanggananCategory(slug);
   const isProviderBrowse =
-    isProviderBrowseCategory(slug) && !isEwalletFlow && !isGameFlow && !isLanggananFlow;
-  // Tagihan / other inquiry cats without provider-browse: still show honest notice (no fake catalog).
-  const inquiryBrowseBlocked =
-    isInquiryRequiredCategory(slug) &&
-    !isProviderBrowse &&
+    isProviderBrowseCategory(slug) &&
     !isEwalletFlow &&
     !isGameFlow &&
     !isLanggananFlow &&
-    !isPlnFlow;
+    !isIntlFlow;
+
+  const dedicatedFlow =
+    isPulsaFlow ||
+    isPhoneOpFlow ||
+    isIntlFlow ||
+    isPaketDataFlow ||
+    isPlnFlow ||
+    isVoucherInternetFlow ||
+    isTagihanFlow ||
+    isProviderBrowse ||
+    isEwalletFlow ||
+    isGameFlow ||
+    isLanggananFlow;
 
   const beginBrand = useEwalletTransferStore((s) => s.beginBrand);
 
@@ -98,83 +110,27 @@ export default function ProductListScreen() {
   };
 
   const load = useCallback(() => {
-    if (
-      slug &&
-      !isPulsaFlow &&
-      !isPaketDataFlow &&
-      !isPlnFlow &&
-      !isVoucherInternetFlow &&
-      !isProviderBrowse &&
-      !isEwalletFlow &&
-      !isGameFlow &&
-      !isLanggananFlow &&
-      !inquiryBrowseBlocked
-    ) {
+    if (slug && !dedicatedFlow) {
       fetchProducts(slug, keyword.trim() || undefined);
     }
-  }, [
-    slug,
-    keyword,
-    fetchProducts,
-    isPulsaFlow,
-    isPaketDataFlow,
-    isPlnFlow,
-    isVoucherInternetFlow,
-    isProviderBrowse,
-    isEwalletFlow,
-    isGameFlow,
-    isLanggananFlow,
-    inquiryBrowseBlocked,
-  ]);
+  }, [slug, keyword, fetchProducts, dedicatedFlow]);
 
   useEffect(() => {
     void fetchFeatures();
   }, [fetchFeatures]);
 
   useEffect(() => {
-    if (
-      slug &&
-      !isPulsaFlow &&
-      !isPaketDataFlow &&
-      !isPlnFlow &&
-      !isVoucherInternetFlow &&
-      !isProviderBrowse &&
-      !isEwalletFlow &&
-      !isGameFlow &&
-      !isLanggananFlow &&
-      !inquiryBrowseBlocked
-    ) {
+    if (slug && !dedicatedFlow) {
       fetchProducts(slug);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    slug,
-    isPulsaFlow,
-    isPaketDataFlow,
-    isPlnFlow,
-    isVoucherInternetFlow,
-    isProviderBrowse,
-    isEwalletFlow,
-    isGameFlow,
-    isLanggananFlow,
-    inquiryBrowseBlocked,
-  ]);
+  }, [slug, dedicatedFlow]);
 
   const purchaseBanner =
     !purchaseEnabled && !flagsLoading ? `Pembelian belum aktif — ${flags.messages.purchase}` : null;
 
   const onRefresh = () => {
-    if (
-      isPulsaFlow ||
-      isPaketDataFlow ||
-      isPlnFlow ||
-      isVoucherInternetFlow ||
-      isProviderBrowse ||
-      isEwalletFlow ||
-      isGameFlow ||
-      isLanggananFlow ||
-      inquiryBrowseBlocked
-    ) {
+    if (dedicatedFlow) {
       return fetchFeatures();
     }
     return load();
@@ -196,20 +152,24 @@ export default function ProductListScreen() {
         }}
       />
 
-      {inquiryBrowseBlocked ? (
-        <PurchaseFlowNotice
-          icon="shield-checkmark-outline"
-          title={`${categoryName} — Validasi Diperlukan`}
-          message={INQUIRY_FLOW_NOTICE}
+      {isPulsaFlow ? (
+        <PulsaCatalogFlow category="pulsa" purchaseBanner={purchaseBanner} />
+      ) : isIntlFlow ? (
+        <PulsaCatalogFlow
+          category="international"
+          purchaseBanner={purchaseBanner}
+          skipOperatorFilter
         />
-      ) : isPulsaFlow ? (
-        <PulsaCatalogFlow purchaseBanner={purchaseBanner} />
+      ) : isPhoneOpFlow ? (
+        <PulsaCatalogFlow category={normalized} purchaseBanner={purchaseBanner} />
       ) : isPaketDataFlow ? (
         <PaketDataCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isPlnFlow ? (
         <PlnTokenCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isVoucherInternetFlow ? (
         <VoucherInternetHubFlow purchaseBanner={purchaseBanner} />
+      ) : isTagihanFlow ? (
+        <TagihanBillCatalogFlow category={normalized} purchaseBanner={purchaseBanner} />
       ) : isEwalletFlow ? (
         <View style={styles.ewalletBlock}>
           {purchaseBanner ? (

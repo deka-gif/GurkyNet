@@ -202,17 +202,8 @@ return [
                 'confidence' => 'needs_review',
             ],
         ],
-        // Digi evidence (2026-09 audit): active SKU, desc does not prove target format.
-        'pre33817245' => [
-            'delivery' => 'unknown',
-            'schema_key' => null,
-            'fields' => [],
-            'provenance' => [
-                'source' => 'OWNER_REVIEW',
-                'evidence' => 'desc does not prove Digi account target format',
-                'confidence' => 'needs_review',
-            ],
-        ],
+        // pre33817245: Free Fire Digi diamond — inherits game_profiles PLAYER_ID (LIVE SoT).
+        // Do not force UNKNOWN; profile evidence: Digi seller "No tujuan = player id".
         'pre33639299' => [
             'delivery' => 'unknown',
             'schema_key' => null,

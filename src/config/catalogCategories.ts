@@ -76,7 +76,7 @@ export function categoryTone(id: string): CategoryToneStyle {
  *  Marketing Logo Brand admin page to group brands the same way the customer nav is grouped. */
 export const HUB_CATEGORY_SLUGS: Record<string, string[]> = {
   telco: ['pulsa', 'data', 'voucher-internet', 'sms-telepon', 'masa-aktif', 'aktivasi-perdana', 'esim'],
-  tagihan: ['pln', 'pln-pascabayar', 'pdam', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'pbb', 'samsat', 'multifinance', 'tagihan'],
+  tagihan: ['pln', 'pln-pascabayar', 'pdam', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'gas-prepaid', 'pbb', 'samsat', 'multifinance', 'tagihan', 'hp-pascabayar'],
   'topup-digital': ['topup-digital'],
   game: ['game'],
   voucher: ['voucher-digital'],
@@ -120,9 +120,11 @@ export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
       { key: 'internet', label: 'Internet', path: '/dashboard/tagihan/internet', icon: Wifi },
       { key: 'tv', label: 'TV Pascabayar', path: '/dashboard/tagihan/tv', icon: Tv },
       { key: 'gas', label: 'Gas Negara', path: '/dashboard/tagihan/gas', icon: Flame },
+      { key: 'gas-prepaid', label: 'Gas Prepaid', path: '/dashboard/tagihan/gas-prepaid', icon: Flame },
       { key: 'pbb', label: 'PBB', path: '/dashboard/tagihan/pbb', icon: Home },
       { key: 'samsat', label: 'SAMSAT', path: '/dashboard/tagihan/samsat', icon: Car },
       { key: 'multifinance', label: 'Multifinance', path: '/dashboard/tagihan/multifinance', icon: Landmark },
+      { key: 'hp-pascabayar', label: 'HP Pascabayar', path: '/dashboard/tagihan/hp-pascabayar', icon: Smartphone },
       { key: 'lainnya', label: 'Tagihan Lainnya', path: '/dashboard/tagihan/lainnya', icon: Receipt },
     ],
   },

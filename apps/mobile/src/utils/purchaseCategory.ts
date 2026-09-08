@@ -2,17 +2,10 @@
  * Purchase-flow category classification for Mobile hardening (Tahap 1+ / 3B).
  * Sourced from Web/backend audit — not invented business rules.
  *
- * Tahap 3B: inquiry-required blocks PURCHASE via generic product detail/checkout.
- * E-Wallet (topup-digital) has a dedicated Transfer/Layanan flow:
- * brand → nomor + nominal manual → inquiry → confirm → PIN → POST /transactions.
- * Game has GameCatalogFlow: game → product → account → inquiry → checkout/PIN.
- * Langganan/Streaming has LanggananCatalogFlow: brand → product → schema → PIN
- * (no upstream inquiry; voucher uses target LANGGANAN).
- *
  * Direct: may use generic checkout (SKU + target + PIN → POST /transactions).
- * PLN prepaid: dedicated inquiry flow (POST /pln/inquiry) then same purchase pipe
- * without inquiry_ref_id (session keyed by user + customer_no on backend).
- * Inquiry-required: must not reach generic PIN / POST /transactions without validation.
+ * PLN prepaid: dedicated inquiry flow (POST /pln/inquiry).
+ * Game / Langganan: dedicated schema flows.
+ * Postpaid tagihan: TagihanBillCatalogFlow → inquiry_ref_id on POST /transactions.
  */
 
 const DIRECT_PURCHASE_SLUGS = new Set([
@@ -20,20 +13,26 @@ const DIRECT_PURCHASE_SLUGS = new Set([
   'data',
   'paket-data',
   'voucher-internet',
+  'sms-telepon',
+  'masa-aktif',
+  'aktivasi-perdana',
+  'esim',
+  'voucher-digital',
+  'international',
+  'gas-prepaid',
 ]);
 
 /** Token PLN prepaid — uses PlnTokenCatalogFlow, not generic checkout. */
 const PLN_PREPAID_SLUGS = new Set(['pln', 'token-pln']);
 
-/** Game top-up — uses GameCatalogFlow + game inquiry session (no inquiry_ref_id). */
+/** Game top-up — uses GameCatalogFlow (VIP nickname optional). */
 const GAME_SLUGS = new Set(['game', 'games', 'topup-game', 'top-up-game', 'game-feature']);
 
-/** Langganan Digital / Streaming — uses LanggananCatalogFlow (schema, no inquiry). */
+/** Langganan Digital / Streaming — uses LanggananCatalogFlow. */
 const LANGGANAN_SLUGS = new Set(['langganan-digital', 'langganan', 'streaming']);
 
 /**
  * Provider-first browse catalogs (Web ProviderCatalogFlow).
- * Value = canonical GET /products `category` + GET /products/providers `category`.
  */
 const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
   'topup-digital': 'topup-digital',
@@ -43,23 +42,39 @@ const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
   'langganan-digital': 'langganan-digital',
   langganan: 'langganan-digital',
   streaming: 'langganan-digital',
+  'voucher-digital': 'voucher-digital',
+  esim: 'esim',
+  international: 'international',
 };
 
-/** Categories whose Web/backend pre-checkout requires inquiry/schema not yet on Mobile. */
-const INQUIRY_REQUIRED_SLUGS = new Set([
-  // Pascabayar PLN (tagihan) — NOT token prepaid
+/** Postpaid / bill categories — TagihanBillCatalogFlow (inquiry_ref_id). */
+const TAGIHAN_BILL_SLUGS = new Set([
   'pln-pascabayar',
-  // E-Wallet / e-money (catalog aliases → topup-digital)
+  'pdam',
+  'bpjs-kesehatan',
+  'bpjs-tk',
+  'internet-pascabayar',
+  'tv-pascabayar',
+  'gas',
+  'multifinance',
+  'tagihan',
+  'hp-pascabayar',
+  // PBB/SAMSAT need region forms — still bill inquiry; Mobile uses same bill flow for customer_no
+  // composed upstream when available. Keep in set so they are not dead-end notices.
+  'pbb',
+  'samsat',
+]);
+
+/** Categories that previously blocked purchase without a dedicated Mobile flow. */
+const INQUIRY_REQUIRED_SLUGS = new Set([
+  'pln-pascabayar',
   'topup-digital',
   'ewallet',
   'e-money',
-  // Game — Digi schema + GameCatalogFlow (VIP nickname optional, not a purchase gate)
   'game',
-  // Streaming / langganan — schema-aware LanggananCatalogFlow (not generic checkout)
   'langganan-digital',
   'langganan',
   'streaming',
-  // Pascabayar / pajak (inquiry_ref_id)
   'pdam',
   'bpjs-kesehatan',
   'bpjs-tk',
@@ -70,6 +85,7 @@ const INQUIRY_REQUIRED_SLUGS = new Set([
   'samsat',
   'multifinance',
   'tagihan',
+  'hp-pascabayar',
 ]);
 
 export const INQUIRY_FLOW_NOTICE =
@@ -87,38 +103,70 @@ export function isPlnPrepaidCategory(slug: string | null | undefined): boolean {
   return PLN_PREPAID_SLUGS.has(normalizeCategorySlug(slug));
 }
 
-/** Game top-up category (dedicated GameCatalogFlow). */
 export function isGameCategory(slug: string | null | undefined): boolean {
   return GAME_SLUGS.has(normalizeCategorySlug(slug));
 }
 
-/** Langganan Digital / Streaming (dedicated LanggananCatalogFlow). */
 export function isLanggananCategory(slug: string | null | undefined): boolean {
   return LANGGANAN_SLUGS.has(normalizeCategorySlug(slug));
 }
 
-/** Purchase gate only — does NOT block browsing/product list. */
 export function isInquiryRequiredCategory(slug: string | null | undefined): boolean {
   return INQUIRY_REQUIRED_SLUGS.has(normalizeCategorySlug(slug));
 }
 
-/** Provider → product browse UX (Tahap 3B). */
+export function isTagihanBillCategory(slug: string | null | undefined): boolean {
+  return TAGIHAN_BILL_SLUGS.has(normalizeCategorySlug(slug));
+}
+
 export function isProviderBrowseCategory(slug: string | null | undefined): boolean {
   return normalizeCategorySlug(slug) in PROVIDER_BROWSE_CANONICAL;
 }
 
-/** Canonical API category for provider browse (Web SoT). */
 export function resolveProviderBrowseCategory(slug: string | null | undefined): string | null {
   const s = normalizeCategorySlug(slug);
   return PROVIDER_BROWSE_CANONICAL[s] ?? null;
 }
 
-/** Phone-style target (digits) — Pulsa / Paket Data. Voucher Internet uses checkout.voucherInternetMode. */
 export function isPhoneTargetCategory(slug: string | null | undefined): boolean {
   const s = normalizeCategorySlug(slug);
-  return s === 'pulsa' || s === 'data' || s === 'paket-data';
+  return (
+    s === 'pulsa' ||
+    s === 'data' ||
+    s === 'paket-data' ||
+    s === 'sms-telepon' ||
+    s === 'masa-aktif' ||
+    s === 'international' ||
+    s === 'hp-pascabayar'
+  );
 }
 
 export function isVoucherInternetCategory(slug: string | null | undefined): boolean {
   return normalizeCategorySlug(slug) === 'voucher-internet';
+}
+
+/** Digi voucher / eSIM — Web uses walletNo || 'VOUCHER' / 'ESIM'. */
+export function isLiteralTargetCategory(slug: string | null | undefined): boolean {
+  const s = normalizeCategorySlug(slug);
+  return s === 'voucher-digital' || s === 'esim';
+}
+
+export function literalTargetForCategory(slug: string | null | undefined): string {
+  const s = normalizeCategorySlug(slug);
+  if (s === 'esim') return 'ESIM';
+  return 'VOUCHER';
+}
+
+export function isSerialTargetCategory(slug: string | null | undefined): boolean {
+  return normalizeCategorySlug(slug) === 'aktivasi-perdana';
+}
+
+export function isGasPrepaidCategory(slug: string | null | undefined): boolean {
+  return normalizeCategorySlug(slug) === 'gas-prepaid';
+}
+
+/** Phone-operator style catalog (reuse PulsaCatalogFlow with category prop). */
+export function isPhoneOperatorCatalogCategory(slug: string | null | undefined): boolean {
+  const s = normalizeCategorySlug(slug);
+  return s === 'pulsa' || s === 'sms-telepon' || s === 'masa-aktif' || s === 'international';
 }

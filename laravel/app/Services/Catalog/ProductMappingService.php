@@ -85,6 +85,12 @@ class ProductMappingService
         // list_type (prepaid|pasca) is authoritative when present.
         $slug = $this->resolvePlnByListType($slug, $providerCategory, $brand, $listType, $source);
 
+        // Digiflazz Gas: prepaid voucher/top-up ≠ postpaid Gas Negara bill.
+        $slug = $this->resolveGasByListType($slug, $providerCategory, $brand, $listType, $source);
+
+        // Digiflazz HP Pascabayar (Halo/XL/… postpaid phone) ≠ generic "Tagihan Lainnya".
+        $slug = $this->resolveHpPascabayar($slug, $providerCategory, $brand, $listType, $source);
+
         $meta = config('gurky_catalog.categories.'.$slug, [
             'name' => Str::title(str_replace('-', ' ', $slug)),
             'hub' => null,
@@ -167,6 +173,95 @@ class ProductMappingService
         return false;
     }
 
+    /**
+     * Digiflazz category "Gas" + list_type prepaid → gas-prepaid (direct buy).
+     * Pasca / Gas Negara bill stays on slug gas (inquiry).
+     */
+    protected function resolveGasByListType(
+        string $slug,
+        string $providerCategory,
+        string $brand,
+        ?string $listType,
+        string &$source,
+    ): string {
+        $cat = Str::lower(trim($providerCategory));
+        $brandL = Str::lower(trim($brand));
+        $lt = Str::lower(trim((string) $listType));
+
+        $isGasFamily = $slug === 'gas'
+            || $slug === 'gas-prepaid'
+            || $cat === 'gas'
+            || $cat === 'gas negara'
+            || str_contains($brandL, 'pertagas')
+            || str_contains($brandL, 'pgn')
+            || str_contains($brandL, 'gas negara');
+
+        if (! $isGasFamily) {
+            return $slug;
+        }
+
+        if (in_array($lt, ['pasca', 'pascabayar', 'postpaid'], true)) {
+            $source = 'gas_list_type_pasca';
+
+            return 'gas';
+        }
+
+        if ($lt === 'prepaid' || $cat === 'gas') {
+            // Digi prepaid Gas SKUs (Pertagas/PGN nominal) — not postpaid inquiry.
+            if ($lt === 'prepaid' || ($cat === 'gas' && ! in_array($lt, ['pasca', 'pascabayar', 'postpaid'], true))) {
+                $source = 'gas_list_type_prepaid';
+
+                return 'gas-prepaid';
+            }
+        }
+
+        return $slug === 'gas-prepaid' ? 'gas-prepaid' : $slug;
+    }
+
+    /**
+     * Digiflazz Pascabayar mobile postpaid brands → dedicated hp-pascabayar CF slug.
+     * Evidence: Digi category Pascabayar + brand family (HP PASCABAYAR + operator Omni/Cuan packs).
+     * Do not map prepaid operator brands here — gated by pasca list_type / category.
+     */
+    protected function resolveHpPascabayar(
+        string $slug,
+        string $providerCategory,
+        string $brand,
+        ?string $listType,
+        string &$source,
+    ): string {
+        $brandL = Str::lower(trim($brand));
+        $cat = Str::lower(trim($providerCategory));
+        $lt = Str::lower(trim((string) $listType));
+
+        $isPascaContext = $cat === 'pascabayar'
+            || in_array($lt, ['pasca', 'pascabayar', 'postpaid'], true)
+            || in_array($slug, ['tagihan', 'hp-pascabayar'], true);
+
+        if (! $isPascaContext) {
+            return $slug;
+        }
+
+        $isHp = $brandL === 'hp pascabayar'
+            || str_starts_with($brandL, 'hp pascabayar')
+            || str_contains($brandL, 'hp pascabayar')
+            || in_array($brandL, [
+                'by.u',
+                'telkomsel omni',
+                'indosat only4u',
+                'tri cuanmax',
+                'xl axis cuanku',
+            ], true);
+
+        if (! $isHp) {
+            return $slug;
+        }
+
+        $source = 'hp_pascabayar_brand';
+
+        return 'hp-pascabayar';
+    }
+
     public function canonicalizeSlug(string $slug): string
     {
         $slug = Str::lower(trim($slug));
@@ -178,6 +273,8 @@ class ProductMappingService
             'streaming', 'streaming-tv', 'apps', 'aplikasi' => 'langganan-digital',
             'token-pln', 'token_pln' => 'pln',
             'paket-data', 'paket_data' => 'data',
+            'gas-negara' => 'gas',
+            'hp-postpaid', 'pulsa-pascabayar' => 'hp-pascabayar',
             default => null,
         };
         if ($direct !== null) {

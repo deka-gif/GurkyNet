@@ -73,6 +73,31 @@ export const TelcoAktivasiPerdanaPage = () => <AktivasiPerdanaFlow />;
 
 export const TelcoEsimPage = () => <EsimCatalogFlow />;
 
+export const GasPrepaidPage = () => (
+  <ProviderCatalogFlow
+    category="gas-prepaid"
+    title="Gas Prepaid"
+    subtitle="Top up gas prepaid Digiflazz (Pertagas/PGN nominal)."
+    serviceName="Gas Prepaid"
+    returnPath="/dashboard/tagihan/gas-prepaid"
+    targetMode="phone"
+    targetLabel="ID Pelanggan / Nomor"
+    targetPlaceholder="Masukkan ID pelanggan"
+  />
+);
+
+export const HpPascabayarPage = () => (
+  <BillPaymentFlow
+    category="hp-pascabayar"
+    title="HP Pascabayar"
+    subtitle="Bayar tagihan Halo / XL / Tri / Smartfren postpaid."
+    serviceName="HP Pascabayar"
+    returnPath="/dashboard/tagihan/hp-pascabayar"
+    targetLabel="Nomor HP Pascabayar"
+    targetPlaceholder="08xxxxxxxxxx"
+  />
+);
+
 export const TagihanSubPage = ({
   category,
   title,
