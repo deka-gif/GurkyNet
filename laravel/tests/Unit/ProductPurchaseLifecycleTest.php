@@ -451,4 +451,93 @@ class ProductPurchaseLifecycleTest extends TestCase
         $this->assertSame(ProductPurchaseLifecycleService::STAGE_NOT_PURCHASABLE, $life['stage']);
         $this->assertSame(\App\Services\Langganan\LanggananAccountResolver::REASON_NON_PURCHASE, $life['reason']);
     }
+
+    public function test_pln_cek_nama_utility_sku_is_not_purchasable(): void
+    {
+        $digi = ProductProvider::digiflazz() ?? ProductProvider::create([
+            'code' => 'digiflazz',
+            'name' => 'Digiflazz',
+            'is_active' => true,
+            'priority' => 1,
+            'sort_order' => 1,
+        ]);
+        $digi->update(['is_active' => true, 'api_status' => 'online']);
+
+        $category = ProductCategory::create(['name' => 'Token PLN', 'slug' => 'pln', 'icon' => 'p']);
+        $brand = Provider::create(['name' => 'PLN', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'pre33794859',
+            'name' => 'Cek Nama Token PLN',
+            'base_price' => 0,
+            'sell_price' => 0,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'pre33794859',
+            'provider_name' => 'Cek Nama Token PLN',
+            'base_price' => 0,
+            'provider_price' => 0,
+            'provider_status' => 'available',
+            'is_active' => true,
+        ]);
+
+        $life = app(ProductPurchaseLifecycleService::class);
+        $this->assertTrue($life->isPlnNonPurchaseSku('pre33794859'));
+        $eval = $life->evaluate($product->fresh(['providerSkus.productProvider', 'productProvider', 'category', 'provider']));
+        $this->assertFalse($eval['purchasable']);
+        $this->assertFalse($eval['catalog_visible']);
+        $this->assertSame(ProductPurchaseLifecycleService::STAGE_NOT_PURCHASABLE, $eval['stage']);
+        $this->assertSame(ProductPurchaseLifecycleService::REASON_NON_PURCHASE, $eval['reason']);
+    }
+
+    public function test_pln_token_nominal_sku_remains_purchasable(): void
+    {
+        $digi = ProductProvider::digiflazz() ?? ProductProvider::create([
+            'code' => 'digiflazz',
+            'name' => 'Digiflazz',
+            'is_active' => true,
+            'priority' => 1,
+            'sort_order' => 1,
+        ]);
+        $digi->update(['is_active' => true, 'api_status' => 'online']);
+
+        $category = ProductCategory::create(['name' => 'Token PLN', 'slug' => 'pln', 'icon' => 'p']);
+        $brand = Provider::create(['name' => 'PLN', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'pre33794860',
+            'name' => 'Token Listrik 20.000',
+            'base_price' => 20000,
+            'sell_price' => 20500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'pre33794860',
+            'provider_name' => 'Token Listrik 20.000',
+            'base_price' => 20000,
+            'provider_price' => 20000,
+            'provider_status' => 'available',
+            'is_active' => true,
+        ]);
+
+        $life = app(ProductPurchaseLifecycleService::class);
+        $this->assertFalse($life->isPlnNonPurchaseSku('pre33794860'));
+        $eval = $life->evaluate($product->fresh(['providerSkus.productProvider', 'productProvider', 'category', 'provider']));
+        $this->assertTrue($eval['purchasable']);
+        $this->assertTrue($eval['catalog_visible']);
+        $this->assertSame(ProductPurchaseLifecycleService::STAGE_PURCHASABLE, $eval['stage']);
+    }
 }

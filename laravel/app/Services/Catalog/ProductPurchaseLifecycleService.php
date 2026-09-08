@@ -35,12 +35,39 @@ class ProductPurchaseLifecycleService
 
     public const REASON_UNKNOWN_SCHEMA = 'UNKNOWN_SCHEMA';
 
+    public const REASON_NON_PURCHASE = 'NON_PURCHASE';
+
     public function __construct(
         protected AvailabilityService $availability,
         protected ProductTransactionCapabilityRegistry $capabilities,
         protected GameAccountSchemaResolver $gameSchemas,
         protected LanggananAccountResolver $langgananSchemas,
     ) {}
+
+    /**
+     * Digi PLN utility SKUs (Cek Nama Token, etc.) — never customer-purchasable.
+     * Explicit allowlist only; no name heuristics.
+     */
+    public function isPlnNonPurchaseSku(?string $skuCode): bool
+    {
+        $sku = trim((string) $skuCode);
+        if ($sku === '') {
+            return false;
+        }
+
+        $list = config('gurky_pln.non_purchase_skus', []);
+        if (! is_array($list)) {
+            return false;
+        }
+
+        foreach ($list as $code) {
+            if (strcasecmp((string) $code, $sku) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /**
      * @return array{
@@ -58,6 +85,18 @@ class ProductPurchaseLifecycleService
 
         $slug = strtolower(trim((string) ($product->category?->slug ?? '')));
         $capability = $this->capabilities->forCategorySlug($slug !== '' ? $slug : null);
+
+        // PLN Digi utility (e.g. Cek Nama Token) — hide before availability → PURCHASABLE.
+        if ($this->isPlnNonPurchaseSku($product->sku_code)) {
+            return [
+                'stage' => self::STAGE_NOT_PURCHASABLE,
+                'purchasable' => false,
+                'catalog_visible' => false,
+                'reason' => self::REASON_NON_PURCHASE,
+                'capability' => $capability,
+                'account_schema' => null,
+            ];
+        }
 
         $availability = $this->availability->getStatus($product);
         $availPurchasable = $availability === 'active';

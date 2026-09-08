@@ -132,6 +132,26 @@ class CustomerProductCatalogFilterTest extends TestCase
         $this->assertNotContains('pre33639299', $this->codesInCategory('game'));
     }
 
+    public function test_d2_pln_cek_nama_utility_does_not_appear_in_catalog(): void
+    {
+        $digi = $this->digiOnline();
+        $this->seedProduct('pln', 'Token PLN', 'PLN', 'pre33794859', $digi, [
+            'name' => 'Cek Nama Token PLN',
+            'base_price' => 0,
+            'sell_price' => 0,
+        ]);
+        $this->seedProduct('pln', 'Token PLN', 'PLN', 'pre33794860', $digi, [
+            'name' => 'Token Listrik 20.000',
+            'base_price' => 20000,
+            'sell_price' => 20500,
+        ]);
+
+        $codes = $this->codesInCategory('pln');
+        $this->assertNotContains('pre33794859', $codes);
+        $this->assertContains('pre33794860', $codes);
+        $this->assertSame(1, Product::query()->where('sku_code', 'pre33794859')->count());
+    }
+
     public function test_e_inactive_product_does_not_appear(): void
     {
         $digi = $this->digiOnline();
