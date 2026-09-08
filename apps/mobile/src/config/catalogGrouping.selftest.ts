@@ -53,6 +53,8 @@ for (const keep of [
   assert(!isHiddenRawCategorySlug(keep), `${keep} must not be hidden`);
 }
 
+assert(isHiddenRawCategorySlug('hp-pascabayar'), 'hp-pascabayar hidden on Mobile');
+
 const sections = groupCategoriesForCatalog([
   cat('game-feature', 'Game Feature'),
   cat('gamed', 'Gamed'),
@@ -68,17 +70,25 @@ const sections = groupCategoriesForCatalog([
   cat('game', 'Game'),
   cat('langganan-digital', 'Langganan Digital'),
   cat('transfer', 'Transfer'),
+  cat('hp-pascabayar', 'HP Pascabayar'),
+  cat('bpjs-kesehatan', 'BPJS Kesehatan'),
+  cat('gas', 'Gas Negara'),
+  cat('gas-prepaid', 'Gas Prepaid'),
 ]);
 
 const allSlugs = sections.flatMap((s) => s.categories.map((c) => c.slug));
 assert(!allSlugs.includes('game-feature'), 'raw game-feature not in groups');
 assert(!allSlugs.includes('saldo-emoney'), 'raw saldo-emoney not in groups');
 assert(!allSlugs.includes('unknown-orphan-xyz'), 'unknown not in groups');
+assert(!allSlugs.includes('hp-pascabayar'), 'HP Pascabayar not in Mobile catalog');
 assert(allSlugs.includes('topup-digital'), 'E-Wallet kept');
 assert(allSlugs.includes('pln'), 'Token PLN kept');
 assert(allSlugs.includes('voucher-digital'), 'Voucher Digital kept');
 assert(allSlugs.includes('voucher-internet'), 'Voucher Internet kept');
 assert(allSlugs.includes('game'), 'Game kept');
+assert(allSlugs.includes('bpjs-kesehatan'), 'BPJS Kesehatan kept');
+assert(allSlugs.includes('gas'), 'Gas Negara kept');
+assert(allSlugs.includes('gas-prepaid'), 'Gas Prepaid kept');
 
 const ewallet = sections.find((s) => s.id === 'topup-digital');
 assert(ewallet?.title === 'E-Wallet', 'hub title E-Wallet');

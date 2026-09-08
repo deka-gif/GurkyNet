@@ -88,6 +88,11 @@ const HIDDEN_RAW_SLUGS = new Set([
   'token-pln',
   'bpjs',
   'langganan',
+  /**
+   * Temporary business hide — Mobile Semua Layanan only.
+   * Digi SKUs / backend mapping retained; do not surface customer-facing tile.
+   */
+  'hp-pascabayar',
 ]);
 
 export function isHiddenRawCategorySlug(slug: string): boolean {
@@ -138,7 +143,7 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
       'samsat',
       'multifinance',
       'tagihan',
-      'hp-pascabayar',
+      // hp-pascabayar intentionally omitted from Mobile Semua Layanan (temp hide).
     ],
     iconKeysForSlug: (slug) => {
       const childMap: Record<string, string> = {
@@ -156,7 +161,6 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
         samsat: 'samsat',
         multifinance: 'multifinance',
         tagihan: 'lainnya',
-        'hp-pascabayar': 'lainnya',
       };
       const child = childMap[slug] || slug;
       return [`sub:tagihan:${child}`, 'hub:tagihan'];

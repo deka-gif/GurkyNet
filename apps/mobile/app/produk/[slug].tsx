@@ -48,6 +48,7 @@ function browseSearchPlaceholder(canonical: string): string {
   if (canonical === 'topup-digital') return 'Cari e-wallet...';
   if (canonical === 'voucher-digital') return 'Cari voucher...';
   if (canonical === 'international') return 'Cari negara / operator...';
+  if (canonical === 'gas-prepaid') return 'Cari provider gas (Pertagas, PGN)...';
   return 'Cari provider...';
 }
 
@@ -179,16 +180,26 @@ export default function ProductListScreen() {
           purchaseBanner={purchaseBanner}
           {...(normalized === 'bpjs-kesehatan'
             ? {
-                targetLabel: 'Nomor Kartu Peserta',
-                targetPlaceholder: 'Masukkan nomor kartu peserta',
+                targetLabel: 'Nomor Peserta',
+                targetPlaceholder: 'Masukkan nomor peserta',
               }
-            : normalized === 'pln-pascabayar' || normalized === 'pln-nontaglis'
+            : normalized === 'bpjs-tk'
               ? {
-                  // Align with Token PLN (PlnTokenCatalogFlow) meter wording.
-                  targetLabel: 'Nomor Meter / ID Pelanggan PLN',
-                  targetPlaceholder: '11–12 digit angka',
+                  targetLabel: 'Nomor Peserta',
+                  targetPlaceholder: 'Masukkan nomor peserta',
                 }
-              : {})}
+              : normalized === 'gas'
+                ? {
+                    targetLabel: 'Nomor / ID Pelanggan',
+                    targetPlaceholder: 'Masukkan nomor pelanggan',
+                  }
+                : normalized === 'pln-pascabayar' || normalized === 'pln-nontaglis'
+                  ? {
+                      // Align with Token PLN (PlnTokenCatalogFlow) meter wording.
+                      targetLabel: 'Nomor Meter / ID Pelanggan PLN',
+                      targetPlaceholder: '11–12 digit angka',
+                    }
+                  : {})}
         />
       ) : isEwalletFlow ? (
         <View style={styles.ewalletBlock}>

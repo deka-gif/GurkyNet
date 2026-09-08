@@ -25,7 +25,7 @@ import {
   type TagihanBrandGroup,
 } from '../../utils/tagihanBrandGrouping';
 import {
-  isPlnBillDirectInputCategory,
+  isTagihanBillDirectInputCategory,
   isTagihanBrandFirstCategory,
 } from '../../utils/tagihanFlowMode';
 import { parseApiError } from '../../api/client';
@@ -33,11 +33,9 @@ import { parseApiError } from '../../api/client';
 /**
  * Mobile postpaid bill flow — mirrors Web BillPaymentFlow.
  *
- * Brand-first (product.name tiles, no catalog price): `tv-pascabayar`, `pdam`,
- * `internet-pascabayar`, `multifinance`, `bpjs-kesehatan`, `gas`.
- * PLN Pascabayar / PLN Nontaglis: direct meter input (Token PLN UX) — no brand/product picker.
- * Other Tagihan keep product-grid-first until later slices. PBB uses dedicated PajakPbbCatalogFlow.
- * Token PLN (`pln`) stays on PlnTokenCatalogFlow.
+ * Brand-first: `tv-pascabayar`, `pdam`, `internet-pascabayar`, `multifinance`, `bpjs-tk`.
+ * Direct-input (no brand tile): `pln-pascabayar`, `pln-nontaglis`, `bpjs-kesehatan`, `gas`.
+ * PBB uses dedicated PajakPbbCatalogFlow. Token PLN (`pln`) stays on PlnTokenCatalogFlow.
  *
  * Brand-first navigation: header/hardware back steps brand list ↔ identifier ↔ review
  * (same beforeRemove pattern as ProviderCatalogBrowseFlow). No body "Ganti produk".
@@ -70,7 +68,7 @@ export function TagihanBillCatalogFlow({
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
 
   const brandFirst = isTagihanBrandFirstCategory(category);
-  const directInput = isPlnBillDirectInputCategory(category);
+  const directInput = isTagihanBillDirectInputCategory(category);
 
   const [step, setStep] = useState<Step>(directInput ? 'input' : 'products');
   const [products, setProducts] = useState<Product[]>([]);
@@ -356,6 +354,9 @@ export function TagihanBillCatalogFlow({
         />
       ) : brandFirst ? (
         <>
+          {category.trim().toLowerCase() === 'bpjs-tk' ? (
+            <Text style={styles.label}>Pilih jenis kepesertaan</Text>
+          ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <TagihanBrandList brands={brands} onPress={onSelectBrand} />
         </>

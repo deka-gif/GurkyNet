@@ -5,8 +5,11 @@
 import assert from 'node:assert/strict';
 import {
   isPlnBillDirectInputCategory,
+  isTagihanBillDirectInputCategory,
   isTagihanBrandFirstCategory,
 } from './tagihanFlowMode';
+import { isHiddenRawCategorySlug } from '../config/catalogGrouping';
+import { resolveProviderBrowseCategory } from './purchaseCategory';
 import type { Product } from '../services/catalog.service';
 import {
   groupTagihanBrandsByProductName,
@@ -360,16 +363,75 @@ if (!pascabayarDup.ok) assert.equal(pascabayarDup.reason, 'ambiguous');
 assert.equal(isTagihanBrandFirstCategory('pln-nontaglis'), false);
 assert.equal(isTagihanBrandFirstCategory('pln-pascabayar'), false);
 assert.equal(isTagihanBrandFirstCategory('pln'), false);
-assert.equal(isPlnBillDirectInputCategory('pln-nontaglis'), true);
-assert.equal(isPlnBillDirectInputCategory('pln-pascabayar'), true);
+assert.equal(isTagihanBillDirectInputCategory('pln-nontaglis'), true);
+assert.equal(isTagihanBillDirectInputCategory('pln-pascabayar'), true);
 assert.equal(isPlnBillDirectInputCategory('pln'), false, 'Token PLN must stay on PlnTokenCatalogFlow');
+
+// BPJS Kesehatan / Gas Negara → direct-input (single service)
+assert.equal(isTagihanBrandFirstCategory('bpjs-kesehatan'), false);
+assert.equal(isTagihanBillDirectInputCategory('bpjs-kesehatan'), true);
+assert.equal(isTagihanBrandFirstCategory('gas'), false);
+assert.equal(isTagihanBillDirectInputCategory('gas'), true);
+
+const bpjsKesDirect = resolvePlnBillDirectSku([
+  stubProduct('post733487', 'Bpjs Kesehatan', {
+    category: 'bpjs-kesehatan',
+    operatorName: 'BPJS Kesehatan',
+  }),
+]);
+assert.equal(bpjsKesDirect.ok, true);
+if (bpjsKesDirect.ok) assert.equal(bpjsKesDirect.product.code, 'post733487');
+
+const gasDirect = resolvePlnBillDirectSku([
+  stubProduct('post733494', 'Gas Negara', { category: 'gas', operatorName: 'GAS NEGARA' }),
+]);
+assert.equal(gasDirect.ok, true);
+if (gasDirect.ok) assert.equal(gasDirect.product.code, 'post733494');
+
+// BPJS TK → brand-first membership type; BPU Digi collision fail-closed
+assert.equal(isTagihanBrandFirstCategory('bpjs-tk'), true);
+assert.equal(isTagihanBillDirectInputCategory('bpjs-tk'), false);
+const bpjsTkBrands = groupTagihanBrandsByProductName([
+  stubProduct('post733500', 'Bpjs Ketenagakerjaan Penerima Upah', {
+    category: 'bpjs-tk',
+    operatorName: 'BPJS KETENAGAKERJAAN',
+  }),
+  stubProduct('post733501', 'Bpjs Ketenagakerjaan Bukan Penerima Upah', {
+    category: 'bpjs-tk',
+    operatorName: 'BPJS KETENAGAKERJAAN',
+  }),
+  stubProduct('post733503', 'Bpjs Ketenagakerjaan Bukan Penerima Upah', {
+    category: 'bpjs-tk',
+    operatorName: 'BPJS KETENAGAKERJAAN',
+  }),
+]);
+assert.equal(bpjsTkBrands.length, 2);
+const pu = bpjsTkBrands.find((b) => b.key === 'bpjs ketenagakerjaan penerima upah');
+const bpu = bpjsTkBrands.find((b) => b.key === 'bpjs ketenagakerjaan bukan penerima upah');
+assert.ok(pu);
+assert.ok(bpu);
+assert.equal(pu!.isAmbiguous, false);
+assert.equal(pu!.boundSkuCode, 'post733500');
+assert.equal(bpu!.isAmbiguous, true);
+assert.equal(bpu!.boundSkuCode, null);
+const bpuResolve = resolveTagihanBrandSelection(bpu!);
+assert.equal(bpuResolve.ok, false);
+if (!bpuResolve.ok) assert.equal(bpuResolve.reason, 'ambiguous');
+
+// Multi-brand Tagihan stay brand-first
 assert.equal(isTagihanBrandFirstCategory('tv-pascabayar'), true);
 assert.equal(isTagihanBrandFirstCategory('pdam'), true);
 assert.equal(isTagihanBrandFirstCategory('internet-pascabayar'), true);
 assert.equal(isTagihanBrandFirstCategory('multifinance'), true);
-assert.equal(isTagihanBrandFirstCategory('bpjs-kesehatan'), true);
-assert.equal(isTagihanBrandFirstCategory('gas'), true);
-assert.equal(isPlnBillDirectInputCategory('tv-pascabayar'), false);
-assert.equal(isPlnBillDirectInputCategory('gas'), false);
+assert.equal(isTagihanBillDirectInputCategory('tv-pascabayar'), false);
+assert.equal(isTagihanBillDirectInputCategory('gas'), true);
+
+// Gas Prepaid → provider browse (not tagihan bill / not brand-first)
+assert.equal(resolveProviderBrowseCategory('gas-prepaid'), 'gas-prepaid');
+assert.equal(isTagihanBrandFirstCategory('gas-prepaid'), false);
+assert.equal(isTagihanBillDirectInputCategory('gas-prepaid'), false);
+
+// HP Pascabayar hidden from Mobile Semua Layanan
+assert.equal(isHiddenRawCategorySlug('hp-pascabayar'), true);
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');

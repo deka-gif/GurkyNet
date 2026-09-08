@@ -45,6 +45,8 @@ const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
   'voucher-digital': 'voucher-digital',
   esim: 'esim',
   international: 'international',
+  /** Gas Prepaid: Pertagas / PGN provider-first (Web ProviderCatalogFlow). */
+  'gas-prepaid': 'gas-prepaid',
 };
 
 /** Postpaid / bill categories — TagihanBillCatalogFlow (inquiry_ref_id). */
