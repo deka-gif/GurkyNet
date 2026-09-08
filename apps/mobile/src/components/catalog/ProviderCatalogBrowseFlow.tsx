@@ -6,21 +6,30 @@ import {
   CategoryProviderSummary,
   Product,
 } from '../../services/catalog.service';
+import { useCheckoutStore } from '../../store/checkout.store';
+import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
 import {
+  Button,
   Card,
   LoadingState,
   ErrorState,
   EmptyState,
   BrandLogo,
+  PurchaseFlowNotice,
 } from '../ui';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
-import { isCatalogListed } from '../../utils/catalogAvailability';
+import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { isGasPrepaidCategory } from '../../utils/purchaseCategory';
 
 /**
  * Provider → product browse (Tahap 3B).
  * UI: category name lives in Stack header only — no duplicate in-content title.
  * Header/hardware back on product step returns to provider list (same route), not Home.
+ *
+ * Gas Prepaid (FR catalog gas-prepaid / PREPAID_DIRECT + CUSTOMER_NO):
+ * providers → ID pelanggan (above) + products → shared checkout (skip Detail Produk).
+ * Other provider-browse categories still open generic /produk/detail/[sku].
  */
 
 type Props = {
@@ -43,6 +52,12 @@ export function ProviderCatalogBrowseFlow({
 }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
+  const gasPrepaid = isGasPrepaidCategory(category);
+  const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const setTarget = useCheckoutStore((s) => s.setTarget);
+  const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
+  const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
+
   const [step, setStep] = useState<Step>('providers');
   const [providers, setProviders] = useState<CategoryProviderSummary[]>([]);
   const [providersLoading, setProvidersLoading] = useState(false);
@@ -52,6 +67,8 @@ export function ProviderCatalogBrowseFlow({
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [customerNo, setCustomerNo] = useState('');
 
   const loadProviders = useCallback(async () => {
     setProvidersLoading(true);
@@ -81,9 +98,11 @@ export function ProviderCatalogBrowseFlow({
     setSelected(null);
     setProducts([]);
     setProductsError(null);
+    setSelectedProduct(null);
+    setCustomerNo('');
   }, []);
 
-  // ← Category header / Android back: products → providers; providers → previous stack (Home).
+  // ← Header / Android back: products → providers; providers → previous stack.
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
       if (step !== 'products') return;
@@ -106,11 +125,23 @@ export function ProviderCatalogBrowseFlow({
 
   const productColumns = category === 'game' ? 5 : 2;
 
+  // Existing Gas Prepaid validation (Web targetMode=phone digits; capability CUSTOMER_NO).
+  const gasTarget = customerNo.replace(/\D/g, '').trim();
+  const customerReady = gasTarget.length > 0;
+  const canProceedGas =
+    gasPrepaid &&
+    !!selectedProduct &&
+    customerReady &&
+    isProductPurchasable(selectedProduct) &&
+    purchaseEnabled;
+
   const selectProvider = async (provider: CategoryProviderSummary) => {
     setSelected(provider);
     setStep('products');
     setProducts([]);
     setProductsError(null);
+    setSelectedProduct(null);
+    setCustomerNo('');
     setProductsLoading(true);
     try {
       const res = await catalogService.getProducts({
@@ -132,7 +163,32 @@ export function ProviderCatalogBrowseFlow({
     }
   };
 
+  const proceedGasCheckout = (product: Product) => {
+    if (!gasPrepaid || !selected) return;
+    if (!isProductPurchasable(product) || !purchaseEnabled) return;
+    const target = customerNo.replace(/\D/g, '').trim();
+    if (!target) return;
+
+    startCheckout(product);
+    setTarget(target);
+    setPurchaseContext({
+      operatorLabel: selected.name,
+      selectedRegion: null,
+    });
+    router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
+  };
+
   const openProduct = (product: Product) => {
+    if (gasPrepaid) {
+      if (!isProductPurchasable(product) || !purchaseEnabled) return;
+      // Keep identifier when switching products (ID-first UX).
+      setSelectedProduct(product);
+      const target = customerNo.replace(/\D/g, '').trim();
+      if (target) {
+        proceedGasCheckout(product);
+      }
+      return;
+    }
     router.push({ pathname: '/produk/detail/[sku]', params: { sku: product.code } });
   };
 
@@ -193,6 +249,32 @@ export function ProviderCatalogBrowseFlow({
       ) : null}
       <Text style={styles.providerHeading}>{selected?.name || 'Produk'}</Text>
 
+      {gasPrepaid ? (
+        !purchaseEnabled ? (
+          <PurchaseFlowNotice
+            icon="time-outline"
+            title="Pembelian Belum Aktif"
+            message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
+          />
+        ) : (
+          <View style={styles.field}>
+            <Text style={styles.label}>ID Pelanggan / Nomor</Text>
+            <TextInput
+              value={customerNo}
+              onChangeText={(t) => setCustomerNo(t.replace(/\D/g, ''))}
+              placeholder="Masukkan ID pelanggan / nomor"
+              placeholderTextColor={colors.gray[400]}
+              keyboardType="number-pad"
+              style={styles.searchInput}
+            />
+          </View>
+        )
+      ) : null}
+
+      {gasPrepaid && purchaseEnabled ? (
+        <Text style={styles.sectionHeading}>Pilih Produk</Text>
+      ) : null}
+
       {productsLoading ? (
         <LoadingState label="Memuat produk..." />
       ) : productsError ? (
@@ -207,7 +289,12 @@ export function ProviderCatalogBrowseFlow({
           products={listedProducts}
           columns={productColumns}
           onPress={openProduct}
-          isDisabled={(p) => p.status !== 'tersedia'}
+          selectedCode={gasPrepaid ? selectedProduct?.code ?? null : null}
+          isDisabled={(p) =>
+            gasPrepaid
+              ? !isProductPurchasable(p) || !purchaseEnabled
+              : p.status !== 'tersedia'
+          }
           renderMeta={(p) =>
             p.status !== 'tersedia' ? (
               <Text style={styles.productStatus}>
@@ -217,6 +304,14 @@ export function ProviderCatalogBrowseFlow({
           }
         />
       )}
+
+      {gasPrepaid && purchaseEnabled && selectedProduct ? (
+        <Button
+          label="Lanjut"
+          onPress={() => selectedProduct && proceedGasCheckout(selectedProduct)}
+          disabled={!canProceedGas}
+        />
+      ) : null}
     </View>
   );
 }
@@ -262,9 +357,23 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
     marginBottom: spacing.xs,
   },
+  sectionHeading: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[700],
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: spacing.xs,
+  },
   productStatus: {
     fontSize: 10,
     color: colors.gray[500],
     fontWeight: typography.weight.bold,
+  },
+  field: { gap: spacing.xs },
+  label: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[700],
   },
 });

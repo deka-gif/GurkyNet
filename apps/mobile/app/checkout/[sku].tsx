@@ -27,6 +27,7 @@ import {
   INQUIRY_FLOW_NOTICE,
   isDirectPurchaseCategory,
   isGameCategory,
+  isGasPrepaidCategory,
   isInquiryRequiredCategory,
   isLiteralTargetCategory,
   isPhoneTargetCategory,
@@ -105,6 +106,7 @@ export default function CheckoutScreen() {
   const tagihanExpired = !!tagihanContext && Date.now() >= (tagihanContext.expiresAt || 0);
   const literalCat = isLiteralTargetCategory(categorySlug);
   const serialCat = isSerialTargetCategory(categorySlug);
+  const gasPrepaid = isGasPrepaidCategory(categorySlug);
 
   useEffect(() => {
     if (literalCat && !targetNumber) {
@@ -393,9 +395,11 @@ export default function CheckoutScreen() {
                 ? 'ID Pelanggan PLN'
                 : gameCat
                   ? 'Akun Game'
-                  : viElektronik
-                    ? 'Tujuan (kode voucher)'
-                    : 'Nomor Tujuan'}
+                  : gasPrepaid
+                    ? 'ID Pelanggan / Nomor'
+                    : viElektronik
+                      ? 'Tujuan (kode voucher)'
+                      : 'Nomor Tujuan'}
             </Text>
             <TextInput
               value={
@@ -416,7 +420,9 @@ export default function CheckoutScreen() {
                   ? 'Dari hasil cek meteran'
                   : gameCat
                     ? 'Dari hasil validasi akun'
-                    : 'Nomor tujuan'
+                    : gasPrepaid
+                      ? 'ID pelanggan / nomor'
+                      : 'Nomor tujuan'
               }
               placeholderTextColor={colors.gray[400]}
               style={[styles.input, styles.inputLocked]}
