@@ -1,5 +1,5 @@
 /**
- * Tagihan brand grouping fixtures (TV + PDAM + Internet + Multifinance + BPJS Kes + Gas).
+ * Tagihan brand grouping fixtures (incl. PLN Nontaglis).
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
@@ -310,5 +310,42 @@ assert.equal(gasDup[0].boundSkuCode, null);
 const gasAmb = resolveTagihanBrandSelection(gasDup[0]);
 assert.equal(gasAmb.ok, false);
 if (!gasAmb.ok) assert.equal(gasAmb.reason, 'ambiguous');
+
+// --- PLN Nontaglis production fixture (test-only; not hardcoded in UI) ---
+const productionPlnNontaglis = [
+  stubProduct('post733504', 'PLN Nontaglis', {
+    category: 'pln-nontaglis',
+    operatorName: 'PLN NONTAGLIS',
+  }),
+];
+
+const nontaglisBrands = groupTagihanBrandsByProductName(productionPlnNontaglis);
+assert.equal(nontaglisBrands.length, 1, 'expected 1 PLN Nontaglis brand tile');
+assert.equal(nontaglisBrands[0].label, 'PLN Nontaglis');
+assert.equal(nontaglisBrands[0].boundSkuCode, 'post733504');
+assert.equal(nontaglisBrands[0].isAmbiguous, false);
+assert.equal(Object.prototype.hasOwnProperty.call(nontaglisBrands[0], 'price'), false);
+
+const nontaglisResolve = resolveTagihanBrandSelection(nontaglisBrands[0]);
+assert.equal(nontaglisResolve.ok, true);
+if (nontaglisResolve.ok) assert.equal(nontaglisResolve.product.code, 'post733504');
+
+// Duplicate PLN Nontaglis display name → fail-closed
+const nontaglisDup = groupTagihanBrandsByProductName([
+  stubProduct('post733504', 'PLN Nontaglis', {
+    category: 'pln-nontaglis',
+    operatorName: 'PLN NONTAGLIS',
+  }),
+  stubProduct('post999993', '  PLN Nontaglis  ', {
+    category: 'pln-nontaglis',
+    operatorName: 'PLN NONTAGLIS',
+  }),
+]);
+assert.equal(nontaglisDup.length, 1);
+assert.equal(nontaglisDup[0].isAmbiguous, true);
+assert.equal(nontaglisDup[0].boundSkuCode, null);
+const nontaglisAmb = resolveTagihanBrandSelection(nontaglisDup[0]);
+assert.equal(nontaglisAmb.ok, false);
+if (!nontaglisAmb.ok) assert.equal(nontaglisAmb.reason, 'ambiguous');
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');
