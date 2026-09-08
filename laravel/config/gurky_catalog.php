@@ -35,6 +35,7 @@ return [
             'children' => [
                 'pln' => ['label' => 'Token PLN', 'path' => '/dashboard/token-pln'],
                 'pln-pascabayar' => ['label' => 'PLN Pascabayar', 'path' => '/dashboard/tagihan/pln-pascabayar'],
+                'pln-nontaglis' => ['label' => 'PLN Nontaglis', 'path' => '/dashboard/tagihan/pln-nontaglis'],
                 'pdam' => ['label' => 'PDAM', 'path' => '/dashboard/tagihan/pdam'],
                 'bpjs' => ['label' => 'BPJS', 'path' => '/dashboard/tagihan/bpjs'],
                 'internet-pascabayar' => ['label' => 'Internet Pascabayar', 'path' => '/dashboard/tagihan/internet'],
@@ -95,6 +96,7 @@ return [
 
         'pln' => ['name' => 'Token PLN', 'hub' => 'pembayaran-tagihan'],
         'pln-pascabayar' => ['name' => 'PLN Pascabayar', 'hub' => 'pembayaran-tagihan'],
+        'pln-nontaglis' => ['name' => 'PLN Nontaglis', 'hub' => 'pembayaran-tagihan'],
         'pdam' => ['name' => 'PDAM', 'hub' => 'pembayaran-tagihan'],
         'bpjs-kesehatan' => ['name' => 'BPJS Kesehatan', 'hub' => 'pembayaran-tagihan'],
         'bpjs-tk' => ['name' => 'BPJS Ketenagakerjaan', 'hub' => 'pembayaran-tagihan'],
@@ -347,6 +349,7 @@ return [
         'pbb' => 'pbb',
         'gas negara' => 'gas',
         'hp pascabayar' => 'hp-pascabayar',
+        'pln nontaglis' => 'pln-nontaglis',
     ],
 
     /*
@@ -394,6 +397,7 @@ return [
 
         'pln' => ['pln', 'token-pln', 'token_pln', 'listrik'],
         'pln-pascabayar' => ['pln-pascabayar', 'pln_pascabayar'],
+        'pln-nontaglis' => ['pln-nontaglis', 'pln_nontaglis', 'nontaglis'],
         'pdam' => ['pdam'],
         'bpjs-kesehatan' => ['bpjs-kesehatan', 'bpjs-kes'],
         'bpjs' => ['bpjs-kesehatan', 'bpjs-tk', 'bpjs-kes'],
@@ -406,7 +410,7 @@ return [
         'pbb' => ['pbb'],
         'samsat' => ['samsat'],
         'multifinance' => ['multifinance', 'angsuran-kredit'],
-        'tagihan' => ['tagihan', 'pascabayar', 'pdam', 'bpjs', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'pbb', 'samsat', 'multifinance', 'pln-pascabayar', 'hp-pascabayar'],
+        'tagihan' => ['tagihan', 'pascabayar', 'pdam', 'bpjs', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'pbb', 'samsat', 'multifinance', 'pln-pascabayar', 'pln-nontaglis', 'hp-pascabayar'],
 
         'topup-digital' => ['topup-digital', 'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money'],
         'ewallet' => ['topup-digital', 'ewallet', 'e-wallet', 'saldo-emoney', 'emoney', 'e-money'],

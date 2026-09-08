@@ -127,6 +127,13 @@ return [
             'mobile_purchase' => true,
             'web_purchase' => true,
         ],
+        'pln-nontaglis' => [
+            'mode' => 'POSTPAID_INQUIRY_PAYMENT',
+            'target_schema' => 'CUSTOMER_NO',
+            'mobile_purchase' => true,
+            'web_purchase' => true,
+            'notes' => 'Digi brand PLN NONTAGLIS — same inq-pasca + pay-pasca as other tagihan',
+        ],
         'topup-digital' => [
             'mode' => 'POSTPAID_INQUIRY_PAYMENT',
             'target_schema' => 'PHONE',

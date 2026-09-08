@@ -249,6 +249,40 @@ class ProductMappingServiceTest extends TestCase
         $this->assertSame('PLN Pascabayar', $m['name']);
     }
 
+    public function test_pln_nontaglis_maps_to_pln_nontaglis_not_pascabayar(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Pascabayar', 'PLN NONTAGLIS', 'PLN Nontaglis', false, 'pasca');
+        $this->assertSame('pln-nontaglis', $m['slug']);
+        $this->assertSame('PLN Nontaglis', $m['name']);
+        $this->assertSame('pln_nontaglis_brand', $m['source']);
+    }
+
+    public function test_post733504_evidence_maps_to_pln_nontaglis(): void
+    {
+        $svc = app(ProductMappingService::class);
+        // Production Digi evidence: buyer_sku_code post733504
+        $m = $svc->map('digiflazz', 'Pascabayar', 'PLN NONTAGLIS', 'PLN Nontaglis', false, 'pasca');
+        $this->assertSame('pln-nontaglis', $m['slug']);
+    }
+
+    public function test_ordinary_pln_pasca_not_moved_to_nontaglis(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $this->assertSame(
+            'pln-pascabayar',
+            $svc->map('digiflazz', 'Pascabayar', 'PLN', 'Tagihan Listrik', false, 'pasca')['slug']
+        );
+        $this->assertSame(
+            'pln-pascabayar',
+            $svc->map('digiflazz', 'Pascabayar', 'PLN PASCABAYAR', 'PLN Pascabayar', false, 'pasca')['slug']
+        );
+        $this->assertNotSame(
+            'pln-nontaglis',
+            $svc->map('digiflazz', 'Pascabayar', 'PLN', 'Tagihan Listrik', false, 'pasca')['slug']
+        );
+    }
+
     public function test_aktivasi_voucher_maps_to_voucher_internet(): void
     {
         $svc = app(ProductMappingService::class);

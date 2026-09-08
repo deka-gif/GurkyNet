@@ -107,8 +107,12 @@ class ProductMappingService
     }
 
     /**
-     * Split Digiflazz Token PLN (`pln`) vs PLN Pascabayar (`pln-pascabayar`).
+     * Split Digiflazz Token PLN (`pln`) vs PLN Pascabayar (`pln-pascabayar`)
+     * vs PLN Nontaglis (`pln-nontaglis`).
      * brand_overrides['pln'] historically forced both into Token PLN.
+     *
+     * Nontaglis is Digi Pascabayar + brand PLN NONTAGLIS — same inq-pasca contract
+     * as other bills, but a distinct customer-facing service (not ordinary PLN bill).
      */
     protected function resolvePlnByListType(
         string $slug,
@@ -124,6 +128,13 @@ class ProductMappingService
         $lt = Str::lower(trim((string) $listType));
         $cat = Str::lower(trim($providerCategory));
         $brandL = Str::lower(trim($brand));
+
+        // Brand evidence first — do not fold Nontaglis into generic PLN Pascabayar.
+        if ($this->isPlnNontaglisBrand($brandL) || $slug === 'pln-nontaglis') {
+            $source = 'pln_nontaglis_brand';
+
+            return 'pln-nontaglis';
+        }
 
         // Primary: Digiflazz price-list cmd stored as digiflazz_products.list_type
         if (in_array($lt, ['pasca', 'pascabayar', 'postpaid'], true)) {
@@ -149,9 +160,16 @@ class ProductMappingService
         return 'pln';
     }
 
+    protected function isPlnNontaglisBrand(string $brandLower): bool
+    {
+        return $brandLower === 'pln nontaglis'
+            || str_starts_with($brandLower, 'pln nontaglis')
+            || str_contains($brandLower, 'nontaglis');
+    }
+
     protected function isPlnElectricityCandidate(string $slug, string $providerCategory, string $brand): bool
     {
-        if (in_array($slug, ['pln', 'pln-pascabayar'], true)) {
+        if (in_array($slug, ['pln', 'pln-pascabayar', 'pln-nontaglis'], true)) {
             return true;
         }
 
@@ -161,11 +179,12 @@ class ProductMappingService
         }
 
         $brandL = Str::lower(trim($brand));
-        // Digi pasca: category=Pascabayar + brand PLN / PLN PASCABAYAR (not PDAM/HP/…)
+        // Digi pasca: category=Pascabayar + brand PLN / PLN PASCABAYAR / PLN NONTAGLIS
         if ($cat === 'pascabayar' && (
             $brandL === 'pln'
             || str_starts_with($brandL, 'pln ')
             || str_contains($brandL, 'pln pascabayar')
+            || $this->isPlnNontaglisBrand($brandL)
         )) {
             return true;
         }
@@ -273,6 +292,7 @@ class ProductMappingService
             'streaming', 'streaming-tv', 'apps', 'aplikasi' => 'langganan-digital',
             'token-pln', 'token_pln' => 'pln',
             'paket-data', 'paket_data' => 'data',
+            'pln-nontaglis', 'pln_nontaglis', 'nontaglis' => 'pln-nontaglis',
             'gas-negara' => 'gas',
             'hp-postpaid', 'pulsa-pascabayar' => 'hp-pascabayar',
             default => null,

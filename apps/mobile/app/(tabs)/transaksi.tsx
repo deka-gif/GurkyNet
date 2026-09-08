@@ -29,6 +29,7 @@ const ICON_BY_SLUG: Record<string, keyof typeof Ionicons.glyphMap> = {
   pln: 'flash-outline',
   'token-pln': 'flash-outline',
   'pln-pascabayar': 'flash-outline',
+  'pln-nontaglis': 'flash-outline',
   pdam: 'water-outline',
   'bpjs-kesehatan': 'medkit-outline',
   'bpjs-tk': 'briefcase-outline',
@@ -114,6 +115,11 @@ export default function TransaksiScreen() {
   const sections = groupCategoriesForCatalog(categories);
 
   const openCategory = (cat: Category) => {
+    // Transfer is GurkyNet-internal wallet P2P — not Digi catalog products.
+    if (cat.slug === 'transfer') {
+      router.push('/transfer');
+      return;
+    }
     router.push({ pathname: '/produk/[slug]', params: { slug: cat.slug, name: cat.name } });
   };
 

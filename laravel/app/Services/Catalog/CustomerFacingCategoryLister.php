@@ -41,6 +41,7 @@ class CustomerFacingCategoryLister
             'esim',
             'pln',
             'pln-pascabayar',
+            'pln-nontaglis',
             'pdam',
             'bpjs-kesehatan',
             'bpjs-tk',

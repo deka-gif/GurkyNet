@@ -43,6 +43,7 @@ export const CUSTOMER_FACING_SLUGS = new Set([
   'esim',
   'pln',
   'pln-pascabayar',
+  'pln-nontaglis',
   'pdam',
   'bpjs-kesehatan',
   'bpjs-tk',
@@ -125,6 +126,7 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
     slugOrder: [
       'pln',
       'pln-pascabayar',
+      'pln-nontaglis',
       'pdam',
       'bpjs-kesehatan',
       'bpjs-tk',
@@ -142,6 +144,7 @@ export const CATALOG_GROUPS: CatalogGroupDef[] = [
       const childMap: Record<string, string> = {
         pln: 'pln',
         'pln-pascabayar': 'pln-pascabayar',
+        'pln-nontaglis': 'pln-pascabayar',
         pdam: 'pdam',
         'bpjs-kesehatan': 'bpjs',
         'bpjs-tk': 'bpjs',

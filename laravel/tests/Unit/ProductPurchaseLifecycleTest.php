@@ -305,6 +305,7 @@ class ProductPurchaseLifecycleTest extends TestCase
         $reg = app(ProductTransactionCapabilityRegistry::class);
         foreach ([
             'pln-pascabayar',
+            'pln-nontaglis',
             'pdam',
             'bpjs-kesehatan',
             'bpjs-tk',

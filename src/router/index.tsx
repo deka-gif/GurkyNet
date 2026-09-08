@@ -693,6 +693,17 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'tagihan/pln-nontaglis',
+        element: (
+          <TagihanSubPage
+            category="pln-nontaglis"
+            title="PLN Nontaglis"
+            subtitle="Bayar PLN Non Tagihan Listrik (Nontaglis) dari katalog Digiflazz."
+            path="/dashboard/tagihan/pln-nontaglis"
+          />
+        ),
+      },
+      {
         path: 'tagihan/pdam',
         element: (
           <TagihanSubPage

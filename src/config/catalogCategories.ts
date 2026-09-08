@@ -76,7 +76,7 @@ export function categoryTone(id: string): CategoryToneStyle {
  *  Marketing Logo Brand admin page to group brands the same way the customer nav is grouped. */
 export const HUB_CATEGORY_SLUGS: Record<string, string[]> = {
   telco: ['pulsa', 'data', 'voucher-internet', 'sms-telepon', 'masa-aktif', 'aktivasi-perdana', 'esim'],
-  tagihan: ['pln', 'pln-pascabayar', 'pdam', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'gas-prepaid', 'pbb', 'samsat', 'multifinance', 'tagihan', 'hp-pascabayar'],
+  tagihan: ['pln', 'pln-pascabayar', 'pln-nontaglis', 'pdam', 'bpjs-kesehatan', 'bpjs-tk', 'internet-pascabayar', 'tv-pascabayar', 'gas', 'gas-prepaid', 'pbb', 'samsat', 'multifinance', 'tagihan', 'hp-pascabayar'],
   'topup-digital': ['topup-digital'],
   game: ['game'],
   voucher: ['voucher-digital'],
@@ -115,6 +115,7 @@ export const DASHBOARD_SERVICE_CATEGORIES: DashboardServiceCategory[] = [
     hubChildren: [
       { key: 'pln', label: 'Token PLN', path: '/dashboard/token-pln', productCategory: 'pln', icon: Zap },
       { key: 'pln-pascabayar', label: 'PLN Pascabayar', path: '/dashboard/tagihan/pln-pascabayar', icon: Zap },
+      { key: 'pln-nontaglis', label: 'PLN Nontaglis', path: '/dashboard/tagihan/pln-nontaglis', icon: Zap },
       { key: 'pdam', label: 'PDAM', path: '/dashboard/tagihan/pdam', icon: Droplets },
       { key: 'bpjs', label: 'BPJS', path: '/dashboard/tagihan/bpjs', icon: Heart },
       { key: 'internet', label: 'Internet', path: '/dashboard/tagihan/internet', icon: Wifi },

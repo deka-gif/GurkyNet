@@ -50,6 +50,7 @@ const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
 /** Postpaid / bill categories — TagihanBillCatalogFlow (inquiry_ref_id). */
 const TAGIHAN_BILL_SLUGS = new Set([
   'pln-pascabayar',
+  'pln-nontaglis',
   'pdam',
   'bpjs-kesehatan',
   'bpjs-tk',
@@ -68,6 +69,7 @@ const TAGIHAN_BILL_SLUGS = new Set([
 /** Categories that previously blocked purchase without a dedicated Mobile flow. */
 const INQUIRY_REQUIRED_SLUGS = new Set([
   'pln-pascabayar',
+  'pln-nontaglis',
   'topup-digital',
   'ewallet',
   'e-money',

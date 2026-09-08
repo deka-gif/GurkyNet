@@ -18,6 +18,7 @@ return [
         'children' => [
             'pln' => 'Token PLN',
             'pln-pascabayar' => 'PLN Pascabayar',
+            'pln-nontaglis' => 'PLN Nontaglis',
             'pdam' => 'PDAM',
             'bpjs' => 'BPJS',
             'internet' => 'Internet Pascabayar',

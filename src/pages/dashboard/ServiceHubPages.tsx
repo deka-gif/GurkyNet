@@ -48,6 +48,7 @@ export const TagihanHubPage = () => (
     children={[
       { key: 'pln', label: 'Token PLN', description: 'Token listrik prabayar', path: '/dashboard/token-pln', icon: Zap },
       { key: 'pln-pascabayar', label: 'PLN Pascabayar', description: 'Tagihan listrik pasca', path: '/dashboard/tagihan/pln-pascabayar', icon: Zap },
+      { key: 'pln-nontaglis', label: 'PLN Nontaglis', description: 'PLN Non Tagihan Listrik', path: '/dashboard/tagihan/pln-nontaglis', icon: Zap },
       { key: 'pdam', label: 'PDAM', description: 'Tagihan air', path: '/dashboard/tagihan/pdam', icon: Droplets },
       { key: 'bpjs', label: 'BPJS', description: 'BPJS Kesehatan & Ketenagakerjaan', path: '/dashboard/tagihan/bpjs', icon: Heart },
       { key: 'internet', label: 'Internet Pascabayar', description: 'IndiHome & sejenis', path: '/dashboard/tagihan/internet', icon: Wifi },
