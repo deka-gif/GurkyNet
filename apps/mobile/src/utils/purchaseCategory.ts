@@ -53,7 +53,7 @@ const INQUIRY_REQUIRED_SLUGS = new Set([
   'topup-digital',
   'ewallet',
   'e-money',
-  // Game — still inquiry-required; purchase only via GameCatalogFlow + valid gameContext
+  // Game — Digi schema + GameCatalogFlow (VIP nickname optional, not a purchase gate)
   'game',
   // Streaming / langganan — schema-aware LanggananCatalogFlow (not generic checkout)
   'langganan-digital',

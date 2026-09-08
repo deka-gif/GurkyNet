@@ -83,6 +83,16 @@ class GameDigiflazzHintReader
             ];
         }
 
+        // Digi Garena Shell: "Tujuan = ID garena"
+        if (preg_match('/\bid\s*garena\b/u', $hay) || preg_match('/garena\s*id\b/u', $hay)) {
+            return [
+                'delivery' => 'account',
+                'fields' => [
+                    ['key' => 'garena_id', 'label' => 'Garena ID', 'required' => true],
+                ],
+            ];
+        }
+
         return null;
     }
 }

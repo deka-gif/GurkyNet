@@ -42,10 +42,15 @@ class GameTopUpFlowTest extends TestCase
             'services.vip.signature' => '',
         ]);
 
-        ProductProvider::digiflazz()?->update([
+        $digi = ProductProvider::digiflazz() ?? ProductProvider::create([
+            'code' => 'digiflazz',
+            'name' => 'Digiflazz',
             'is_active' => true,
-            'api_status' => 'online',
+            'priority' => 1,
+            'sort_order' => 1,
         ]);
+        $digi->update(['is_active' => true, 'api_status' => 'online']);
+
         ProductProvider::vip()?->update([
             'is_active' => true,
             'api_status' => 'online',
@@ -78,15 +83,29 @@ class GameTopUpFlowTest extends TestCase
             'is_active' => true,
         ]);
 
+        // Production-proven Digi ML diamond SKU (user_id|zone_id).
         $this->product = Product::create([
             'product_category_id' => $category->id,
             'provider_id' => $provider->id,
-            'sku_code' => 'MLBB50',
-            'name' => '50 Diamonds',
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'pre33639301',
+            'name' => 'MOBILELEGEND - 3 Diamond',
             'base_price' => 12000,
             'sell_price' => 12500,
             'admin_fee' => 0,
             'status' => true,
+            'ops_status' => 'active',
+        ]);
+
+        \App\Models\ProductProviderSku::create([
+            'product_id' => $this->product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'pre33639301',
+            'provider_name' => 'MOBILELEGEND - 3 Diamond',
+            'base_price' => 12000,
+            'provider_price' => 12000,
+            'provider_status' => 'available',
+            'is_active' => true,
         ]);
     }
 
@@ -148,7 +167,7 @@ class GameTopUpFlowTest extends TestCase
         Sanctum::actingAs($this->user);
 
         $response = $this->postJson('/api/v1/game/inquiry', [
-            'sku_code' => 'MLBB50',
+            'sku_code' => 'pre33639301',
             'account' => [
                 'user_id' => '12345678',
                 'zone_id' => '1234',
@@ -162,7 +181,7 @@ class GameTopUpFlowTest extends TestCase
             ->assertJsonPath('data.zone_id', '1234')
             ->assertJsonPath('data.customer_no', '12345678|1234')
             ->assertJsonPath('data.found', true)
-            ->assertJsonPath('data.item', '50 Diamonds');
+            ->assertJsonPath('data.item', 'MOBILELEGEND - 3 Diamond');
 
         Http::assertSent(function ($request) {
             $url = $request->url();
@@ -189,20 +208,23 @@ class GameTopUpFlowTest extends TestCase
         Sanctum::actingAs($this->user);
         $before = (float) $this->wallet->fresh()->balance;
 
+        // VIP lookup miss is optional — Digi purchase path still gets customer_no.
         $response = $this->postJson('/api/v1/game/inquiry', [
-            'sku_code' => 'MLBB50',
+            'sku_code' => 'pre33639301',
             'account' => [
                 'user_id' => '00000000',
                 'zone_id' => '0000',
             ],
         ]);
 
-        $response->assertStatus(422)
-            ->assertJsonPath('data.found', false);
+        $response->assertOk()
+            ->assertJsonPath('data.found', false)
+            ->assertJsonPath('data.customer_no', '00000000|0000')
+            ->assertJsonPath('data.nickname', null);
         $this->assertSame($before, (float) $this->wallet->fresh()->balance);
     }
 
-    public function test_game_purchase_requires_prior_inquiry_and_stores_nickname(): void
+    public function test_game_purchase_with_optional_nickname_stores_meta(): void
     {
         Http::fake([
             'vip-reseller.co.id/api/game-feature' => Http::response([
@@ -214,7 +236,7 @@ class GameTopUpFlowTest extends TestCase
                 'data' => [
                     'ref_id' => 'GNGGAME001',
                     'customer_no' => '12345678|1234',
-                    'buyer_sku_code' => 'MLBB50',
+                    'buyer_sku_code' => 'pre33639301',
                     'message' => 'Transaksi Sukses',
                     'status' => 'Sukses',
                     'rc' => '00',
@@ -227,7 +249,7 @@ class GameTopUpFlowTest extends TestCase
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/v1/game/inquiry', [
-            'sku_code' => 'MLBB50',
+            'sku_code' => 'pre33639301',
             'account' => [
                 'user_id' => '12345678',
                 'zone_id' => '1234',
@@ -239,7 +261,7 @@ class GameTopUpFlowTest extends TestCase
         $create = resolve(CreateTransactionAction::class);
         $transaction = $create->execute(
             $this->user,
-            'MLBB50',
+            'pre33639301',
             '12345678|1234',
             '123456'
         );
@@ -268,18 +290,133 @@ class GameTopUpFlowTest extends TestCase
             ->assertJsonPath('data.transaction_details.serial_number', '81723918239123');
     }
 
-    public function test_game_purchase_without_inquiry_is_rejected(): void
+    public function test_digi_game_purchase_without_vip_session_succeeds(): void
     {
-        Sanctum::actingAs($this->user);
-        $before = (float) $this->wallet->fresh()->balance;
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNGDIGI001',
+                    'customer_no' => '11112222|3333',
+                    'buyer_sku_code' => 'pre33639301',
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'sn' => 'SN-DIGI-ML',
+                    'price' => 12000,
+                ],
+            ], 200),
+        ]);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        Sanctum::actingAs($this->user);
+        Queue::fake();
 
         $create = resolve(CreateTransactionAction::class);
-        try {
-            $create->execute($this->user, 'MLBB50', '12345678|1234', '123456');
-        } finally {
-            $this->assertSame($before, (float) $this->wallet->fresh()->balance);
-        }
+        $transaction = $create->execute(
+            $this->user,
+            'pre33639301',
+            '11112222|3333',
+            '123456'
+        );
+
+        $meta = $transaction->items->first()?->custom_metadata ?? [];
+        $this->assertTrue(! empty($meta['is_game']));
+        $this->assertSame('11112222', $meta['user_id'] ?? null);
+        $this->assertSame('3333', $meta['zone_id'] ?? null);
+        $this->assertTrue(empty($meta['nickname']));
+        $this->assertNull($meta['game_inquiry_ref_id'] ?? null);
+
+        $job = new ProcessProductProviderTransaction($transaction->id);
+        app()->call([$job, 'handle']);
+        $this->assertEquals('success', $transaction->fresh()->status);
+    }
+
+    public function test_fc_mobile_and_garena_schema_from_sku_evidence(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $fc = $this->getJson('/api/v1/game/account-schema?brand=FC%20Mobile&sku=pre33639303');
+        $fc->assertOk()
+            ->assertJsonPath('data.delivery', 'account');
+        $this->assertSame(['user_id'], collect($fc->json('data.fields'))->pluck('key')->all());
+
+        $garena = $this->getJson('/api/v1/game/account-schema?brand=GARENA&sku=pre33817227');
+        $garena->assertOk()
+            ->assertJsonPath('data.delivery', 'account');
+        $this->assertSame(['garena_id'], collect($garena->json('data.fields'))->pluck('key')->all());
+
+        $ff = $this->getJson('/api/v1/game/account-schema?brand=FREE%20FIRE&sku=ff50');
+        $ff->assertOk()
+            ->assertJsonPath('data.delivery', 'account')
+            ->assertJsonPath('data.schema_key', 'PLAYER_ID');
+        $this->assertSame(['player_id'], collect($ff->json('data.fields'))->pluck('key')->all());
+    }
+
+    public function test_free_fire_player_id_purchase_without_vip_session(): void
+    {
+        $digi = ProductProvider::digiflazz();
+        $category = ProductCategory::query()->where('slug', 'game')->firstOrFail();
+        $ffBrand = Provider::create([
+            'name' => 'Free Fire',
+            'logo' => null,
+            'is_active' => true,
+        ]);
+        $ffProduct = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $ffBrand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'ff50',
+            'name' => 'Free Fire 50 Diamond',
+            'base_price' => 7000,
+            'sell_price' => 7500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        \App\Models\ProductProviderSku::create([
+            'product_id' => $ffProduct->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'ff50',
+            'provider_name' => 'Free Fire 50 Diamond',
+            'base_price' => 7000,
+            'provider_price' => 7000,
+            'provider_status' => 'available',
+            'is_active' => true,
+        ]);
+
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNGDIGIFF001',
+                    'customer_no' => '987654321',
+                    'buyer_sku_code' => 'ff50',
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'sn' => 'SN-DIGI-FF',
+                    'price' => 7000,
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+        Queue::fake();
+
+        $create = resolve(CreateTransactionAction::class);
+        $transaction = $create->execute(
+            $this->user,
+            'ff50',
+            '987654321',
+            '123456'
+        );
+
+        $meta = $transaction->items->first()?->custom_metadata ?? [];
+        $this->assertTrue(! empty($meta['is_game']));
+        $this->assertSame('987654321', $meta['user_id'] ?? null);
+        $this->assertTrue(empty($meta['nickname']));
+        $this->assertNull($meta['game_inquiry_ref_id'] ?? null);
+
+        $job = new ProcessProductProviderTransaction($transaction->id);
+        app()->call([$job, 'handle']);
+        $this->assertEquals('success', $transaction->fresh()->status);
     }
 }
