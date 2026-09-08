@@ -174,7 +174,16 @@ export default function ProductListScreen() {
       ) : isPbbFlow ? (
         <PajakPbbCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isTagihanFlow ? (
-        <TagihanBillCatalogFlow category={normalized} purchaseBanner={purchaseBanner} />
+        <TagihanBillCatalogFlow
+          category={normalized}
+          purchaseBanner={purchaseBanner}
+          {...(normalized === 'bpjs-kesehatan'
+            ? {
+                targetLabel: 'Nomor Kartu Peserta',
+                targetPlaceholder: 'Masukkan nomor kartu peserta',
+              }
+            : {})}
+        />
       ) : isEwalletFlow ? (
         <View style={styles.ewalletBlock}>
           {purchaseBanner ? (

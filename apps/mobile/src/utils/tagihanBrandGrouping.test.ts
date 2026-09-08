@@ -1,5 +1,5 @@
 /**
- * Slice 1–4 — Tagihan brand grouping (TV + PDAM + Internet + Multifinance evidence).
+ * Slice 1–5 — Tagihan brand grouping (TV + PDAM + Internet + Multifinance + BPJS Kesehatan).
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
@@ -242,5 +242,42 @@ assert.equal(mfDup[0].boundSkuCode, null);
 const mfAmb = resolveTagihanBrandSelection(mfDup[0]);
 assert.equal(mfAmb.ok, false);
 if (!mfAmb.ok) assert.equal(mfAmb.reason, 'ambiguous');
+
+// --- BPJS Kesehatan production fixture (test-only; not hardcoded in UI) ---
+const productionBpjsKes = [
+  stubProduct('post733487', 'Bpjs Kesehatan', {
+    category: 'bpjs-kesehatan',
+    operatorName: 'BPJS Kesehatan',
+  }),
+];
+
+const bpjsKesBrands = groupTagihanBrandsByProductName(productionBpjsKes);
+assert.equal(bpjsKesBrands.length, 1, 'expected 1 BPJS Kesehatan brand tile');
+assert.equal(bpjsKesBrands[0].label, 'Bpjs Kesehatan');
+assert.equal(bpjsKesBrands[0].boundSkuCode, 'post733487');
+assert.equal(bpjsKesBrands[0].isAmbiguous, false);
+assert.equal(Object.prototype.hasOwnProperty.call(bpjsKesBrands[0], 'price'), false);
+
+const bpjsKesResolve = resolveTagihanBrandSelection(bpjsKesBrands[0]);
+assert.equal(bpjsKesResolve.ok, true);
+if (bpjsKesResolve.ok) assert.equal(bpjsKesResolve.product.code, 'post733487');
+
+// Duplicate BPJS Kesehatan display name → fail-closed
+const bpjsKesDup = groupTagihanBrandsByProductName([
+  stubProduct('post733487', 'Bpjs Kesehatan', {
+    category: 'bpjs-kesehatan',
+    operatorName: 'BPJS Kesehatan',
+  }),
+  stubProduct('post999995', '  Bpjs Kesehatan  ', {
+    category: 'bpjs-kesehatan',
+    operatorName: 'BPJS Kesehatan',
+  }),
+]);
+assert.equal(bpjsKesDup.length, 1);
+assert.equal(bpjsKesDup[0].isAmbiguous, true);
+assert.equal(bpjsKesDup[0].boundSkuCode, null);
+const bpjsKesAmb = resolveTagihanBrandSelection(bpjsKesDup[0]);
+assert.equal(bpjsKesAmb.ok, false);
+if (!bpjsKesAmb.ok) assert.equal(bpjsKesAmb.reason, 'ambiguous');
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');

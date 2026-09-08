@@ -29,7 +29,8 @@ import { parseApiError } from '../../api/client';
  * Mobile postpaid bill flow — mirrors Web BillPaymentFlow.
  *
  * Brand-first (product.name tiles, no catalog price): `tv-pascabayar` (Slice 1), `pdam` (Slice 2),
- * `internet-pascabayar` (Slice 3), `multifinance` (Slice 4). Other Tagihan keep product-grid-first until later slices.
+ * `internet-pascabayar` (Slice 3), `multifinance` (Slice 4), `bpjs-kesehatan` (Slice 5).
+ * Other Tagihan keep product-grid-first until later slices. PBB uses dedicated PajakPbbCatalogFlow.
  *
  * Brand-first navigation: header/hardware back steps brand list ↔ identifier ↔ review
  * (same beforeRemove pattern as ProviderCatalogBrowseFlow). No body "Ganti produk".
@@ -48,12 +49,13 @@ type Props = {
 
 type Step = 'products' | 'input' | 'review';
 
-/** Brand-first Tagihan slugs — Slice 1 TV, 2 PDAM, 3 Internet, 4 Multifinance. */
+/** Brand-first Tagihan slugs — TV, PDAM, Internet, Multifinance, BPJS Kesehatan. */
 const BRAND_FIRST_CATEGORIES = new Set([
   'tv-pascabayar',
   'pdam',
   'internet-pascabayar',
   'multifinance',
+  'bpjs-kesehatan',
 ]);
 
 export function TagihanBillCatalogFlow({
