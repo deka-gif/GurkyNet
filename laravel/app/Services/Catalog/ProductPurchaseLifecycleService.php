@@ -119,6 +119,18 @@ class ProductPurchaseLifecycleService
 
             if (in_array($slug, ['langganan-digital', 'langganan', 'streaming'], true)) {
                 $brand = trim((string) ($product->provider?->name ?? ''));
+
+                if ($this->langgananSchemas->isNonPurchaseSku($product->sku_code)) {
+                    return [
+                        'stage' => self::STAGE_NOT_PURCHASABLE,
+                        'purchasable' => false,
+                        'catalog_visible' => false,
+                        'reason' => LanggananAccountResolver::REASON_NON_PURCHASE,
+                        'capability' => $capability,
+                        'account_schema' => $this->langgananSchemas->resolveForProduct($brand, $product->sku_code),
+                    ];
+                }
+
                 $resolved = $this->langgananSchemas->resolveForProduct($brand, $product->sku_code);
                 $accountSchema = $resolved;
 

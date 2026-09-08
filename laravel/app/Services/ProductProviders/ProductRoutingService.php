@@ -60,27 +60,35 @@ class ProductRoutingService
             ]);
         }
 
-        // Backward-compatible Digiflazz synthetic offer when no mapping rows yet
+        // Backward-compatible Digiflazz synthetic offer when no Control Center mapping rows exist yet.
+        // Do NOT synthesize when mappings exist but are all inactive — Ops intentionally disabled them
+        // (e.g. Digi seller=0 / product_provider_skus.is_active=0). Synthetic would revive dead SKUs.
         if ($offers->isEmpty()) {
-            $digi = ProductProvider::digiflazz();
-            if ($digi && $digi->is_active && $this->registry->has($digi->code)) {
-                $synthetic = new ProductProviderSku([
-                    'product_id' => $product->id,
-                    'product_provider_id' => $digi->id,
-                    'provider_sku' => $product->sku_code,
-                    'base_price' => $product->base_price,
-                    'is_preferred' => true,
-                    'is_active' => true,
-                ]);
-                $synthetic->setRelation('productProvider', $digi);
-                $offers = collect([$synthetic]);
+            $hasMappedRows = ProductProviderSku::query()
+                ->whereIn('product_id', $productIds)
+                ->exists();
 
-                if ($this->routingTraceEnabled()) {
-                    Log::info('PRODUCT ROUTING — synthetic Digiflazz offer', [
-                        'transaction_id' => $transactionId,
+            if (! $hasMappedRows) {
+                $digi = ProductProvider::digiflazz();
+                if ($digi && $digi->is_active && $this->registry->has($digi->code)) {
+                    $synthetic = new ProductProviderSku([
                         'product_id' => $product->id,
+                        'product_provider_id' => $digi->id,
                         'provider_sku' => $product->sku_code,
+                        'base_price' => $product->base_price,
+                        'is_preferred' => true,
+                        'is_active' => true,
                     ]);
+                    $synthetic->setRelation('productProvider', $digi);
+                    $offers = collect([$synthetic]);
+
+                    if ($this->routingTraceEnabled()) {
+                        Log::info('PRODUCT ROUTING — synthetic Digiflazz offer', [
+                            'transaction_id' => $transactionId,
+                            'product_id' => $product->id,
+                            'provider_sku' => $product->sku_code,
+                        ]);
+                    }
                 }
             }
         }

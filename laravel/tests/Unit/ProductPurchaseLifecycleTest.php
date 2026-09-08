@@ -329,4 +329,126 @@ class ProductPurchaseLifecycleTest extends TestCase
             $this->assertTrue($cap['web_purchase'], $slug);
         }
     }
+
+    public function test_inactive_control_center_mapping_is_not_purchasable(): void
+    {
+        $digi = ProductProvider::digiflazz() ?? ProductProvider::create([
+            'code' => 'digiflazz',
+            'name' => 'Digiflazz',
+            'is_active' => true,
+            'priority' => 1,
+            'sort_order' => 1,
+        ]);
+        $digi->update(['is_active' => true, 'api_status' => 'online']);
+
+        $category = ProductCategory::create(['name' => 'Gas Negara', 'slug' => 'gas', 'icon' => 'g']);
+        $brand = Provider::create(['name' => 'GAS NEGARA', 'is_active' => true]);
+
+        $active = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'post733494-test',
+            'name' => 'Gas Negara',
+            'base_price' => 0,
+            'sell_price' => 1500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $active->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'post733494-test',
+            'provider_name' => 'Gas Negara',
+            'base_price' => 0,
+            'provider_price' => 0,
+            'provider_status' => 'available',
+            'is_active' => true,
+            'is_preferred' => true,
+        ]);
+
+        $inactive = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'post733495-test',
+            'name' => 'Pertagas',
+            'base_price' => 0,
+            'sell_price' => 1500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $inactive->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'post733495-test',
+            'provider_name' => 'Pertagas',
+            'base_price' => 0,
+            'provider_price' => 0,
+            'provider_status' => 'available',
+            'is_active' => false,
+            'is_preferred' => true,
+        ]);
+
+        $life = app(ProductPurchaseLifecycleService::class);
+        $activeEval = $life->evaluate($active->fresh(['providerSkus.productProvider', 'productProvider', 'category', 'provider']));
+        $inactiveEval = $life->evaluate($inactive->fresh(['providerSkus.productProvider', 'productProvider', 'category', 'provider']));
+
+        $this->assertTrue($activeEval['purchasable']);
+        $this->assertSame(ProductPurchaseLifecycleService::STAGE_PURCHASABLE, $activeEval['stage']);
+
+        $this->assertFalse($inactiveEval['purchasable']);
+        $this->assertFalse($inactiveEval['catalog_visible']);
+        $this->assertSame(ProductPurchaseLifecycleService::STAGE_NOT_PURCHASABLE, $inactiveEval['stage']);
+        $this->assertSame('PROVIDER_INACTIVE', $inactiveEval['reason']);
+    }
+
+    public function test_langganan_non_purchase_utility_sku_is_hidden(): void
+    {
+        $digi = ProductProvider::digiflazz() ?? ProductProvider::create([
+            'code' => 'digiflazz',
+            'name' => 'Digiflazz',
+            'is_active' => true,
+            'priority' => 1,
+            'sort_order' => 1,
+        ]);
+        $digi->update(['is_active' => true, 'api_status' => 'online']);
+
+        $category = ProductCategory::create([
+            'name' => 'Langganan Digital',
+            'slug' => 'langganan-digital',
+            'icon' => 'l',
+        ]);
+        $brand = Provider::create(['name' => 'NEX PARABOLA', 'is_active' => true]);
+        $product = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $brand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'pre33821931',
+            'name' => 'Nex Parabola Cek Paket',
+            'base_price' => 0,
+            'sell_price' => 1500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'pre33821931',
+            'provider_name' => 'Nex Parabola Cek Paket',
+            'base_price' => 0,
+            'provider_price' => 0,
+            'provider_status' => 'available',
+            'is_active' => true,
+        ]);
+
+        $life = app(ProductPurchaseLifecycleService::class)->evaluate($product->fresh());
+        $this->assertFalse($life['purchasable']);
+        $this->assertFalse($life['catalog_visible']);
+        $this->assertSame(ProductPurchaseLifecycleService::STAGE_NOT_PURCHASABLE, $life['stage']);
+        $this->assertSame(\App\Services\Langganan\LanggananAccountResolver::REASON_NON_PURCHASE, $life['reason']);
+    }
 }

@@ -173,4 +173,18 @@ class LanggananAccountResolverTest extends TestCase
         $this->assertSame('account', $schema['delivery']);
         $this->assertSame('phone', $schema['fields'][0]['key']);
     }
+
+    public function test_nex_cek_paket_is_non_purchase_utility(): void
+    {
+        $resolver = app(LanggananAccountResolver::class);
+
+        $this->assertTrue($resolver->isNonPurchaseSku('pre33821931'));
+        $schema = $resolver->resolveForProduct('NEX PARABOLA', 'pre33821931');
+        $this->assertSame('unknown', $schema['delivery']);
+        $this->assertSame([], $schema['fields']);
+        $this->assertSame(LanggananAccountResolver::REASON_NON_PURCHASE, $schema['reason']);
+
+        // Sibling Nex purchase SKUs must not inherit the utility flag.
+        $this->assertFalse($resolver->isNonPurchaseSku('pre33821900'));
+    }
 }

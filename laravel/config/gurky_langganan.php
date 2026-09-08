@@ -55,6 +55,16 @@ return [
         ],
     ],
 
+    /**
+     * Digi SKUs that are lookup/utility — not purchase products.
+     * Mirrored after gurky_game.non_purchase_skus (Cek Username).
+     *
+     * @var list<string>
+     */
+    'non_purchase_skus' => [
+        'pre33821931', // Nex Parabola Cek Paket — status-check utility
+    ],
+
     /** VIP provider_sku overrides (empty until verified per-SKU). */
     'vip_sku_schemas' => [],
 

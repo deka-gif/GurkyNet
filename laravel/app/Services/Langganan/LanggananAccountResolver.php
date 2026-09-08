@@ -23,12 +23,48 @@ class LanggananAccountResolver
 
     public const CATALOG_VIP = 'vip';
 
+    public const REASON_NON_PURCHASE = 'NON_PURCHASE';
+
+    /**
+     * Utility / status-check Digi SKUs — never customer-purchasable.
+     */
+    public function isNonPurchaseSku(?string $skuCode): bool
+    {
+        $sku = trim((string) $skuCode);
+        if ($sku === '') {
+            return false;
+        }
+
+        $list = config('gurky_langganan.non_purchase_skus', []);
+        if (! is_array($list)) {
+            return false;
+        }
+
+        foreach ($list as $code) {
+            if (strcasecmp((string) $code, $sku) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @return array{code:string,label:string,delivery:string,fields:list<array{key:string,label:string,required:bool,input:string}>}
      */
     public function resolveForProduct(string $brand, ?string $skuCode = null): array
     {
         $skuRaw = trim((string) $skuCode);
+        if ($skuRaw !== '' && $this->isNonPurchaseSku($skuRaw)) {
+            return [
+                'code' => Str::slug($skuRaw),
+                'label' => trim($brand) !== '' ? trim($brand) : 'Langganan Digital',
+                'delivery' => 'unknown',
+                'fields' => [],
+                'reason' => self::REASON_NON_PURCHASE,
+            ];
+        }
+
         $sku = strtoupper($skuRaw);
         $catalog = $this->detectCatalogSource($skuRaw);
 

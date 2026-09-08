@@ -204,6 +204,38 @@ class CatalogProviderRoutingArchitectureTest extends TestCase
         $this->assertNull($row, 'Products without active provider SKU mapping must not appear in customer catalog');
     }
 
+    public function test_inactive_control_center_mapping_does_not_synthesize_digiflazz_offer(): void
+    {
+        $product = Product::create([
+            'product_category_id' => $this->pulsa->id,
+            'provider_id' => $this->telkomsel->id,
+            'product_provider_id' => $this->digi->id,
+            'sku_code' => 'post733495-arch',
+            'name' => 'Pertagas Arch',
+            'base_price' => 0,
+            'sell_price' => 1500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $product->id,
+            'product_provider_id' => $this->digi->id,
+            'provider_sku' => 'post733495-arch',
+            'base_price' => 0,
+            'is_active' => false,
+            'is_preferred' => true,
+        ]);
+
+        $offers = app(ProductRoutingService::class)->orderedOffersForProduct($product->fresh());
+        $this->assertCount(0, $offers, 'Inactive PPS must not revive via synthetic Digi offer');
+
+        $availability = app(\App\Services\AvailabilityService::class);
+        $this->assertSame('inactive', $availability->getStatus($product->fresh([
+            'providerSkus.productProvider', 'productProvider', 'category', 'provider',
+        ])));
+    }
+
     public function test_customer_transaction_resource_hides_provider_fields(): void
     {
         $tx = Transaction::factory()->create([
