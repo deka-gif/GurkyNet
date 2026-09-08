@@ -18,6 +18,7 @@ import { ProviderCatalogBrowseFlow } from '../../src/components/catalog/Provider
 import { GameCatalogFlow } from '../../src/components/catalog/GameCatalogFlow';
 import { LanggananCatalogFlow } from '../../src/components/catalog/LanggananCatalogFlow';
 import { TagihanBillCatalogFlow } from '../../src/components/catalog/TagihanBillCatalogFlow';
+import { PajakPbbCatalogFlow } from '../../src/components/catalog/PajakPbbCatalogFlow';
 import { ProductCatalogGrid } from '../../src/components/catalog/ProductCatalogGrid';
 import { EwalletBrandList } from '../../src/components/catalog/EwalletBrandList';
 import { useEwalletTransferStore } from '../../src/store/ewalletTransfer.store';
@@ -69,7 +70,8 @@ export default function ProductListScreen() {
   const isPaketDataFlow = normalized === 'data' || normalized === 'paket-data';
   const isPlnFlow = isPlnPrepaidCategory(slug);
   const isVoucherInternetFlow = isVoucherInternetCategory(slug);
-  const isTagihanFlow = isTagihanBillCategory(slug);
+  const isPbbFlow = normalized === 'pbb';
+  const isTagihanFlow = isTagihanBillCategory(slug) && !isPbbFlow;
   const providerBrowseCategory = resolveProviderBrowseCategory(slug);
   const isEwalletFlow = providerBrowseCategory === 'topup-digital';
   const isGameFlow = providerBrowseCategory === 'game' || isGameCategory(slug);
@@ -89,6 +91,7 @@ export default function ProductListScreen() {
     isPaketDataFlow ||
     isPlnFlow ||
     isVoucherInternetFlow ||
+    isPbbFlow ||
     isTagihanFlow ||
     isProviderBrowse ||
     isEwalletFlow ||
@@ -168,6 +171,8 @@ export default function ProductListScreen() {
         <PlnTokenCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isVoucherInternetFlow ? (
         <VoucherInternetHubFlow purchaseBanner={purchaseBanner} />
+      ) : isPbbFlow ? (
+        <PajakPbbCatalogFlow purchaseBanner={purchaseBanner} />
       ) : isTagihanFlow ? (
         <TagihanBillCatalogFlow category={normalized} purchaseBanner={purchaseBanner} />
       ) : isEwalletFlow ? (

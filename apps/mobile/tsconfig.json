@@ -6,7 +6,8 @@
   "exclude": [
     "**/node_modules",
     "**/voucherPhysicalScan.test.ts",
-    "**/tagihanBrandGrouping.test.ts"
+    "**/tagihanBrandGrouping.test.ts",
+    "**/pajakCustomerNo.test.ts"
   ]
 }
 
