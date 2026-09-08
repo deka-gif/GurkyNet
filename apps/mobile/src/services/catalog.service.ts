@@ -66,6 +66,8 @@ export interface ProductFilters {
   data_group?: string;
   telkomsel_group?: string;
   sort?: string;
+  /** Customer surface — backend filters capability.mobile_purchase when set to mobile. */
+  surface?: 'mobile' | 'web';
 }
 
 /**
@@ -109,7 +111,9 @@ export const catalogService = {
 
   /** GET /products — same contract as web productService.getProducts. */
   getProducts: async (filters: ProductFilters): Promise<ApiResponse<Product[]>> => {
-    const response = await apiClient.get<ApiResponse<Product[]>>('/products', { params: filters });
+    const response = await apiClient.get<ApiResponse<Product[]>>('/products', {
+      params: { surface: 'mobile', ...filters },
+    });
     return response.data;
   },
 

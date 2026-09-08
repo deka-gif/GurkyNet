@@ -1,97 +1,223 @@
 <?php
 
 /**
- * Game account / nickname mapping.
+ * Game Account Schema Registry (DigiFlazz purchase SoT).
  *
- * Resolve priority (GameNicknameResolver) — provider-isolated:
- *   sku_schemas (Digi) / vip_sku_schemas (VIP)
- *   → Digiflazz desc (Digi only) / VIP note (VIP only)
- *   → nickname_codes (VIP get-nickname helpers — NOT Digi purchase schema)
- *   → UNKNOWN
+ * Resolve priority (GameAccountSchemaResolver):
+ *   SKU override (with provenance)
+ *   → Game Profile (verified Digi brand default)
+ *   → Verified Digi provider evidence (desc parse)
+ *   → UNKNOWN / NEEDS_REVIEW (not purchasable)
  *
- * Digi products without clear Digi evidence do NOT inherit VIP brand fields.
- * VIP get-nickname is optional UX lookup — never a Digi purchase gate.
- *
- * sku_schemas below: production Digi evidence only (2026-09 VPS audit).
+ * VIP nickname_codes = optional get-nickname helpers ONLY — never Digi purchase schema.
+ * VIP catalog products stay UNKNOWN while VIP fulfillment is OFF.
  */
 return [
     /**
-     * DigiFlazz buyer_sku_code overrides (verified production desc / type).
+     * Reusable schema templates (schema_key → definition).
+     * Extensible — do not treat this list as a closed enum at runtime.
      */
-    'sku_schemas' => [
-        // FC Mobile — Digi desc "Masukkan UID"
-        'pre33639303' => [
+    'schemas' => [
+        'PLAYER_ID' => [
+            'schema_key' => 'PLAYER_ID',
             'delivery' => 'account',
-            'code' => 'fc-mobile',
-            'label' => 'FC Mobile',
+            'fields' => [
+                ['key' => 'player_id', 'label' => 'Player ID', 'required' => true],
+            ],
+            'formatter' => 'single',
+            'primary_key' => 'player_id',
+        ],
+        'UID' => [
+            'schema_key' => 'UID',
+            'delivery' => 'account',
             'fields' => [
                 ['key' => 'user_id', 'label' => 'UID', 'required' => true],
             ],
+            'formatter' => 'single',
+            'primary_key' => 'user_id',
         ],
-        'pre33639304' => [
+        'USER_ID' => [
+            'schema_key' => 'USER_ID',
             'delivery' => 'account',
-            'code' => 'fc-mobile',
-            'label' => 'FC Mobile',
             'fields' => [
-                ['key' => 'user_id', 'label' => 'UID', 'required' => true],
+                ['key' => 'user_id', 'label' => 'User ID', 'required' => true],
             ],
+            'formatter' => 'single',
+            'primary_key' => 'user_id',
         ],
-
-        // Garena Shell — Digi desc "Tujuan = ID garena"
-        'pre33817227' => [
+        'GARENA_ID' => [
+            'schema_key' => 'GARENA_ID',
             'delivery' => 'account',
-            'code' => 'garena',
-            'label' => 'Garena',
             'fields' => [
                 ['key' => 'garena_id', 'label' => 'Garena ID', 'required' => true],
             ],
+            'formatter' => 'single',
+            'primary_key' => 'garena_id',
         ],
-
-        // Mobile Legends diamond — Digi desc "no pelanggan = gabungan antara user_id dan zone_id"
-        'pre33639301' => [
+        'ACCOUNT_ID' => [
+            'schema_key' => 'ACCOUNT_ID',
             'delivery' => 'account',
-            'code' => 'mobile-legends',
-            'label' => 'Mobile Legends',
+            'fields' => [
+                ['key' => 'account_id', 'label' => 'Account ID', 'required' => true],
+            ],
+            'formatter' => 'single',
+            'primary_key' => 'account_id',
+        ],
+        'PHONE' => [
+            'schema_key' => 'PHONE',
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'phone', 'label' => 'Nomor HP', 'required' => true],
+            ],
+            'formatter' => 'single',
+            'primary_key' => 'phone',
+        ],
+        'CUSTOMER_NO' => [
+            'schema_key' => 'CUSTOMER_NO',
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'customer_no', 'label' => 'No. Pelanggan', 'required' => true],
+            ],
+            'formatter' => 'single',
+            'primary_key' => 'customer_no',
+        ],
+        'USER_ID_ZONE_ID' => [
+            'schema_key' => 'USER_ID_ZONE_ID',
+            'delivery' => 'account',
             'fields' => [
                 ['key' => 'user_id', 'label' => 'User ID', 'required' => true],
                 ['key' => 'zone_id', 'label' => 'Zone ID', 'required' => true],
             ],
+            'formatter' => 'pipe',
+            'primary_key' => 'user_id',
+            'secondary_key' => 'zone_id',
         ],
-
-        // Digi active but desc does not prove target format
-        'mlweek' => [
-            'delivery' => 'unknown',
-            'fields' => [],
-        ],
-        'pre33639299' => [
-            'delivery' => 'unknown',
-            'fields' => [],
-        ],
-        'ff12' => [
-            'delivery' => 'unknown',
-            'fields' => [],
-        ],
-        'ff50' => [
-            'delivery' => 'unknown',
-            'fields' => [],
-        ],
-        'ff140' => [
-            'delivery' => 'unknown',
-            'fields' => [],
-        ],
-        'ff355' => [
-            'delivery' => 'unknown',
-            'fields' => [],
-        ],
-        'pre33817245' => [
-            'delivery' => 'unknown',
-            'fields' => [],
+        'USER_ID_SERVER_ID' => [
+            'schema_key' => 'USER_ID_SERVER_ID',
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'user_id', 'label' => 'User ID', 'required' => true],
+                ['key' => 'server_id', 'label' => 'Server ID', 'required' => true],
+            ],
+            'formatter' => 'pipe',
+            'primary_key' => 'user_id',
+            'secondary_key' => 'server_id',
         ],
     ],
 
     /**
-     * Digi SKUs that are lookup/utility rows — not top-up purchase products.
-     * (Production: "Cek Username" style products.)
+     * Digi Game Profiles — brand defaults with provenance.
+     * New Digi SKUs under a profiled brand inherit the profile automatically.
+     */
+    'game_profiles' => [
+        'free-fire' => [
+            'schema_key' => 'PLAYER_ID',
+            'label' => 'Free Fire',
+            'aliases' => ['free fire', 'garena free fire', 'ff', 'freefire'],
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_SELLER_CATALOG',
+                'evidence' => 'No tujuan = player id',
+                'confidence' => 'verified',
+            ],
+        ],
+        'fc-mobile' => [
+            'schema_key' => 'UID',
+            'label' => 'FC Mobile',
+            'aliases' => ['fc mobile', 'fcmobile', 'ea sports fc mobile', 'fifa mobile', 'fifamobile'],
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_DESCRIPTION',
+                'evidence' => 'Masukkan UID',
+                'confidence' => 'verified',
+            ],
+        ],
+        'garena' => [
+            'schema_key' => 'GARENA_ID',
+            'label' => 'Garena',
+            'aliases' => ['garena', 'garena shell', 'voucher garena'],
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_DESCRIPTION',
+                'evidence' => 'Tujuan = ID garena',
+                'confidence' => 'verified',
+            ],
+        ],
+        'mobile-legends' => [
+            'schema_key' => 'USER_ID_ZONE_ID',
+            'label' => 'Mobile Legends',
+            'aliases' => ['mobile legends', 'mobile legend', 'mlbb', 'ml', 'mobilelegends'],
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_PRODUCT_DESCRIPTION',
+                'evidence' => 'no pelanggan = gabungan antara user_id dan zone_id',
+                'confidence' => 'verified',
+            ],
+        ],
+    ],
+
+    /**
+     * Per-SKU overrides — MUST include provenance/evidence.
+     * Specific SKUs beat Game Profile.
+     */
+    'sku_overrides' => [
+        // Explicit Digi production SKUs (same schema as profile; provenance from Digi desc).
+        'pre33639303' => [
+            'schema_key' => 'UID',
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_DESCRIPTION',
+                'evidence' => 'Masukkan UID',
+                'confidence' => 'verified',
+            ],
+        ],
+        'pre33639304' => [
+            'schema_key' => 'UID',
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_DESCRIPTION',
+                'evidence' => 'Masukkan UID',
+                'confidence' => 'verified',
+            ],
+        ],
+        'pre33817227' => [
+            'schema_key' => 'GARENA_ID',
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_DESCRIPTION',
+                'evidence' => 'Tujuan = ID garena',
+                'confidence' => 'verified',
+            ],
+        ],
+        'pre33639301' => [
+            'schema_key' => 'USER_ID_ZONE_ID',
+            'provenance' => [
+                'source' => 'DIGIFLAZZ_PRODUCT_DESCRIPTION',
+                'evidence' => 'no pelanggan = gabungan antara user_id dan zone_id',
+                'confidence' => 'verified',
+            ],
+        ],
+
+        // Digi active but target format not proven — NEEDS_REVIEW / not purchasable.
+        'mlweek' => [
+            'delivery' => 'unknown',
+            'schema_key' => null,
+            'fields' => [],
+            'provenance' => [
+                'source' => 'OWNER_REVIEW',
+                'evidence' => 'desc=- ; account format not proven',
+                'confidence' => 'needs_review',
+            ],
+        ],
+        // pre33817245: Free Fire Digi diamond — inherits game_profiles PLAYER_ID (LIVE SoT).
+        // Do not force UNKNOWN; profile evidence: Digi seller "No tujuan = player id".
+        'pre33639299' => [
+            'delivery' => 'unknown',
+            'schema_key' => null,
+            'fields' => [],
+            'provenance' => [
+                'source' => 'NON_PURCHASE',
+                'evidence' => 'Cek Username utility — not top-up',
+                'confidence' => 'verified',
+            ],
+        ],
+    ],
+
+    /**
+     * Digi SKUs that are lookup/utility — not top-up purchase products.
      *
      * @var list<string>
      */
@@ -100,12 +226,12 @@ return [
         'pre33817254', // PUBG MOBILE Cek Username
     ],
 
-    /** VIP provider_sku / VIP-{code} overrides (empty until verified per-SKU). */
+    /** VIP provider_sku overrides (empty — VIP purchase schema OFF). */
     'vip_sku_schemas' => [],
 
     /**
      * Explicit VIP get-nickname brand mapping (optional UX lookup only).
-     * Never applied as Digi purchase schema when Digi evidence is missing.
+     * Never applied as Digi purchase schema.
      */
     'nickname_codes' => [
         'mobile-legends' => [
@@ -249,4 +375,9 @@ return [
      * @deprecated Unused — unknown brands return delivery=unknown (fail-closed).
      */
     'default_fields' => [],
+
+    /**
+     * @deprecated Use sku_overrides. Kept empty for backward-compatible config reads.
+     */
+    'sku_schemas' => [],
 ];

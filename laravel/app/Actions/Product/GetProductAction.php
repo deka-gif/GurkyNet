@@ -23,7 +23,21 @@ class GetProductAction
 
     public function executeBySku(string $skuCode): ?Product
     {
-        return $this->productRepository->findBySku($skuCode);
+        $product = $this->productRepository->findBySku($skuCode);
+        if (! $product) {
+            return null;
+        }
+
+        // Customer-facing product detail: same PURCHASABLE SoT as GET /products (no dead-end).
+        $life = app(\App\Services\Catalog\ProductPurchaseLifecycleService::class)->evaluate($product);
+        if (! ($life['purchasable'] ?? false)
+            || ! ($life['catalog_visible'] ?? false)
+            || ($life['stage'] ?? null) !== \App\Services\Catalog\ProductPurchaseLifecycleService::STAGE_PURCHASABLE
+        ) {
+            return null;
+        }
+
+        return $product;
     }
 
     public function getActiveProducts(): \Illuminate\Database\Eloquent\Collection

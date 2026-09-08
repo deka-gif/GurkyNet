@@ -60,14 +60,16 @@ class LanggananCatalogMergeTest extends TestCase
         $this->tiktok = Provider::create(['name' => 'TikTok', 'logo' => null, 'is_active' => true]);
     }
 
-    public function test_duplicate_steam_myr5_merged_to_digiflazz_card(): void
+    public function test_duplicate_vidio_merged_to_digiflazz_card_in_customer_catalog(): void
     {
+        $vidio = Provider::create(['name' => 'Vidio', 'logo' => null, 'is_active' => true]);
+
         $digiProduct = Product::create([
             'product_category_id' => $this->category->id,
-            'provider_id' => $this->steam->id,
+            'provider_id' => $vidio->id,
             'product_provider_id' => $this->digi->id,
-            'sku_code' => 'STEAMMYR5',
-            'name' => 'Steam Wallet MYR 5',
+            'sku_code' => 'VIDIO30',
+            'name' => 'Vidio 30 Hari',
             'base_price' => 20000,
             'sell_price' => 22513,
             'admin_fee' => 0,
@@ -77,7 +79,7 @@ class LanggananCatalogMergeTest extends TestCase
         ProductProviderSku::create([
             'product_id' => $digiProduct->id,
             'product_provider_id' => $this->digi->id,
-            'provider_sku' => 'STEAMMYR5',
+            'provider_sku' => 'VIDIO30',
             'base_price' => 20000,
             'is_preferred' => true,
             'is_active' => true,
@@ -85,10 +87,10 @@ class LanggananCatalogMergeTest extends TestCase
 
         $vipProduct = Product::create([
             'product_category_id' => $this->category->id,
-            'provider_id' => $this->steam->id,
+            'provider_id' => $vidio->id,
             'product_provider_id' => $this->vip->id,
-            'sku_code' => 'VIP-STEAMMYR5',
-            'name' => 'Steam Wallet Code MYR 5',
+            'sku_code' => 'VIP-VIDIO30',
+            'name' => 'Vidio Premium 30 Hari',
             'base_price' => 21000,
             'sell_price' => 23000,
             'admin_fee' => 0,
@@ -98,7 +100,7 @@ class LanggananCatalogMergeTest extends TestCase
         ProductProviderSku::create([
             'product_id' => $vipProduct->id,
             'product_provider_id' => $this->vip->id,
-            'provider_sku' => 'VIP_STEAM_MYR5',
+            'provider_sku' => 'VIP_VIDIO30',
             'base_price' => 21000,
             'is_preferred' => false,
             'is_active' => true,
@@ -106,18 +108,18 @@ class LanggananCatalogMergeTest extends TestCase
 
         Sanctum::actingAs(User::factory()->create());
 
-        $res = $this->getJson('/api/v1/products?category=langganan-digital&provider_id=' . $this->steam->id);
+        $res = $this->getJson('/api/v1/products?category=langganan-digital&provider_id=' . $vidio->id);
         $res->assertOk();
 
-        $myr5 = collect($res->json('data'))->filter(
-            fn ($row) => str_contains(strtolower((string) ($row['name'] ?? '')), 'myr 5')
+        $rows = collect($res->json('data'))->filter(
+            fn ($row) => str_contains(strtolower((string) ($row['name'] ?? '')), '30')
         );
-        $this->assertCount(1, $myr5);
-        $this->assertSame('STEAMMYR5', $myr5->first()['code'] ?? null);
-        $this->assertSame(22513.0, (float) ($myr5->first()['price'] ?? 0));
+        $this->assertCount(1, $rows);
+        $this->assertSame('VIDIO30', $rows->first()['code'] ?? null);
+        $this->assertSame(22513.0, (float) ($rows->first()['price'] ?? 0));
     }
 
-    public function test_steam_myr10_vip_only_still_listed(): void
+    public function test_steam_without_schema_hidden_from_customer_catalog(): void
     {
         $digiMyr5 = Product::create([
             'product_category_id' => $this->category->id,
@@ -164,14 +166,12 @@ class LanggananCatalogMergeTest extends TestCase
 
         $res = $this->getJson('/api/v1/products?category=langganan-digital&provider_id=' . $this->steam->id);
         $res->assertOk();
-
-        $names = collect($res->json('data'))->pluck('name')->map(fn ($n) => strtolower((string) $n));
-        $this->assertTrue($names->contains(fn ($n) => str_contains($n, 'myr 5')));
-        $this->assertTrue($names->contains(fn ($n) => str_contains($n, 'myr 10')));
-        $this->assertCount(2, $res->json('data'));
+        // No verified Langganan schema for Steam → customer catalog stays empty (DB rows kept).
+        $this->assertCount(0, $res->json('data'));
+        $this->assertSame(2, Product::query()->whereIn('sku_code', ['STEAMMYR5', 'VIP-STEAMMYR10'])->count());
     }
 
-    public function test_tiktok_premium_vip_only_appears(): void
+    public function test_vip_only_langganan_hidden_while_vip_schema_off(): void
     {
         $vipOnly = Product::create([
             'product_category_id' => $this->category->id,
@@ -197,8 +197,8 @@ class LanggananCatalogMergeTest extends TestCase
 
         $res = $this->getJson('/api/v1/products?category=langganan-digital&provider_id=' . $this->tiktok->id);
         $res->assertOk();
-        $this->assertCount(1, $res->json('data'));
-        $this->assertSame('VIP-TIKTOK30', $res->json('data.0.code'));
+        $this->assertCount(0, $res->json('data'));
+        $this->assertSame(1, Product::query()->where('sku_code', 'VIP-TIKTOK30')->count());
     }
 
     public function test_langganan_sibling_routing_includes_vip_fallback_offer(): void

@@ -3,6 +3,7 @@
 namespace App\Actions\Product;
 
 use App\Repositories\Contracts\ProductRepositoryInterface;
+use App\Services\Catalog\ProductPurchaseLifecycleService;
 use App\Services\ProductProviders\ProductCatalogCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -12,9 +13,15 @@ class GetCategoryProviderSummaryAction
 {
     public function __construct(
         protected ProductRepositoryInterface $productRepository,
+        protected ProductPurchaseLifecycleService $lifecycle,
     ) {}
 
     /**
+     * Customer-facing brand/provider summary for a category.
+     *
+     * Only counts products that are PURCHASABLE (schema + capability + availability).
+     * Brands with zero purchasable SKUs are omitted — avoids empty Game → Brand pages.
+     *
      * @return list<array{providerId: int, name: string, logo: ?string, count: int}>
      */
     public function execute(string $category): array
@@ -26,6 +33,12 @@ class GetCategoryProviderSummaryAction
 
             $groups = [];
             foreach ($products as $product) {
+                // Customer purchase grid: only PURCHASABLE SKUs contribute to brand visibility.
+                $life = $this->lifecycle->evaluate($product);
+                if (! ($life['purchasable'] ?? false) || ! ($life['catalog_visible'] ?? false)) {
+                    continue;
+                }
+
                 $name = trim((string) ($product->provider?->name ?? 'Lainnya'));
                 if ($name === '') {
                     $name = 'Lainnya';

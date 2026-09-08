@@ -116,17 +116,18 @@ class CatalogCategoryVisibilityTest extends TestCase
 
     public function test_provider_id_filter_does_not_match_similar_provider_names(): void
     {
-        [, $pubgProvider] = $this->seedGameCategoryWithProvider('PUBG', 'PUBG-TEST-1');
-        [, $pubgMobileProvider, $pubgMobileProduct] = $this->seedGameCategoryWithProvider('PUBG Mobile', 'PUBGM-TEST-1');
+        [, $ffProvider] = $this->seedGameCategoryWithProvider('Free Fire', 'ff50');
+        [, $mlProvider, $mlProduct] = $this->seedGameCategoryWithProvider('Mobile Legends', 'pre33639301');
 
-        $response = $this->getJson('/api/v1/products?category=game&provider_id='.$pubgProvider->id.'&per_page=100');
+        $response = $this->getJson('/api/v1/products?category=game&provider_id='.$ffProvider->id.'&per_page=100');
 
         $response->assertOk()->assertJsonPath('success', true);
 
         $codes = collect($response->json('data'))->pluck('code')->all();
-        $this->assertContains('PUBG-TEST-1', $codes);
-        $this->assertNotContains('PUBGM-TEST-1', $codes);
-        $this->assertNotSame((int) $pubgProvider->id, (int) $pubgMobileProduct->provider_id);
+        $this->assertContains('ff50', $codes);
+        $this->assertNotContains('pre33639301', $codes);
+        $this->assertNotSame((int) $ffProvider->id, (int) $mlProduct->provider_id);
+        $this->assertSame((int) $mlProvider->id, (int) $mlProduct->provider_id);
     }
 
     public function test_listing_provider_fulfillment_cache_does_not_leak_between_requests(): void
