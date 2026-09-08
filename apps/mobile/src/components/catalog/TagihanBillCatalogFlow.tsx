@@ -20,18 +20,24 @@ import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvaila
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 import {
   groupTagihanBrandsByProductName,
+  resolvePlnBillDirectSku,
   resolveTagihanBrandSelection,
   type TagihanBrandGroup,
 } from '../../utils/tagihanBrandGrouping';
+import {
+  isPlnBillDirectInputCategory,
+  isTagihanBrandFirstCategory,
+} from '../../utils/tagihanFlowMode';
 import { parseApiError } from '../../api/client';
 
 /**
  * Mobile postpaid bill flow — mirrors Web BillPaymentFlow.
  *
  * Brand-first (product.name tiles, no catalog price): `tv-pascabayar`, `pdam`,
- * `internet-pascabayar`, `multifinance`, `bpjs-kesehatan`, `gas`, `pln-nontaglis`.
+ * `internet-pascabayar`, `multifinance`, `bpjs-kesehatan`, `gas`.
+ * PLN Pascabayar / PLN Nontaglis: direct meter input (Token PLN UX) — no brand/product picker.
  * Other Tagihan keep product-grid-first until later slices. PBB uses dedicated PajakPbbCatalogFlow.
- * Token PLN (`pln`) and PLN Pascabayar stay separate.
+ * Token PLN (`pln`) stays on PlnTokenCatalogFlow.
  *
  * Brand-first navigation: header/hardware back steps brand list ↔ identifier ↔ review
  * (same beforeRemove pattern as ProviderCatalogBrowseFlow). No body "Ganti produk".
@@ -50,17 +56,6 @@ type Props = {
 
 type Step = 'products' | 'input' | 'review';
 
-/** Brand-first Tagihan — excludes Token PLN (`pln`) and HOLD `pln-pascabayar`. */
-const BRAND_FIRST_CATEGORIES = new Set([
-  'tv-pascabayar',
-  'pdam',
-  'internet-pascabayar',
-  'multifinance',
-  'bpjs-kesehatan',
-  'gas',
-  'pln-nontaglis',
-]);
-
 export function TagihanBillCatalogFlow({
   category,
   purchaseBanner,
@@ -74,9 +69,10 @@ export function TagihanBillCatalogFlow({
   const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
 
-  const brandFirst = BRAND_FIRST_CATEGORIES.has(category.trim().toLowerCase());
+  const brandFirst = isTagihanBrandFirstCategory(category);
+  const directInput = isPlnBillDirectInputCategory(category);
 
-  const [step, setStep] = useState<Step>('products');
+  const [step, setStep] = useState<Step>(directInput ? 'input' : 'products');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +106,24 @@ export function TagihanBillCatalogFlow({
     });
     return unsub;
   }, [navigation, brandFirst, step, goBackBrandFirstStep]);
+
+  /** Direct-input: review → meter; meter leaves the screen via header back (no product picker). */
+  const goBackDirectInputStep = useCallback(() => {
+    if (step === 'review') {
+      setStep('input');
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (!directInput) return;
+    const unsub = navigation.addListener('beforeRemove', (e) => {
+      if (step !== 'review') return;
+      if (!isBackAction(e.data.action)) return;
+      e.preventDefault();
+      goBackDirectInputStep();
+    });
+    return unsub;
+  }, [navigation, directInput, step, goBackDirectInputStep]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,6 +160,27 @@ export function TagihanBillCatalogFlow({
     () => (brandFirst ? groupTagihanBrandsByProductName(listed) : []),
     [brandFirst, listed]
   );
+
+  /** Auto-bind catalog SKU for PLN bill direct-input; fail-closed on Digi duplicates. */
+  useEffect(() => {
+    if (!directInput || loading) return;
+    if (selected) return;
+
+    const resolved = resolvePlnBillDirectSku(listed);
+    if (resolved.ok) {
+      setSelected(resolved.product);
+      setStep('input');
+      setError(null);
+      return;
+    }
+    if (resolved.reason === 'empty') {
+      setError(null);
+      return;
+    }
+    setError(
+      'Kategori ini memiliki lebih dari satu SKU dengan nama yang sama dan belum dapat dipilih otomatis. Hubungi dukungan.'
+    );
+  }, [directInput, loading, listed, selected]);
 
   const onSelectProduct = (product: Product) => {
     if (!purchaseEnabled) return;
@@ -206,6 +241,28 @@ export function TagihanBillCatalogFlow({
     return <LoadingState label="Memuat produk..." />;
   }
 
+  if (directInput && loading && !selected) {
+    return <LoadingState label="Memuat produk..." />;
+  }
+
+  if (directInput && !loading && !selected) {
+    if (listed.length === 0) {
+      return <EmptyState title="Belum Ada Produk" message="Produk tagihan belum tersedia." />;
+    }
+    return (
+      <ErrorState
+        message={
+          error ||
+          'Kategori ini memiliki lebih dari satu SKU dengan nama yang sama dan belum dapat dipilih otomatis. Hubungi dukungan.'
+        }
+        onRetry={() => {
+          setSelected(null);
+          void load();
+        }}
+      />
+    );
+  }
+
   if (error && products.length === 0 && step === 'products') {
     return <ErrorState message={error} onRetry={() => void load()} />;
   }
@@ -225,8 +282,8 @@ export function TagihanBillCatalogFlow({
             message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
           />
         ) : null}
-        {/* Product-first Tagihan: body back to product grid. Brand-first: header back only. */}
-        {!brandFirst ? (
+        {/* Product-first Tagihan: body back to product grid. Brand-first / PLN direct: header back only. */}
+        {!brandFirst && !directInput ? (
           <TouchableOpacity
             onPress={() => {
               setError(null);
@@ -237,7 +294,7 @@ export function TagihanBillCatalogFlow({
             <Text style={styles.backText}>← Ganti produk</Text>
           </TouchableOpacity>
         ) : null}
-        <Text style={styles.productName}>{selected.name}</Text>
+        {!directInput ? <Text style={styles.productName}>{selected.name}</Text> : null}
         <Text style={styles.label}>{targetLabel}</Text>
         <TextInput
           style={styles.input}
@@ -246,6 +303,7 @@ export function TagihanBillCatalogFlow({
           placeholder={targetPlaceholder}
           placeholderTextColor={colors.gray[400]}
           autoCapitalize="characters"
+          keyboardType={directInput ? 'number-pad' : 'default'}
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button
@@ -260,9 +318,11 @@ export function TagihanBillCatalogFlow({
   if (step === 'review' && selected && inquiry) {
     return (
       <View style={styles.wrap}>
-        <TouchableOpacity onPress={() => setStep('input')} style={styles.back}>
-          <Text style={styles.backText}>← Ubah nomor</Text>
-        </TouchableOpacity>
+        {!directInput ? (
+          <TouchableOpacity onPress={() => setStep('input')} style={styles.back}>
+            <Text style={styles.backText}>← Ubah nomor</Text>
+          </TouchableOpacity>
+        ) : null}
         <Text style={styles.productName}>{inquiry.product_name || selected.name}</Text>
         <Text style={styles.meta}>Pelanggan: {inquiry.customer_name || '-'}</Text>
         <Text style={styles.meta}>ID: {inquiry.customer_no}</Text>

@@ -1,12 +1,17 @@
 /**
- * Tagihan brand grouping fixtures (incl. PLN Nontaglis).
+ * Tagihan brand grouping + PLN bill direct-input + flow-mode gates.
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
+import {
+  isPlnBillDirectInputCategory,
+  isTagihanBrandFirstCategory,
+} from './tagihanFlowMode';
 import type { Product } from '../services/catalog.service';
 import {
   groupTagihanBrandsByProductName,
   normalizeTagihanBrandKey,
+  resolvePlnBillDirectSku,
   resolveTagihanBrandSelection,
 } from './tagihanBrandGrouping';
 
@@ -311,7 +316,7 @@ const gasAmb = resolveTagihanBrandSelection(gasDup[0]);
 assert.equal(gasAmb.ok, false);
 if (!gasAmb.ok) assert.equal(gasAmb.reason, 'ambiguous');
 
-// --- PLN Nontaglis production fixture (test-only; not hardcoded in UI) ---
+// --- PLN Nontaglis: direct-input bind (catalog SKU; not brand-first) ---
 const productionPlnNontaglis = [
   stubProduct('post733504', 'PLN Nontaglis', {
     category: 'pln-nontaglis',
@@ -319,19 +324,12 @@ const productionPlnNontaglis = [
   }),
 ];
 
-const nontaglisBrands = groupTagihanBrandsByProductName(productionPlnNontaglis);
-assert.equal(nontaglisBrands.length, 1, 'expected 1 PLN Nontaglis brand tile');
-assert.equal(nontaglisBrands[0].label, 'PLN Nontaglis');
-assert.equal(nontaglisBrands[0].boundSkuCode, 'post733504');
-assert.equal(nontaglisBrands[0].isAmbiguous, false);
-assert.equal(Object.prototype.hasOwnProperty.call(nontaglisBrands[0], 'price'), false);
+const nontaglisDirect = resolvePlnBillDirectSku(productionPlnNontaglis);
+assert.equal(nontaglisDirect.ok, true);
+if (nontaglisDirect.ok) assert.equal(nontaglisDirect.product.code, 'post733504');
 
-const nontaglisResolve = resolveTagihanBrandSelection(nontaglisBrands[0]);
-assert.equal(nontaglisResolve.ok, true);
-if (nontaglisResolve.ok) assert.equal(nontaglisResolve.product.code, 'post733504');
-
-// Duplicate PLN Nontaglis display name → fail-closed
-const nontaglisDup = groupTagihanBrandsByProductName([
+// Duplicate PLN Nontaglis display name → fail-closed (no silent pick)
+const nontaglisDupDirect = resolvePlnBillDirectSku([
   stubProduct('post733504', 'PLN Nontaglis', {
     category: 'pln-nontaglis',
     operatorName: 'PLN NONTAGLIS',
@@ -341,11 +339,37 @@ const nontaglisDup = groupTagihanBrandsByProductName([
     operatorName: 'PLN NONTAGLIS',
   }),
 ]);
-assert.equal(nontaglisDup.length, 1);
-assert.equal(nontaglisDup[0].isAmbiguous, true);
-assert.equal(nontaglisDup[0].boundSkuCode, null);
-const nontaglisAmb = resolveTagihanBrandSelection(nontaglisDup[0]);
-assert.equal(nontaglisAmb.ok, false);
-if (!nontaglisAmb.ok) assert.equal(nontaglisAmb.reason, 'ambiguous');
+assert.equal(nontaglisDupDirect.ok, false);
+if (!nontaglisDupDirect.ok) assert.equal(nontaglisDupDirect.reason, 'ambiguous');
+
+// --- PLN Pascabayar HOLD: duplicate Digi SKUs → fail-closed ---
+const pascabayarDup = resolvePlnBillDirectSku([
+  stubProduct('post733470', 'PLN Pascabayar', {
+    category: 'pln-pascabayar',
+    operatorName: 'PLN',
+  }),
+  stubProduct('post733563', 'PLN Pascabayar', {
+    category: 'pln-pascabayar',
+    operatorName: 'PLN',
+  }),
+]);
+assert.equal(pascabayarDup.ok, false);
+if (!pascabayarDup.ok) assert.equal(pascabayarDup.reason, 'ambiguous');
+
+// --- Flow-mode gates (regression) ---
+assert.equal(isTagihanBrandFirstCategory('pln-nontaglis'), false);
+assert.equal(isTagihanBrandFirstCategory('pln-pascabayar'), false);
+assert.equal(isTagihanBrandFirstCategory('pln'), false);
+assert.equal(isPlnBillDirectInputCategory('pln-nontaglis'), true);
+assert.equal(isPlnBillDirectInputCategory('pln-pascabayar'), true);
+assert.equal(isPlnBillDirectInputCategory('pln'), false, 'Token PLN must stay on PlnTokenCatalogFlow');
+assert.equal(isTagihanBrandFirstCategory('tv-pascabayar'), true);
+assert.equal(isTagihanBrandFirstCategory('pdam'), true);
+assert.equal(isTagihanBrandFirstCategory('internet-pascabayar'), true);
+assert.equal(isTagihanBrandFirstCategory('multifinance'), true);
+assert.equal(isTagihanBrandFirstCategory('bpjs-kesehatan'), true);
+assert.equal(isTagihanBrandFirstCategory('gas'), true);
+assert.equal(isPlnBillDirectInputCategory('tv-pascabayar'), false);
+assert.equal(isPlnBillDirectInputCategory('gas'), false);
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');

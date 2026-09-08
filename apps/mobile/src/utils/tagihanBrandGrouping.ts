@@ -74,3 +74,20 @@ export function resolveTagihanBrandSelection(
   }
   return { ok: true, product: group.products[0] };
 }
+
+/**
+ * Auto-bind SKU for PLN Pascabayar / PLN Nontaglis direct-input (no brand/product picker).
+ * Exactly one eligible product → bind. Duplicate display-name Digi SKUs → fail-closed.
+ * Never silently pick among collisions (e.g. post733470 / post733563).
+ */
+export function resolvePlnBillDirectSku(
+  products: Product[]
+): { ok: true; product: Product } | { ok: false; reason: 'ambiguous' | 'empty' } {
+  if (products.length === 0) return { ok: false, reason: 'empty' };
+  if (products.length === 1) return { ok: true, product: products[0] };
+  const groups = groupTagihanBrandsByProductName(products);
+  if (groups.length === 1) {
+    return resolveTagihanBrandSelection(groups[0]);
+  }
+  return { ok: false, reason: 'ambiguous' };
+}

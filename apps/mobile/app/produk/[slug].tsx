@@ -182,7 +182,13 @@ export default function ProductListScreen() {
                 targetLabel: 'Nomor Kartu Peserta',
                 targetPlaceholder: 'Masukkan nomor kartu peserta',
               }
-            : {})}
+            : normalized === 'pln-pascabayar' || normalized === 'pln-nontaglis'
+              ? {
+                  // Align with Token PLN (PlnTokenCatalogFlow) meter wording.
+                  targetLabel: 'Nomor Meter / ID Pelanggan PLN',
+                  targetPlaceholder: '11–12 digit angka',
+                }
+              : {})}
         />
       ) : isEwalletFlow ? (
         <View style={styles.ewalletBlock}>
