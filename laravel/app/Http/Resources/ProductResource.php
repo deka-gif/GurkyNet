@@ -56,6 +56,16 @@ class ProductResource extends JsonResource
         $sellable = $availabilityStatus === 'active';
         $catalogVisible = $availabilityStatus === 'active' || $availabilityStatus === 'maintenance';
 
+        // Purchase lifecycle / capability gate (Game schema etc.) — does not replace Control Center.
+        $lifecycle = resolve(\App\Services\Catalog\ProductPurchaseLifecycleService::class)
+            ->evaluate($this->resource);
+        if (! ($lifecycle['purchasable'] ?? false)) {
+            $sellable = false;
+        }
+        if (! ($lifecycle['catalog_visible'] ?? true)) {
+            $catalogVisible = false;
+        }
+
         $description = '';
         $meta = ['quota' => null, 'validity' => null];
         $dataGroup = null;
@@ -107,6 +117,15 @@ class ProductResource extends JsonResource
             'availabilityStatus' => $availabilityStatus, // Engine calculated: active, inactive, maintenance
             'isPurchasable' => $sellable,
             'isCatalogVisible' => $catalogVisible,
+            'purchaseLifecycle' => $lifecycle['stage'] ?? null,
+            'notPurchasableReason' => $lifecycle['reason'] ?? null,
+            'transactionCapability' => $lifecycle['capability'] === null ? null : [
+                'mode' => $lifecycle['capability']['mode'] ?? null,
+                'targetSchema' => $lifecycle['capability']['target_schema'] ?? null,
+                'inquiryRequired' => $lifecycle['capability']['inquiry_required'] ?? false,
+                'mobilePurchase' => $lifecycle['capability']['mobile_purchase'] ?? false,
+                'webPurchase' => $lifecycle['capability']['web_purchase'] ?? false,
+            ],
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
             // How this product's category was resolved by ProductMappingService — lets

@@ -12,6 +12,8 @@ export interface ProductFilters {
   telkomsel_group?: string;
   data_group?: string;
   sort?: string;
+  /** Customer surface for capability filtering (web keeps postpaid; mobile hides web-only). */
+  surface?: 'mobile' | 'web';
 }
 
 export interface CategoryProviderSummary {
@@ -23,7 +25,9 @@ export interface CategoryProviderSummary {
 
 export const productService = {
   getAll: async (): Promise<ApiResponse<Product[]>> => {
-    const response = await apiClient.get<ApiResponse<Product[]>>('/products');
+    const response = await apiClient.get<ApiResponse<Product[]>>('/products', {
+      params: { surface: 'web', per_page: 5000 },
+    });
     return response.data;
   },
 
@@ -38,10 +42,13 @@ export const productService = {
       if (filters.data_group) params.append('data_group', filters.data_group);
       if (filters.telkomsel_group) params.append('telkomsel_group', filters.telkomsel_group);
       if (filters.sort) params.append('sort', filters.sort);
+      if (filters.surface) params.append('surface', filters.surface);
+      else params.append('surface', 'web');
       if (filters.page) params.append('page', String(filters.page));
       // Default page size for lazy catalogs; Telkomsel UX passes smaller per_page.
       params.append('per_page', (filters.per_page ?? 5000).toString());
     } else {
+      params.append('surface', 'web');
       params.append('per_page', '5000');
     }
     const queryString = params.toString() ? `?${params.toString()}` : '';

@@ -97,6 +97,7 @@ class ProductRepository implements ProductRepositoryInterface
         $merged = $this->mergeDuplicateCatalogProducts($all);
         $merged = $this->applyTelkomselGroupFilter($merged, $filters);
         $merged = $this->sortCatalogProducts($merged, $filters);
+        $merged = $this->filterCustomerPurchasableCatalog($merged, $filters);
 
         if ($this->catalogTraceEnabled()) {
             Log::info('CATALOG TRACE — count after mergeDuplicateCatalogProducts()', [
@@ -276,6 +277,49 @@ class ProductRepository implements ProductRepositoryInterface
                 'Bindings' => $query->getBindings(),
             ]);
         }
+    }
+
+    /**
+     * Customer-facing catalog SoT: ProductPurchaseLifecycleService.
+     * Only PURCHASABLE + catalog_visible products are returned (no "gangguan" placeholders).
+     * Optional filters.surface=mobile|web further requires that surface's purchase flag.
+     *
+     * @param  Collection<int, Product>|EloquentCollection<int, Product>  $products
+     * @return Collection<int, Product>
+     */
+    protected function filterCustomerPurchasableCatalog(Collection|EloquentCollection $products, array $filters = []): Collection
+    {
+        $lifecycle = app(\App\Services\Catalog\ProductPurchaseLifecycleService::class);
+        $surface = strtolower(trim((string) ($filters['surface'] ?? '')));
+
+        return $products
+            ->filter(function (Product $product) use ($lifecycle, $surface) {
+                $life = $lifecycle->evaluate($product);
+                if (! ($life['purchasable'] ?? false)) {
+                    return false;
+                }
+                if (! ($life['catalog_visible'] ?? false)) {
+                    return false;
+                }
+                if (($life['stage'] ?? null) !== \App\Services\Catalog\ProductPurchaseLifecycleService::STAGE_PURCHASABLE) {
+                    return false;
+                }
+
+                $cap = $life['capability'] ?? null;
+                if (! is_array($cap)) {
+                    return false;
+                }
+
+                if ($surface === 'mobile' && empty($cap['mobile_purchase'])) {
+                    return false;
+                }
+                if ($surface === 'web' && empty($cap['web_purchase'])) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->values();
     }
 
     /**

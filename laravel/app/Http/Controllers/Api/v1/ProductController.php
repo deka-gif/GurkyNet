@@ -78,7 +78,7 @@ class ProductController extends Controller
     {
         $filters = $request->only([
             'category', 'provider', 'provider_id', 'status', 'keyword', 'per_page', 'page',
-            'telkomsel_group', 'data_group', 'sort',
+            'telkomsel_group', 'data_group', 'sort', 'surface',
         ]);
         
         $paginatedProducts = $this->searchProductAction->execute($filters);

@@ -23,26 +23,19 @@ class GameNicknameResolverTest extends TestCase
 
         $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
-        $this->assertSame('sku_schema', $schema['source']);
+        $this->assertSame('sku_override', $schema['source']);
+        $this->assertFalse($schema['purchasable']);
     }
 
     public function test_digiflazz_uid_hint_for_fc_mobile_sku(): void
     {
-        DigiflazzProduct::create([
-            'buyer_sku_code' => 'pre33639303',
-            'product_name' => 'FC Mobile 40',
-            'category' => 'Games',
-            'brand' => 'FC Mobile',
-            'seller_price' => 10000,
-            'desc' => '40 + 8 Bonus. Masukkan UID.',
-        ]);
-
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('FC Mobile', 'pre33639303');
 
         $this->assertSame('account', $schema['delivery']);
-        $this->assertSame('digiflazz_desc', $schema['source']);
+        $this->assertSame('sku_override', $schema['source']);
         $this->assertSame(['user_id'], collect($schema['fields'])->pluck('key')->all());
+        $this->assertSame('UID', $schema['fields'][0]['label']);
     }
 
     public function test_ml_combo_from_desc(): void
@@ -56,14 +49,27 @@ class GameNicknameResolverTest extends TestCase
             'desc' => 'no pelanggan = gabungan antara user_id dan zone_id',
         ]);
 
+        // Game Profile wins for Mobile Legends before desc — same fields.
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('Mobile Legends', 'ml10');
 
         $this->assertSame('account', $schema['delivery']);
         $this->assertSame(['user_id', 'zone_id'], collect($schema['fields'])->pluck('key')->all());
+        $this->assertSame('game_profile', $schema['source']);
     }
 
-    public function test_free_fire_digi_without_explicit_target_is_unknown(): void
+    public function test_ml_proven_sku_schema_product_level(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+        $proven = $resolver->resolveForProduct('MOBILE LEGENDS', 'pre33639301');
+        $this->assertSame('account', $proven['delivery']);
+        $this->assertSame(['user_id', 'zone_id'], collect($proven['fields'])->pluck('key')->all());
+
+        $week = $resolver->resolveForProduct('MOBILE LEGENDS', 'mlweek');
+        $this->assertSame('unknown', $week['delivery']);
+    }
+
+    public function test_free_fire_uses_game_profile_player_id(): void
     {
         DigiflazzProduct::create([
             'buyer_sku_code' => 'ff50',
@@ -77,9 +83,10 @@ class GameNicknameResolverTest extends TestCase
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('Free Fire', 'ff50');
 
-        $this->assertSame('unknown', $schema['delivery']);
-        $this->assertSame([], $schema['fields']);
-        $this->assertNotSame('brand', $schema['source']);
+        $this->assertSame('account', $schema['delivery']);
+        $this->assertSame(['player_id'], collect($schema['fields'])->pluck('key')->all());
+        $this->assertSame('game_profile', $schema['source']);
+        $this->assertTrue($schema['purchasable']);
     }
 
     public function test_free_fire_vip_catalog_schema_is_unknown_while_vip_off(): void
@@ -121,10 +128,9 @@ class GameNicknameResolverTest extends TestCase
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('Free Fire', 'VIP-FFDIAMOND50');
 
-        // VIPPayment OFF for active schema/UI — fail-closed (DigiFlazz sole SoT).
         $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
-        $this->assertSame('unknown', $schema['source']);
+        $this->assertFalse($schema['purchasable']);
     }
 
     public function test_digi_desc_does_not_apply_to_vip_sku(): void
@@ -163,8 +169,6 @@ class GameNicknameResolverTest extends TestCase
         $schema = $resolver->resolveForProduct('FC Mobile', 'VIP-pre33639303');
 
         $this->assertNotSame('digiflazz_desc', $schema['source']);
-        // VIP catalog schema OFF — not Digi desc, not VIP brand player_id.
-        $this->assertSame('unknown', $schema['source']);
         $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
     }
@@ -176,16 +180,21 @@ class GameNicknameResolverTest extends TestCase
 
         $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
-        $this->assertSame('unknown', $schema['source']);
+        $this->assertFalse($schema['purchasable']);
     }
 
-    public function test_sku_schema_beats_brand_mapping(): void
+    public function test_sku_override_beats_game_profile(): void
     {
         config([
             'gurky_game.sku_schemas' => [
                 'ff50' => [
                     'delivery' => 'unknown',
                     'fields' => [],
+                    'provenance' => [
+                        'source' => 'OWNER_REVIEW',
+                        'evidence' => 'forced unknown for test',
+                        'confidence' => 'needs_review',
+                    ],
                 ],
             ],
         ]);
@@ -194,7 +203,7 @@ class GameNicknameResolverTest extends TestCase
         $schema = $resolver->resolveForProduct('Free Fire', 'ff50');
 
         $this->assertSame('unknown', $schema['delivery']);
-        $this->assertSame('sku_schema', $schema['source']);
+        $this->assertSame('sku_override', $schema['source']);
     }
 
     public function test_vip_note_phone_style_is_used_when_present(): void
@@ -234,8 +243,6 @@ class GameNicknameResolverTest extends TestCase
         $resolver = app(GameNicknameResolver::class);
         $schema = $resolver->resolveForProduct('Mystery Game', 'VIP-MYST01');
 
-        // VIP note reader remains in codebase but is not used while VIP schema is OFF.
-        $this->assertSame('unknown', $schema['source']);
         $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
     }

@@ -3,10 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\ProductCategory;
+use App\Models\ProductProvider;
+use App\Models\ProductProviderSku;
 use App\Models\Provider;
 use App\Models\Product;
 use App\Services\PricingService;
 use App\Services\AvailabilityService;
+use App\Services\ProductProviders\ProductCatalogCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -18,14 +21,28 @@ class ProductModuleTest extends TestCase
     protected ProductCategory $category;
     protected Provider $provider;
     protected Product $product;
+    protected ProductProvider $digi;
 
     protected function setUp(): void
     {
         parent::setUp();
 
+        ProductCatalogCache::bump();
+        Cache::flush();
+
+        $this->digi = ProductProvider::digiflazz() ?? ProductProvider::create([
+            'code' => 'digiflazz',
+            'name' => 'Digiflazz',
+            'is_active' => true,
+            'priority' => 1,
+            'sort_order' => 1,
+        ]);
+        $this->digi->update(['is_active' => true, 'api_status' => 'online']);
+
+        // Canonical customer slug (capability registry key) — not legacy pulsa-seluler.
         $this->category = ProductCategory::create([
-            'name' => 'Pulsa Seluler',
-            'slug' => 'pulsa-seluler',
+            'name' => 'Pulsa',
+            'slug' => 'pulsa',
             'icon' => 'phone',
         ]);
 
@@ -38,12 +55,25 @@ class ProductModuleTest extends TestCase
         $this->product = Product::create([
             'product_category_id' => $this->category->id,
             'provider_id' => $this->provider->id,
+            'product_provider_id' => $this->digi->id,
             'sku_code' => 'TSEL10K',
             'name' => 'Telkomsel 10K',
             'base_price' => 10000.00,
             'sell_price' => 11500.00,
             'admin_fee' => 0.00,
             'status' => true,
+            'ops_status' => 'active',
+        ]);
+
+        ProductProviderSku::create([
+            'product_id' => $this->product->id,
+            'product_provider_id' => $this->digi->id,
+            'provider_sku' => 'TSEL10K',
+            'provider_name' => 'Telkomsel 10K',
+            'base_price' => 10000,
+            'provider_price' => 10000,
+            'provider_status' => 'available',
+            'is_active' => true,
         ]);
     }
 
@@ -85,7 +115,7 @@ class ProductModuleTest extends TestCase
     public function test_filter_by_category(): void
     {
         // Filter by slug
-        $response = $this->getJson('/api/v1/products?category=pulsa-seluler');
+        $response = $this->getJson('/api/v1/products?category=pulsa');
         $response->assertStatus(200);
         $this->assertCount(1, $response->json('data'));
 
@@ -108,28 +138,52 @@ class ProductModuleTest extends TestCase
             'icon' => 'wifi',
         ]);
 
-        Product::create([
+        $vi = Product::create([
             'product_category_id' => $voucherInternetCategory->id,
             'provider_id' => $this->provider->id,
+            'product_provider_id' => $this->digi->id,
             'sku_code' => 'XLVI3GB',
             'name' => 'Voucher Internet XL 3GB',
             'base_price' => 15000.00,
             'sell_price' => 15500.00,
             'admin_fee' => 0.00,
             'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $vi->id,
+            'product_provider_id' => $this->digi->id,
+            'provider_sku' => 'XLVI3GB',
+            'provider_name' => 'Voucher Internet XL 3GB',
+            'base_price' => 15000,
+            'provider_price' => 15000,
+            'provider_status' => 'available',
+            'is_active' => true,
         ]);
 
-        // Same-category (pulsa-seluler) product whose name coincidentally contains
+        // Same-category (pulsa) product whose name coincidentally contains
         // "data"/"voucher" wording — must stay out of the voucher-internet filter.
-        Product::create([
+        $bonus = Product::create([
             'product_category_id' => $this->category->id,
             'provider_id' => $this->provider->id,
+            'product_provider_id' => $this->digi->id,
             'sku_code' => 'TSEL20K-BONUS',
             'name' => 'Telkomsel 20K Bonus Voucher Data',
             'base_price' => 20000.00,
             'sell_price' => 21000.00,
             'admin_fee' => 0.00,
             'status' => true,
+            'ops_status' => 'active',
+        ]);
+        ProductProviderSku::create([
+            'product_id' => $bonus->id,
+            'product_provider_id' => $this->digi->id,
+            'provider_sku' => 'TSEL20K-BONUS',
+            'provider_name' => $bonus->name,
+            'base_price' => 20000,
+            'provider_price' => 20000,
+            'provider_status' => 'available',
+            'is_active' => true,
         ]);
 
         $response = $this->getJson('/api/v1/products?category=voucher-internet');
@@ -179,20 +233,23 @@ class ProductModuleTest extends TestCase
 
         $this->assertEquals('active', $status);
 
-        // test inactive
-        $this->product->status = false;
+        // Control Center SoT: ops_status inactive (not products.status alone).
+        $this->product->ops_status = 'inactive';
         $this->product->save();
         $this->assertEquals('inactive', $availabilityService->getStatus($this->product));
 
         // test maintenance simulation
         $maintenanceProduct = Product::create([
             'product_category_id' => $this->category->id,
+            'provider_id' => $this->provider->id,
+            'product_provider_id' => $this->digi->id,
             'sku_code' => 'TSEL-MAINTENANCE-10K',
             'name' => 'Tsel Maintenance 10K',
             'base_price' => 10000.00,
             'sell_price' => 11500.00,
             'admin_fee' => 0.00,
             'status' => true,
+            'ops_status' => 'active',
         ]);
         $this->assertEquals('maintenance', $availabilityService->getStatus($maintenanceProduct));
     }
