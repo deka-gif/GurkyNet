@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { catalogService, Product } from '../../services/catalog.service';
 import { tagihanService, TagihanInquiryResult } from '../../services/tagihan.service';
 import { useCheckoutStore } from '../../store/checkout.store';
@@ -30,7 +30,14 @@ import { parseApiError } from '../../api/client';
  *
  * Slice 1: `tv-pascabayar` uses brand-first (product.name tiles, no catalog price).
  * Other Tagihan categories keep product-grid-first until later slices.
+ *
+ * Brand-first navigation: header/hardware back steps brand list ↔ identifier ↔ review
+ * (same beforeRemove pattern as ProviderCatalogBrowseFlow). No body "Ganti produk".
  */
+
+function isBackAction(action: { type: string }): boolean {
+  return action.type === 'GO_BACK' || action.type === 'POP' || action.type === 'POP_TO_TOP';
+}
 
 type Props = {
   category: string;
@@ -51,6 +58,7 @@ export function TagihanBillCatalogFlow({
   targetPlaceholder = 'Masukkan nomor pelanggan',
 }: Props) {
   const router = useRouter();
+  const navigation = useNavigation();
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
@@ -66,6 +74,32 @@ export function TagihanBillCatalogFlow({
   const [customerNo, setCustomerNo] = useState('');
   const [inquiring, setInquiring] = useState(false);
   const [inquiry, setInquiry] = useState<TagihanInquiryResult | null>(null);
+
+  /** Brand-first only: identifier → brand list; review → identifier. Product-first unchanged. */
+  const goBackBrandFirstStep = useCallback(() => {
+    if (step === 'review') {
+      setStep('input');
+      return;
+    }
+    if (step === 'input') {
+      setError(null);
+      setSelected(null);
+      setInquiry(null);
+      setCustomerNo('');
+      setStep('products');
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (!brandFirst) return;
+    const unsub = navigation.addListener('beforeRemove', (e) => {
+      if (step === 'products') return;
+      if (!isBackAction(e.data.action)) return;
+      e.preventDefault();
+      goBackBrandFirstStep();
+    });
+    return unsub;
+  }, [navigation, brandFirst, step, goBackBrandFirstStep]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -181,15 +215,18 @@ export function TagihanBillCatalogFlow({
             message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
           />
         ) : null}
-        <TouchableOpacity
-          onPress={() => {
-            setError(null);
-            setStep('products');
-          }}
-          style={styles.back}
-        >
-          <Text style={styles.backText}>← Ganti produk</Text>
-        </TouchableOpacity>
+        {/* Product-first Tagihan: body back to product grid. Brand-first: header back only. */}
+        {!brandFirst ? (
+          <TouchableOpacity
+            onPress={() => {
+              setError(null);
+              setStep('products');
+            }}
+            style={styles.back}
+          >
+            <Text style={styles.backText}>← Ganti produk</Text>
+          </TouchableOpacity>
+        ) : null}
         <Text style={styles.productName}>{selected.name}</Text>
         <Text style={styles.label}>{targetLabel}</Text>
         <TextInput
