@@ -3,5 +3,10 @@
   "compilerOptions": {
     "strict": true
   },
-  "exclude": ["**/node_modules", "**/voucherPhysicalScan.test.ts"]
+  "exclude": [
+    "**/node_modules",
+    "**/voucherPhysicalScan.test.ts",
+    "**/tagihanBrandGrouping.test.ts"
+  ]
 }
+

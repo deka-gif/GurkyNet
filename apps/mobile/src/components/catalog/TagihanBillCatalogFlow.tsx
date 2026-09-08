@@ -13,15 +13,23 @@ import {
   Button,
 } from '../ui';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
+import { TagihanBrandList } from './TagihanBrandList';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
+import {
+  groupTagihanBrandsByProductName,
+  resolveTagihanBrandSelection,
+  type TagihanBrandGroup,
+} from '../../utils/tagihanBrandGrouping';
 import { parseApiError } from '../../api/client';
 
 /**
  * Mobile postpaid bill flow — mirrors Web BillPaymentFlow.
- * Vendor products → customer_no → POST /tagihan/inquiry → PIN with inquiry_ref_id.
+ *
+ * Slice 1: `tv-pascabayar` uses brand-first (product.name tiles, no catalog price).
+ * Other Tagihan categories keep product-grid-first until later slices.
  */
 
 type Props = {
@@ -32,6 +40,9 @@ type Props = {
 };
 
 type Step = 'products' | 'input' | 'review';
+
+/** Slice 1 pilot — only this slug gets brand-first UX. */
+const BRAND_FIRST_CATEGORIES = new Set(['tv-pascabayar']);
 
 export function TagihanBillCatalogFlow({
   category,
@@ -44,6 +55,8 @@ export function TagihanBillCatalogFlow({
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
+
+  const brandFirst = BRAND_FIRST_CATEGORIES.has(category.trim().toLowerCase());
 
   const [step, setStep] = useState<Step>('products');
   const [products, setProducts] = useState<Product[]>([]);
@@ -85,12 +98,32 @@ export function TagihanBillCatalogFlow({
     [products]
   );
 
+  const brands = useMemo(
+    () => (brandFirst ? groupTagihanBrandsByProductName(listed) : []),
+    [brandFirst, listed]
+  );
+
   const onSelectProduct = (product: Product) => {
     if (!purchaseEnabled) return;
     setSelected(product);
     setInquiry(null);
     setCustomerNo('');
+    setError(null);
     setStep('input');
+  };
+
+  const onSelectBrand = (brand: TagihanBrandGroup) => {
+    if (!purchaseEnabled) return;
+    const resolved = resolveTagihanBrandSelection(brand);
+    if (!resolved.ok) {
+      setError(
+        resolved.reason === 'ambiguous'
+          ? 'Brand ini memiliki lebih dari satu SKU dan belum dapat dipilih otomatis. Hubungi dukungan.'
+          : 'Brand tidak memiliki produk yang dapat dibeli.'
+      );
+      return;
+    }
+    onSelectProduct(resolved.product);
   };
 
   const onInquire = async () => {
@@ -148,7 +181,13 @@ export function TagihanBillCatalogFlow({
             message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
           />
         ) : null}
-        <TouchableOpacity onPress={() => setStep('products')} style={styles.back}>
+        <TouchableOpacity
+          onPress={() => {
+            setError(null);
+            setStep('products');
+          }}
+          style={styles.back}
+        >
           <Text style={styles.backText}>← Ganti produk</Text>
         </TouchableOpacity>
         <Text style={styles.productName}>{selected.name}</Text>
@@ -191,6 +230,10 @@ export function TagihanBillCatalogFlow({
     return <EmptyState title="Belum Ada Produk" message="Produk tagihan belum tersedia." />;
   }
 
+  if (brandFirst && brands.length === 0) {
+    return <EmptyState title="Belum Ada Brand" message="Brand tagihan belum tersedia." />;
+  }
+
   return (
     <View style={styles.wrap}>
       {purchaseBanner ? (
@@ -204,6 +247,11 @@ export function TagihanBillCatalogFlow({
           title="Pembelian Belum Aktif"
           message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
         />
+      ) : brandFirst ? (
+        <>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <TagihanBrandList brands={brands} onPress={onSelectBrand} />
+        </>
       ) : (
         <ProductCatalogGrid products={listed} onPress={onSelectProduct} columns={2} />
       )}
