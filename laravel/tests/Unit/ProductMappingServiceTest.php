@@ -279,12 +279,38 @@ class ProductMappingServiceTest extends TestCase
         $this->assertSame('brand_override', $m['source']);
     }
 
-    public function test_pascabayar_hp_brand_stays_on_generic_tagihan(): void
+    public function test_pascabayar_hp_brand_maps_to_hp_pascabayar(): void
     {
         $svc = app(ProductMappingService::class);
         $m = $svc->map('digiflazz', 'Pascabayar', 'HP PASCABAYAR', 'Halo Postpaid', false, 'pasca');
-        $this->assertSame('tagihan', $m['slug']);
-        $this->assertSame('provider_category', $m['source']);
+        $this->assertSame('hp-pascabayar', $m['slug']);
+
+        foreach (['by.U', 'Telkomsel Omni', 'Indosat Only4u', 'Tri CuanMax', 'XL Axis Cuanku'] as $brand) {
+            $mapped = $svc->map('digiflazz', 'Pascabayar', $brand, $brand.' Postpaid', false, 'pasca');
+            $this->assertSame('hp-pascabayar', $mapped['slug'], $brand);
+        }
+    }
+
+    public function test_singapore_thailand_topup_map_to_international(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $this->assertSame(
+            'international',
+            $svc->map('digiflazz', 'Singapore TOPUP', 'Starhub', 'Starhub 10', false, 'prepaid')['slug']
+        );
+        $this->assertSame(
+            'international',
+            $svc->map('digiflazz', 'Thailand TOPUP', 'TrueMove', 'TrueMove H 10', false, 'prepaid')['slug']
+        );
+    }
+
+    public function test_prepaid_gas_maps_to_gas_prepaid_not_postpaid_gas(): void
+    {
+        $svc = app(ProductMappingService::class);
+        $m = $svc->map('digiflazz', 'Gas', 'Pertagas', 'Pertagas 50.000', false, 'prepaid');
+        $this->assertSame('gas-prepaid', $m['slug']);
+        $mPasca = $svc->map('digiflazz', 'Pascabayar', 'GAS NEGARA', 'Gas Negara', false, 'pasca');
+        $this->assertSame('gas', $mPasca['slug']);
     }
 
     public function test_pascabayar_gas_negara_brand_maps_to_gas(): void
@@ -292,7 +318,7 @@ class ProductMappingServiceTest extends TestCase
         $svc = app(ProductMappingService::class);
         $m = $svc->map('digiflazz', 'Pascabayar', 'GAS NEGARA', 'Gas Negara', false, 'pasca');
         $this->assertSame('gas', $m['slug']);
-        $this->assertSame('brand_override', $m['source']);
+        $this->assertContains($m['source'], ['brand_override', 'gas_list_type_pasca']);
     }
 
     public function test_ewallet_and_voucher_unaffected_by_pln_list_type_guard(): void

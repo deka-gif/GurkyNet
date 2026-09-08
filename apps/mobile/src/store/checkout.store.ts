@@ -2,17 +2,16 @@ import { create } from 'zustand';
 import { Product } from '../services/catalog.service';
 import { PlnInquiryResult } from '../services/pln.service';
 import { GameInquiryResult } from '../services/game.service';
+import { TagihanInquiryResult } from '../services/tagihan.service';
 import { Transaction, TransactionStatus } from '../api/types';
 import { createIdempotencyKey } from '../utils/idempotency';
 
 /**
  * Transient checkout state only. PIN never lives here.
  *
- * PLN prepaid: plnInquiry + plnInquiredMeter + plnInquiryExpiresAt are UI/session
- * mirrors of backend PlnInquiryService (keyed by user + customer_no). They are NOT
- * sent as inquiry_ref_id — POST /transactions only uses target_number = customer_no.
- *
- * Game: gameContext mirrors GameInquiryService session the same way (no inquiry_ref_id).
+ * PLN prepaid: plnContext — NOT sent as inquiry_ref_id.
+ * Game: gameContext — VIP nickname optional.
+ * Tagihan pasca: tagihanContext — MUST send inquiry_ref_id on POST /transactions.
  */
 
 export type PlnCheckoutContext = {
@@ -30,6 +29,11 @@ export type GameCheckoutContext = {
   expiresAt: number;
 };
 
+export type TagihanCheckoutContext = {
+  inquiry: TagihanInquiryResult;
+  expiresAt: number;
+};
+
 /** Web VoucherInternetPage mode — UX only; not a product-type classifier. */
 export type VoucherInternetMode = 'tembak' | 'elektronik';
 
@@ -41,7 +45,7 @@ interface CheckoutState {
   selectedRegion: string | null;
   plnContext: PlnCheckoutContext | null;
   gameContext: GameCheckoutContext | null;
-  /** Set by Voucher Internet flows; null for other categories. */
+  tagihanContext: TagihanCheckoutContext | null;
   voucherInternetMode: VoucherInternetMode | null;
   idempotencyKey: string | null;
   submitting: boolean;
@@ -56,10 +60,12 @@ interface CheckoutState {
     selectedRegion?: string | null;
     plnContext?: PlnCheckoutContext | null;
     gameContext?: GameCheckoutContext | null;
+    tagihanContext?: TagihanCheckoutContext | null;
     voucherInternetMode?: VoucherInternetMode | null;
   }) => void;
   clearPlnContext: () => void;
   clearGameContext: () => void;
+  clearTagihanContext: () => void;
   setSubmitting: (submitting: boolean) => void;
   setTransaction: (transaction: Transaction | null) => void;
   setStatus: (status: TransactionStatus | 'idle') => void;
@@ -77,6 +83,7 @@ const IDLE_STATE = {
   selectedRegion: null as string | null,
   plnContext: null as PlnCheckoutContext | null,
   gameContext: null as GameCheckoutContext | null,
+  tagihanContext: null as TagihanCheckoutContext | null,
   voucherInternetMode: null as VoucherInternetMode | null,
   idempotencyKey: null as string | null,
   submitting: false,
@@ -85,7 +92,6 @@ const IDLE_STATE = {
   error: null as string | null,
 };
 
-/** True when PLN inquiry context is present, matches target, and not client-expired. */
 export function isPlnContextValid(ctx: PlnCheckoutContext | null, targetNumber: string): boolean {
   if (!ctx?.inquiry) return false;
   if (!ctx.inquiry.customer_name) return false;
@@ -101,6 +107,19 @@ export function isGameContextValid(
   skuCode: string | null | undefined
 ): boolean {
   if (!ctx?.inquiry) return false;
+  if (!ctx.inquiry.customer_no) return false;
+  if (ctx.inquiry.customer_no !== targetNumber) return false;
+  if (skuCode && ctx.inquiry.sku_code !== skuCode) return false;
+  if (!ctx.expiresAt || Date.now() >= ctx.expiresAt) return false;
+  return true;
+}
+
+export function isTagihanContextValid(
+  ctx: TagihanCheckoutContext | null,
+  targetNumber: string,
+  skuCode: string | null | undefined
+): boolean {
+  if (!ctx?.inquiry?.inquiry_ref_id) return false;
   if (!ctx.inquiry.customer_no) return false;
   if (ctx.inquiry.customer_no !== targetNumber) return false;
   if (skuCode && ctx.inquiry.sku_code !== skuCode) return false;
@@ -131,12 +150,14 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
       ...(ctx.selectedRegion !== undefined ? { selectedRegion: ctx.selectedRegion } : {}),
       ...(ctx.plnContext !== undefined ? { plnContext: ctx.plnContext } : {}),
       ...(ctx.gameContext !== undefined ? { gameContext: ctx.gameContext } : {}),
+      ...(ctx.tagihanContext !== undefined ? { tagihanContext: ctx.tagihanContext } : {}),
       ...(ctx.voucherInternetMode !== undefined
         ? { voucherInternetMode: ctx.voucherInternetMode }
         : {}),
     }),
   clearPlnContext: () => set({ plnContext: null }),
   clearGameContext: () => set({ gameContext: null }),
+  clearTagihanContext: () => set({ tagihanContext: null }),
   setSubmitting: (submitting) => set({ submitting }),
   setTransaction: (transaction) => set({ transaction }),
   setStatus: (status) => set({ status }),

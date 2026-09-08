@@ -169,7 +169,7 @@ class CustomerProductCatalogFilterTest extends TestCase
         $web = $this->codesInCategory('pdam', ['surface' => 'web']);
         $pulsaMobile = $this->codesInCategory('pulsa', ['surface' => 'mobile']);
 
-        $this->assertNotContains('pdam-jkt-1', $mobile);
+        $this->assertContains('pdam-jkt-1', $mobile);
         $this->assertContains('pdam-jkt-1', $web);
         $this->assertContains('pulsa10', $pulsaMobile);
     }

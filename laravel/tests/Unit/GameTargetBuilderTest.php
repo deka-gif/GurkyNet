@@ -66,14 +66,44 @@ class GameTargetBuilderTest extends TestCase
         $builder->assertValidCustomerNo('12345678', $schema);
     }
 
-    public function test_free_fire_and_mlweek_remain_unknown(): void
+    public function test_free_fire_customer_no_is_player_id(): void
     {
         $resolver = app(GameNicknameResolver::class);
-        foreach (['ff12', 'ff50', 'ff140', 'ff355', 'pre33817245', 'mlweek'] as $sku) {
-            $schema = $resolver->resolveForProduct('Game', $sku);
+        $builder = app(GameTargetBuilder::class);
+
+        // Digi Game Profile SoT — Free Fire inherits PLAYER_ID without per-SKU override.
+        foreach (['ff12', 'ff50', 'ff140', 'ff355'] as $sku) {
+            $schema = $resolver->resolveForProduct('Free Fire', $sku);
+            $this->assertSame('account', $schema['delivery'], $sku);
+            $this->assertSame('PLAYER_ID', $schema['schema_key'] ?? null, $sku);
+            $this->assertSame(['player_id'], collect($schema['fields'])->pluck('key')->all(), $sku);
+
+            $customerNo = $builder->buildCustomerNo(['player_id' => '987654321'], $schema);
+            $this->assertSame('987654321', $customerNo, $sku);
+            $builder->assertValidCustomerNo($customerNo, $schema);
+        }
+    }
+
+    public function test_unproven_skus_remain_unknown(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+        foreach (['mlweek'] as $sku) {
+            $schema = $resolver->resolveForProduct('Mobile Legends', $sku);
             $this->assertSame('unknown', $schema['delivery'], $sku);
             $this->assertSame([], $schema['fields'], $sku);
         }
+    }
+
+    public function test_pre33817245_inherits_free_fire_player_id(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+        $builder = app(GameTargetBuilder::class);
+        $schema = $resolver->resolveForProduct('Free Fire', 'pre33817245');
+
+        $this->assertSame('account', $schema['delivery']);
+        $this->assertSame('PLAYER_ID', $schema['schema_key'] ?? null);
+        $customerNo = $builder->buildCustomerNo(['player_id' => '112233'], $schema);
+        $this->assertSame('112233', $customerNo);
     }
 
     public function test_cek_username_is_non_purchase(): void

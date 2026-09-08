@@ -22,6 +22,8 @@ import {
   gameService,
   GameAccountField,
   GameInquiryResult,
+  buildGameCustomerNo,
+  isGameNonPurchaseSku,
 } from '../../services/game/game.service';
 import {
   langgananService,
@@ -253,10 +255,12 @@ export function ProviderCatalogFlow({
       .filter(
         (p) =>
           isCatalogListed(p) &&
-          String(p.operatorName ?? '').trim().toLowerCase() === selectedProvider.toLowerCase()
+          isProductPurchasable(p) &&
+          String(p.operatorName ?? '').trim().toLowerCase() === selectedProvider.toLowerCase() &&
+          !(isGameInquiry && (String(p.code ?? '').toUpperCase().startsWith('VIP-') || isGameNonPurchaseSku(p.code)))
       )
       .sort((a, b) => a.price - b.price);
-  }, [products, selectedProvider]);
+  }, [products, selectedProvider, isGameInquiry]);
 
   const phoneReady = !isEwalletInquiry || targetNo.replace(/\D/g, '').length >= 10;
   const gameAccountReady =
@@ -402,6 +406,7 @@ export function ProviderCatalogFlow({
     }
   };
 
+  /** Digi path: customer_no from schema; VIP nickname optional (not a purchase gate). */
   const handleGameNext = async () => {
     setGameInquiry(null);
     if (!selectedProduct || !selectedProvider) {
@@ -421,23 +426,60 @@ export function ProviderCatalogFlow({
 
     setInquiring(true);
     try {
-      const res = await gameService.inquire(selectedProduct.code, account);
-      if (!res.success || !res.data?.found || !res.data.nickname) {
-        showFlowError(
-          humanizeCatalogError(
-            res.message,
-            'Player ID Tidak Ditemukan. Periksa kembali data akun Anda.'
-          )
-        );
+      let customerNo: string;
+      try {
+        customerNo = buildGameCustomerNo(gameFields, account);
+      } catch (e: unknown) {
+        showFlowError(e instanceof Error ? e.message : 'Data akun game wajib diisi.');
         return;
       }
-      setGameInquiry(res.data);
+
+      const zone =
+        account.zone_id || account.server_id
+          ? String(account.zone_id || account.server_id).trim()
+          : null;
+      const userId =
+        account.user_id ||
+        account.player_id ||
+        account.uid ||
+        account.garena_id ||
+        customerNo.split('|')[0];
+
+      let nickname: string | null = null;
+      let inquiryRef: string | null = null;
+      try {
+        const res = await gameService.inquire(selectedProduct.code, account);
+        if (res.success && res.data) {
+          if (res.data.customer_no) customerNo = res.data.customer_no;
+          if (res.data.nickname) nickname = res.data.nickname;
+          if (res.data.inquiry_ref_id) inquiryRef = res.data.inquiry_ref_id;
+        }
+      } catch {
+        // Optional VIP lookup failure must not block Digi purchase.
+      }
+
+      setGameInquiry({
+        inquiry_ref_id: inquiryRef,
+        sku_code: selectedProduct.code,
+        product_name: selectedProduct.name,
+        game: selectedProvider,
+        brand: selectedProvider,
+        user_id: userId,
+        zone_id: zone,
+        customer_no: customerNo,
+        id_zone_label: zone ? `${userId} (${zone})` : userId,
+        nickname,
+        item: selectedProduct.name,
+        price: selectedProduct.price,
+        sell_price: selectedProduct.price,
+        admin_fee: selectedProduct.adminFee ?? 0,
+        found: !!nickname,
+        nickname_optional: true,
+        expires_in_seconds: 20 * 60,
+      });
     } catch (err: unknown) {
       showFlowError(
-        resolveInquiryError(
-          err,
-          'Player ID Tidak Ditemukan. Periksa kembali data akun Anda.'
-        )
+        resolveInquiryError(err, 'Gagal menyiapkan review pembelian game.')
       );
     } finally {
       setInquiring(false);
@@ -483,7 +525,7 @@ export function ProviderCatalogFlow({
 
   const handleGameLanjutBayar = () => {
     if (!gameInquiry || !selectedProduct || !selectedProvider) return;
-    if (!gameInquiry.nickname) return;
+    if (!gameInquiry.customer_no) return;
 
     if (!wallet || wallet.balance < gameInquiry.price) {
       showFlowError('Saldo GurkyPay Anda tidak mencukupi untuk top up game ini.');
@@ -495,13 +537,13 @@ export function ProviderCatalogFlow({
       serviceName,
       productName: gameInquiry.product_name || selectedProduct.name,
       targetNo: gameInquiry.customer_no,
-      amount: gameInquiry.sell_price,
-      adminFee: gameInquiry.admin_fee,
+      amount: gameInquiry.sell_price ?? gameInquiry.price,
+      adminFee: gameInquiry.admin_fee ?? 0,
       skuCode: gameInquiry.sku_code || selectedProduct.code,
       customDetails: {
         Game: gameInquiry.game || selectedProvider,
-        Nickname: gameInquiry.nickname,
-        'User ID': gameInquiry.user_id,
+        ...(gameInquiry.nickname ? { Nickname: gameInquiry.nickname } : {}),
+        'ID Akun': gameInquiry.id_zone_label || gameInquiry.user_id,
         ...(gameInquiry.zone_id ? { 'Zone ID': gameInquiry.zone_id } : {}),
         Item: gameInquiry.item || selectedProduct.name,
       },
@@ -757,20 +799,24 @@ export function ProviderCatalogFlow({
       return (
         <SummaryPanelShell>
           <p className="text-[10px] font-black tracking-widest text-white/50 uppercase mb-3">
-            Validasi Game
+            Review Game
           </p>
           <div className="rounded-2xl bg-white/10 border border-white/10 p-3.5 flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
               <User className="w-5 h-5 text-white/90" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-extrabold text-white truncate">{gameInquiry.nickname}</p>
+              <p className="text-sm font-extrabold text-white truncate">
+                {gameInquiry.nickname || gameInquiry.id_zone_label || gameInquiry.user_id}
+              </p>
               <p className="text-[10px] font-bold text-emerald-300 flex items-center gap-1 mt-0.5">
-                <CheckCircle2 className="w-3 h-3" /> Nickname terverifikasi
+                <CheckCircle2 className="w-3 h-3" />
+                {gameInquiry.nickname ? 'Nickname terverifikasi' : 'Siap dibayar via Digiflazz'}
               </p>
             </div>
           </div>
           <SummaryRow label="Game" value={gameInquiry.game || selectedProvider || '-'} />
+          <SummaryRow label="ID Akun" value={gameInquiry.id_zone_label || gameInquiry.customer_no} />
           <SummaryRow label="Item" value={gameInquiry.item || selectedProduct.name} />
           <SummaryRow label="Harga" value={formatIDR(gameInquiry.price)} large />
           <PanelActions>
@@ -784,7 +830,7 @@ export function ProviderCatalogFlow({
             <button
               type="button"
               onClick={handleGameLanjutBayar}
-              disabled={!gameInquiry.nickname}
+              disabled={!gameInquiry.customer_no}
               className="w-full py-3.5 bg-white text-primary-900 rounded-2xl font-extrabold text-sm hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Lanjut Bayar (PIN)

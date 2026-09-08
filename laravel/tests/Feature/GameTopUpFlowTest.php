@@ -346,7 +346,77 @@ class GameTopUpFlowTest extends TestCase
 
         $ff = $this->getJson('/api/v1/game/account-schema?brand=FREE%20FIRE&sku=ff50');
         $ff->assertOk()
-            ->assertJsonPath('data.delivery', 'unknown')
-            ->assertJsonPath('data.fields', []);
+            ->assertJsonPath('data.delivery', 'account')
+            ->assertJsonPath('data.schema_key', 'PLAYER_ID');
+        $this->assertSame(['player_id'], collect($ff->json('data.fields'))->pluck('key')->all());
+    }
+
+    public function test_free_fire_player_id_purchase_without_vip_session(): void
+    {
+        $digi = ProductProvider::digiflazz();
+        $category = ProductCategory::query()->where('slug', 'game')->firstOrFail();
+        $ffBrand = Provider::create([
+            'name' => 'Free Fire',
+            'logo' => null,
+            'is_active' => true,
+        ]);
+        $ffProduct = Product::create([
+            'product_category_id' => $category->id,
+            'provider_id' => $ffBrand->id,
+            'product_provider_id' => $digi->id,
+            'sku_code' => 'ff50',
+            'name' => 'Free Fire 50 Diamond',
+            'base_price' => 7000,
+            'sell_price' => 7500,
+            'admin_fee' => 0,
+            'status' => true,
+            'ops_status' => 'active',
+        ]);
+        \App\Models\ProductProviderSku::create([
+            'product_id' => $ffProduct->id,
+            'product_provider_id' => $digi->id,
+            'provider_sku' => 'ff50',
+            'provider_name' => 'Free Fire 50 Diamond',
+            'base_price' => 7000,
+            'provider_price' => 7000,
+            'provider_status' => 'available',
+            'is_active' => true,
+        ]);
+
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNGDIGIFF001',
+                    'customer_no' => '987654321',
+                    'buyer_sku_code' => 'ff50',
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'sn' => 'SN-DIGI-FF',
+                    'price' => 7000,
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+        Queue::fake();
+
+        $create = resolve(CreateTransactionAction::class);
+        $transaction = $create->execute(
+            $this->user,
+            'ff50',
+            '987654321',
+            '123456'
+        );
+
+        $meta = $transaction->items->first()?->custom_metadata ?? [];
+        $this->assertTrue(! empty($meta['is_game']));
+        $this->assertSame('987654321', $meta['user_id'] ?? null);
+        $this->assertTrue(empty($meta['nickname']));
+        $this->assertNull($meta['game_inquiry_ref_id'] ?? null);
+
+        $job = new ProcessProductProviderTransaction($transaction->id);
+        app()->call([$job, 'handle']);
+        $this->assertEquals('success', $transaction->fresh()->status);
     }
 }

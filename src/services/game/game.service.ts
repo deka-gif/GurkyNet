@@ -14,10 +14,15 @@ export type GameAccountSchema = {
   label: string;
   delivery?: 'account' | 'unknown' | string;
   fields: GameAccountField[];
+  schema_key?: string | null;
+  provenance?: { source: string; evidence: string; confidence: string } | null;
+  purchasable?: boolean;
+  not_purchasable_reason?: string | null;
+  lifecycle?: string;
 };
 
 export type GameInquiryResult = {
-  inquiry_ref_id: string;
+  inquiry_ref_id?: string | null;
   sku_code: string;
   product_name: string;
   game: string;
@@ -26,14 +31,53 @@ export type GameInquiryResult = {
   zone_id?: string | null;
   customer_no: string;
   id_zone_label: string;
-  nickname: string;
+  nickname?: string | null;
   item: string;
   price: number;
-  sell_price: number;
-  admin_fee: number;
-  found: boolean;
+  sell_price?: number;
+  admin_fee?: number;
+  found?: boolean;
+  nickname_optional?: boolean;
   expires_in_seconds: number;
 };
+
+/** Digi lookup/utility SKUs — not top-up purchase. */
+export const GAME_NON_PURCHASE_SKUS = new Set([
+  'pre33639299',
+  'pre33817254',
+]);
+
+export function isGameNonPurchaseSku(code: string | null | undefined): boolean {
+  return GAME_NON_PURCHASE_SKUS.has(String(code ?? '').trim());
+}
+
+export function buildGameCustomerNo(
+  fields: GameAccountField[],
+  account: Record<string, string>
+): string {
+  const values: Record<string, string> = {};
+  for (const f of fields) {
+    const v = String(account[f.key] ?? '').trim();
+    if (f.required && !v) {
+      throw new Error(`${f.label} wajib diisi.`);
+    }
+    if (v) values[f.key] = v;
+  }
+
+  const target =
+    values.user_id ??
+    values.player_id ??
+    values.uid ??
+    values.garena_id ??
+    Object.values(values)[0];
+
+  if (!target) {
+    throw new Error('Data akun game wajib diisi.');
+  }
+
+  const zone = values.zone_id ?? values.server_id;
+  return zone ? `${target}|${zone}` : target;
+}
 
 export const gameService = {
   accountSchema: async (

@@ -53,9 +53,11 @@ export const TagihanHubPage = () => (
       { key: 'internet', label: 'Internet Pascabayar', description: 'IndiHome & sejenis', path: '/dashboard/tagihan/internet', icon: Wifi },
       { key: 'tv', label: 'TV Pascabayar', description: 'TV kabel / satelit', path: '/dashboard/tagihan/tv', icon: Tv },
       { key: 'gas', label: 'Gas Negara', description: 'PGN / gas', path: '/dashboard/tagihan/gas', icon: Flame },
+      { key: 'gas-prepaid', label: 'Gas Prepaid', description: 'Top up gas prepaid', path: '/dashboard/tagihan/gas-prepaid', icon: Flame },
       { key: 'pbb', label: 'PBB', description: 'Pajak bumi & bangunan', path: '/dashboard/tagihan/pbb', icon: Home },
       { key: 'samsat', label: 'SAMSAT', description: 'Pajak kendaraan', path: '/dashboard/tagihan/samsat', icon: Car },
       { key: 'multifinance', label: 'Multifinance', description: 'Angsuran kredit', path: '/dashboard/tagihan/multifinance', icon: Landmark },
+      { key: 'hp-pascabayar', label: 'HP Pascabayar', description: 'Halo / XL / Tri postpaid', path: '/dashboard/tagihan/hp-pascabayar', icon: Smartphone },
       { key: 'lainnya', label: 'Tagihan Lainnya', description: 'Katalog tagihan umum', path: '/dashboard/tagihan/lainnya', icon: Receipt },
     ]}
   />

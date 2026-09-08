@@ -20,16 +20,25 @@ import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValid
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 
 /**
- * Mobile Pulsa pre-checkout — mirrors Web PulsaPage:
- * phone → prefix operator detect → GET /products?category=pulsa → client filter by brand
+ * Mobile phone-operator catalog — mirrors Web PhoneOperatorCatalogFlow / PulsaPage:
+ * phone → prefix operator detect → GET /products?category=… → client filter by brand
  * → checkout (existing Mobile transaction pipeline).
+ *
+ * Used for pulsa, sms-telepon, masa-aktif, international.
  */
 
 type Props = {
+  category?: string;
   purchaseBanner?: string | null;
+  /** When true (international), skip Indonesian operator prefix filter. */
+  skipOperatorFilter?: boolean;
 };
 
-export function PulsaCatalogFlow({ purchaseBanner }: Props) {
+export function PulsaCatalogFlow({
+  category = 'pulsa',
+  purchaseBanner,
+  skipOperatorFilter = false,
+}: Props) {
   const router = useRouter();
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
   const setTarget = useCheckoutStore((s) => s.setTarget);
@@ -42,48 +51,60 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
-  const phoneReady = isValidPhoneTarget(phoneNo);
+  const phoneReady = skipOperatorFilter
+    ? phoneNo.replace(/\D/g, '').length >= 8
+    : isValidPhoneTarget(phoneNo);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getProducts({ category: 'pulsa', per_page: 5000 });
+      const res = await catalogService.getProducts({ category, per_page: 5000 });
       if (res.success && Array.isArray(res.data)) {
         setAllProducts(res.data);
       } else {
-        setError(res.message || 'Gagal memuat produk pulsa.');
+        setError(res.message || 'Gagal memuat produk.');
         setAllProducts([]);
       }
     } catch (err: any) {
-      setError(err?.message || 'Gagal memuat produk pulsa.');
+      setError(err?.message || 'Gagal memuat produk.');
       setAllProducts([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [category]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const listed = useMemo(() => {
+    if (skipOperatorFilter) {
+      return sortProductsByPriceAsc(allProducts.filter((p) => isCatalogListed(p)));
+    }
     if (!operator) return [];
     return sortProductsByPriceAsc(
       allProducts.filter(
         (p) => isCatalogListed(p) && operatorsMatch(p.operatorName || p.providerDetails?.name, operator)
       )
     );
-  }, [allProducts, operator]);
+  }, [allProducts, operator, skipOperatorFilter]);
 
   const onSelect = (product: Product) => {
-    if (!purchaseEnabled || !phoneReady || !operator) return;
+    if (!purchaseEnabled || !phoneReady) return;
+    if (!skipOperatorFilter && !operator) return;
     if (!isProductPurchasable(product)) return;
+    const digits = sanitizePhoneDigits(phoneNo);
     startCheckout(product);
-    setTarget(sanitizePhoneDigits(phoneNo));
-    setPurchaseContext({ operatorLabel: operator, selectedRegion: null });
+    setTarget(digits);
+    setPurchaseContext({
+      operatorLabel: skipOperatorFilter ? product.operatorName || null : operator,
+      selectedRegion: null,
+    });
     router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
   };
+
+  const needOperator = !skipOperatorFilter && !operator;
 
   return (
     <View style={styles.wrap}>
@@ -95,17 +116,17 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
         </View>
       ) : null}
 
-      {!operator ? (
+      {needOperator ? (
         <EmptyState
           title="Masukkan Nomor HP"
-          message="Produk pulsa akan muncul setelah operator terdeteksi."
+          message="Produk akan muncul setelah operator terdeteksi."
         />
       ) : loading && listed.length === 0 ? (
-        <LoadingState label="Memuat nominal pulsa..." />
+        <LoadingState label="Memuat produk..." />
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : listed.length === 0 ? (
-        <EmptyState title="Belum Ada Nominal" message="Produk pulsa untuk operator ini belum tersedia." />
+        <EmptyState title="Belum Ada Produk" message="Produk untuk kategori ini belum tersedia." />
       ) : !purchaseEnabled ? (
         <PurchaseFlowNotice
           icon="time-outline"
@@ -115,7 +136,11 @@ export function PulsaCatalogFlow({ purchaseBanner }: Props) {
       ) : (
         <View style={styles.list}>
           {!phoneReady ? (
-            <Text style={styles.hintWarn}>Lengkapi nomor HP (minimal 10 digit) sebelum memilih nominal.</Text>
+            <Text style={styles.hintWarn}>
+              {skipOperatorFilter
+                ? 'Lengkapi nomor internasional sebelum memilih produk.'
+                : 'Lengkapi nomor HP (minimal 10 digit) sebelum memilih nominal.'}
+            </Text>
           ) : null}
           <ProductCatalogGrid
             products={listed}

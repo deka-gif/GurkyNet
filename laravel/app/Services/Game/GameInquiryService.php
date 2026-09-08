@@ -30,7 +30,19 @@ class GameInquiryService
     ) {}
 
     /**
-     * @return array{brand:string,sku:?string,code:string,label:string,delivery:string,fields:list<array{key:string,label:string,required:bool}>}
+     * @return array{
+     *   brand:string,
+     *   sku:?string,
+     *   code:string,
+     *   label:string,
+     *   delivery:string,
+     *   fields:list<array{key:string,label:string,required:bool}>,
+     *   schema_key:?string,
+     *   provenance:?array{source:string,evidence:string,confidence:string},
+     *   purchasable:bool,
+     *   not_purchasable_reason:?string,
+     *   lifecycle:string
+     * }
      */
     public function accountSchema(string $brand, ?string $skuCode = null): array
     {
@@ -44,6 +56,11 @@ class GameInquiryService
             'label' => $resolved['label'],
             'delivery' => $resolved['delivery'],
             'fields' => $resolved['fields'],
+            'schema_key' => $resolved['schema_key'] ?? null,
+            'provenance' => $resolved['provenance'] ?? null,
+            'purchasable' => (bool) ($resolved['purchasable'] ?? false),
+            'not_purchasable_reason' => $resolved['not_purchasable_reason'] ?? null,
+            'lifecycle' => (string) ($resolved['lifecycle'] ?? 'NEEDS_REVIEW'),
         ];
     }
 
