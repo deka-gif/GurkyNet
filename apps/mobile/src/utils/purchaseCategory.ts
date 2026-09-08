@@ -94,7 +94,7 @@ const INQUIRY_REQUIRED_SLUGS = new Set([
 ]);
 
 export const INQUIRY_FLOW_NOTICE =
-  'Pembelian kategori ini memerlukan langkah validasi (inquiry) sebelum pembayaran. Fitur tersebut sedang disiapkan di aplikasi mobile. Silakan gunakan Web GurkyNet untuk sementara, atau coba lagi setelah pembaruan.';
+  'Sesi cek tagihan sudah tidak berlaku. Silakan cek tagihan kembali.';
 
 export function normalizeCategorySlug(slug: string | null | undefined): string {
   return (slug || '').trim().toLowerCase();

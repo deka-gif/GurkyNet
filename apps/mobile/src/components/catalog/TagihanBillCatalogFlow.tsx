@@ -28,6 +28,7 @@ import {
   isTagihanBillDirectInputCategory,
   isTagihanBrandFirstCategory,
 } from '../../utils/tagihanFlowMode';
+import { shouldClearTagihanInquiryOnIdentifierEdit } from '../../utils/tagihanCheckout';
 import { parseApiError } from '../../api/client';
 
 /**
@@ -62,9 +63,8 @@ export function TagihanBillCatalogFlow({
 }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
-  const startCheckout = useCheckoutStore((s) => s.startCheckout);
-  const setTarget = useCheckoutStore((s) => s.setTarget);
-  const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
+  const beginTagihanCheckout = useCheckoutStore((s) => s.beginTagihanCheckout);
+  const clearTagihanContext = useCheckoutStore((s) => s.clearTagihanContext);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
 
   const brandFirst = isTagihanBrandFirstCategory(category);
@@ -76,23 +76,32 @@ export function TagihanBillCatalogFlow({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Product | null>(null);
   const [customerNo, setCustomerNo] = useState('');
+  /** Identifier used for the current local inquiry session (mirror Token PLN inquiredFor). */
+  const [inquiredFor, setInquiredFor] = useState<string | null>(null);
   const [inquiring, setInquiring] = useState(false);
   const [inquiry, setInquiry] = useState<TagihanInquiryResult | null>(null);
+
+  const invalidateInquirySession = useCallback(() => {
+    setInquiry(null);
+    setInquiredFor(null);
+    clearTagihanContext();
+  }, [clearTagihanContext]);
 
   /** Brand-first only: identifier → brand list; review → identifier. Product-first unchanged. */
   const goBackBrandFirstStep = useCallback(() => {
     if (step === 'review') {
+      invalidateInquirySession();
       setStep('input');
       return;
     }
     if (step === 'input') {
       setError(null);
       setSelected(null);
-      setInquiry(null);
+      invalidateInquirySession();
       setCustomerNo('');
       setStep('products');
     }
-  }, [step]);
+  }, [step, invalidateInquirySession]);
 
   useEffect(() => {
     if (!brandFirst) return;
@@ -108,9 +117,10 @@ export function TagihanBillCatalogFlow({
   /** Direct-input: review → meter; meter leaves the screen via header back (no product picker). */
   const goBackDirectInputStep = useCallback(() => {
     if (step === 'review') {
+      invalidateInquirySession();
       setStep('input');
     }
-  }, [step]);
+  }, [step, invalidateInquirySession]);
 
   useEffect(() => {
     if (!directInput) return;
@@ -176,14 +186,14 @@ export function TagihanBillCatalogFlow({
       return;
     }
     setError(
-      'Kategori ini memiliki lebih dari satu SKU dengan nama yang sama dan belum dapat dipilih otomatis. Hubungi dukungan.'
+      'Kategori ini memiliki lebih dari satu jenis produk dan belum dapat dipilih otomatis. Hubungi dukungan.'
     );
   }, [directInput, loading, listed, selected]);
 
   const onSelectProduct = (product: Product) => {
     if (!purchaseEnabled) return;
     setSelected(product);
-    setInquiry(null);
+    invalidateInquirySession();
     setCustomerNo('');
     setError(null);
     setStep('input');
@@ -194,13 +204,20 @@ export function TagihanBillCatalogFlow({
     const resolved = resolveTagihanBrandSelection(brand);
     if (!resolved.ok) {
       setError(
-        resolved.reason === 'ambiguous'
-          ? 'Brand ini memiliki lebih dari satu SKU dan belum dapat dipilih otomatis. Hubungi dukungan.'
-          : 'Brand tidak memiliki produk yang dapat dibeli.'
+        resolved.reason === 'empty'
+          ? 'Brand tidak memiliki produk yang dapat dibeli.'
+          : 'Brand tidak dapat dipilih otomatis. Hubungi dukungan.'
       );
       return;
     }
     onSelectProduct(resolved.product);
+  };
+
+  const onCustomerNoChange = (value: string) => {
+    setCustomerNo(value);
+    if (shouldClearTagihanInquiryOnIdentifierEdit(inquiredFor, value)) {
+      invalidateInquirySession();
+    }
   };
 
   const onInquire = async () => {
@@ -208,14 +225,18 @@ export function TagihanBillCatalogFlow({
     setInquiring(true);
     setError(null);
     try {
-      const res = await tagihanService.inquire(selected.code, customerNo.trim());
+      const typed = customerNo.trim();
+      const res = await tagihanService.inquire(selected.code, typed);
       if (!res.success || !res.data?.inquiry_ref_id) {
+        invalidateInquirySession();
         setError(res.message || 'Inquiry gagal. Periksa nomor pelanggan.');
         return;
       }
       setInquiry(res.data);
+      setInquiredFor(typed);
       setStep('review');
     } catch (err: unknown) {
+      invalidateInquirySession();
       setError(parseApiError(err).message || 'Inquiry gagal.');
     } finally {
       setInquiring(false);
@@ -223,15 +244,12 @@ export function TagihanBillCatalogFlow({
   };
 
   const onPay = () => {
-    if (!selected || !inquiry) return;
-    startCheckout(selected);
-    setTarget(inquiry.customer_no);
-    setPurchaseContext({
-      tagihanContext: {
-        inquiry,
-        expiresAt: Date.now() + (inquiry.expires_in_seconds || 20 * 60) * 1000,
-      },
-    });
+    if (!selected || !inquiry?.inquiry_ref_id) return;
+    beginTagihanCheckout(
+      selected,
+      inquiry,
+      Date.now() + (inquiry.expires_in_seconds || 20 * 60) * 1000
+    );
     router.push({ pathname: '/checkout/[sku]', params: { sku: selected.code } });
   };
 
@@ -251,7 +269,7 @@ export function TagihanBillCatalogFlow({
       <ErrorState
         message={
           error ||
-          'Kategori ini memiliki lebih dari satu SKU dengan nama yang sama dan belum dapat dipilih otomatis. Hubungi dukungan.'
+          'Kategori ini memiliki lebih dari satu jenis produk dan belum dapat dipilih otomatis. Hubungi dukungan.'
         }
         onRetry={() => {
           setSelected(null);
@@ -297,7 +315,7 @@ export function TagihanBillCatalogFlow({
         <TextInput
           style={styles.input}
           value={customerNo}
-          onChangeText={setCustomerNo}
+          onChangeText={onCustomerNoChange}
           placeholder={targetPlaceholder}
           placeholderTextColor={colors.gray[400]}
           autoCapitalize="characters"
@@ -317,7 +335,13 @@ export function TagihanBillCatalogFlow({
     return (
       <View style={styles.wrap}>
         {!directInput ? (
-          <TouchableOpacity onPress={() => setStep('input')} style={styles.back}>
+          <TouchableOpacity
+            onPress={() => {
+              invalidateInquirySession();
+              setStep('input');
+            }}
+            style={styles.back}
+          >
             <Text style={styles.backText}>← Ubah nomor</Text>
           </TouchableOpacity>
         ) : null}

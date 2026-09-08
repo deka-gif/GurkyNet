@@ -7,7 +7,8 @@
     "**/node_modules",
     "**/voucherPhysicalScan.test.ts",
     "**/tagihanBrandGrouping.test.ts",
-    "**/pajakCustomerNo.test.ts"
+    "**/pajakCustomerNo.test.ts",
+    "**/tagihanCheckout.test.ts"
   ]
 }
 

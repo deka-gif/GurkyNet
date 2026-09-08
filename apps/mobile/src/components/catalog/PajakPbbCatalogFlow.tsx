@@ -35,6 +35,10 @@ import {
   sanitizePbbNop,
   taxYearOptions,
 } from '../../utils/pajakCustomerNo';
+import {
+  shouldClearTagihanInquiryOnIdentifierEdit,
+  shouldClearTagihanInquiryOnTaxYearEdit,
+} from '../../utils/tagihanCheckout';
 import { parseApiError } from '../../api/client';
 
 /**
@@ -60,9 +64,8 @@ function isPayableAmount(n: unknown): n is number {
 export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
-  const startCheckout = useCheckoutStore((s) => s.startCheckout);
-  const setTarget = useCheckoutStore((s) => s.setTarget);
-  const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
+  const beginTagihanCheckout = useCheckoutStore((s) => s.beginTagihanCheckout);
+  const clearTagihanContext = useCheckoutStore((s) => s.clearTagihanContext);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
 
   const yearOptions = useMemo(() => taxYearOptions(6), []);
@@ -74,23 +77,33 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [nop, setNop] = useState('');
   const [tahunPajak, setTahunPajak] = useState<number>(() => new Date().getFullYear());
+  const [inquiredNop, setInquiredNop] = useState<string | null>(null);
+  const [inquiredYear, setInquiredYear] = useState<number | null>(null);
   const [inquiring, setInquiring] = useState(false);
   const [inquiry, setInquiry] = useState<TagihanInquiryResult | null>(null);
 
+  const invalidateInquirySession = useCallback(() => {
+    setInquiry(null);
+    setInquiredNop(null);
+    setInquiredYear(null);
+    clearTagihanContext();
+  }, [clearTagihanContext]);
+
   const goBackStep = useCallback(() => {
     if (step === 'review') {
+      invalidateInquirySession();
       setStep('input');
       return;
     }
     if (step === 'input') {
       setError(null);
       setSelected(null);
-      setInquiry(null);
+      invalidateInquirySession();
       setNop('');
       setTahunPajak(new Date().getFullYear());
       setStep('regions');
     }
-  }, [step]);
+  }, [step, invalidateInquirySession]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
@@ -140,18 +153,33 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
     const resolved = resolveTagihanBrandSelection(brand);
     if (!resolved.ok) {
       setError(
-        resolved.reason === 'ambiguous'
-          ? 'Wilayah ini memiliki lebih dari satu SKU dan belum dapat dipilih otomatis. Hubungi dukungan.'
-          : 'Wilayah tidak memiliki produk yang dapat dibeli.'
+        resolved.reason === 'empty'
+          ? 'Wilayah tidak memiliki produk yang dapat dibeli.'
+          : 'Wilayah tidak dapat dipilih otomatis. Hubungi dukungan.'
       );
       return;
     }
     setError(null);
     setSelected(resolved.product);
-    setInquiry(null);
+    invalidateInquirySession();
     setNop('');
     setTahunPajak(new Date().getFullYear());
     setStep('input');
+  };
+
+  const onNopChange = (raw: string) => {
+    const next = sanitizePbbNop(raw);
+    setNop(next);
+    if (shouldClearTagihanInquiryOnIdentifierEdit(inquiredNop, next)) {
+      invalidateInquirySession();
+    }
+  };
+
+  const onYearChange = (year: number) => {
+    setTahunPajak(year);
+    if (shouldClearTagihanInquiryOnTaxYearEdit(inquiredYear, year)) {
+      invalidateInquirySession();
+    }
   };
 
   const onInquire = async () => {
@@ -167,16 +195,21 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
     try {
       const res = await tagihanService.inquire(selected.code, customerNo, tahunPajak);
       if (!res.success || !res.data?.inquiry_ref_id) {
+        invalidateInquirySession();
         setError(res.message || 'Inquiry gagal. Periksa NOP dan Tahun Pajak.');
         return;
       }
       if (!isPayableAmount(res.data.selling_price)) {
+        invalidateInquirySession();
         setError('Inquiry berhasil tetapi nominal tagihan tidak valid.');
         return;
       }
       setInquiry(res.data);
+      setInquiredNop(customerNo);
+      setInquiredYear(tahunPajak);
       setStep('review');
     } catch (err: unknown) {
+      invalidateInquirySession();
       setError(parseApiError(err).message || 'Inquiry gagal.');
     } finally {
       setInquiring(false);
@@ -184,15 +217,12 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
   };
 
   const onPay = () => {
-    if (!selected || !inquiry || !isPayableAmount(inquiry.selling_price)) return;
-    startCheckout(selected);
-    setTarget(inquiry.customer_no);
-    setPurchaseContext({
-      tagihanContext: {
-        inquiry,
-        expiresAt: Date.now() + (inquiry.expires_in_seconds || 20 * 60) * 1000,
-      },
-    });
+    if (!selected || !inquiry?.inquiry_ref_id || !isPayableAmount(inquiry.selling_price)) return;
+    beginTagihanCheckout(
+      selected,
+      inquiry,
+      Date.now() + (inquiry.expires_in_seconds || 20 * 60) * 1000
+    );
     router.push({ pathname: '/checkout/[sku]', params: { sku: selected.code } });
   };
 
@@ -225,7 +255,7 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
         <TextInput
           style={styles.input}
           value={nop}
-          onChangeText={(t) => setNop(sanitizePbbNop(t))}
+          onChangeText={onNopChange}
           placeholder="15–18 digit NOP"
           placeholderTextColor={colors.gray[400]}
           keyboardType="number-pad"
@@ -241,7 +271,7 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
               <TouchableOpacity
                 key={y}
                 style={[styles.yearChip, active && styles.yearChipActive]}
-                onPress={() => setTahunPajak(y)}
+                onPress={() => onYearChange(y)}
                 disabled={!purchaseEnabled || inquiring}
               >
                 <Text style={[styles.yearText, active && styles.yearTextActive]}>{y}</Text>

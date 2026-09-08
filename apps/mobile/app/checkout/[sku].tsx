@@ -36,6 +36,7 @@ import {
   isVoucherInternetCategory,
   literalTargetForCategory,
 } from '../../src/utils/purchaseCategory';
+import { buildTagihanCheckoutPriceLines } from '../../src/utils/tagihanCheckout';
 import { isValidPhoneTarget, phoneTargetError } from '../../src/utils/targetValidation';
 import { stripGameProductDisplayName } from '../../src/utils/stripGameProductDisplayName';
 
@@ -133,9 +134,13 @@ export default function CheckoutScreen() {
 
   const phoneCategory = isPhoneTargetCategory(categorySlug) || viTembak;
 
+  const tagihanPriceLines =
+    tagihanCat && tagihanContext?.inquiry
+      ? buildTagihanCheckoutPriceLines(tagihanContext.inquiry)
+      : null;
   const estimatedTotal =
-    tagihanCat && tagihanContext?.inquiry?.selling_price != null
-      ? Number(tagihanContext.inquiry.selling_price)
+    tagihanPriceLines != null
+      ? tagihanPriceLines.total
       : productDetail != null
         ? productDetail.price + (productDetail.adminFee || 0)
         : 0;
@@ -520,20 +525,49 @@ export default function CheckoutScreen() {
                   : productDetail.name}
               </Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Harga</Text>
-              <Text style={styles.summaryValue}>{formatIDR(productDetail.price)}</Text>
-            </View>
-            {productDetail.adminFee > 0 ? (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Biaya Admin</Text>
-                <Text style={styles.summaryValue}>{formatIDR(productDetail.adminFee)}</Text>
-              </View>
-            ) : null}
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabelBold}>Total</Text>
-              <Text style={styles.summaryValueBold}>{formatIDR(estimatedTotal)}</Text>
-            </View>
+            {tagihanPriceLines ? (
+              <>
+                {tagihanPriceLines.billAmount != null ? (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Tagihan</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatIDR(tagihanPriceLines.billAmount)}
+                    </Text>
+                  </View>
+                ) : null}
+                {tagihanPriceLines.adminFee != null && tagihanPriceLines.adminFee > 0 ? (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Biaya Admin</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatIDR(tagihanPriceLines.adminFee)}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabelBold}>Total</Text>
+                  <Text style={styles.summaryValueBold}>
+                    {formatIDR(tagihanPriceLines.total)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Harga</Text>
+                  <Text style={styles.summaryValue}>{formatIDR(productDetail.price)}</Text>
+                </View>
+                {productDetail.adminFee > 0 ? (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Biaya Admin</Text>
+                    <Text style={styles.summaryValue}>{formatIDR(productDetail.adminFee)}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabelBold}>Total</Text>
+                  <Text style={styles.summaryValueBold}>{formatIDR(estimatedTotal)}</Text>
+                </View>
+              </>
+            )}
             {typeof balance === 'number' ? (
               <View style={[styles.summaryRow, styles.balanceRow]}>
                 <Text style={styles.balanceLabel}>Saldo GurkyPay</Text>

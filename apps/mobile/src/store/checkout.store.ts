@@ -5,6 +5,7 @@ import { GameInquiryResult } from '../services/game.service';
 import { TagihanInquiryResult } from '../services/tagihan.service';
 import { Transaction, TransactionStatus } from '../api/types';
 import { createIdempotencyKey } from '../utils/idempotency';
+import { resolveTagihanCheckoutSession } from '../utils/tagihanCheckout';
 
 /**
  * Transient checkout state only. PIN never lives here.
@@ -54,6 +55,16 @@ interface CheckoutState {
   error: string | null;
 
   startCheckout: (product: Product) => void;
+  /**
+   * Tagihan / PBB purchase start — binds inquiry session to checkout.
+   * Same SKU + same inquiry_ref_id → reuse idempotency key.
+   * New inquiry_ref_id → new key (new purchase attempt).
+   */
+  beginTagihanCheckout: (
+    product: Product,
+    inquiry: TagihanInquiryResult,
+    expiresAt: number
+  ) => void;
   setTarget: (target: string) => void;
   setPurchaseContext: (ctx: {
     operatorLabel?: string | null;
@@ -139,6 +150,38 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
       ...IDLE_STATE,
       skuCode: product.code,
       categorySlug: product.category || null,
+      idempotencyKey: createIdempotencyKey(),
+    });
+  },
+
+  beginTagihanCheckout: (product, inquiry, expiresAt) => {
+    const state = get();
+    const decision = resolveTagihanCheckoutSession({
+      skuCode: state.skuCode,
+      idempotencyKey: state.idempotencyKey,
+      existingInquiryRef: state.tagihanContext?.inquiry?.inquiry_ref_id,
+      productCode: product.code,
+      nextInquiryRef: inquiry.inquiry_ref_id,
+    });
+
+    const tagihanContext: TagihanCheckoutContext = { inquiry, expiresAt };
+    const targetNumber = inquiry.customer_no;
+
+    if (decision === 'reuse') {
+      set({
+        targetNumber,
+        tagihanContext,
+        categorySlug: product.category || state.categorySlug,
+      });
+      return;
+    }
+
+    set({
+      ...IDLE_STATE,
+      skuCode: product.code,
+      categorySlug: product.category || null,
+      targetNumber,
+      tagihanContext,
       idempotencyKey: createIdempotencyKey(),
     });
   },
