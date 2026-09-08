@@ -1,5 +1,5 @@
 /**
- * Slice 1–2 — Tagihan brand grouping (TV Pascabayar + PDAM evidence).
+ * Slice 1–3 — Tagihan brand grouping (TV Pascabayar + PDAM + Internet Pascabayar evidence).
  * Run: npx --yes tsx src/utils/tagihanBrandGrouping.test.ts
  */
 import assert from 'node:assert/strict';
@@ -130,5 +130,61 @@ assert.equal(pdamDup[0].boundSkuCode, null);
 const pdamAmb = resolveTagihanBrandSelection(pdamDup[0]);
 assert.equal(pdamAmb.ok, false);
 if (!pdamAmb.ok) assert.equal(pdamAmb.reason, 'ambiguous');
+
+// --- Slice 3 Internet Pascabayar production fixtures (test-only; not hardcoded in UI) ---
+const productionInternet = [
+  stubProduct('post733483', 'XL HOME', {
+    category: 'internet-pascabayar',
+    operatorName: 'INTERNET PASCABAYAR',
+  }),
+  stubProduct('post733484', 'BIZNET HOME', {
+    category: 'internet-pascabayar',
+    operatorName: 'INTERNET PASCABAYAR',
+  }),
+  stubProduct('post733485', 'BNETFIT', {
+    category: 'internet-pascabayar',
+    operatorName: 'INTERNET PASCABAYAR',
+  }),
+];
+
+const internetBrands = groupTagihanBrandsByProductName(productionInternet);
+assert.equal(internetBrands.length, 3, 'expected 3 Internet Pascabayar brand tiles');
+
+const internetByLabel = Object.fromEntries(internetBrands.map((g) => [g.label, g]));
+assert.ok(internetByLabel['XL HOME']);
+assert.ok(internetByLabel['BIZNET HOME']);
+assert.ok(internetByLabel['BNETFIT']);
+
+assert.equal(internetByLabel['XL HOME'].boundSkuCode, 'post733483');
+assert.equal(internetByLabel['BIZNET HOME'].boundSkuCode, 'post733484');
+assert.equal(internetByLabel['BNETFIT'].boundSkuCode, 'post733485');
+
+const xlResolve = resolveTagihanBrandSelection(internetByLabel['XL HOME']);
+assert.equal(xlResolve.ok, true);
+if (xlResolve.ok) assert.equal(xlResolve.product.code, 'post733483');
+
+// Deterministic sort (localeCompare id): BIZNET HOME → BNETFIT → XL HOME
+assert.deepEqual(
+  internetBrands.map((g) => g.label),
+  ['BIZNET HOME', 'BNETFIT', 'XL HOME']
+);
+
+// Duplicate Internet display name → fail-closed
+const internetDup = groupTagihanBrandsByProductName([
+  stubProduct('post733483', 'XL HOME', {
+    category: 'internet-pascabayar',
+    operatorName: 'INTERNET PASCABAYAR',
+  }),
+  stubProduct('post999997', '  XL HOME  ', {
+    category: 'internet-pascabayar',
+    operatorName: 'INTERNET PASCABAYAR',
+  }),
+]);
+assert.equal(internetDup.length, 1);
+assert.equal(internetDup[0].isAmbiguous, true);
+assert.equal(internetDup[0].boundSkuCode, null);
+const internetAmb = resolveTagihanBrandSelection(internetDup[0]);
+assert.equal(internetAmb.ok, false);
+if (!internetAmb.ok) assert.equal(internetAmb.reason, 'ambiguous');
 
 console.log('tagihanBrandGrouping.test.ts: all assertions passed');

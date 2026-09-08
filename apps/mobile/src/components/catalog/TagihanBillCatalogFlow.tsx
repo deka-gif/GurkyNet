@@ -28,8 +28,8 @@ import { parseApiError } from '../../api/client';
 /**
  * Mobile postpaid bill flow — mirrors Web BillPaymentFlow.
  *
- * Brand-first (product.name tiles, no catalog price): `tv-pascabayar` (Slice 1), `pdam` (Slice 2).
- * Other Tagihan categories keep product-grid-first until later slices.
+ * Brand-first (product.name tiles, no catalog price): `tv-pascabayar` (Slice 1), `pdam` (Slice 2),
+ * `internet-pascabayar` (Slice 3). Other Tagihan categories keep product-grid-first until later slices.
  *
  * Brand-first navigation: header/hardware back steps brand list ↔ identifier ↔ review
  * (same beforeRemove pattern as ProviderCatalogBrowseFlow). No body "Ganti produk".
@@ -48,8 +48,8 @@ type Props = {
 
 type Step = 'products' | 'input' | 'review';
 
-/** Brand-first Tagihan slugs — Slice 1 TV, Slice 2 PDAM. */
-const BRAND_FIRST_CATEGORIES = new Set(['tv-pascabayar', 'pdam']);
+/** Brand-first Tagihan slugs — Slice 1 TV, Slice 2 PDAM, Slice 3 Internet. */
+const BRAND_FIRST_CATEGORIES = new Set(['tv-pascabayar', 'pdam', 'internet-pascabayar']);
 
 export function TagihanBillCatalogFlow({
   category,
