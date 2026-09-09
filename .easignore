@@ -1,0 +1,25 @@
+node_modules/
+build/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+dist/
+.vite/
+laravel/.phpunit.result.cache
+*.bak
+*.save
+.cursor/
+
+# Laravel
+/laravel/
+
+# Web root
+/src/
+/public/
+/assets/
+/database/
+/deploy/
+/docs/
+/scripts/
