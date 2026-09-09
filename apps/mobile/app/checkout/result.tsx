@@ -4,10 +4,12 @@ import { Stack, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useCheckoutStore } from '../../src/store/checkout.store';
 import { useWalletStore } from '../../src/store/wallet.store';
+import { useAuthStore } from '../../src/store/auth.store';
 import { transactionService, ReceiptData } from '../../src/services/transaction.service';
 import { ScreenContainer, Card, Button, LoadingState, StatusBadge } from '../../src/components/ui';
 import { colors, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
+import { runPrintReceiptFlow } from '../../src/utils/printReceiptFlow';
 
 /** Backend's own normalized vocabulary (TransactionResource) — never a client-invented
  * status. Matches the terminal set audited from TransactionStatusMapper. */
@@ -35,7 +37,10 @@ export default function CheckoutResultScreen() {
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [printMsg, setPrintMsg] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
   const walletRefreshedRef = useRef(false);
+  const userName = useAuthStore((s) => s.user?.name);
 
   const loadReceipt = async (idOrInvoice: string | number) => {
     setReceiptLoading(true);
@@ -118,6 +123,22 @@ export default function CheckoutResultScreen() {
       setCopyMsg('Kode disalin.');
     } catch {
       setCopyMsg('Gagal menyalin kode.');
+    }
+  };
+
+  const onPrint = async () => {
+    if (!receipt || printing) return;
+    setPrinting(true);
+    setPrintMsg(null);
+    try {
+      await runPrintReceiptFlow({
+        receipt,
+        userName,
+        router,
+        onMessage: setPrintMsg,
+      });
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -221,6 +242,19 @@ export default function CheckoutResultScreen() {
         </Card>
       )}
 
+      {terminal && String(transaction.status).toLowerCase() === 'success' && receipt ? (
+        <>
+          <Button
+            label={printing ? 'Mencetak…' : 'Cetak Struk'}
+            variant="secondary"
+            onPress={() => void onPrint()}
+            loading={printing}
+            disabled={printing}
+          />
+          {printMsg ? <Text style={styles.printMsg}>{printMsg}</Text> : null}
+        </>
+      ) : null}
+
       {terminal && <Button label="Mulai Pembelian Baru" onPress={handleNewPurchase} />}
     </ScreenContainer>
   );
@@ -251,6 +285,7 @@ const styles = StyleSheet.create({
   },
   voucherHint: { fontSize: typography.size.xs, color: colors.gray[500] },
   copyMsg: { fontSize: typography.size.xs, color: colors.status.success, fontWeight: typography.weight.medium },
+  printMsg: { fontSize: typography.size.xs, color: colors.gray[600], textAlign: 'center' },
   receiptCard: { gap: spacing.sm },
   receiptTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between' },

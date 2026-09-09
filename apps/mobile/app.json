@@ -12,7 +12,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.gurkynet.gurkypay",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "GurkyPay menggunakan Face ID untuk membuka aplikasi dengan aman di perangkat ini."
+        "NSFaceIDUsageDescription": "GurkyPay menggunakan Face ID untuk membuka aplikasi dengan aman di perangkat ini.",
+        "NSBluetoothAlwaysUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
+        "NSBluetoothPeripheralUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
+        "NSLocalNetworkUsageDescription": "GurkyPay membutuhkan akses jaringan lokal untuk mencetak ke printer thermal melalui Wi‑Fi/TCP jika tersedia."
       }
     },
     "android": {
@@ -24,7 +27,16 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -59,7 +71,15 @@
           "barcodeScannerEnabled": true
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-dev-client",
+      [
+        "react-native-thermal-printer-driver",
+        {
+          "bluetoothAlwaysUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
+          "bluetoothPeripheralUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi."
+        }
+      ]
     ]
   }
 }

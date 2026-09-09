@@ -24,6 +24,8 @@ import {
 } from '../../src/utils/transactionStatus';
 import { openSnapCheckout } from '../../src/utils/topupSnap';
 import { useTopUpStore } from '../../src/store/topup.store';
+import { useAuthStore } from '../../src/store/auth.store';
+import { runPrintReceiptFlow } from '../../src/utils/printReceiptFlow';
 
 /**
  * Transaction detail — GET /transactions/{id}.
@@ -44,8 +46,11 @@ export default function RiwayatDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [printMsg, setPrintMsg] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
   const config = useTopUpStore((s) => s.config);
   const loadConfig = useTopUpStore((s) => s.loadConfig);
+  const userName = useAuthStore((s) => s.user?.name);
 
   const isTopUp = tx
     ? isWalletTopUpService(tx.serviceName, tx.paymentMethod, tx.transactionCode)
@@ -158,6 +163,22 @@ export default function RiwayatDetailScreen() {
     }
   };
 
+  const onPrint = async () => {
+    if (!receipt || printing) return;
+    setPrinting(true);
+    setPrintMsg(null);
+    try {
+      await runPrintReceiptFlow({
+        receipt,
+        userName,
+        router,
+        onMessage: setPrintMsg,
+      });
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   return (
     <ScreenContainer belowHeader onRefresh={() => void load()} refreshing={loading}>
       <Stack.Screen
@@ -258,6 +279,18 @@ export default function RiwayatDetailScreen() {
             </Text>
           ) : null}
 
+          {success && receipt ? (
+            <>
+              <Button
+                label={printing ? 'Mencetak…' : 'Cetak Struk'}
+                onPress={() => void onPrint()}
+                loading={printing}
+                disabled={printing}
+              />
+              {printMsg ? <Text style={styles.printMsg}>{printMsg}</Text> : null}
+            </>
+          ) : null}
+
           <Button label="Kembali ke Riwayat" variant="secondary" onPress={() => router.back()} />
         </>
       )}
@@ -334,4 +367,5 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   copyMsg: { fontSize: typography.size.xs, color: colors.status.success },
+  printMsg: { fontSize: typography.size.sm, color: colors.gray[600], lineHeight: 20 },
 });

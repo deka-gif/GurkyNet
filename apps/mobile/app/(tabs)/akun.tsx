@@ -150,6 +150,18 @@ export default function AkunScreen() {
 
       <Section title="Fitur">
         <MenuRow
+          icon="storefront-outline"
+          label="Profil Toko"
+          subtitle="Nama toko, alamat, dan WhatsApp untuk header struk"
+          onPress={() => router.push('/akun/profil-toko')}
+        />
+        <MenuRow
+          icon="list-outline"
+          label="Template Struk"
+          subtitle="Atur field, urutan, dan catatan yang dicetak"
+          onPress={() => router.push('/akun/template-struk')}
+        />
+        <MenuRow
           icon="print-outline"
           label="Bluetooth & Printer"
           subtitle="Hubungkan printer mini Bluetooth untuk mencetak struk"

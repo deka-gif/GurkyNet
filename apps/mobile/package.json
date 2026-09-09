@@ -14,6 +14,7 @@
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.17",
     "expo-crypto": "~57.0.2",
+    "expo-dev-client": "~57.0.18",
     "expo-file-system": "~57.0.6",
     "expo-haptics": "~57.0.2",
     "expo-image-picker": "~57.0.16",
@@ -33,6 +34,7 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
+    "react-native-thermal-printer-driver": "^0.1.1",
     "react-native-web": "^0.21.2",
     "zustand": "^5.0.15"
   },
@@ -45,7 +47,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "eas:dev:android": "eas build --profile development --platform android",
+    "eas:dev:ios": "eas build --profile development --platform ios"
   },
   "private": true
 }
