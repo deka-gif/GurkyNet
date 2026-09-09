@@ -288,6 +288,24 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* 4b. CEK HARGA — read-only catalog browser entry (after Layanan) */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cek Harga</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cek Harga"
+              onPress={() => router.push('/cek-harga')}
+              style={({ pressed }) => [styles.categoryItem, pressed && styles.pressed]}
+            >
+              <View style={[styles.categoryIconWrap, styles.categoryIconWrapFallback]}>
+                <Ionicons name="pricetag-outline" size={26} color={colors.primary[600]} />
+              </View>
+              <Text style={styles.categoryLabel} numberOfLines={2}>
+                Cek Harga
+              </Text>
+            </Pressable>
+          </View>
+
           {/* 5. AKTIVITAS TERBARU */}
           <View style={[styles.section, styles.sectionLast]}>
             <View style={styles.sectionHeader}>
