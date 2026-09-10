@@ -12,6 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // API-first app: Laravel 11 defaults redirectGuestsTo(route('login')), but this
+        // project has no named "login" route. Calling route('login') on unauthenticated
+        // API requests without Accept: application/json caused RouteNotFoundException → 500.
+        // Keep auth:sanctum enforcement; null redirect → AuthenticationException → 401 JSON.
+        $middleware->redirectGuestsTo(fn () => null);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
             'health.token' => \App\Http\Middleware\ProtectHealthMetrics::class,
