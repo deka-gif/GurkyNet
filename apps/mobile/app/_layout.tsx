@@ -73,10 +73,16 @@ export default function RootLayout() {
         if (!seen && status !== 'granted') {
           setShowPushPreprompt(true);
         } else if (status === 'granted') {
-          await pushNotificationService.syncPushTokenWithBackend();
+          // Already consented at OS level — fetch Expo token without re-prompting.
+          await pushNotificationService.syncPushTokenWithBackend({
+            requestPermission: false,
+          });
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.info(
+          '[push] STARTUP_SYNC_FAILURE error=' +
+            (err instanceof Error ? err.message.slice(0, 200) : 'unknown')
+        );
       }
     })();
     return () => {
@@ -92,7 +98,10 @@ export default function RootLayout() {
   const onAllow = async () => {
     setShowPushPreprompt(false);
     await storageService.markPushPrepromptSeen();
-    await pushNotificationService.syncPushTokenWithBackend();
+    // Soft pre-prompt consent → may show OS permission dialog, then register token.
+    await pushNotificationService.syncPushTokenWithBackend({
+      requestPermission: true,
+    });
   };
 
   return (

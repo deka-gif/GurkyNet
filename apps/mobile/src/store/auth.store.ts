@@ -63,14 +63,19 @@ async function syncDeviceRegistration(): Promise<void> {
       os_version: getOsVersion(),
       app_version: Constants.expoConfig?.version ?? undefined,
     });
-    // Best-effort push token sync when OS permission already granted.
+    // Best-effort push token sync when OS permission already granted — no auto OS prompt.
     const { pushNotificationService } = await import('../services/pushNotification.service');
     const status = await pushNotificationService.getPermissionStatus();
     if (status === 'granted') {
-      await pushNotificationService.syncPushTokenWithBackend();
+      await pushNotificationService.syncPushTokenWithBackend({
+        requestPermission: false,
+      });
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    console.info(
+      '[push] AUTH_DEVICE_SYNC_FAILURE error=' +
+        (err instanceof Error ? err.message.slice(0, 200) : 'unknown')
+    );
   }
 }
 

@@ -114,7 +114,10 @@ export default function NotifikasiPreferensiScreen() {
   const enableOsPush = async () => {
     setSaving(true);
     try {
-      const ok = await pushNotificationService.syncPushTokenWithBackend();
+      // Explicit user action from settings → may show OS permission dialog.
+      const ok = await pushNotificationService.syncPushTokenWithBackend({
+        requestPermission: true,
+      });
       setOsGranted(ok);
     } finally {
       setSaving(false);

@@ -6,6 +6,21 @@ import { apiClient } from '../api/client';
 import { storageService } from './storage.service';
 import { useNotificationStore } from '../store/notification.store';
 import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
+import {
+  classifyTokenFetchFailure,
+  isExpoPushToken,
+  logPushObservability,
+  resolveEasProjectId,
+  sanitizePushErrorMessage,
+  type PushSyncReason,
+} from './pushNotification.helpers';
+
+export {
+  isExpoPushToken,
+  resolveEasProjectId,
+  sanitizePushErrorMessage,
+  logPushObservability,
+} from './pushNotification.helpers';
 
 /**
  * Expo push infrastructure (SDK 57 / expo-notifications).
@@ -21,6 +36,7 @@ export const ANDROID_NOTIFICATION_CHANNEL_ID = 'default';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     // Foreground: refresh inbox; avoid OS banner that duplicates in-app state.
+    // Do not change until background tray delivery is proven.
     shouldShowBanner: false,
     shouldShowList: false,
     shouldPlaySound: false,
@@ -39,27 +55,22 @@ type PushData = {
   deep_link?: string;
 };
 
+export type PushSyncResult = {
+  ok: boolean;
+  reason: PushSyncReason;
+  permission?: Notifications.PermissionStatus;
+  tokenPresent: boolean;
+  provider?: 'expo';
+};
+
 /** Prevent cold-start double navigation (lastResponse + response listener). */
 let lastHandledResponseKey: string | null = null;
 let androidChannelReady: Promise<void> | null = null;
-
-function projectId(): string | undefined {
-  return (
-    Constants.easConfig?.projectId ||
-    (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas
-      ?.projectId
-  );
-}
+/** Bound concurrent sync attempts (startup + allow + auth). */
+let syncInFlight: Promise<PushSyncResult> | null = null;
 
 function platform(): 'android' | 'ios' {
   return Platform.OS === 'ios' ? 'ios' : 'android';
-}
-
-function isExpoPushToken(token: string): boolean {
-  return (
-    token.startsWith('ExponentPushToken') ||
-    token.startsWith('ExpoPushToken')
-  );
 }
 
 function asPushData(raw: unknown): PushData {
@@ -86,10 +97,6 @@ function responseKey(response: Notifications.NotificationResponse): string {
   return `${response.notification.request.identifier}:${response.actionIdentifier}`;
 }
 
-/**
- * Ensure Android channel exists once. Channel id is stable ("default").
- * Required for reliable tray display on Android 8+.
- */
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   if (!androidChannelReady) {
@@ -107,13 +114,21 @@ async function ensureAndroidChannel(): Promise<void> {
   await androidChannelReady;
 }
 
-async function registerDeviceWithToken(pushToken: string | null): Promise<void> {
+/**
+ * Persist Expo token to backend. Never called with null to "succeed" registration.
+ * user_id is bound by Sanctum on the server — never sent from the client.
+ */
+async function registerDeviceWithToken(pushToken: string): Promise<void> {
+  if (!isExpoPushToken(pushToken)) {
+    throw new Error('invalid_expo_push_token_shape');
+  }
   const device_uuid = await storageService.getDeviceUuid();
-  const token =
-    pushToken && isExpoPushToken(pushToken) ? pushToken : null;
 
-  // Observability only — never log the token value.
-  console.info('[push] TOKEN_REGISTERED=' + (token ? 'true' : 'false'));
+  logPushObservability('REGISTER_ATTEMPT', {
+    TOKEN_PRESENT: true,
+    provider: 'expo',
+    platform: platform(),
+  });
 
   await apiClient.post('/devices/register', {
     device_uuid,
@@ -121,15 +136,149 @@ async function registerDeviceWithToken(pushToken: string | null): Promise<void> 
     device_model: getDeviceModel(),
     os_version: getOsVersion(),
     app_version: Constants.expoConfig?.version ?? undefined,
-    ...(token ? { push_token: token, push_provider: 'expo' as const } : {}),
+    push_token: pushToken,
+    push_provider: 'expo' as const,
   });
-  if (token) {
-    await apiClient.post('/devices/push-token', {
-      device_uuid,
-      platform: platform(),
-      push_token: token,
-      push_provider: 'expo',
+  await apiClient.post('/devices/push-token', {
+    device_uuid,
+    platform: platform(),
+    push_token: pushToken,
+    push_provider: 'expo',
+  });
+
+  logPushObservability('REGISTER_SUCCESS', {
+    TOKEN_REGISTERED: true,
+    provider: 'expo',
+  });
+}
+
+async function fetchExpoPushTokenWithRetry(maxAttempts = 2): Promise<string> {
+  const pid = resolveEasProjectId(Constants);
+  if (!pid) {
+    throw new Error('missing_eas_project_id');
+  }
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await ensureAndroidChannel();
+      logPushObservability('TOKEN_FETCH_ATTEMPT', {
+        attempt,
+        projectId_present: true,
+        platform: platform(),
+      });
+      const token = await Notifications.getExpoPushTokenAsync({ projectId: pid });
+      const value = token.data || '';
+      if (!value) {
+        throw new Error('empty_expo_push_token');
+      }
+      if (!isExpoPushToken(value)) {
+        throw new Error('invalid_expo_push_token_shape');
+      }
+      logPushObservability('TOKEN_FETCH_SUCCESS', {
+        TOKEN_PRESENT: true,
+        provider: 'expo',
+      });
+      return value;
+    } catch (err) {
+      lastError = err;
+      logPushObservability('TOKEN_FETCH_FAILURE', {
+        attempt,
+        error: sanitizePushErrorMessage(err),
+      });
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 400 * attempt));
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('token_fetch_failed');
+}
+
+async function syncPushTokenWithBackendInner(opts: {
+  /** When true, may show the OS permission dialog (only after soft pre-prompt consent). */
+  requestPermission: boolean;
+}): Promise<PushSyncResult> {
+  const authToken = await storageService.getToken();
+  if (!authToken) {
+    logPushObservability('SYNC_SKIP', { reason: 'not_authenticated' });
+    return { ok: false, reason: 'not_authenticated', tokenPresent: false };
+  }
+
+  let permission = await Notifications.getPermissionsAsync();
+  logPushObservability('PERMISSION_STATUS', {
+    status: permission.status,
+    granted: permission.granted,
+    canAskAgain: permission.canAskAgain,
+  });
+
+  if (!permission.granted) {
+    if (!opts.requestPermission) {
+      const reason: PushSyncReason =
+        permission.status === 'undetermined'
+          ? 'permission_undetermined'
+          : 'permission_denied';
+      logPushObservability('SYNC_SKIP', {
+        reason,
+        TOKEN_REGISTERED: false,
+      });
+      return {
+        ok: false,
+        reason,
+        permission: permission.status,
+        tokenPresent: false,
+      };
+    }
+    if (!permission.canAskAgain) {
+      logPushObservability('SYNC_SKIP', {
+        reason: 'permission_denied',
+        TOKEN_REGISTERED: false,
+      });
+      return {
+        ok: false,
+        reason: 'permission_denied',
+        permission: permission.status,
+        tokenPresent: false,
+      };
+    }
+    permission = await Notifications.requestPermissionsAsync();
+    logPushObservability('PERMISSION_REQUEST_RESULT', {
+      status: permission.status,
+      granted: permission.granted,
     });
+    if (!permission.granted) {
+      return {
+        ok: false,
+        reason: 'permission_denied',
+        permission: permission.status,
+        tokenPresent: false,
+      };
+    }
+  }
+
+  try {
+    const token = await fetchExpoPushTokenWithRetry(2);
+    await registerDeviceWithToken(token);
+    return {
+      ok: true,
+      reason: 'registered',
+      permission: permission.status,
+      tokenPresent: true,
+      provider: 'expo',
+    };
+  } catch (err) {
+    const msg = sanitizePushErrorMessage(err);
+    const reason = classifyTokenFetchFailure(msg);
+    logPushObservability('SYNC_FAILURE', {
+      reason,
+      error: msg,
+      TOKEN_REGISTERED: false,
+    });
+    return {
+      ok: false,
+      reason,
+      permission: permission.status,
+      tokenPresent: false,
+    };
   }
 }
 
@@ -152,41 +301,45 @@ export const pushNotificationService = {
 
   getExpoPushToken: async (): Promise<string | null> => {
     try {
-      await ensureAndroidChannel();
-      const pid = projectId();
-      const token = await Notifications.getExpoPushTokenAsync(
-        pid ? { projectId: pid } : undefined
-      );
-      const value = token.data || null;
-      if (value && !isExpoPushToken(value)) {
-        return null;
-      }
-      return value;
-    } catch {
+      return await fetchExpoPushTokenWithRetry(2);
+    } catch (err) {
+      logPushObservability('GET_TOKEN_NULL', {
+        error: sanitizePushErrorMessage(err),
+        TOKEN_PRESENT: false,
+      });
       return null;
     }
   },
 
   /**
-   * After OS permission granted: obtain Expo token and bind to authenticated user.
+   * Obtain Expo token (if permitted) and bind to authenticated user via Sanctum.
+   * Does NOT register a null token as success.
    */
-  syncPushTokenWithBackend: async (): Promise<boolean> => {
-    try {
-      const granted = await pushNotificationService.requestOsPermission();
-      if (!granted) {
-        await registerDeviceWithToken(null);
-        return false;
-      }
-      const token = await pushNotificationService.getExpoPushToken();
-      if (!token) {
-        await registerDeviceWithToken(null);
-        return false;
-      }
-      await registerDeviceWithToken(token);
-      return true;
-    } catch {
-      return false;
+  syncPushTokenWithBackend: async (opts?: {
+    requestPermission?: boolean;
+  }): Promise<boolean> => {
+    const requestPermission = opts?.requestPermission === true;
+    if (syncInFlight) {
+      const shared = await syncInFlight;
+      return shared.ok;
     }
+    syncInFlight = syncPushTokenWithBackendInner({ requestPermission }).finally(() => {
+      syncInFlight = null;
+    });
+    const result = await syncInFlight;
+    return result.ok;
+  },
+
+  /** Detailed sync result for diagnostics / tests. */
+  syncPushTokenWithBackendDetailed: async (opts?: {
+    requestPermission?: boolean;
+  }): Promise<PushSyncResult> => {
+    const requestPermission = opts?.requestPermission === true;
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = syncPushTokenWithBackendInner({ requestPermission }).finally(() => {
+      syncInFlight = null;
+    });
+    return syncInFlight;
   },
 
   /** Logout / switch account — clear device↔user association before dropping session. */
@@ -197,14 +350,14 @@ export const pushNotificationService = {
         device_uuid,
         platform: platform(),
       });
-    } catch {
-      // ignore — logout must continue
+      logPushObservability('DISASSOCIATE_SUCCESS', { platform: platform() });
+    } catch (err) {
+      logPushObservability('DISASSOCIATE_FAILURE', {
+        error: sanitizePushErrorMessage(err),
+      });
     }
   },
 
-  /**
-   * Navigate from structured push / inbox payload. Never crash on bad deep links.
-   */
   openFromPayload: async (
     raw: unknown,
     opts?: { fallbackToInbox?: boolean }
@@ -215,7 +368,7 @@ export const pushNotificationService = {
       try {
         await useNotificationStore.getState().markAsRead(String(notificationId));
       } catch {
-        // ignore — may run before auth hydrate; inbox mark is best-effort
+        // ignore — may run before auth hydrate
       }
     }
 
@@ -246,7 +399,7 @@ export const pushNotificationService = {
         }
       }
     } catch {
-      // fall through — never crash closed-app launch
+      // fall through
     }
 
     if (fallback) {
@@ -272,11 +425,6 @@ export const pushNotificationService = {
     );
   },
 
-  /**
-   * Wire listeners once per authenticated session.
-   * Foreground receive → inbox refresh only (handler suppresses OS banner).
-   * Token listener → re-fetch Expo push token (never upload native FCM token as Expo).
-   */
   attachListeners: (): (() => void) => {
     void ensureAndroidChannel();
 
@@ -289,18 +437,19 @@ export const pushNotificationService = {
     });
 
     const tokenSub = Notifications.addPushTokenListener(() => {
-      // Native device token changed — refresh Expo Push Token and upsert backend.
       void (async () => {
         try {
           const authToken = await storageService.getToken();
           if (!authToken) return;
           const status = await pushNotificationService.getPermissionStatus();
           if (status !== 'granted') return;
-          const expoToken = await pushNotificationService.getExpoPushToken();
-          if (!expoToken) return;
-          await registerDeviceWithToken(expoToken);
-        } catch {
-          // ignore
+          await pushNotificationService.syncPushTokenWithBackend({
+            requestPermission: false,
+          });
+        } catch (err) {
+          logPushObservability('TOKEN_LISTENER_FAILURE', {
+            error: sanitizePushErrorMessage(err),
+          });
         }
       })();
     });
@@ -312,16 +461,15 @@ export const pushNotificationService = {
     };
   },
 
-  /**
-   * Cold start: open app from notification tap (after auth gate is ready).
-   */
   handleLastResponse: async (): Promise<void> => {
     try {
       const last = await Notifications.getLastNotificationResponseAsync();
       if (!last) return;
       await pushNotificationService.handleNotificationResponse(last);
-    } catch {
-      // ignore — do not crash if app state not fully hydrated
+    } catch (err) {
+      logPushObservability('LAST_RESPONSE_FAILURE', {
+        error: sanitizePushErrorMessage(err),
+      });
     }
   },
 };
