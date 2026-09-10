@@ -21,9 +21,23 @@ class ProfileAction
         return $this->profileRepository->updateProfile($user, $data);
     }
 
-    public function updateNotificationPreference(User $user, bool $enabled): User
+    /**
+     * Update customer notification channel preferences.
+     *
+     * @param  array{notify_transactions?:bool,notify_announcements?:bool,notify_promotions?:bool}  $prefs
+     */
+    public function updateNotificationPreference(User $user, array $prefs): User
     {
-        $user->forceFill(['notify_transactions' => $enabled])->save();
+        $fill = [];
+        foreach (['notify_transactions', 'notify_announcements', 'notify_promotions'] as $key) {
+            if (array_key_exists($key, $prefs)) {
+                $fill[$key] = (bool) $prefs[$key];
+            }
+        }
+
+        if ($fill !== []) {
+            $user->forceFill($fill)->save();
+        }
 
         return $user->fresh();
     }

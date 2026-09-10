@@ -158,6 +158,8 @@ export const profileService = {
     device_model?: string;
     os_version?: string;
     app_version?: string;
+    push_token?: string;
+    push_provider?: 'fcm' | 'apns' | 'webpush' | 'expo';
   }): Promise<ApiResponse<unknown>> => {
     const response = await apiClient.post<ApiResponse<unknown>>('/devices/register', payload);
     return response.data;

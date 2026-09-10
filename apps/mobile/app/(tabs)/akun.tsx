@@ -150,6 +150,12 @@ export default function AkunScreen() {
 
       <Section title="Fitur">
         <MenuRow
+          icon="notifications-outline"
+          label="Notifikasi"
+          subtitle="Preferensi transaksi, informasi, dan promo"
+          onPress={() => router.push('/akun/notifikasi')}
+        />
+        <MenuRow
           icon="storefront-outline"
           label="Profil Toko"
           subtitle="Nama toko, alamat, dan WhatsApp untuk header struk"

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\TransactionStatus;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\Transaction;
@@ -10,7 +11,9 @@ use App\Models\UserNotification;
 use App\Events\TransactionCreated;
 use App\Events\TransactionSuccess;
 use App\Events\TransactionFailed;
+use App\Events\TransactionProcessing;
 use App\Events\WalletCredited;
+use App\Events\WalletDebited;
 use App\Listeners\SendNotification;
 use App\Listeners\WriteAuditLog;
 use App\Listeners\BroadcastEvent;
@@ -192,6 +195,7 @@ class ObservabilityAndNotificationTest extends TestCase
 
         $notification = Notification::where('title', 'Top Up Berhasil')->first();
         $this->assertNotNull($notification);
+        $this->assertSame('Saldo Anda berhasil ditambahkan sebesar Rp25.000.', $notification->message);
         $this->assertStringNotContainsString('refund', strtolower((string) $notification->message));
     }
 
@@ -268,5 +272,387 @@ class ObservabilityAndNotificationTest extends TestCase
         $this->assertDatabaseHas('notifications', [
             'title' => 'Pembayaran Kedaluwarsa',
         ]);
+    }
+
+    public function test_product_purchase_success_uses_single_customer_final_notification(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-PRODUCT-NOTIF-001',
+            'service_name' => 'Pulsa Telkomsel 75.000',
+            'target_number' => '081234567899',
+            'amount' => 75000,
+            'total_payment' => 77000,
+            'payment_method' => 'wallet',
+            'status' => 'success',
+        ]);
+        $transaction->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionCreated($transaction));
+        $listener->handle(new \App\Events\TransactionProcessing($transaction));
+        $listener->handle(new TransactionSuccess($transaction));
+        $listener->handle(new \App\Events\TransactionProcessing($transaction));
+
+        $this->assertSame(1, Notification::count());
+        $notification = Notification::first();
+        $this->assertSame('Pembelian Berhasil', $notification->title);
+        $this->assertSame(
+            'Pembelian Pulsa Telkomsel 75.000 sebesar Rp75.000 berhasil diproses.',
+            $notification->message
+        );
+        $this->assertSame('customer_final:'.$transaction->id, $notification->dedupe_key);
+    }
+
+    public function test_bill_payment_success_uses_customer_wording(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-BILL-NOTIF-001',
+            'service_name' => 'PLN Pascabayar',
+            'target_number' => '1234567890',
+            'amount' => 150000,
+            'total_payment' => 152500,
+            'payment_method' => 'wallet',
+            'status' => 'success',
+        ]);
+        $transaction->load('user');
+
+        resolve(SendNotification::class)->handle(new TransactionSuccess($transaction));
+
+        $this->assertDatabaseHas('notifications', ['title' => 'Pembayaran Berhasil']);
+        $notification = Notification::where('title', 'Pembayaran Berhasil')->first();
+        $this->assertSame(
+            'Pembayaran tagihan PLN Pascabayar sebesar Rp150.000 berhasil diselesaikan.',
+            $notification->message
+        );
+    }
+
+    public function test_bill_payment_failed_includes_service_and_amount(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-BILL-NOTIF-002',
+            'service_name' => 'PLN Pascabayar',
+            'target_number' => '1234567890',
+            'amount' => 150000,
+            'total_payment' => 152500,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::FAILED->value,
+            'refunded_at' => now(),
+        ]);
+        $transaction->load('user');
+
+        resolve(SendNotification::class)->handle(new TransactionFailed($transaction));
+
+        $notification = Notification::first();
+        $this->assertSame('Pembayaran Gagal', $notification->title);
+        $this->assertSame(
+            'Pembayaran tagihan PLN Pascabayar sebesar Rp150.000 tidak dapat diproses. Dana telah dikembalikan ke saldo Anda.',
+            $notification->message
+        );
+        $this->assertSame(1, Notification::count());
+    }
+
+    public function test_purchase_failed_includes_service_and_amount_without_fake_reason(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-PRODUCT-NOTIF-004',
+            'service_name' => 'Mobile Legends 50.000',
+            'target_number' => '123456789',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::FAILED->value,
+        ]);
+        $transaction->load('user');
+
+        resolve(SendNotification::class)->handle(new TransactionFailed($transaction));
+
+        $notification = Notification::first();
+        $this->assertSame('Pembelian Gagal', $notification->title);
+        $this->assertSame(
+            'Pembelian Mobile Legends 50.000 sebesar Rp50.000 tidak dapat diproses.',
+            $notification->message
+        );
+        $this->assertStringNotContainsStringIgnoringCase('server', $notification->message);
+        $this->assertStringNotContainsStringIgnoringCase('digiflazz', $notification->message);
+        $this->assertSame('customer_final:'.$transaction->id, $notification->dedupe_key);
+    }
+
+    public function test_transfer_success_skips_wallet_ledger_toasts_and_sends_single_final_notification(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-TF-NOTIF-001',
+            'service_name' => 'Transfer Saldo',
+            'target_number' => '104200000199',
+            'amount' => 100000,
+            'total_payment' => 100000,
+            'payment_method' => 'wallet',
+            'status' => 'success',
+            'notes' => 'Transfer ke BUDI',
+        ]);
+        $transaction->load('user');
+        $this->wallet->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new WalletDebited($this->wallet, 100000, 'Transfer ke 104200000199', $transaction->id));
+        $listener->handle(new TransactionCreated($transaction));
+        $listener->handle(new TransactionSuccess($transaction));
+        $listener->handle(new WalletCredited($this->wallet, 100000, 'Transfer masuk dari 104200000099', $transaction->id));
+
+        $this->assertSame(1, Notification::count());
+        $notification = Notification::first();
+        $this->assertSame('Transfer Berhasil', $notification->title);
+        $this->assertSame('Transfer sebesar Rp100.000 berhasil dilakukan.', $notification->message);
+    }
+
+    public function test_failed_purchase_with_refund_merges_refund_into_single_notification(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-PRODUCT-NOTIF-002',
+            'service_name' => 'Pulsa Telkomsel 75.000',
+            'target_number' => '081234567899',
+            'amount' => 75000,
+            'total_payment' => 77000,
+            'payment_method' => 'wallet',
+            'status' => 'REFUNDED',
+            'refunded_at' => now(),
+            'notes' => 'Refund confirmed',
+        ]);
+        $transaction->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionFailed($transaction));
+        $listener->handle(new WalletCredited($this->wallet, 77000, 'Refund transaksi', $transaction->id));
+
+        $this->assertSame(1, Notification::count());
+        $notification = Notification::first();
+        $this->assertSame('Pembelian Gagal', $notification->title);
+        $this->assertSame(
+            'Pembelian Pulsa Telkomsel 75.000 sebesar Rp75.000 tidak dapat diproses. Dana telah dikembalikan ke saldo Anda.',
+            $notification->message
+        );
+        $this->assertDatabaseMissing('notifications', ['title' => 'Refund Berhasil']);
+        $this->assertDatabaseMissing('notifications', ['title' => 'Saldo Bertambah']);
+    }
+
+    public function test_duplicate_and_late_events_do_not_create_more_than_one_final_notification(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-PRODUCT-NOTIF-003',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => 'success',
+        ]);
+        $transaction->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionCreated($transaction));
+        $listener->handle(new \App\Events\TransactionProcessing($transaction));
+        $listener->handle(new TransactionSuccess($transaction));
+        $listener->handle(new TransactionSuccess($transaction));
+        $listener->handle(new \App\Events\TransactionProcessing($transaction));
+
+        $this->assertSame(1, Notification::count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$transaction->id)->count());
+        $this->assertSame(1, UserNotification::where('user_id', $this->user->id)->count());
+    }
+
+    public function test_customer_final_dedupe_success_success_creates_exactly_one_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-001',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::SUCCESS->value,
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionSuccess($tx));
+        $listener->handle(new TransactionSuccess($tx));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+    }
+
+    public function test_customer_final_dedupe_failed_failed_creates_exactly_one_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-002',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::FAILED->value,
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionFailed($tx));
+        $listener->handle(new TransactionFailed($tx));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+    }
+
+    public function test_customer_final_dedupe_expired_expired_creates_exactly_one_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-003',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::EXPIRED->value,
+            'notes' => 'Pembayaran kedaluwarsa',
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionFailed($tx));
+        $listener->handle(new TransactionFailed($tx));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+    }
+
+    public function test_customer_final_dedupe_failed_then_expired_does_not_create_second_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-004',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::FAILED->value,
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionFailed($tx));
+
+        $tx->status = TransactionStatus::EXPIRED->value;
+        $tx->notes = 'Pembayaran kedaluwarsa';
+        $tx->save();
+
+        $listener->handle(new TransactionFailed($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+        $this->assertSame(1, Notification::count());
+    }
+
+    public function test_customer_final_dedupe_expired_then_failed_does_not_create_second_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-005',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::EXPIRED->value,
+            'notes' => 'Pembayaran kedaluwarsa',
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionFailed($tx));
+
+        $tx->status = TransactionStatus::FAILED->value;
+        $tx->notes = 'Transaksi gagal';
+        $tx->save();
+
+        $listener->handle(new TransactionFailed($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+        $this->assertSame(1, Notification::count());
+    }
+
+    public function test_customer_final_dedupe_success_then_processing_does_not_create_second_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-006',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::SUCCESS->value,
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionSuccess($tx));
+        $listener->handle(new TransactionProcessing($tx));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+        $this->assertSame(1, Notification::count());
+    }
+
+    public function test_customer_final_dedupe_failed_then_success_does_not_create_second_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-007',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::FAILED->value,
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        $listener->handle(new TransactionFailed($tx));
+
+        $tx->status = TransactionStatus::SUCCESS->value;
+        $tx->save();
+
+        $listener->handle(new TransactionSuccess($tx->fresh(['user'])));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+        $this->assertSame(1, Notification::count());
+    }
+
+    public function test_customer_final_concurrentish_success_events_still_single_notification(): void
+    {
+        $tx = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'GRK-DEDUP-008',
+            'service_name' => 'Pulsa Telkomsel 50.000',
+            'target_number' => '081234567899',
+            'amount' => 50000,
+            'total_payment' => 52000,
+            'payment_method' => 'wallet',
+            'status' => TransactionStatus::SUCCESS->value,
+        ]);
+        $tx->load('user');
+
+        $listener = resolve(SendNotification::class);
+        // Separated calls mimic two workers racing; unique constraint ensures only one row.
+        $listener->handle(new TransactionSuccess($tx));
+        $listener->handle(new TransactionSuccess($tx));
+
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
+        $this->assertSame(1, Notification::count());
     }
 }

@@ -48,6 +48,9 @@ class User extends Authenticatable
         'transaction_pin' => 'hashed',
         'pin_updated_at' => 'datetime',
         'role' => \App\Enums\UserRole::class,
+        'notify_transactions' => 'boolean',
+        'notify_announcements' => 'boolean',
+        'notify_promotions' => 'boolean',
     ];
 
     /**

@@ -243,6 +243,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
 
         // Device management (authenticated)
         Route::get('/devices', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'index']);
+        Route::post('/devices/disassociate', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'disassociate']);
         Route::delete('/devices/{deviceUuid}', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'destroy']);
 
         // Notification API Module

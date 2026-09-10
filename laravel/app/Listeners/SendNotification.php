@@ -35,21 +35,217 @@ class SendNotification implements ShouldQueue
         return $channels;
     }
 
-    /**
-     * @return array{transaction_id:int|string,invoice_number:string,dedupe_key:string}
-     */
-    private function topUpPayload(\App\Models\Transaction $tx, string $kind): array
-    {
-        return [
-            'transaction_id' => $tx->id,
-            'invoice_number' => (string) $tx->invoice_number,
-            'dedupe_key' => 'topup_'.$kind.':'.$tx->id,
-        ];
-    }
-
     private function formatIdr(float $amount): string
     {
         return 'Rp'.number_format($amount, 0, ',', '.');
+    }
+
+    private function isTransfer(\App\Models\Transaction $tx): bool
+    {
+        return str_contains(strtolower((string) ($tx->service_name ?? '')), 'transfer');
+    }
+
+    private function isBillPayment(\App\Models\Transaction $tx): bool
+    {
+        $service = strtolower((string) ($tx->service_name ?? ''));
+
+        foreach (['pln', 'pdam', 'bpjs', 'internet', 'tv', 'gas', 'pbb', 'multifinance', 'tagihan'] as $keyword) {
+            if (str_contains($service, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasConfirmedRefund(\App\Models\Transaction $tx): bool
+    {
+        return $tx->refunded_at !== null || TransactionStatusMapper::isRefunded($tx->status);
+    }
+
+    /**
+     * Customer-facing product/service label from authoritative transaction fields.
+     * Prefer item.product_name, then service_name. Never surface provider internals.
+     */
+    private function customerFacingServiceLabel(\App\Models\Transaction $tx): string
+    {
+        if (! $tx->relationLoaded('items')) {
+            $tx->loadMissing('items');
+        }
+
+        $fromItem = '';
+        $firstItem = $tx->items->first();
+        if ($firstItem && is_string($firstItem->product_name ?? null)) {
+            $fromItem = trim((string) $firstItem->product_name);
+        }
+
+        $fromService = trim((string) ($tx->service_name ?? ''));
+        $label = $fromItem !== '' ? $fromItem : $fromService;
+
+        if ($label === '') {
+            return '';
+        }
+
+        $blocked = ['digiflazz', 'vippayment', 'vip payment', 'midtrans', 'provider'];
+        $lower = strtolower($label);
+        foreach ($blocked as $needle) {
+            if (str_contains($lower, $needle)) {
+                return $fromService !== '' && ! str_contains(strtolower($fromService), $needle)
+                    ? $fromService
+                    : '';
+            }
+        }
+
+        return $label;
+    }
+
+    private function amountText(\App\Models\Transaction $tx): string
+    {
+        return $this->formatIdr((float) $tx->amount);
+    }
+
+    private function refundSuffix(\App\Models\Transaction $tx): string
+    {
+        return $this->hasConfirmedRefund($tx)
+            ? ' Dana telah dikembalikan ke saldo Anda.'
+            : '';
+    }
+
+    private function finalPayload(\App\Models\Transaction $tx, string $kind): array
+    {
+        return [
+            'category' => 'transaction',
+            'transaction_id' => $tx->id,
+            'invoice_number' => (string) $tx->invoice_number,
+            'deep_link' => '/riwayat/'.$tx->id,
+            // FR-NOTIF-DEDUP-01 — One transaction = maksimal satu customer final notification.
+            // Outcome (SUCCESS/FAILED/EXPIRED) boleh datang berurutan/duplikat; identitas final
+            // untuk inbox selalu `customer_final:{transaction_id}`.
+            'dedupe_key' => 'customer_final:'.$tx->id,
+        ];
+    }
+
+    /**
+     * @return array{title:string,message:string,type:string,payload:array<string,mixed>}
+     */
+    private function successContent(\App\Models\Transaction $tx): array
+    {
+        $payload = $this->finalPayload($tx, 'success');
+        $amount = $this->amountText($tx);
+        $service = $this->customerFacingServiceLabel($tx);
+
+        if (TransactionStatusMapper::isWalletTopUp($tx)) {
+            return [
+                'title' => 'Top Up Berhasil',
+                'message' => 'Saldo Anda berhasil ditambahkan sebesar '.$amount.'.',
+                'type' => 'transaction_success',
+                'payload' => $payload,
+            ];
+        }
+
+        if ($this->isTransfer($tx)) {
+            return [
+                'title' => 'Transfer Berhasil',
+                'message' => 'Transfer sebesar '.$amount.' berhasil dilakukan.',
+                'type' => 'transaction_success',
+                'payload' => $payload,
+            ];
+        }
+
+        if ($this->isBillPayment($tx)) {
+            $label = $service !== '' ? ' tagihan '.$service : ' tagihan';
+
+            return [
+                'title' => 'Pembayaran Berhasil',
+                'message' => 'Pembayaran'.$label.' sebesar '.$amount.' berhasil diselesaikan.',
+                'type' => 'transaction_success',
+                'payload' => $payload,
+            ];
+        }
+
+        $subject = $service !== '' ? $service.' sebesar '.$amount : 'sebesar '.$amount;
+
+        return [
+            'title' => 'Pembelian Berhasil',
+            'message' => 'Pembelian '.$subject.' berhasil diproses.',
+            'type' => 'transaction_success',
+            'payload' => $payload,
+        ];
+    }
+
+    /**
+     * @return array{title:string,message:string,type:string,payload:array<string,mixed>}
+     */
+    private function failureContent(\App\Models\Transaction $tx): array
+    {
+        $payload = $this->finalPayload(
+            $tx,
+            strtolower((string) $tx->status) === \App\Enums\TransactionStatus::EXPIRED->value ? 'expired' : 'failed'
+        );
+        $amount = $this->amountText($tx);
+        $service = $this->customerFacingServiceLabel($tx);
+        $refund = $this->refundSuffix($tx);
+
+        if (strtolower((string) $tx->status) === \App\Enums\TransactionStatus::EXPIRED->value) {
+            if (TransactionStatusMapper::isWalletTopUp($tx)) {
+                $context = 'top up sebesar '.$amount;
+            } elseif ($this->isTransfer($tx)) {
+                $context = 'transfer sebesar '.$amount;
+            } elseif ($this->isBillPayment($tx)) {
+                $context = $service !== ''
+                    ? 'tagihan '.$service.' sebesar '.$amount
+                    : 'tagihan sebesar '.$amount;
+            } else {
+                $context = $service !== ''
+                    ? $service.' sebesar '.$amount
+                    : 'sebesar '.$amount;
+            }
+
+            return [
+                'title' => 'Pembayaran Kedaluwarsa',
+                'message' => 'Pembayaran '.$context.' tidak diselesaikan dalam batas waktu yang ditentukan.',
+                'type' => 'transaction_failed',
+                'payload' => $payload,
+            ];
+        }
+
+        if (TransactionStatusMapper::isWalletTopUp($tx)) {
+            return [
+                'title' => 'Top Up Tidak Berhasil',
+                'message' => 'Top up saldo sebesar '.$amount.' tidak dapat diproses.'.$refund,
+                'type' => 'transaction_failed',
+                'payload' => $payload,
+            ];
+        }
+
+        if ($this->isTransfer($tx)) {
+            return [
+                'title' => 'Transfer Tidak Berhasil',
+                'message' => 'Transfer sebesar '.$amount.' tidak dapat diproses.'.$refund,
+                'type' => 'transaction_failed',
+                'payload' => $payload,
+            ];
+        }
+
+        if ($this->isBillPayment($tx)) {
+            $label = $service !== '' ? ' tagihan '.$service : ' tagihan';
+
+            return [
+                'title' => 'Pembayaran Gagal',
+                'message' => 'Pembayaran'.$label.' sebesar '.$amount.' tidak dapat diproses.'.$refund,
+                'type' => 'transaction_failed',
+                'payload' => $payload,
+            ];
+        }
+
+        $subject = $service !== '' ? $service.' sebesar '.$amount : 'sebesar '.$amount;
+
+        return [
+            'title' => 'Pembelian Gagal',
+            'message' => 'Pembelian '.$subject.' tidak dapat diproses.'.$refund,
+            'type' => 'transaction_failed',
+            'payload' => $payload,
+        ];
     }
 
     /**
@@ -57,166 +253,97 @@ class SendNotification implements ShouldQueue
      */
     public function handle(mixed $event): void
     {
-        Log::info("SendNotification listener handling event: " . get_class($event));
+        Log::info('SendNotification listener handling event: '.get_class($event));
 
         if ($event instanceof TransactionCreated) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                // FR-TOPUP-UX-01 — Top Up intermediate statuses live in Riwayat only.
-                if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    Log::info('SEND NOTIFICATION — skipped TransactionCreated for Top Up (history-only intermediate)', [
-                        'transaction_id' => $tx->id,
-                    ]);
-
-                    return;
-                }
-                $this->notificationService->send($user, 'Transaksi Dibuat', "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . " telah dibuat.", 'info', $this->channelsFor($user, ['database']));
+                Log::info('SEND NOTIFICATION — skipped TransactionCreated (internal lifecycle only)', [
+                    'transaction_id' => $tx->id,
+                    'invoice' => $tx->invoice_number,
+                ]);
             }
         } elseif ($event instanceof TransactionProcessing) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    Log::info('SEND NOTIFICATION — skipped TransactionProcessing for Top Up (history-only intermediate)', [
-                        'transaction_id' => $tx->id,
-                    ]);
-
-                    return;
-                }
-                $this->notificationService->send($user, 'Transaksi Diproses', "Transaksi #{$tx->invoice_number} sedang diproses.", 'info', $this->channelsFor($user, ['database']));
+                Log::info('SEND NOTIFICATION — skipped TransactionProcessing (internal lifecycle only)', [
+                    'transaction_id' => $tx->id,
+                    'invoice' => $tx->invoice_number,
+                ]);
             }
         } elseif ($event instanceof TransactionSuccess) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    $wallet = \App\Models\Wallet::where('user_id', $user->id)->first();
-                    $balanceText = $wallet ? ' Saldo Anda sekarang '.$this->formatIdr((float) $wallet->balance).'.' : '';
-                    Log::info('SEND NOTIFICATION — Top Up Berhasil', [
-                        'transaction_id' => $tx->id,
-                        'user_id' => $user->id,
-                        'invoice' => $tx->invoice_number,
-                    ]);
-                    $this->notificationService->send(
-                        $user,
-                        'Top Up Berhasil',
-                        'Top Up '.$this->formatIdr((float) $tx->amount).' berhasil.'.$balanceText,
-                        'transaction_success',
-                        $this->channelsFor($user, ['database', 'push']),
-                        $this->topUpPayload($tx, 'success')
-                    );
-                } else {
-                    Log::info('SEND NOTIFICATION — Pembayaran Berhasil', [
-                        'transaction_id' => $tx->id,
-                        'user_id' => $user->id,
-                        'invoice' => $tx->invoice_number,
-                    ]);
-                    $this->notificationService->send(
-                        $user,
-                        'Pembayaran Berhasil',
-                        "Transaksi #{$tx->invoice_number} senilai Rp" . number_format($tx->amount, 0) . ' telah berhasil diselesaikan.',
-                        'transaction_success',
-                        $this->channelsFor($user, ['database', 'push']),
-                        [
-                            'transaction_id' => $tx->id,
-                            'invoice_number' => (string) $tx->invoice_number,
-                            'dedupe_key' => 'tx_success:'.$tx->id,
-                        ]
-                    );
-                }
+                $content = $this->successContent($tx);
+                Log::info('SEND NOTIFICATION — final success notification', [
+                    'transaction_id' => $tx->id,
+                    'user_id' => $user->id,
+                    'invoice' => $tx->invoice_number,
+                    'title' => $content['title'],
+                    'dedupe_key' => $content['payload']['dedupe_key'] ?? null,
+                ]);
+                $this->notificationService->send(
+                    $user,
+                    $content['title'],
+                    $content['message'],
+                    $content['type'],
+                    $this->channelsFor($user, ['database', 'push']),
+                    $content['payload']
+                );
             }
         } elseif ($event instanceof TransactionFailed) {
             $tx = $event->transaction;
             $user = $tx->user;
             if ($user) {
-                $isTimeout = str_contains(strtolower((string) ($tx->notes ?? '')), 'batas waktu')
-                    || str_contains(strtolower((string) ($tx->notes ?? '')), 'timeout');
-
-                if (TransactionStatusMapper::isWalletTopUp($tx)) {
-                    $amountText = $this->formatIdr((float) $tx->amount);
-                    $rawStatus = strtolower((string) $tx->status);
-
-                    if ($rawStatus === \App\Enums\TransactionStatus::EXPIRED->value) {
-                        $title = 'Pembayaran Kedaluwarsa';
-                        $message = "Pembayaran {$amountText} telah kedaluwarsa.";
-                        $type = 'transaction_failed';
-                        $kind = 'expired';
-                    } elseif ($isTimeout) {
-                        // Belum ada bukti pasti dari Midtrans — jangan klaim gagal secara definitif.
-                        $title = 'Status Pembayaran Belum Dapat Dikonfirmasi';
-                        $message = "Status pembayaran Top Up {$amountText} belum dapat dikonfirmasi. Silakan cek kembali beberapa saat lagi. Saldo Anda tidak berubah.";
-                        $type = 'transaction_timeout';
-                        $kind = 'timeout';
-                    } else {
-                        $title = 'Top Up Gagal';
-                        $message = "Pembayaran Top Up {$amountText} tidak berhasil. Saldo Anda tidak berubah.";
-                        $type = 'transaction_failed';
-                        $kind = 'failed';
-                    }
-
-                    Log::info('SEND NOTIFICATION — ' . $title . ' (Top Up)', [
-                        'transaction_id' => $tx->id,
-                        'user_id' => $user->id,
-                    ]);
-                    $this->notificationService->send(
-                        $user,
-                        $title,
-                        $message,
-                        $type,
-                        $this->channelsFor($user, ['database', 'push']),
-                        $this->topUpPayload($tx, $kind)
-                    );
-                } else {
-                    $title = $isTimeout ? 'Transaksi Timeout' : 'Transaksi Gagal';
-                    $message = $isTimeout
-                        ? ((string) ($tx->notes ?: 'Provider tidak memberikan respon dalam batas waktu. Saldo Anda telah dikembalikan.'))
-                        : ("Transaksi #{$tx->invoice_number} telah gagal.");
-                    Log::info('SEND NOTIFICATION — ' . $title, [
-                        'transaction_id' => $tx->id,
-                        'user_id' => $user->id,
-                    ]);
-                    $this->notificationService->send(
-                        $user,
-                        $title,
-                        $message,
-                        $isTimeout ? 'transaction_timeout' : 'transaction_failed',
-                        $this->channelsFor($user, ['database', 'push']),
-                        [
-                            'transaction_id' => $tx->id,
-                            'invoice_number' => (string) $tx->invoice_number,
-                            'dedupe_key' => ($isTimeout ? 'tx_timeout:' : 'tx_failed:').$tx->id,
-                        ]
-                    );
-                }
+                $content = $this->failureContent($tx);
+                Log::info('SEND NOTIFICATION — final failed notification', [
+                    'transaction_id' => $tx->id,
+                    'user_id' => $user->id,
+                    'invoice' => $tx->invoice_number,
+                    'title' => $content['title'],
+                    'dedupe_key' => $content['payload']['dedupe_key'] ?? null,
+                    'refunded_at' => $tx->refunded_at,
+                ]);
+                $this->notificationService->send(
+                    $user,
+                    $content['title'],
+                    $content['message'],
+                    $content['type'],
+                    $this->channelsFor($user, ['database', 'push']),
+                    $content['payload']
+                );
             }
         } elseif ($event instanceof WalletCredited) {
             $user = $event->wallet->user;
             if ($user) {
                 $relatedTx = $event->referenceId ? \App\Models\Transaction::find($event->referenceId) : null;
-                $isTopUpCredit = $relatedTx && TransactionStatusMapper::isWalletTopUp($relatedTx);
-
-                if ($isTopUpCredit) {
-                    // Top Up settlement — TransactionSuccess event above already sent "Top Up
-                    // Berhasil". Never label this a "refund": Top Up never debits the wallet
-                    // up front, so there is nothing to "return". Avoid a second, redundant
-                    // notification for the same completed Top Up.
-                    Log::info('SEND NOTIFICATION — skipped WalletCredited for Top Up settlement (covered by TransactionSuccess)', [
+                if ($relatedTx) {
+                    Log::info('SEND NOTIFICATION — skipped WalletCredited (covered by transaction final state)', [
                         'wallet_id' => $event->wallet->id,
                         'transaction_id' => $relatedTx->id,
+                        'reason' => $event->reason,
                     ]);
                 } else {
-                    $title = str_contains(strtolower($event->reason), 'refund') ? 'Refund Berhasil' : 'Saldo Bertambah';
-                    $this->notificationService->send($user, $title, "Saldo Anda bertambah sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'success', $this->channelsFor($user, ['database', 'push']));
+                    Log::info('SEND NOTIFICATION — skipped WalletCredited (internal ledger event only)', [
+                        'wallet_id' => $event->wallet->id,
+                        'reason' => $event->reason,
+                    ]);
                 }
             }
         } elseif ($event instanceof WalletDebited) {
             $user = $event->wallet->user;
             if ($user) {
-                $this->notificationService->send($user, 'Saldo Berkurang', "Saldo Anda berkurang sebesar Rp" . number_format($event->amount, 0) . ". Alasan: {$event->reason}", 'info', $this->channelsFor($user, ['database', 'push']));
+                Log::info('SEND NOTIFICATION — skipped WalletDebited (internal ledger event only)', [
+                    'wallet_id' => $event->wallet->id,
+                    'reference_id' => $event->referenceId,
+                    'reason' => $event->reason,
+                ]);
             }
         } elseif ($event instanceof PaymentSettled) {
-            // TransactionSuccess already sends "Pembayaran Berhasil"/"Top Up Berhasil" — avoid duplicate badge noise.
+            // TransactionSuccess already sends final customer notification — avoid duplicate badge noise.
             $tx = $event->transaction;
             Log::info('SEND NOTIFICATION — skipped PaymentSettled (covered by TransactionSuccess)', [
                 'transaction_id' => $tx->id ?? null,

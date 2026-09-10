@@ -11,7 +11,7 @@ import { profileService } from '../services/profile.service';
 import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
 import { User } from '../api/types';
 import { parseApiError } from '../api/client';
-
+import { useNotificationStore } from './notification.store';
 function normalizeRole(role: string | undefined | null): string {
   if (!role) return 'User';
   const map: Record<string, string> = {
@@ -63,6 +63,21 @@ async function syncDeviceRegistration(): Promise<void> {
       os_version: getOsVersion(),
       app_version: Constants.expoConfig?.version ?? undefined,
     });
+    // Best-effort push token sync when OS permission already granted.
+    const { pushNotificationService } = await import('../services/pushNotification.service');
+    const status = await pushNotificationService.getPermissionStatus();
+    if (status === 'granted') {
+      await pushNotificationService.syncPushTokenWithBackend();
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function disassociatePushDevice(): Promise<void> {
+  try {
+    const { pushNotificationService } = await import('../services/pushNotification.service');
+    await pushNotificationService.disassociateDevice();
   } catch {
     // ignore
   }
@@ -364,6 +379,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     set({ loading: true });
     try {
+      await disassociatePushDevice();
       const token = await storageService.getToken();
       if (token) {
         await authService.logout();
@@ -373,6 +389,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } finally {
       await storageService.clear();
       const identity = await storageService.getRememberedIdentity();
+      // Clear in-memory inbox so user B never sees user A notifications.
+      useNotificationStore.getState().reset();
       set({
         user: null,
         token: null,
@@ -387,6 +405,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   switchAccount: async () => {
     try {
+      await disassociatePushDevice();
       const token = await storageService.getToken();
       if (token) {
         try {
@@ -397,6 +416,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } finally {
       await storageService.clearAuthIdentity();
+      useNotificationStore.getState().reset();
       set({
         user: null,
         token: null,

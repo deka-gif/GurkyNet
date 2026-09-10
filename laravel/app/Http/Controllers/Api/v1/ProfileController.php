@@ -98,15 +98,26 @@ class ProfileController extends Controller
     /**
      * Update notification preference.
      * PUT /api/v1/profile/notification-preference
+     *
+     * Accepts any subset of:
+     * - notify_transactions
+     * - notify_announcements
+     * - notify_promotions
      */
     public function updateNotificationPreference(Request $request, ProfileAction $action): JsonResponse
     {
-        $request->validate([
-            'notify_transactions' => 'required|boolean',
+        $data = $request->validate([
+            'notify_transactions' => 'sometimes|boolean',
+            'notify_announcements' => 'sometimes|boolean',
+            'notify_promotions' => 'sometimes|boolean',
         ]);
 
+        if ($data === []) {
+            return $this->errorResponse('Minimal satu preferensi notifikasi harus dikirim.', 422);
+        }
+
         $user = $request->user();
-        $updatedUser = $action->updateNotificationPreference($user, (bool) $request->input('notify_transactions'));
+        $updatedUser = $action->updateNotificationPreference($user, $data);
 
         return $this->successResponse(
             'Preferensi notifikasi berhasil disimpan.',

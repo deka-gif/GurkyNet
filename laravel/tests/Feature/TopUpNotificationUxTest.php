@@ -117,12 +117,11 @@ class TopUpNotificationUxTest extends TestCase
         $this->assertSame(1, Notification::where('title', 'Top Up Berhasil')->count());
         $notif = Notification::where('title', 'Top Up Berhasil')->first();
         $this->assertNotNull($notif);
-        $this->assertStringContainsString('Rp10.000', $notif->message);
-        $this->assertStringContainsString('Rp1.820.000', $notif->message);
+        $this->assertSame('Saldo Anda berhasil ditambahkan sebesar Rp10.000.', $notif->message);
         $this->assertSame($tx->id, $notif->payload['transaction_id'] ?? null);
         $this->assertSame($tx->invoice_number, $notif->payload['invoice_number'] ?? null);
-        $this->assertSame('topup_success:'.$tx->id, $notif->dedupe_key);
-        $this->assertSame('topup_success:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+        $this->assertSame('customer_final:'.$tx->id, $notif->dedupe_key);
+        $this->assertSame('customer_final:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
     }
 
     public function test_d_duplicate_success_stays_one_notification(): void
@@ -134,7 +133,7 @@ class TopUpNotificationUxTest extends TestCase
         $listener->handle(new TransactionSuccess($tx->fresh(['user'])));
 
         $this->assertSame(1, Notification::where('title', 'Top Up Berhasil')->count());
-        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$tx->id)->count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
         $this->assertSame(1, UserNotification::where('user_id', $this->user->id)->count());
     }
 
@@ -144,7 +143,7 @@ class TopUpNotificationUxTest extends TestCase
         $payload = [
             'transaction_id' => $tx->id,
             'invoice_number' => $tx->invoice_number,
-            'dedupe_key' => 'topup_success:'.$tx->id,
+            'dedupe_key' => 'customer_final:'.$tx->id,
         ];
         $svc = resolve(\App\Services\NotificationService::class);
 
@@ -152,7 +151,7 @@ class TopUpNotificationUxTest extends TestCase
         $svc->send($this->user, 'Top Up Berhasil', 'Top Up Rp10.000 berhasil.', 'transaction_success', ['database'], $payload);
         $svc->send($this->user, 'Top Up Berhasil', 'Top Up Rp10.000 berhasil. retry', 'transaction_success', ['database'], $payload);
 
-        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$tx->id)->count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$tx->id)->count());
         $this->assertSame(1, UserNotification::where('user_id', $this->user->id)->count());
     }
 
@@ -164,8 +163,8 @@ class TopUpNotificationUxTest extends TestCase
         resolve(SendNotification::class)->handle(new TransactionSuccess($a->fresh(['user'])));
         resolve(SendNotification::class)->handle(new TransactionSuccess($b->fresh(['user'])));
 
-        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$a->id)->count());
-        $this->assertSame(1, Notification::where('dedupe_key', 'topup_success:'.$b->id)->count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$a->id)->count());
+        $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:'.$b->id)->count());
         $this->assertSame(2, Notification::where('title', 'Top Up Berhasil')->count());
     }
 
@@ -185,8 +184,8 @@ class TopUpNotificationUxTest extends TestCase
             'title' => 'Top Up Berhasil',
             'message' => 'first',
             'type' => 'transaction_success',
-            'dedupe_key' => 'topup_success:lock-test',
-            'payload' => ['dedupe_key' => 'topup_success:lock-test'],
+            'dedupe_key' => 'customer_final:lock-test',
+            'payload' => ['dedupe_key' => 'customer_final:lock-test'],
         ]);
 
         $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
@@ -194,8 +193,8 @@ class TopUpNotificationUxTest extends TestCase
             'title' => 'Top Up Berhasil',
             'message' => 'second',
             'type' => 'transaction_success',
-            'dedupe_key' => 'topup_success:lock-test',
-            'payload' => ['dedupe_key' => 'topup_success:lock-test'],
+            'dedupe_key' => 'customer_final:lock-test',
+            'payload' => ['dedupe_key' => 'customer_final:lock-test'],
         ]);
     }
 
@@ -204,9 +203,10 @@ class TopUpNotificationUxTest extends TestCase
         $tx = $this->makeTopUp(['status' => TransactionStatus::FAILED->value]);
         resolve(SendNotification::class)->handle(new TransactionFailed($tx->fresh(['user'])));
 
-        $this->assertSame(1, Notification::where('title', 'Top Up Gagal')->count());
-        $notif = Notification::where('title', 'Top Up Gagal')->first();
-        $this->assertSame('topup_failed:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+        $this->assertSame(1, Notification::where('title', 'Top Up Tidak Berhasil')->count());
+        $notif = Notification::where('title', 'Top Up Tidak Berhasil')->first();
+        $this->assertSame('Top up saldo sebesar Rp10.000 tidak dapat diproses.', $notif->message);
+        $this->assertSame('customer_final:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
     }
 
     public function test_f_expired_creates_kedaluwarsa_notification(): void
@@ -216,8 +216,11 @@ class TopUpNotificationUxTest extends TestCase
 
         $this->assertSame(1, Notification::where('title', 'Pembayaran Kedaluwarsa')->count());
         $notif = Notification::where('title', 'Pembayaran Kedaluwarsa')->first();
-        $this->assertSame('topup_expired:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
-        $this->assertSame('Pembayaran Rp10.000 telah kedaluwarsa.', $notif->message);
+        $this->assertSame('customer_final:'.$tx->id, $notif->payload['dedupe_key'] ?? null);
+        $this->assertSame(
+            'Pembayaran top up sebesar Rp10.000 tidak diselesaikan dalam batas waktu yang ditentukan.',
+            $notif->message
+        );
         $this->assertStringNotContainsStringIgnoringCase('saldo Anda tidak berubah', $notif->message);
         $this->assertStringNotContainsStringIgnoringCase('midtrans', $notif->message);
     }
@@ -411,7 +414,10 @@ class TopUpNotificationUxTest extends TestCase
         $this->assertSame(0, WalletMutation::where('wallet_id', $this->wallet->id)->count());
         $this->assertSame(1, Notification::where('title', 'Pembayaran Kedaluwarsa')->count());
         $notif = Notification::where('title', 'Pembayaran Kedaluwarsa')->first();
-        $this->assertSame('Pembayaran Rp15.000 telah kedaluwarsa.', $notif->message);
+        $this->assertSame(
+            'Pembayaran top up sebesar Rp15.000 tidak diselesaikan dalam batas waktu yang ditentukan.',
+            $notif->message
+        );
 
         // Duplicate expire sync — terminal skip (no second Midtrans call), no second notification.
         $res2 = $this->postJson('/api/v1/transactions/'.$tx->id.'/sync-payment');

@@ -42,6 +42,8 @@ export interface User {
   isVerified: boolean;
   hasPin?: boolean;
   notifyTransactions?: boolean;
+  notifyAnnouncements?: boolean;
+  notifyPromotions?: boolean;
   createdAt?: string;
   kycStatus?: string;
   phoneVerified?: boolean;

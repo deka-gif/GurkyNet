@@ -13,6 +13,7 @@ const DEVICE_UUID_KEY = 'gurkynet_device_uuid';
 const TRUSTED_DEVICE_IDENTITIES_KEY = 'gurkynet_trusted_device_identities';
 const BIOMETRIC_ENABLED_KEY = 'gurkynet_biometric_enabled';
 const RETURNING_USER_KEY = 'gurkynet_returning_user';
+const PUSH_PREPROMPT_SEEN_KEY = 'gurkynet_push_preprompt_seen';
 
 async function safeGet(key: string): Promise<string | null> {
   try {
@@ -123,6 +124,13 @@ export const storageService = {
   setBiometricEnabled: async (enabled: boolean): Promise<void> => {
     if (enabled) await safeSet(BIOMETRIC_ENABLED_KEY, '1');
     else await safeDelete(BIOMETRIC_ENABLED_KEY);
+  },
+
+  /** Soft push permission pre-prompt — not OS permission itself. */
+  hasSeenPushPreprompt: async (): Promise<boolean> =>
+    (await safeGet(PUSH_PREPROMPT_SEEN_KEY)) === '1',
+  markPushPrepromptSeen: async (): Promise<void> => {
+    await safeSet(PUSH_PREPROMPT_SEEN_KEY, '1');
   },
 
   /** Clears session token/user. Keeps device UUID, returning identity, biometric pref. */

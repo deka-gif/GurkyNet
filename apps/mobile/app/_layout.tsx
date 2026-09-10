@@ -1,26 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../src/store/auth.store';
 import { useFeaturesStore } from '../src/store/features.store';
+import { useNotificationStore } from '../src/store/notification.store';
 import { appEvents, AUTH_UNAUTHORIZED_EVENT } from '../src/utils/eventEmitter';
+import { storageService } from '../src/services/storage.service';
+import { pushNotificationService } from '../src/services/pushNotification.service';
+import { PushPermissionPreprompt } from '../src/components/notifications/PushPermissionPreprompt';
 
 /**
  * Root layout — runs once for the whole app.
- * 1. Hydrates the auth store from secure storage (never trust in-memory state alone,
- *    the app may have been killed and relaunched).
+ * 1. Hydrates the auth store from secure storage.
  * 2. Loads GET /features (fail-closed purchase gate until resolved).
- * 3. Listens for the global "session expired" event fired by the API client's 401
- *    interceptor and forces the user back to the login stack — the RN equivalent of
- *    web's `window.addEventListener('auth-unauthorized', ...)` in App.tsx.
- *
- * Floating Chat CS is NOT global — rendered only on Help tab (help.tsx).
+ * 3. Listens for session-expired and forces login.
+ * 4. Push notification listeners + soft permission pre-prompt.
  */
 export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
+  const gate = useAuthStore((s) => s.gate);
   const fetchFeatures = useFeaturesStore((s) => s.fetchFeatures);
   const router = useRouter();
+  const [showPushPreprompt, setShowPushPreprompt] = useState(false);
 
   useEffect(() => {
     hydrate();
@@ -30,8 +32,13 @@ export default function RootLayout() {
   useEffect(() => {
     const unsubscribe = appEvents.on(AUTH_UNAUTHORIZED_EVENT, () => {
       void (async () => {
-        const { storageService } = await import('../src/services/storage.service');
+        try {
+          await pushNotificationService.disassociateDevice();
+        } catch {
+          // ignore
+        }
         await storageService.clear();
+        useNotificationStore.getState().reset();
         const identity = await storageService.getRememberedIdentity();
         useAuthStore.setState({
           user: null,
@@ -45,6 +52,49 @@ export default function RootLayout() {
     return unsubscribe;
   }, [router]);
 
+  useEffect(() => {
+    if (gate !== 'authenticated') return;
+    const detach = pushNotificationService.attachListeners();
+    void pushNotificationService.handleLastResponse();
+    return detach;
+  }, [gate]);
+
+  useEffect(() => {
+    if (gate !== 'authenticated') {
+      setShowPushPreprompt(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const seen = await storageService.hasSeenPushPreprompt();
+        const status = await pushNotificationService.getPermissionStatus();
+        if (cancelled) return;
+        if (!seen && status !== 'granted') {
+          setShowPushPreprompt(true);
+        } else if (status === 'granted') {
+          await pushNotificationService.syncPushTokenWithBackend();
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gate]);
+
+  const onLater = async () => {
+    setShowPushPreprompt(false);
+    await storageService.markPushPrepromptSeen();
+  };
+
+  const onAllow = async () => {
+    setShowPushPreprompt(false);
+    await storageService.markPushPrepromptSeen();
+    await pushNotificationService.syncPushTokenWithBackend();
+  };
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
@@ -52,10 +102,12 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
-        {/* checkout/* and produk/* are file-based flat routes
-            (checkout/[sku], checkout/pin, …) — do not declare name="checkout"
-            or name="produk"; those segment names are not registered children. */}
       </Stack>
+      <PushPermissionPreprompt
+        visible={showPushPreprompt}
+        onLater={() => void onLater()}
+        onAllow={() => void onAllow()}
+      />
     </SafeAreaProvider>
   );
 }

@@ -36,6 +36,10 @@ class ProfileResource extends JsonResource
             'pin_updated_at' => $this->pin_updated_at?->toIso8601String(),
             'notifyTransactions' => (bool) ($this->notify_transactions ?? true),
             'notify_transactions' => (bool) ($this->notify_transactions ?? true),
+            'notifyAnnouncements' => (bool) ($this->notify_announcements ?? true),
+            'notify_announcements' => (bool) ($this->notify_announcements ?? true),
+            'notifyPromotions' => (bool) ($this->notify_promotions ?? true),
+            'notify_promotions' => (bool) ($this->notify_promotions ?? true),
             'wallet' => $this->wallet ? [
                 'id' => $this->wallet->id,
                 'walletNo' => $this->gurky_pay_id ?: $this->wallet->wallet_number,
