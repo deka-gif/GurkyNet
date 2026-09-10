@@ -20,10 +20,21 @@ class WithdrawRequest extends FormRequest
             'pin' => 'required|string|size:6|regex:/^\d{6}$/',
             'bank_name' => 'required|string|max:50',
             'account_number' => 'required|string|max:50',
-            'admin_fee' => 'nullable|numeric|min:0',
+            // admin_fee stripped — server WalletAdminFeeResolver::withdrawFee() only.
             // SRS 14.1 — required for balance-mutating withdraw.
             'idempotency_key' => 'required|string|max:80',
         ];
+    }
+
+    /**
+     * P0 — never trust client admin_fee / total_payment for wallet withdraw.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->request->remove('admin_fee');
+        $this->request->remove('total_payment');
+        $this->request->remove('status');
+        $this->request->remove('user_id');
     }
 
     public function messages(): array

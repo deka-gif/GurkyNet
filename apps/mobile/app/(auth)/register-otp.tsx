@@ -16,6 +16,7 @@ import {
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { authService } from '../../src/services/auth.service';
+import { useAuthStore } from '../../src/store/auth.store';
 import { parseApiError } from '../../src/api/client';
 import { colors, spacing, typography } from '../../src/theme';
 
@@ -89,6 +90,16 @@ export default function RegisterOtpScreen() {
         code,
       });
       if (res.success) {
+        const finalizeToken = res.data?.finalize_token;
+        if (!finalizeToken) {
+          setOtp('');
+          setError('Sesi verifikasi tidak lengkap. Silakan coba lagi.');
+          return;
+        }
+        useAuthStore.getState().setPendingOnboardingFinalize({
+          onboardingId,
+          finalizeToken,
+        });
         setOtp('');
         router.replace({
           pathname: '/(auth)/register-pin',

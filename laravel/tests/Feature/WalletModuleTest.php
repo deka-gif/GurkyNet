@@ -256,13 +256,16 @@ class WalletModuleTest extends TestCase
      */
     public function test_transfer_success(): void
     {
+        $serverFee = (float) config('wallet.transfer_fee', 0);
+
         $response = $this->actingAs($this->sender)
             ->postJson('/api/v1/wallet/transfer', [
                 'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
                 'recipient_wallet_number' => '104222222222',
                 'amount' => 30000,
                 'pin' => '123456',
-                'admin_fee' => 1000, // configurable fee simulation
+                // Client admin_fee must be ignored (P0 — server fee only).
+                'admin_fee' => 1000,
             ]);
 
         $response->assertStatus(200)
@@ -274,8 +277,8 @@ class WalletModuleTest extends TestCase
         $this->senderWallet->refresh();
         $this->recipientWallet->refresh();
 
-        // Sender balance: 100.000 - (30.000 + 1.000) = 69.000
-        $this->assertEquals(69000.00, $this->senderWallet->balance);
+        // Sender balance: 100.000 - (30.000 + serverFee)
+        $this->assertEquals(100000.00 - (30000.00 + $serverFee), $this->senderWallet->balance);
 
         // Recipient balance: 50.000 + 30.000 = 80.000
         $this->assertEquals(80000.00, $this->recipientWallet->balance);
@@ -285,8 +288,8 @@ class WalletModuleTest extends TestCase
             'user_id' => $this->sender->id,
             'target_number' => '104222222222',
             'amount' => 30000.00,
-            'admin_fee' => 1000.00,
-            'total_payment' => 31000.00,
+            'admin_fee' => $serverFee,
+            'total_payment' => 30000.00 + $serverFee,
             // Sprint 3 (SRS §6) — canonical write status is SUCCESS; legacy SUKSES rows
             // from before this sprint remain readable but are never written anew.
             'status' => 'success',
@@ -295,7 +298,7 @@ class WalletModuleTest extends TestCase
         // Verify history exists
         $this->assertDatabaseHas('wallet_histories', [
             'wallet_id' => $this->senderWallet->id,
-            'amount' => 31000.00,
+            'amount' => 30000.00 + $serverFee,
             'type' => 'debit',
         ]);
 

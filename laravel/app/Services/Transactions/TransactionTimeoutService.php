@@ -32,6 +32,7 @@ class TransactionTimeoutService
         protected ProductProviderRegistry $registry,
         protected WalletRefundService $refundService,
         protected NotificationService $notificationService,
+        protected TransactionSuccessTransitionService $successTransition,
     ) {}
 
     public function maxSeconds(): int
@@ -400,74 +401,25 @@ class TransactionTimeoutService
 
     protected function applySuccess(Transaction $transaction, ProviderFulfillmentResult $result): void
     {
-        DB::transaction(function () use ($transaction, $result) {
-            /** @var Transaction $locked */
-            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
+        // P0 — centralized locked SUCCESS writer (poll / reconcile).
+        $providerCode = (string) ($transaction->fulfillment_provider_code ?: '');
+        $outcome = $this->successTransition->apply($transaction->id, [
+            'provider_code' => $providerCode !== '' ? $providerCode : 'provider',
+            'source' => 'transaction_timeout_engine',
+            'sn' => $result->sn,
+            'notes' => 'Transaksi berhasil. SN: '.($result->sn ?? '-'),
+            'raw' => $result->raw,
+            'raw_item' => $result->raw,
+            'provider_response' => is_array($result->raw) ? $result->raw : null,
+            'sync_digiflazz_mirror' => $providerCode === ProductProvider::CODE_DIGIFLAZZ,
+            'digiflazz_response' => is_array($result->raw) ? $result->raw : [],
+        ]);
 
-            if (!$this->isInFlight($locked)) {
-                return;
-            }
-
-            if ($this->refundService->hasExistingRefund($locked) || $locked->refunded_at) {
-                Log::warning('TX TIMEOUT — skip success; already refunded', [
-                    'transaction_id' => $locked->id,
-                ]);
-
-                return;
-            }
-
-            $locked->update([
-                'status' => TransactionStatus::SUCCESS->value,
-                'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
-                'provider_last_status' => 'success',
-                'provider_checked_at' => now(),
-                'completed_at' => now(),
-                'provider_response' => is_array($result->raw) ? $result->raw : $locked->provider_response,
-            ]);
-
-            if (($locked->fulfillment_provider_code ?? '') === ProductProvider::CODE_DIGIFLAZZ) {
-                DigiflazzTransaction::where('transaction_id', $locked->id)->update(
-                    \App\Services\DigiflazzService::digiflazzTransactionAttributesFromResponse(
-                        'success',
-                        is_array($result->raw) ? $result->raw : [],
-                        $result->sn
-                    )
-                );
-            }
-
-            PaymentHistory::recordFor(
-                $locked,
-                $locked->fulfillment_provider_code ?: 'provider',
-                'success',
-                $result->raw,
-                $result->raw,
-                $locked->invoice_number
-            );
-
-            Log::info('UPDATE TRANSACTION', [
-                'transaction_id' => $locked->id,
-                'action' => 'SET SUCCESS',
-                'provider_ref' => $locked->provider_ref,
-                'sn' => $result->sn,
-            ]);
-            Log::info('SET SUCCESS', [
-                'transaction_id' => $locked->id,
-                'provider_ref' => $locked->provider_ref,
-            ]);
-            Log::info('WRITE WALLET HISTORY — debit already finalized (no refund)', [
-                'transaction_id' => $locked->id,
-            ]);
-
-            // Listeners: SendNotification ("Pembayaran Berhasil"), BroadcastEvent, WriteAuditLog, AnalyticsCollector
-            Log::info('BROADCAST EVENT — dispatch TransactionSuccess + PaymentSettled', [
-                'transaction_id' => $locked->id,
-            ]);
-
-            event(new \App\Events\TransactionSuccess($locked->fresh(['user']) ?? $locked));
-            event(new \App\Events\PaymentSettled($locked->fresh(['user']) ?? $locked, $result->raw));
-        });
-
-        Log::info('TX TIMEOUT — settled SUCCESS', ['transaction_id' => $transaction->id]);
+        Log::info('TX TIMEOUT — settled SUCCESS attempt', [
+            'transaction_id' => $transaction->id,
+            'outcome' => $outcome['outcome'],
+            'events_dispatched' => $outcome['events_dispatched'],
+        ]);
     }
 
     protected function applyFailure(

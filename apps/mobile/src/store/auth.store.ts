@@ -97,6 +97,12 @@ export type TwoFactorChallenge = {
 /** Bootstrap gate — set after hydrate, before first navigation. */
 export type AuthGate = 'booting' | 'login' | 'unlock' | 'authenticated';
 
+/** In-memory only — P0 finalize capability after OTP (never persist to SecureStore). */
+export type PendingOnboardingFinalize = {
+  onboardingId: number;
+  finalizeToken: string;
+};
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -107,15 +113,18 @@ interface AuthState {
   error: string | null;
   validationErrors: Record<string, string[]> | null;
   twoFactorChallenge: TwoFactorChallenge | null;
+  pendingOnboardingFinalize: PendingOnboardingFinalize | null;
   hydrate: () => Promise<void>;
   applySession: (token: string, userRaw: unknown, identity?: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<'ok' | '2fa' | false>;
   pinLogin: (pin: string) => Promise<boolean>;
   verifyLogin2fa: (code: string) => Promise<boolean>;
   clearTwoFactorChallenge: () => void;
+  setPendingOnboardingFinalize: (pending: PendingOnboardingFinalize | null) => void;
   registerStart: (payload: RegisterPayload) => Promise<{ onboardingId: number; email: string } | null>;
   finalizeRegistration: (payload: {
     onboarding_id: number;
+    finalize_token: string;
     pin: string;
     pin_confirmation: string;
   }) => Promise<boolean>;
@@ -137,6 +146,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
   validationErrors: null,
   twoFactorChallenge: null,
+  pendingOnboardingFinalize: null,
 
   setGate: (gate) => set({ gate }),
   clearError: () => set({ error: null, validationErrors: null }),
@@ -332,6 +342,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearTwoFactorChallenge: () => set({ twoFactorChallenge: null }),
 
+  setPendingOnboardingFinalize: (pending) => set({ pendingOnboardingFinalize: pending }),
+
   registerStart: async (payload) => {
     set({ loading: true, error: null, validationErrors: null });
     try {
@@ -365,6 +377,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         remember_device: true,
       });
       if (response.success && response.data?.token) {
+        set({ pendingOnboardingFinalize: null });
         await get().applySession(response.data.token, response.data.user);
         return true;
       }

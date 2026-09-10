@@ -139,22 +139,20 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
             );
 
             if ($digiflazzStatus === 'success') {
-                $transaction->update([
-                    'status' => TransactionStatus::SUCCESS->value,
-                    'notes' => 'Transaksi sukses. SN: ' . ($sn ?? '-'),
-                ]);
-
-                PaymentHistory::recordFor(
-                    $transaction,
-                    'digiflazz',
-                    'success',
-                    $response,
-                    $response,
-                    $transaction->invoice_number
+                app(\App\Services\Transactions\TransactionSuccessTransitionService::class)->apply(
+                    (int) $transaction->id,
+                    [
+                        'provider_code' => \App\Models\ProductProvider::CODE_DIGIFLAZZ,
+                        'source' => 'digiflazz_legacy_job',
+                        'sn' => is_string($sn) ? $sn : null,
+                        'notes' => 'Transaksi sukses. SN: '.($sn ?? '-'),
+                        'raw' => $response,
+                        'raw_item' => $response,
+                        'provider_response' => is_array($response) ? $response : null,
+                        'sync_digiflazz_mirror' => true,
+                        'digiflazz_response' => is_array($response) ? $response : [],
+                    ]
                 );
-
-                event(new \App\Events\TransactionSuccess($transaction));
-                event(new \App\Events\PaymentSettled($transaction, is_array($response) ? $response : []));
             } elseif ($digiflazzStatus === 'failed') {
                 $result = $refundService->refundOnce(
                     $transaction,
@@ -247,22 +245,20 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
         $sn = $data['sn'] ?? null;
 
         if (in_array($status, ['sukses', 'success'], true)) {
-            $digiflazzTx = DigiflazzTransaction::where('transaction_id', $transaction->id)->first();
-            $digiflazzTx?->update(DigiflazzService::digiflazzTransactionAttributesFromResponse(
-                'success',
-                $response,
-                is_string($sn) ? $sn : null
-            ));
-
-            $transaction->update([
-                'status' => TransactionStatus::SUCCESS->value,
-                'notes' => 'Transaksi sukses. SN: ' . ($sn ?? '-'),
-            ]);
-
-            PaymentHistory::recordFor($transaction, 'digiflazz', 'success', $response, $response, $transaction->invoice_number);
-
-            event(new \App\Events\TransactionSuccess($transaction));
-            event(new \App\Events\PaymentSettled($transaction, $response));
+            app(\App\Services\Transactions\TransactionSuccessTransitionService::class)->apply(
+                (int) $transaction->id,
+                [
+                    'provider_code' => \App\Models\ProductProvider::CODE_DIGIFLAZZ,
+                    'source' => 'digiflazz_legacy_job_retry_check',
+                    'sn' => is_string($sn) ? $sn : null,
+                    'notes' => 'Transaksi sukses. SN: '.($sn ?? '-'),
+                    'raw' => $response,
+                    'raw_item' => $response,
+                    'provider_response' => is_array($response) ? $response : null,
+                    'sync_digiflazz_mirror' => true,
+                    'digiflazz_response' => is_array($response) ? $response : [],
+                ]
+            );
 
             return;
         }

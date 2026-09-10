@@ -477,10 +477,46 @@ class TransactionController extends Controller
                     ],
                 ]
             );
-            $digiflazzTx->update($mirrorAttributes);
 
             $transaction = $digiflazzTx->transaction;
             if (! $transaction) {
+                continue;
+            }
+
+            // Digiflazz mirror update for fail/pending paths. SUCCESS mirror is owned by
+            // TransactionSuccessTransitionService under the same lock as status write.
+            if ($normalizedStatus !== 'success') {
+                $digiflazzTx->update($mirrorAttributes);
+            }
+
+            if ($normalizedStatus === 'success') {
+                // P0 — never soft-skip then unlocked SUCCESS; locked writer decides.
+                $settle = app(\App\Services\Transactions\TransactionSuccessTransitionService::class)
+                    ->apply((int) $transaction->id, [
+                        'provider_code' => \App\Models\ProductProvider::CODE_DIGIFLAZZ,
+                        'source' => 'digiflazz_webhook',
+                        'sn' => $sn ?? $digiflazzTx->fresh()?->sn,
+                        'notes' => 'Transaksi sukses. SN: '.($sn ?? $digiflazzTx->fresh()?->sn ?? '-'),
+                        'raw' => $payload,
+                        'raw_item' => $item,
+                        'provider_response' => is_array($payload) ? $payload : null,
+                        'sync_digiflazz_mirror' => true,
+                        'digiflazz_response' => ['data' => $item],
+                    ]);
+
+                if ($settle['outcome'] !== \App\Services\Transactions\TransactionSuccessTransitionService::OUTCOME_APPLIED
+                    && $settle['outcome'] !== \App\Services\Transactions\TransactionSuccessTransitionService::OUTCOME_ALREADY_SUCCESS) {
+                    // Late SUCCESS after refund/terminal: keep provider mirror for ops, not status.
+                    $digiflazzTx->update($mirrorAttributes);
+                }
+
+                \Illuminate\Support\Facades\Log::info('Digiflazz webhook SUCCESS settle', [
+                    'ref_id' => $refId,
+                    'transaction_id' => $transaction->id,
+                    'outcome' => $settle['outcome'],
+                    'events_dispatched' => $settle['events_dispatched'],
+                ]);
+
                 continue;
             }
 
@@ -496,24 +532,7 @@ class TransactionController extends Controller
                 continue;
             }
 
-            if ($normalizedStatus === 'success') {
-                $transaction->update([
-                    'status' => \App\Enums\TransactionStatus::SUCCESS->value,
-                    'notes' => 'Transaksi sukses. SN: '.($sn ?? $digiflazzTx->fresh()?->sn ?? '-'),
-                ]);
-
-                \App\Models\PaymentHistory::recordFor(
-                    $transaction,
-                    'digiflazz',
-                    'success',
-                    $payload,
-                    $item,
-                    $transaction->invoice_number
-                );
-
-                event(new \App\Events\TransactionSuccess($transaction));
-                event(new \App\Events\PaymentSettled($transaction, is_array($payload) ? $payload : []));
-            } elseif ($normalizedStatus === 'failed') {
+            if ($normalizedStatus === 'failed') {
                 $refundService = app(\App\Services\WalletRefundService::class);
                 $failNote = $rcClassifier->category === \App\Services\ProductProviders\DigiflazzResponseCodeClassifier::REFUND
                     || $rcClassifier->isRefundable()
@@ -683,6 +702,30 @@ class TransactionController extends Controller
                 continue;
             }
 
+            if ($normalized === 'success') {
+                // P0 — VIP OFF as fulfillment does not exempt webhook SUCCESS from locked guards.
+                $settle = app(\App\Services\Transactions\TransactionSuccessTransitionService::class)
+                    ->apply((int) $transaction->id, [
+                        'provider_code' => \App\Models\ProductProvider::CODE_VIP,
+                        'source' => 'vip_webhook',
+                        'sn' => $sn,
+                        'notes' => 'Transaksi sukses. SN: '.($sn ?? '-'),
+                        'raw' => $payload,
+                        'raw_item' => $item,
+                        'provider_response' => is_array($payload) ? $payload : null,
+                        'sync_digiflazz_mirror' => false,
+                    ]);
+
+                \Illuminate\Support\Facades\Log::info('VIP webhook SUCCESS settle', [
+                    'trxid' => $trxid,
+                    'transaction_id' => $transaction->id,
+                    'outcome' => $settle['outcome'],
+                    'events_dispatched' => $settle['events_dispatched'],
+                ]);
+
+                continue;
+            }
+
             $inFlight = TransactionStatusMapper::isFulfillOpen($transaction->status);
             if (! $inFlight) {
                 \Illuminate\Support\Facades\Log::info('VIP webhook duplicate — transaction already terminal', [
@@ -701,24 +744,7 @@ class TransactionController extends Controller
                 'provider_checked_at' => now(),
             ])->save();
 
-            if ($normalized === 'success') {
-                $transaction->update([
-                    'status' => \App\Enums\TransactionStatus::SUCCESS->value,
-                    'notes' => 'Transaksi sukses. SN: '.($sn ?? '-'),
-                ]);
-
-                \App\Models\PaymentHistory::recordFor(
-                    $transaction,
-                    'vip',
-                    'success',
-                    $payload,
-                    $item,
-                    $transaction->invoice_number
-                );
-
-                event(new \App\Events\TransactionSuccess($transaction->fresh(['user']) ?? $transaction));
-                event(new \App\Events\PaymentSettled($transaction->fresh(['user']) ?? $transaction, $payload));
-            } elseif ($normalized === 'failed') {
+            if ($normalized === 'failed') {
                 $refundService = app(\App\Services\WalletRefundService::class);
                 $failNote = $note !== ''
                     ? 'Transaksi gagal dari operator: '.$note

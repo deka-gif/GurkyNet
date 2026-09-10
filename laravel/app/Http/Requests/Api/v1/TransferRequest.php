@@ -19,10 +19,21 @@ class TransferRequest extends FormRequest
             'recipient_wallet_number' => 'required|string',
             'amount' => 'required|numeric|min:1000',
             'pin' => 'required|string|size:6|regex:/^\d{6}$/',
-            'admin_fee' => 'nullable|numeric|min:0',
+            // admin_fee stripped — server WalletAdminFeeResolver::transferFee() only.
             // SRS 14.1 — required for balance-mutating transfer.
             'idempotency_key' => 'required|string|max:80',
         ];
+    }
+
+    /**
+     * P0 — never trust client admin_fee / total_payment for wallet transfer.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->request->remove('admin_fee');
+        $this->request->remove('total_payment');
+        $this->request->remove('status');
+        $this->request->remove('user_id');
     }
 
     public function messages(): array

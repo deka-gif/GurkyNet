@@ -338,8 +338,11 @@ class DigiflazzWebhookAuditTest extends TestCase
         $this->assertSame('success', $tx->fresh()->status);
         $this->assertSame($digi->id, DigiflazzTransaction::where('ref_id', $tx->invoice_number)->value('id'));
 
-        Log::shouldHaveReceived('info')->withArgs(function ($message) {
-            return $message === 'Digiflazz webhook duplicate — transaction already terminal';
+        // P0 — duplicate SUCCESS goes through locked writer (already_success), not soft terminal skip.
+        Log::shouldHaveReceived('info')->withArgs(function ($message, $context = null) {
+            return $message === 'Digiflazz webhook SUCCESS settle'
+                && is_array($context)
+                && ($context['outcome'] ?? null) === 'already_success';
         })->atLeast()->once();
     }
 

@@ -30,6 +30,7 @@ export interface VerifyOnboardingPayload {
 
 export interface FinalizeRegistrationPayload {
   onboarding_id: number;
+  finalize_token: string;
   pin: string;
   pin_confirmation: string;
   remember_device?: boolean;
@@ -132,8 +133,20 @@ export const authService = {
     return response.data;
   },
 
-  verifyOnboardingOtp: async (payload: VerifyOnboardingPayload): Promise<ApiResponse<{ verified: boolean; onboarding_id: number; next_step: string }>> => {
-    const response = await apiClient.post<ApiResponse<{ verified: boolean; onboarding_id: number; next_step: string }>>('/auth/otp/verify', {
+  verifyOnboardingOtp: async (payload: VerifyOnboardingPayload): Promise<ApiResponse<{
+    verified: boolean;
+    onboarding_id: number;
+    next_step: string;
+    finalize_token?: string;
+    finalize_token_expires_at?: string | null;
+  }>> => {
+    const response = await apiClient.post<ApiResponse<{
+      verified: boolean;
+      onboarding_id: number;
+      next_step: string;
+      finalize_token?: string;
+      finalize_token_expires_at?: string | null;
+    }>>('/auth/otp/verify', {
       onboarding_id: payload.onboarding_id,
       code: payload.code,
       action: 'onboarding_registration',

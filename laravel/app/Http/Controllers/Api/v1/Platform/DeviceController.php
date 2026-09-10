@@ -4,21 +4,33 @@ namespace App\Http\Controllers\Api\v1\Platform;
 
 use App\Http\Controllers\Controller;
 use App\Models\UserDevice;
+use App\Services\Platform\UserDeviceBindingService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * P0 #4 — device/push registration requires Sanctum; device_uuid is locator only.
+ */
 class DeviceController extends Controller
 {
     use ApiResponseTrait;
 
+    public function __construct(
+        protected UserDeviceBindingService $binding
+    ) {}
+
     /**
-     * Register or upsert a client device.
+     * Register or upsert a client device for the authenticated user.
      * POST /api/v1/devices/register
-     * Auth optional — attaches user when Sanctum token is present.
      */
     public function register(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Autentikasi diperlukan.', 401);
+        }
+
         $data = $request->validate([
             'device_uuid' => 'required|string|max:191',
             'platform' => 'required|string|in:android,ios,web,pwa',
@@ -28,12 +40,12 @@ class DeviceController extends Controller
             'app_build' => 'nullable|integer|min:1',
             'device_model' => 'nullable|string|max:128',
             'os_version' => 'nullable|string|max:64',
+            // Intentionally ignored if present — ownership is server-authoritative.
+            'user_id' => 'prohibited',
+            'owner_id' => 'prohibited',
         ]);
 
-        $authUserId = optional(auth('sanctum')->user())->id ?? optional($request->user())->id;
-
-        $update = [
-            'user_id' => $authUserId,
+        $attrs = [
             'app_version' => $data['app_version'] ?? null,
             'app_build' => $data['app_build'] ?? null,
             'device_model' => $data['device_model'] ?? null,
@@ -46,74 +58,76 @@ class DeviceController extends Controller
         // Do not wipe an existing push_token when register is called without one
         // (mobile syncDeviceRegistration often omits token).
         if (array_key_exists('push_token', $data) && is_string($data['push_token']) && $data['push_token'] !== '') {
-            $update['push_token'] = $data['push_token'];
+            $attrs['push_token'] = $data['push_token'];
         }
         if (! empty($data['push_provider'])) {
-            $update['push_provider'] = $data['push_provider'];
+            $attrs['push_provider'] = $data['push_provider'];
         }
 
-        $device = UserDevice::updateOrCreate(
-            [
-                'device_uuid' => $data['device_uuid'],
-                'platform' => strtolower($data['platform']),
-            ],
-            $update
+        $result = $this->binding->claimOrUpdate(
+            (int) $user->id,
+            $data['device_uuid'],
+            $data['platform'],
+            $attrs
         );
 
-        if ($authUserId && (int) $device->user_id !== (int) $authUserId) {
-            $device->user_id = $authUserId;
-            $device->save();
+        if (! $result['ok']) {
+            return $this->errorResponse(
+                'Perangkat sudah terdaftar pada akun lain.',
+                403,
+                ['device_uuid' => ['Perangkat sudah terdaftar pada akun lain.']]
+            );
         }
 
-        return $this->successResponse('Perangkat berhasil didaftarkan.', $this->mapDevice($device), 201);
+        return $this->successResponse('Perangkat berhasil didaftarkan.', $this->mapDevice($result['device']), 201);
     }
 
     /**
-     * Update push token for a registered device.
+     * Update push token for a device owned by the authenticated user.
      * POST /api/v1/devices/push-token
      */
     public function updatePushToken(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Autentikasi diperlukan.', 401);
+        }
+
         $data = $request->validate([
             'device_uuid' => 'required|string|max:191',
             'platform' => 'required|string|in:android,ios,web,pwa',
             'push_token' => 'required|string|max:1024',
             'push_provider' => 'nullable|string|in:fcm,apns,webpush,expo',
+            'user_id' => 'prohibited',
+            'owner_id' => 'prohibited',
         ]);
 
-        $device = UserDevice::where('device_uuid', $data['device_uuid'])
-            ->where('platform', strtolower($data['platform']))
-            ->first();
+        $result = $this->binding->updatePushTokenForOwner(
+            (int) $user->id,
+            $data['device_uuid'],
+            $data['platform'],
+            $data['push_token'],
+            [
+                'push_provider' => $data['push_provider'] ?? null,
+                'user_agent' => substr((string) $request->userAgent(), 0, 512),
+            ]
+        );
 
-        if (!$device) {
-            return $this->errorResponse('Perangkat belum terdaftar. Panggil /devices/register terlebih dahulu.', 404);
+        if (! $result['ok']) {
+            return $this->errorResponse(
+                'Perangkat tidak ditemukan atau bukan milik akun Anda.',
+                404,
+                ['device_uuid' => ['Perangkat tidak ditemukan atau bukan milik akun Anda.']]
+            );
         }
 
-        if ($request->user() || auth('sanctum')->user()) {
-            $device->user_id = optional($request->user() ?? auth('sanctum')->user())->id;
-        }
-
-        $provider = $data['push_provider']
-            ?? $device->push_provider
-            ?? (str_starts_with($data['push_token'], 'ExponentPushToken')
-                || str_starts_with($data['push_token'], 'ExpoPushToken')
-                    ? 'expo'
-                    : 'fcm');
-
-        $device->fill([
-            'push_token' => $data['push_token'],
-            'push_provider' => $provider,
-            'is_active' => true,
-            'last_seen_at' => now(),
-            'user_agent' => substr((string) $request->userAgent(), 0, 512),
-        ])->save();
-
-        return $this->successResponse('Push token berhasil diperbarui.', $this->mapDevice($device));
+        return $this->successResponse('Push token berhasil diperbarui.', $this->mapDevice($result['device']));
     }
 
     /**
      * Disassociate push token from the current user (logout / account switch).
-     * Keeps device_uuid row but clears ownership + token so User A cannot receive on User B's session.
+     * Keeps device_uuid row but clears ownership + token so the next authenticated
+     * owner can claim the unbound row after login — not via anonymous UUID alone.
      * POST /api/v1/devices/disassociate
      */
     public function disassociate(Request $request): JsonResponse
@@ -154,7 +168,7 @@ class DeviceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return $this->errorResponse('Autentikasi diperlukan.', 401);
         }
 
@@ -174,7 +188,7 @@ class DeviceController extends Controller
     public function destroy(Request $request, string $deviceUuid): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return $this->errorResponse('Autentikasi diperlukan.', 401);
         }
 
@@ -182,7 +196,7 @@ class DeviceController extends Controller
             ->where('device_uuid', $deviceUuid)
             ->first();
 
-        if (!$device) {
+        if (! $device) {
             return $this->errorResponse('Perangkat tidak ditemukan.', 404);
         }
 
@@ -201,7 +215,7 @@ class DeviceController extends Controller
             'id' => $device->id,
             'device_uuid' => $device->device_uuid,
             'platform' => $device->platform,
-            'push_token_registered' => !empty($device->push_token),
+            'push_token_registered' => ! empty($device->push_token),
             'push_provider' => $device->push_provider,
             'app_version' => $device->app_version,
             'app_build' => $device->app_build,

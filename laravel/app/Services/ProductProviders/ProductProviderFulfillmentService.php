@@ -31,6 +31,7 @@ class ProductProviderFulfillmentService
         protected ProductProviderHealthService $health,
         protected WalletRefundService $refundService,
         protected NotificationService $notificationService,
+        protected \App\Services\Transactions\TransactionSuccessTransitionService $successTransition,
     ) {}
 
     /**
@@ -353,65 +354,26 @@ class ProductProviderFulfillmentService
 
     protected function markSuccess(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void
     {
-        DB::transaction(function () use ($transaction, $provider, $result) {
-            /** @var Transaction $locked */
-            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
+        // P0 — centralized locked SUCCESS writer (same guards as poll/webhook).
+        $outcome = $this->successTransition->apply($transaction->id, [
+            'provider_code' => $provider->code,
+            'source' => 'product_provider_fulfillment',
+            'sn' => $result->sn,
+            'notes' => 'Transaksi berhasil. SN: '.($result->sn ?? '-'),
+            'raw' => $result->raw,
+            'raw_item' => $result->raw,
+            'provider_response' => is_array($result->raw) ? $result->raw : null,
+            'sync_digiflazz_mirror' => $provider->code === ProductProvider::CODE_DIGIFLAZZ,
+            'digiflazz_response' => is_array($result->raw) ? $result->raw : [],
+        ]);
 
-            if (!$this->assertCanWriteFulfillmentStatus($locked, 'SET SUCCESS')) {
-                return;
-            }
-
-            Log::info('UPDATE TRANSACTION', [
-                'transaction_id' => $locked->id,
-                'action' => 'SET SUCCESS',
-                'provider_code' => $provider->code,
-                'provider_ref' => $locked->provider_ref,
-                'sn' => $result->sn,
-            ]);
-            Log::info('SET SUCCESS', [
-                'transaction_id' => $locked->id,
-                'provider_ref' => $locked->provider_ref,
-            ]);
-
-            $locked->update([
-                'status' => TransactionStatus::SUCCESS->value,
-                'notes' => 'Transaksi berhasil. SN: ' . ($result->sn ?? '-'),
-                'provider_last_status' => 'success',
-                'provider_checked_at' => now(),
-                'completed_at' => now(),
-                'provider_response' => is_array($result->raw) ? $result->raw : $locked->provider_response,
-            ]);
-
-            if ($provider->code === ProductProvider::CODE_DIGIFLAZZ) {
-                DigiflazzTransaction::where('transaction_id', $locked->id)->update(
-                    DigiflazzService::digiflazzTransactionAttributesFromResponse(
-                        'success',
-                        is_array($result->raw) ? $result->raw : [],
-                        $result->sn
-                    )
-                );
-            }
-
-            PaymentHistory::recordFor(
-                $locked,
-                $provider->code,
-                'success',
-                $result->raw,
-                $result->raw,
-                $locked->invoice_number
-            );
-
-            Log::info('WRITE WALLET HISTORY — debit already finalized (no refund)', [
-                'transaction_id' => $locked->id,
-                'total_payment' => $locked->total_payment,
-            ]);
-
-            Log::info('BROADCAST EVENT — dispatch TransactionSuccess + PaymentSettled', [
-                'transaction_id' => $locked->id,
-            ]);
-            event(new \App\Events\TransactionSuccess($locked->fresh(['user']) ?? $locked));
-            event(new \App\Events\PaymentSettled($locked->fresh(['user']) ?? $locked, $result->raw));
-        });
+        Log::info('UPDATE TRANSACTION', [
+            'transaction_id' => $transaction->id,
+            'action' => 'SET SUCCESS',
+            'provider_code' => $provider->code,
+            'outcome' => $outcome['outcome'],
+            'events_dispatched' => $outcome['events_dispatched'],
+        ]);
     }
 
     protected function markPending(Transaction $transaction, ProductProvider $provider, ProviderFulfillmentResult $result): void

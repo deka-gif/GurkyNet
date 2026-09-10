@@ -43,6 +43,9 @@ export type OtpVerifyResponse = {
   verified?: boolean;
   status?: string;
   next_step?: string;
+  /** P0 — single-use capability for finalize; not a substitute for OTP */
+  finalize_token?: string;
+  finalize_token_expires_at?: string | null;
 };
 
 /**
@@ -116,6 +119,7 @@ export const authService = {
 
   finalizeRegistration: async (payload: {
     onboarding_id: number;
+    finalize_token: string;
     pin: string;
     pin_confirmation: string;
     accept_policies?: boolean;
@@ -125,6 +129,7 @@ export const authService = {
       '/auth/register/finalize',
       {
         onboarding_id: payload.onboarding_id,
+        finalize_token: payload.finalize_token,
         pin: payload.pin,
         pin_confirmation: payload.pin_confirmation,
         accept_policies: payload.accept_policies ?? true,

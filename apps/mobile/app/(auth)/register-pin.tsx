@@ -44,6 +44,7 @@ export default function RegisterPinScreen() {
   const onboardingId = Number(params.onboarding_id);
 
   const finalizeRegistration = useAuthStore((s) => s.finalizeRegistration);
+  const pendingFinalize = useAuthStore((s) => s.pendingOnboardingFinalize);
   const loading = useAuthStore((s) => s.loading);
   const storeError = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
@@ -70,10 +71,14 @@ export default function RegisterPinScreen() {
       : 'Masukkan kembali PIN kamu';
 
   useEffect(() => {
-    if (!onboardingId) {
+    if (
+      !onboardingId ||
+      !pendingFinalize?.finalizeToken ||
+      pendingFinalize.onboardingId !== onboardingId
+    ) {
       router.replace('/(auth)/register');
     }
-  }, [onboardingId, router]);
+  }, [onboardingId, pendingFinalize, router]);
 
   const submit = async (pinValue: string, confirmValue: string) => {
     if (lockRef.current || loading) return;
@@ -84,7 +89,11 @@ export default function RegisterPinScreen() {
       setStep('confirm');
       return;
     }
-    if (!onboardingId) {
+    if (
+      !onboardingId ||
+      !pendingFinalize?.finalizeToken ||
+      pendingFinalize.onboardingId !== onboardingId
+    ) {
       setError('Sesi registrasi tidak valid. Silakan daftar ulang.');
       submittingRef.current = false;
       return;
@@ -96,6 +105,7 @@ export default function RegisterPinScreen() {
     try {
       const ok = await finalizeRegistration({
         onboarding_id: onboardingId,
+        finalize_token: pendingFinalize.finalizeToken,
         pin: pinValue,
         pin_confirmation: confirmValue,
       });

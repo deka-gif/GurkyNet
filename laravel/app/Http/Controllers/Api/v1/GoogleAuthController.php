@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\v1;
 use App\Actions\Auth\RegisterUserAction;
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Models\UserDevice;
+use App\Services\Platform\UserDeviceBindingService;
 use App\Support\TokenPolicy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -232,10 +232,12 @@ class GoogleAuthController extends Controller
             $platform = 'android';
         }
 
-        UserDevice::updateOrCreate(
-            ['device_uuid' => $deviceUuid, 'platform' => $platform],
+        // P0 #4 — bind only unbound or own rows; never steal another user's device.
+        app(UserDeviceBindingService::class)->claimOrUpdate(
+            (int) $user->id,
+            (string) $deviceUuid,
+            $platform,
             [
-                'user_id' => $user->id,
                 'app_version' => $request->header('X-App-Version'),
                 'device_model' => substr((string) $request->header('X-Device-Model', ''), 0, 128) ?: null,
                 'os_version' => substr((string) $request->header('X-Os-Version', ''), 0, 64) ?: null,

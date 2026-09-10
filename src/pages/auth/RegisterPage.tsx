@@ -74,6 +74,7 @@ export const RegisterPage: React.FC = () => {
   const [pin, setPin] = useState('');
   const [pinConfirmation, setPinConfirmation] = useState('');
   const [onboardingId, setOnboardingId] = useState<number | null>(null);
+  const [finalizeToken, setFinalizeToken] = useState<string | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [rememberDevice, setRememberDevice] = useState(true);
   const [showReferralField, setShowReferralField] = useState(false);
@@ -134,6 +135,12 @@ export const RegisterPage: React.FC = () => {
     try {
       const response = await authService.verifyOnboardingOtp({ onboarding_id: onboardingId, code: otpCode });
       if (response.success) {
+        const token = response.data?.finalize_token;
+        if (!token) {
+          setOtpError('Sesi verifikasi tidak lengkap. Silakan coba lagi.');
+          return;
+        }
+        setFinalizeToken(token);
         setStep('pin');
         setSuccessMsg('Email berhasil diverifikasi. Lanjutkan dengan membuat PIN transaksi 6 digit.');
       } else {
@@ -170,7 +177,7 @@ export const RegisterPage: React.FC = () => {
   };
 
   const submitPin = async () => {
-    if (!onboardingId) return;
+    if (!onboardingId || !finalizeToken) return;
     setPinError(null);
     setPinConfirmationError(null);
     if (pin !== pinConfirmation) {
@@ -186,12 +193,14 @@ export const RegisterPage: React.FC = () => {
     try {
       const response = await authService.finalizeRegistration({
         onboarding_id: onboardingId,
+        finalize_token: finalizeToken,
         pin,
         pin_confirmation: pinConfirmation,
         remember_device: rememberDevice,
         accept_policies: true,
       });
       if (response.success) {
+        setFinalizeToken(null);
         storageService.setToken(response.data.token, true);
         storageService.setUser(response.data.user as unknown as Record<string, unknown>, true);
         storageService.markTrustedIdentity(registeredEmail);

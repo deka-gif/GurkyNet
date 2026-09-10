@@ -261,7 +261,7 @@ class NotificationInfrastructureTest extends TestCase
         $this->assertFalse((bool) $device->is_active);
     }
 
-    public function test_account_switch_rebinding_prevents_previous_user_ownership(): void
+    public function test_account_switch_requires_disassociate_before_rebinding(): void
     {
         $userB = User::create([
             'name' => 'User B',
@@ -279,6 +279,23 @@ class NotificationInfrastructureTest extends TestCase
             'is_active' => true,
             'last_seen_at' => now(),
         ]);
+
+        // P0 #4 — B cannot steal while A still owns the row.
+        Sanctum::actingAs($userB);
+        $this->postJson('/api/v1/devices/register', [
+            'device_uuid' => 'shared-device',
+            'platform' => 'android',
+            'push_token' => 'ExponentPushToken[shared-b]',
+            'push_provider' => 'expo',
+        ])->assertForbidden();
+
+        $this->assertSame($this->user->id, UserDevice::where('device_uuid', 'shared-device')->value('user_id'));
+
+        Sanctum::actingAs($this->user);
+        $this->postJson('/api/v1/devices/disassociate', [
+            'device_uuid' => 'shared-device',
+            'platform' => 'android',
+        ])->assertOk();
 
         Sanctum::actingAs($userB);
         $this->postJson('/api/v1/devices/register', [

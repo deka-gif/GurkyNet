@@ -86,8 +86,8 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::get('/force-update', [\App\Http\Controllers\Api\v1\Platform\PlatformVersionController::class, 'forceUpdate']);
     });
 
-    // Device registration (auth optional — Sanctum token attaches user when present)
-    Route::prefix('devices')->middleware('throttle:60,1')->group(function () {
+    // Device registration — P0 #4: auth required (no anonymous ownership/token hijack)
+    Route::prefix('devices')->middleware(['auth:sanctum', RenewTokenExpiration::class, 'throttle:60,1'])->group(function () {
         Route::post('/register', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'register']);
         Route::post('/push-token', [\App\Http\Controllers\Api\v1\Platform\DeviceController::class, 'updatePushToken']);
     });

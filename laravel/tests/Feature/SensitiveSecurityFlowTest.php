@@ -54,14 +54,18 @@ class SensitiveSecurityFlowTest extends TestCase
         $otp = $register->json('data.dummy_sent_code');
         $onboardingId = $register->json('data.onboarding_id');
 
-        $this->postJson('/api/v1/auth/otp/verify', [
+        $verify = $this->postJson('/api/v1/auth/otp/verify', [
             'onboarding_id' => $onboardingId,
             'code' => $otp,
             'action' => 'onboarding_registration',
-        ])->assertStatus(200);
+        ]);
+        $verify->assertStatus(200)
+            ->assertJsonStructure(['data' => ['finalize_token']]);
+        $finalizeToken = $verify->json('data.finalize_token');
 
         $this->postJson('/api/v1/auth/register/finalize', [
             'onboarding_id' => $onboardingId,
+            'finalize_token' => $finalizeToken,
             'pin' => '482951',
             'pin_confirmation' => '482951',
             'accept_policies' => true,

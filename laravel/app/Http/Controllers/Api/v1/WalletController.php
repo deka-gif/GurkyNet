@@ -17,6 +17,7 @@ use App\Http\Requests\Api\v1\WithdrawRequest;
 use App\Repositories\Contracts\WalletRepositoryInterface;
 use App\Services\Wallet\WalletSummaryService;
 use App\Services\Wallet\CustomerStatementService;
+use App\Services\Wallet\WalletAdminFeeResolver;
 use App\Services\Marketing\WebsiteBrandLogoResolver;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
@@ -226,10 +227,11 @@ class WalletController extends Controller
             return $this->withIdempotency(
                 $request,
                 'POST /api/v1/wallet/topup',
-                $request->only(['amount', 'admin_fee', 'payment_method', 'channel']),
+                $request->only(['amount', 'payment_method', 'channel']),
                 function () use ($request, $user) {
                     $amount = (float) $request->amount;
-                    $adminFee = (float) $request->input('admin_fee', 0.00);
+                    // P0 — fee is server-authoritative (never from client admin_fee).
+                    $adminFee = WalletAdminFeeResolver::topUpFee();
                     $paymentMethodInput = (string) $request->input('payment_method', 'qris');
                     $channelInput = $request->input('channel');
                     $channelInput = is_string($channelInput) ? $channelInput : null;
@@ -379,14 +381,14 @@ class WalletController extends Controller
             return $this->withIdempotency(
                 $request,
                 'POST /api/v1/wallet/transfer',
-                $request->only(['recipient_wallet_number', 'amount', 'pin', 'admin_fee']),
+                $request->only(['recipient_wallet_number', 'amount', 'pin']),
                 function () use ($request, $user) {
                     $recipientWalletNumber = $request->recipient_wallet_number;
                     $amount = (float) $request->amount;
                     $pin = $request->pin;
 
-                    // Configurable fee (configurable fee rule from Sprint 13)
-                    $fee = (float) $request->input('admin_fee', config('wallet.transfer_fee', 0.00));
+                    // P0 — Sprint 13 fee is server config only (never client admin_fee).
+                    $fee = WalletAdminFeeResolver::transferFee();
 
                     $transaction = $this->transferWalletAction->execute(
                         $user,
@@ -461,7 +463,7 @@ class WalletController extends Controller
             return $this->withIdempotency(
                 $request,
                 'POST /api/v1/wallet/withdraw',
-                $request->only(['amount', 'pin', 'bank_name', 'account_number', 'admin_fee']),
+                $request->only(['amount', 'pin', 'bank_name', 'account_number']),
                 function () use ($request, $user) {
                     $transaction = $this->withdrawWalletAction->execute(
                         $user,
@@ -469,7 +471,7 @@ class WalletController extends Controller
                         (string) $request->pin,
                         (string) $request->bank_name,
                         (string) $request->account_number,
-                        (float) $request->input('admin_fee', 0),
+                        WalletAdminFeeResolver::withdrawFee(),
                         $request->input('idempotency_key')
                     );
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\v1\RegisterRequest;
 use App\Http\Requests\Api\v1\LoginRequest;
 use App\Http\Requests\Api\v1\VerifyOtpRequest;
+use App\Http\Requests\Api\v1\FinalizeRegistrationRequest;
 use App\Http\Requests\Api\v1\ResetPasswordRequest;
 use App\Http\Requests\Api\v1\ChangePinRequest;
 use App\Actions\Auth\RegisterUserAction;
@@ -20,6 +21,8 @@ use App\Models\User;
 use App\Models\UserDevice;
 use App\Repositories\Contracts\OtpRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
+use App\Services\Platform\UserDeviceBindingService;
+use App\Services\Security\OnboardingFinalizeTokenService;
 use App\Services\Security\OtpService;
 use App\Support\TokenPolicy;
 use App\Traits\ApiResponseTrait;
@@ -31,6 +34,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -45,6 +49,7 @@ class AuthController extends Controller
     protected OtpRepositoryInterface $otpRepository;
     protected UserRepositoryInterface $userRepository;
     protected OtpService $unifiedOtpService;
+    protected OnboardingFinalizeTokenService $finalizeTokenService;
 
     public function __construct(
         RegisterUserAction $registerAction,
@@ -55,7 +60,8 @@ class AuthController extends Controller
         ChangePinAction $changePinAction,
         OtpRepositoryInterface $otpRepository,
         UserRepositoryInterface $userRepository,
-        OtpService $unifiedOtpService
+        OtpService $unifiedOtpService,
+        OnboardingFinalizeTokenService $finalizeTokenService
     ) {
         $this->registerAction = $registerAction;
         $this->loginAction = $loginAction;
@@ -66,6 +72,7 @@ class AuthController extends Controller
         $this->otpRepository = $otpRepository;
         $this->userRepository = $userRepository;
         $this->unifiedOtpService = $unifiedOtpService;
+        $this->finalizeTokenService = $finalizeTokenService;
     }
 
     /**
@@ -95,6 +102,9 @@ class AuthController extends Controller
                     'otp_code' => null,
                     'otp_expires_at' => null,
                     'otp_verified_at' => null,
+                    'finalize_token_hash' => null,
+                    'finalize_token_expires_at' => null,
+                    'finalize_token_consumed_at' => null,
                     'status' => 'pending_verification',
                     'meta' => [
                         'channel' => 'email',
@@ -262,13 +272,12 @@ class AuthController extends Controller
         $newToken = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
 
         if ($deviceUuid) {
-            \App\Models\UserDevice::updateOrCreate(
+            // P0 #4 — do not steal another user's device row via refresh headers.
+            app(UserDeviceBindingService::class)->claimOrUpdate(
+                (int) $user->id,
+                (string) $deviceUuid,
+                in_array($platform, ['android', 'ios', 'web', 'pwa'], true) ? $platform : 'web',
                 [
-                    'device_uuid' => $deviceUuid,
-                    'platform' => in_array($platform, ['android', 'ios', 'web', 'pwa'], true) ? $platform : 'web',
-                ],
-                [
-                    'user_id' => $user->id,
                     'app_version' => $appVersion,
                     'user_agent' => substr((string) $request->userAgent(), 0, 512),
                     'is_active' => true,
@@ -361,17 +370,32 @@ class AuthController extends Controller
                 $attempt = OnboardingAttempt::query()->findOrFail((int) $request->input('onboarding_id'));
                 $this->unifiedOtpService->verify($attempt->email, $request->code, 'onboarding_registration', 'email');
 
+                // P0 — mint finalize capability; onboarding_id alone must not authorize finalize.
+                $finalizeToken = $this->finalizeTokenService->issue($attempt);
+
                 $attempt->forceFill([
                     'otp_verified_at' => now(),
                     'otp_code' => null,
                     'status' => 'verified',
                 ])->save();
 
+                ActivityLog::create([
+                    'user_id' => null,
+                    'activity' => 'onboarding_finalize_token_issued',
+                    'payload' => [
+                        'onboarding_id' => $attempt->id,
+                        'expires_at' => optional($attempt->fresh()->finalize_token_expires_at)?->toIso8601String(),
+                        'timestamp' => now()->toIso8601String(),
+                    ],
+                ]);
+
                 return $this->successResponse('Kode OTP berhasil diverifikasi.', [
                     'onboarding_id' => $attempt->id,
                     'verified' => true,
                     'status' => 'verified',
                     'next_step' => 'create_pin',
+                    'finalize_token' => $finalizeToken,
+                    'finalize_token_expires_at' => optional($attempt->fresh()->finalize_token_expires_at)?->toIso8601String(),
                 ]);
             }
 
@@ -425,16 +449,9 @@ class AuthController extends Controller
         ]);
     }
 
-    public function finalizeRegistration(Request $request): JsonResponse
+    public function finalizeRegistration(FinalizeRegistrationRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'onboarding_id' => 'required|integer|exists:onboarding_attempts,id',
-            'pin' => 'required|string|regex:/^\d{6}$/',
-            'pin_confirmation' => 'required|same:pin',
-            'remember_device' => 'nullable|boolean',
-            // Sprint 18 — server-side policy acceptance (Bagian 27/28)
-            'accept_policies' => 'accepted',
-        ]);
+        $data = $request->validated();
 
         if ($this->isWeakPin($data['pin'])) {
             return $this->errorResponse('PIN terlalu lemah. Gunakan kombinasi 6 digit lain.', 422, [
@@ -442,54 +459,80 @@ class AuthController extends Controller
             ]);
         }
 
-        /** @var OnboardingAttempt $attempt */
-        $attempt = OnboardingAttempt::query()->findOrFail((int) $data['onboarding_id']);
-        if (!$attempt->otp_verified_at) {
-            return $this->errorResponse('OTP email belum diverifikasi.', 422, [
-                'onboarding_id' => ['OTP email belum diverifikasi.'],
-            ]);
+        try {
+            $result = DB::transaction(function () use ($data, $request) {
+                /** @var OnboardingAttempt|null $attempt */
+                $attempt = OnboardingAttempt::query()
+                    ->whereKey((int) $data['onboarding_id'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$attempt) {
+                    throw ValidationException::withMessages([
+                        'onboarding_id' => ['Sesi onboarding tidak ditemukan atau sudah selesai.'],
+                    ]);
+                }
+
+                if (in_array((string) $attempt->status, ['completed', 'cancelled'], true)) {
+                    throw ValidationException::withMessages([
+                        'onboarding_id' => ['Sesi onboarding sudah tidak aktif.'],
+                    ]);
+                }
+
+                if (!$attempt->otp_verified_at || (string) $attempt->status !== 'verified') {
+                    throw ValidationException::withMessages([
+                        'onboarding_id' => ['OTP email belum diverifikasi.'],
+                    ]);
+                }
+
+                // Capability check — onboarding_id is locator only.
+                $this->finalizeTokenService->assertUsable($attempt, (string) $data['finalize_token']);
+                $this->finalizeTokenService->consume($attempt);
+
+                $meta = is_array($attempt->meta) ? $attempt->meta : [];
+                // Email OTP onboarding already verified contact ownership for this attempt.
+                // Stamp BOTH email_verified_at and phone_verified_at so Tier-1 contact gates
+                // (IdentityVerificationGate) do not ask for a separate phone OTP after register.
+                // Does NOT bypass KYC Tier-2 / withdraw gates. PURCHASE_KYC_REQUIRED unchanged.
+                // Identity is authoritative from the attempt — never from client body.
+                $verifiedAt = now();
+                $user = $this->registerAction->execute([
+                    'name' => $attempt->name,
+                    'email' => $attempt->email,
+                    'phone_number' => $attempt->phone_number,
+                    'password' => Crypt::decryptString($attempt->password),
+                    'transaction_pin' => $data['pin'],
+                    'email_verified_at' => $verifiedAt,
+                    'phone_verified_at' => $verifiedAt,
+                    'referral_code' => $meta['referral_code'] ?? null,
+                    'referral_context' => [
+                        'ip' => $request->ip(),
+                        'device_fingerprint' => $request->header('X-Device-Id'),
+                    ],
+                    'accept_policies' => true,
+                ]);
+
+                $tokenName = $this->deviceTokenName($request);
+                $token = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
+                $this->rememberTrustedDevice($user, $request, (bool) ($data['remember_device'] ?? true));
+                $this->writeSecurityAudit($user, 'REGISTER_AND_CREATE_PIN', [
+                    'channel' => 'email_otp',
+                    'onboarding_id' => $attempt->id,
+                ]);
+
+                $attempt->forceFill([
+                    'status' => 'completed',
+                    'otp_code' => null,
+                ])->delete();
+
+                return [
+                    'user' => $user->fresh(['wallet']),
+                    'token' => $token,
+                ];
+            });
+        } catch (ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
-
-        $result = DB::transaction(function () use ($attempt, $data, $request) {
-            $meta = is_array($attempt->meta) ? $attempt->meta : [];
-            // Email OTP onboarding already verified contact ownership for this attempt.
-            // Stamp BOTH email_verified_at and phone_verified_at so Tier-1 contact gates
-            // (IdentityVerificationGate) do not ask for a separate phone OTP after register.
-            // Does NOT bypass KYC Tier-2 / withdraw gates. PURCHASE_KYC_REQUIRED unchanged.
-            $verifiedAt = now();
-            $user = $this->registerAction->execute([
-                'name' => $attempt->name,
-                'email' => $attempt->email,
-                'phone_number' => $attempt->phone_number,
-                'password' => Crypt::decryptString($attempt->password),
-                'transaction_pin' => $data['pin'],
-                'email_verified_at' => $verifiedAt,
-                'phone_verified_at' => $verifiedAt,
-                'referral_code' => $meta['referral_code'] ?? null,
-                'referral_context' => [
-                    'ip' => $request->ip(),
-                    'device_fingerprint' => $request->header('X-Device-Id'),
-                ],
-                'accept_policies' => true,
-            ]);
-
-            $tokenName = $this->deviceTokenName($request);
-            $token = $user->createToken($tokenName, ['*'], TokenPolicy::expiresAtFor($user))->plainTextToken;
-            $this->rememberTrustedDevice($user, $request, (bool) ($data['remember_device'] ?? true));
-            $this->writeSecurityAudit($user, 'REGISTER_AND_CREATE_PIN', [
-                'channel' => 'email_otp',
-            ]);
-
-            $attempt->forceFill([
-                'status' => 'completed',
-                'otp_code' => null,
-            ])->delete();
-
-            return [
-                'user' => $user->fresh(['wallet']),
-                'token' => $token,
-            ];
-        });
 
         return $this->successResponse('Akun berhasil diverifikasi dan PIN berhasil dibuat.', [
             'token' => $result['token'],
@@ -639,10 +682,12 @@ class AuthController extends Controller
         $deviceModel = trim((string) $request->header('X-Device-Model', $request->input('device_model', '')));
         $osVersion = trim((string) $request->header('X-Os-Version', $request->input('os_version', '')));
 
-        UserDevice::updateOrCreate(
-            ['device_uuid' => $deviceUuid, 'platform' => strtolower((string) $request->header('X-Platform', 'web'))],
+        // P0 #4 — bind only unbound or own rows; never overwrite another user's ownership.
+        $result = app(UserDeviceBindingService::class)->claimOrUpdate(
+            (int) $user->id,
+            (string) $deviceUuid,
+            strtolower((string) $request->header('X-Platform', 'web')),
             [
-                'user_id' => $user->id,
                 'app_version' => $request->header('X-App-Version'),
                 'device_model' => $deviceModel !== '' ? substr($deviceModel, 0, 128) : null,
                 'os_version' => $osVersion !== '' ? substr($osVersion, 0, 64) : null,
@@ -651,7 +696,10 @@ class AuthController extends Controller
                 'last_seen_at' => now(),
             ]
         );
-        $this->writeSecurityAudit($user, 'trusted_device_added');
+
+        if ($result['ok']) {
+            $this->writeSecurityAudit($user, 'trusted_device_added');
+        }
     }
 
     protected function isTrustedDevice(User $user, Request $request): bool

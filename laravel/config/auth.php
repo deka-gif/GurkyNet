@@ -34,4 +34,17 @@ return [
     ],
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Onboarding finalize capability (P0 identity binding)
+    |--------------------------------------------------------------------------
+    |
+    | After OTP verification, a high-entropy single-use finalize_token is issued.
+    | onboarding_id alone must never authorize account creation.
+    |
+    */
+    'onboarding' => [
+        'finalize_token_ttl_minutes' => (int) env('ONBOARDING_FINALIZE_TOKEN_TTL_MINUTES', 30),
+    ],
 ];
