@@ -91,8 +91,13 @@ export type HistoryGroup = {
 };
 
 /**
- * Dynamic period labels from transaction timestamps (not hardcoded static buckets).
- * Order: Hari Ini → Kemarin → 7 Hari Terakhir → then month+year descending.
+ * Dynamic period labels from transaction timestamps.
+ *
+ * Global chronological DESC is preserved:
+ * 1) items sorted by authoritative created_at DESC
+ * 2) sections ordered by newest item timestamp inside each section (DESC)
+ *
+ * Month sections must NEVER appear above "Hari Ini" due to a broken numeric order.
  */
 export function groupTransactionsByPeriod(transactions: Transaction[]): HistoryGroup[] {
   const today = startOfDay(new Date());
@@ -101,7 +106,8 @@ export function groupTransactionsByPeriod(transactions: Transaction[]): HistoryG
   const weekStart = new Date(today);
   weekStart.setDate(weekStart.getDate() - 6);
 
-  const buckets = new Map<string, HistoryGroup>();
+  type Bucket = HistoryGroup & { latestTs: number };
+  const buckets = new Map<string, Bucket>();
 
   const sorted = [...transactions].sort((a, b) => transactionTimestamp(b) - transactionTimestamp(a));
 
@@ -112,38 +118,32 @@ export function groupTransactionsByPeriod(transactions: Transaction[]): HistoryG
 
     let key: string;
     let title: string;
-    let order: number;
 
     if (d.getTime() === today.getTime()) {
       key = 'today';
       title = 'Hari Ini';
-      order = 0;
     } else if (d.getTime() === yesterday.getTime()) {
       key = 'yesterday';
       title = 'Kemarin';
-      order = 1;
     } else if (d >= weekStart && d < yesterday) {
       key = 'last7';
       title = '7 Hari Terakhir';
-      order = 2;
     } else {
       const monthTitle = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
       key = `m-${d.getFullYear()}-${d.getMonth()}`;
       title = monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1);
-      order = 1000 - (d.getFullYear() * 12 + d.getMonth());
     }
 
     const existing = buckets.get(key);
     if (existing) {
       existing.items.push(tx);
+      existing.latestTs = Math.max(existing.latestTs, ts);
     } else {
-      buckets.set(key, { key: `${order}:${key}`, title, items: [tx] });
+      buckets.set(key, { key, title, items: [tx], latestTs: ts });
     }
   }
 
-  return Array.from(buckets.values()).sort((a, b) => {
-    const oa = Number(a.key.split(':')[0]);
-    const ob = Number(b.key.split(':')[0]);
-    return oa - ob;
-  });
+  return Array.from(buckets.values())
+    .sort((a, b) => b.latestTs - a.latestTs)
+    .map(({ key, title, items }) => ({ key, title, items }));
 }

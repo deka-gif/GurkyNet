@@ -22,9 +22,23 @@ $PHP_BIN artisan config:clear
 echo "==> Migrations"
 $PHP_BIN artisan migrate --force
 
-echo "==> Storage permissions (PHP-FPM must own writable dirs)"
+echo "==> Storage permissions (PHP-FPM / queue worker www-data must own writable dirs)"
+# File cache (CACHE_STORE=file) creates nested hash dirs under cache/data.
+# Missing nested dirs + wrong ownership caused ProcessMidtransCallback settlement crashes.
+sudo mkdir -p "$APP_DIR/laravel/storage/framework/cache/data"
+sudo mkdir -p "$APP_DIR/laravel/storage/framework/sessions"
+sudo mkdir -p "$APP_DIR/laravel/storage/framework/views"
+sudo mkdir -p "$APP_DIR/laravel/storage/logs"
+sudo mkdir -p "$APP_DIR/laravel/bootstrap/cache"
+# Drop azureuser-owned hash shards that www-data cannot extend (e.g. cache/data/5c).
+# Safe: file cache is regenerable; do not delete other storage contents.
+if [ -d "$APP_DIR/laravel/storage/framework/cache/data" ]; then
+  sudo find "$APP_DIR/laravel/storage/framework/cache/data" -mindepth 1 -maxdepth 1 -type d ! -user www-data -exec rm -rf {} + 2>/dev/null || true
+fi
 sudo chown -R www-data:www-data "$APP_DIR/laravel/storage" "$APP_DIR/laravel/bootstrap/cache"
 sudo chmod -R ug+rwx "$APP_DIR/laravel/storage" "$APP_DIR/laravel/bootstrap/cache"
+# setgid on cache tree so new nested dirs inherit www-data group
+sudo find "$APP_DIR/laravel/storage/framework/cache" -type d -exec chmod g+s {} \;
 
 echo "==> Optimize"
 $PHP_BIN artisan optimize

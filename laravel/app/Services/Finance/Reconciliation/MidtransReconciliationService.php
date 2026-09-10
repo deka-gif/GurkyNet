@@ -163,35 +163,38 @@ class MidtransReconciliationService
     }
 
     /**
-     * SRS 16.4 — poll pending Midtrans deposits older than 5 minutes.
-     * Dispatches existing ProcessMidtransCallback (idempotent credit).
+     * SRS 16.4 — poll Midtrans deposits older than 5 minutes.
+     * Uses existing reconcileOrder → ProcessMidtransCallback (idempotent credit).
+     *
+     * Includes:
+     * - open Midtrans statuses (pending/challenge/…)
+     * - stuck settlements: MT settlement/capture but local not success AND no topup mutation
+     *   (production hole: MT row updated before credit crashed → previously excluded forever)
      *
      * @return array{polled:int,dispatched:int}
      */
     public function pollPendingDeposits(): array
     {
         $age = (int) config('finance.midtrans_pending_age_minutes', 5);
+        $cutoff = now()->subMinutes($age);
         $polled = 0;
         $dispatched = 0;
+        $seen = [];
 
-        $pending = MidtransTransaction::query()
-            ->where(function ($q) {
-                $q->whereNull('transaction_status')
-                    ->orWhereNotIn('transaction_status', [
-                        'settlement', 'capture', 'success', 'expire', 'cancel', 'failure', 'failed', 'deny',
-                    ]);
-            })
-            ->where('created_at', '<=', now()->subMinutes($age))
-            ->orderBy('id')
-            ->limit(100)
-            ->get();
+        $candidates = $this->midtransPollCandidates($cutoff);
 
-        foreach ($pending as $mt) {
+        foreach ($candidates as $mt) {
+            $orderId = (string) $mt->order_id;
+            if ($orderId === '' || isset($seen[$orderId])) {
+                continue;
+            }
+            $seen[$orderId] = true;
+
             $polled++;
             if (! $this->midtrans->isConfigured()) {
                 break;
             }
-            $result = $this->reconcileOrder((string) $mt->order_id);
+            $result = $this->reconcileOrder($orderId);
             if ($result['ok']) {
                 $dispatched++;
             }
@@ -203,5 +206,47 @@ class MidtransReconciliationService
         ]);
 
         return compact('polled', 'dispatched');
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, MidtransTransaction>
+     */
+    protected function midtransPollCandidates(\DateTimeInterface $cutoff)
+    {
+        $open = MidtransTransaction::query()
+            ->where(function ($q) {
+                $q->whereNull('transaction_status')
+                    ->orWhereNotIn('transaction_status', [
+                        'settlement', 'capture', 'success', 'expire', 'cancel', 'failure', 'failed', 'deny',
+                    ]);
+            })
+            ->where('created_at', '<=', $cutoff)
+            ->orderBy('id')
+            ->limit(100)
+            ->get();
+
+        // Stuck settlement/capture: local unpaid + no topup mutation yet.
+        // Eligibility is applied in SQL BEFORE limit(100) so newer stuck rows are not
+        // hidden behind historical settlement/capture/success rows that already credited.
+        // No age cutoff — MT is already final; delaying only prolongs missing credit.
+        $settledStuck = MidtransTransaction::query()
+            ->whereIn('transaction_status', ['settlement', 'capture', 'success'])
+            ->whereHas('transaction', function ($q) {
+                $q->whereRaw('LOWER(status) NOT IN (?, ?)', ['success', 'sukses'])
+                    ->whereNotExists(function ($sub) {
+                        $sub->selectRaw('1')
+                            ->from('wallet_mutations')
+                            ->where('wallet_mutations.type', WalletMutation::TYPE_TOPUP)
+                            // reference_id is stored as string of transactions.id
+                            ->whereColumn('wallet_mutations.reference_id', 'transactions.id');
+                    });
+            })
+            ->orderBy('id')
+            ->limit(100)
+            ->get();
+
+        // Each branch already capped at 100; do not re-take(100) after concat or open
+        // pending rows could hide eligible stuck settlements.
+        return $open->concat($settledStuck)->unique('id')->sortBy('id')->values();
     }
 }

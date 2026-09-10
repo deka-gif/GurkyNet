@@ -142,7 +142,7 @@ class ProcessMidtransCallback implements ShouldQueue
 
                 $locked->update([
                     'status' => $localStatus,
-                    'notes' => 'Transaksi dibatalkan atau kedaluwarsa dari Midtrans. Status: ' . $midtransStatus,
+                    'notes' => 'Transaksi dibatalkan atau kedaluwarsa. Status pembayaran: '.$midtransStatus,
                 ]);
 
                 event(new \App\Events\TransactionFailed($locked->fresh()));
@@ -156,7 +156,7 @@ class ProcessMidtransCallback implements ShouldQueue
                 && !TransactionStatusMapper::isTerminalFailureRaw($locked->status)) {
                 $locked->update([
                     'status' => TransactionStatus::PROCESSING->value,
-                    'notes' => 'Menunggu penyelesaian pembayaran di Midtrans.',
+                    'notes' => 'Menunggu penyelesaian pembayaran.',
                 ]);
             }
 
@@ -245,7 +245,7 @@ class ProcessMidtransCallback implements ShouldQueue
 
         $transaction->update([
             'status' => TransactionStatus::SUCCESS->value,
-            'notes' => 'Pembayaran berhasil dikonfirmasi oleh Midtrans.',
+            'notes' => 'Pembayaran berhasil dikonfirmasi.',
         ]);
 
         PaymentHistory::recordFor(
