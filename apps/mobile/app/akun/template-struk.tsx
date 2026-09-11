@@ -1,19 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { Stack } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenContainer, Button, Card } from '../../src/components/ui';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { colors, spacing, typography } from '../../src/theme';
 import {
   RECEIPT_FIELD_LABELS,
   createDefaultReceiptTemplate,
+  createEmptyStoreProfile,
   receiptSettingsService,
   type ReceiptFieldConfig,
   type ReceiptTemplate,
@@ -23,16 +17,13 @@ import { buildReceiptLines, receiptLinesToPreviewText } from '../../src/utils/re
 import { useAuthStore } from '../../src/store/auth.store';
 
 /**
- * Template Struk — toggle/reorder (naik/turun), catatan, live preview. Local only.
+ * Template Struk — visibility + order only.
+ * Closing message text lives on Profil Toko (store.closingMessage).
  */
 export default function TemplateStrukScreen() {
   const userName = useAuthStore((s) => s.user?.name);
   const [template, setTemplate] = useState<ReceiptTemplate>(createDefaultReceiptTemplate());
-  const [store, setStore] = useState<StoreProfile>({
-    storeName: '',
-    address: '',
-    whatsapp: '',
-  });
+  const [store, setStore] = useState<StoreProfile>(createEmptyStoreProfile());
   const [paperWidthMm, setPaperWidthMm] = useState<58 | 80>(58);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -48,9 +39,11 @@ export default function TemplateStrukScreen() {
     setPaperWidthMm(p.paperWidthMm);
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const previewText = useMemo(() => {
     const lines = buildReceiptLines({
@@ -93,17 +86,21 @@ export default function TemplateStrukScreen() {
     try {
       await receiptSettingsService.setReceiptTemplate(template);
       setMsg('Template struk disimpan di perangkat ini.');
-    } catch {
-      setMsg('Gagal menyimpan template.');
+    } catch (err: any) {
+      setMsg(err?.message || 'Gagal menyimpan template.');
     } finally {
       setSaving(false);
     }
   };
 
   const onReset = async () => {
-    const def = await receiptSettingsService.resetReceiptTemplate();
-    setTemplate(def);
-    setMsg('Template dikembalikan ke default.');
+    try {
+      const def = await receiptSettingsService.resetReceiptTemplate();
+      setTemplate(def);
+      setMsg('Template dikembalikan ke default.');
+    } catch (err: any) {
+      setMsg(err?.message || 'Gagal mereset template.');
+    }
   };
 
   return (
@@ -118,36 +115,34 @@ export default function TemplateStrukScreen() {
 
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Pratinjau langsung</Text>
-        <Text style={styles.hint}>Lebar mengikuti pengaturan printer ({paperWidthMm} mm).</Text>
+        <Text style={styles.hint}>
+          Menggunakan Profil Toko aktif. Lebar kertas: {paperWidthMm} mm (Akun → Printer).
+        </Text>
         <View style={styles.previewBox}>
           <Text style={styles.previewText}>{previewText}</Text>
         </View>
       </Card>
 
       <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>Catatan tambahan</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          value={template.note}
-          onChangeText={(note) => setTemplate((t) => ({ ...t, note }))}
-          placeholder="Teks di bagian bawah struk"
-          placeholderTextColor={colors.gray[400]}
-          multiline
-        />
-        <Text style={styles.hint}>
-          Tampil jika field “Catatan tambahan” aktif di daftar di bawah.
-        </Text>
-      </Card>
-
-      <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Field struk</Text>
+        <Text style={styles.hint}>
+          Pesan penutup diisi di Profil Toko. Toggle di bawah hanya menampilkan / menyembunyikan.
+        </Text>
         {template.fields.map((field, index) => (
           <View key={field.id} style={styles.fieldRow}>
             <View style={styles.fieldMain}>
               <Text style={styles.fieldLabel}>{RECEIPT_FIELD_LABELS[field.id]}</Text>
-              {field.locked ? (
-                <Text style={styles.lockedBadge}>Wajib</Text>
+              {field.id === 'note' ? (
+                <Text style={styles.fieldSub}>
+                  Tampilkan pesan penutup dari Profil Toko
+                  {store.closingMessage.trim()
+                    ? `: “${store.closingMessage.trim().slice(0, 40)}${
+                        store.closingMessage.trim().length > 40 ? '…' : ''
+                      }”`
+                    : ' (belum diisi)'}
+                </Text>
               ) : null}
+              {field.locked ? <Text style={styles.lockedBadge}>Wajib</Text> : null}
             </View>
             <Switch
               value={field.locked ? true : field.visible}
@@ -190,7 +185,11 @@ export default function TemplateStrukScreen() {
 
       <Button label="Simpan template" onPress={() => void onSave()} loading={saving} disabled={saving} />
       <Button label="Reset ke default" variant="secondary" onPress={() => void onReset()} />
-      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+      {msg ? (
+        <Text style={[styles.msg, /gagal/i.test(msg) ? styles.msgError : styles.msgOk]}>
+          {msg}
+        </Text>
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -205,7 +204,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: typography.size.xs, color: colors.gray[500], lineHeight: 18 },
   previewBox: {
     backgroundColor: colors.gray[50],
-    borderRadius: radius.md,
+    borderRadius: 8,
     padding: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.gray[200],
@@ -215,17 +214,6 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
     lineHeight: 16,
   },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.gray[300],
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: typography.size.sm,
-    color: colors.gray[900],
-    backgroundColor: colors.white,
-  },
-  multiline: { minHeight: 72, textAlignVertical: 'top' },
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -240,6 +228,11 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
     fontWeight: typography.weight.medium,
   },
+  fieldSub: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+    lineHeight: 16,
+  },
   lockedBadge: {
     fontSize: 10,
     color: colors.primary[700],
@@ -247,5 +240,7 @@ const styles = StyleSheet.create({
   },
   reorder: { flexDirection: 'column' },
   reorderBtn: { padding: 2 },
-  msg: { fontSize: typography.size.sm, color: colors.status.success, marginBottom: spacing.xl },
+  msg: { fontSize: typography.size.sm, lineHeight: 20, marginBottom: spacing.xl },
+  msgOk: { color: colors.status.success },
+  msgError: { color: colors.status.failed },
 });

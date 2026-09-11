@@ -265,18 +265,21 @@ export default function UnlockScreen() {
             })}
           </View>
 
-          {bioHardware && !bioEnabled ? (
-            <Pressable
-              onPress={() => void consentEnableBiometric()}
-              disabled={locked}
-              hitSlop={8}
-              style={styles.consentWrap}
-              accessibilityRole="button"
-              accessibilityLabel={`Aktifkan ${bioLabel}`}
-            >
-              <Text style={styles.consentText}>Aktifkan {bioLabel}</Text>
-            </Pressable>
-          ) : null}
+          {/* Slot tinggi tetap: teks Face ID tidak boleh mendorong keypad. */}
+          <View style={styles.consentSlot}>
+            {bioHardware && !bioEnabled ? (
+              <Pressable
+                onPress={() => void consentEnableBiometric()}
+                disabled={locked}
+                hitSlop={8}
+                style={styles.consentWrap}
+                accessibilityRole="button"
+                accessibilityLabel={`Aktifkan ${bioLabel}`}
+              >
+                <Text style={styles.consentText}>Aktifkan {bioLabel}</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
           {locked ? (
             <View style={styles.loadingRow}>
@@ -287,7 +290,7 @@ export default function UnlockScreen() {
           {displayError && !locked ? <Text style={styles.error}>{displayError}</Text> : null}
         </View>
 
-        {/* Gap antara bulatan PIN dan keypad — sedikit lebih pendek agar keypad naik. */}
+        {/* Spacer fleksibel di atas keypad — keypad tetap di blok bawah. */}
         <View style={styles.midSpacer} />
 
         {/* Airy keypad */}
@@ -394,8 +397,6 @@ export default function UnlockScreen() {
             </View>
           ))}
         </View>
-
-        <View style={styles.lowerSpacer} />
       </View>
     </View>
   );
@@ -454,8 +455,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
-    // Naikkan bulatan PIN ~2cm dari posisi terakhir.
-    marginTop: spacing['3xl'] + spacing.md,
+    // Sedikit lebih dekat ke "Masukkan PIN".
+    marginTop: spacing.lg,
     minHeight: 22,
   },
   dot: {
@@ -473,9 +474,15 @@ const styles = StyleSheet.create({
     borderColor: colors.primary[600],
     backgroundColor: colors.primary[600],
   },
+  consentSlot: {
+    marginTop: spacing.sm,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
   consentWrap: {
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   consentText: {
     fontSize: 13,
@@ -484,10 +491,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loadingRow: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   error: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     fontSize: typography.size.sm,
     color: colors.status.failed,
     backgroundColor: colors.status.failedBg,
@@ -498,17 +505,12 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   midSpacer: {
-    flexGrow: 0.45,
-    minHeight: 16,
-  },
-  lowerSpacer: {
-    flexGrow: 0.55,
-    minHeight: 8,
+    flex: 1,
+    minHeight: 12,
   },
   keypad: {
     alignSelf: 'center',
-    // Turunkan keypad angka ~1cm lagi.
-    marginTop: 38,
+    marginBottom: spacing.md,
   },
   keypadRow: {
     flexDirection: 'row',

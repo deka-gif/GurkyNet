@@ -26,6 +26,7 @@ import { formatIDR } from '../../src/utils/currency';
 import {
   INQUIRY_FLOW_NOTICE,
   isDirectPurchaseCategory,
+  isEsimCategory,
   isGameCategory,
   isGasPrepaidCategory,
   isInquiryRequiredCategory,
@@ -107,6 +108,7 @@ export default function CheckoutScreen() {
   const literalCat = isLiteralTargetCategory(categorySlug);
   const serialCat = isSerialTargetCategory(categorySlug);
   const gasPrepaid = isGasPrepaidCategory(categorySlug);
+  const esimCat = isEsimCategory(categorySlug);
 
   useEffect(() => {
     if (literalCat && !targetNumber) {
@@ -389,6 +391,8 @@ export default function CheckoutScreen() {
             )}
           </Card>
 
+          {/* PLACEHOLDER target (eSIM) is internal only — never show as "Nomor Tujuan". */}
+          {!esimCat ? (
           <View style={styles.field}>
             <Text style={styles.label}>
               {plnPrepaid
@@ -397,9 +401,11 @@ export default function CheckoutScreen() {
                   ? 'Akun Game'
                   : gasPrepaid
                     ? 'ID Pelanggan / Nomor'
-                    : viElektronik
-                      ? 'Tujuan (kode voucher)'
-                      : 'Nomor Tujuan'}
+                    : serialCat
+                      ? 'Nomor Serial / Barcode'
+                      : viElektronik
+                        ? 'Tujuan (kode voucher)'
+                        : 'Nomor Tujuan'}
             </Text>
             <TextInput
               value={
@@ -422,7 +428,9 @@ export default function CheckoutScreen() {
                     ? 'Dari hasil validasi akun'
                     : gasPrepaid
                       ? 'ID pelanggan / nomor'
-                      : 'Nomor tujuan'
+                      : serialCat
+                        ? 'Dari halaman provider'
+                        : 'Nomor tujuan'
               }
               placeholderTextColor={colors.gray[400]}
               style={[styles.input, styles.inputLocked]}
@@ -432,12 +440,17 @@ export default function CheckoutScreen() {
                 ? 'Nomor terkunci dari hasil cek meteran. Ubah meter di layar sebelumnya dan cek ulang jika perlu.'
                 : gameCat
                   ? 'Akun terkunci dari hasil validasi nickname. Tekan Kembali untuk mengubah User ID.'
-                  : viElektronik
-                    ? 'Kode voucher akan ditampilkan setelah transaksi berhasil dan tersimpan di Riwayat.'
-                    : 'Nomor tujuan tidak bisa diubah di sini. Tekan Kembali untuk mengubah nomor.'}
+                  : serialCat
+                    ? 'Serial terkunci dari halaman provider. Tekan Kembali untuk mengubah serial / barcode.'
+                    : viElektronik
+                      ? 'Kode voucher akan ditampilkan setelah transaksi berhasil dan tersimpan di Riwayat.'
+                      : 'Nomor tujuan tidak bisa diubah di sini. Tekan Kembali untuk mengubah nomor.'}
             </Text>
             {targetError ? <Text style={styles.fieldError}>{targetError}</Text> : null}
           </View>
+          ) : targetError ? (
+            <Text style={styles.fieldError}>{targetError}</Text>
+          ) : null}
 
           <Card style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Ringkasan Pembelian</Text>
@@ -496,14 +509,17 @@ export default function CheckoutScreen() {
             ) : (
               <>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Operator</Text>
+                  <Text style={styles.summaryLabel}>
+                    {esimCat ? 'Negara / Provider' : 'Operator'}
+                  </Text>
                   <Text style={styles.summaryValue}>
                     {operatorLabel || productDetail.operatorName || '—'}
                   </Text>
                 </View>
+                {!esimCat ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    {viElektronik ? 'Mode' : 'Nomor Tujuan'}
+                    {viElektronik ? 'Mode' : serialCat ? 'Nomor Serial' : 'Nomor Tujuan'}
                   </Text>
                   <Text style={styles.summaryValue}>
                     {viElektronik
@@ -513,6 +529,7 @@ export default function CheckoutScreen() {
                       : targetNumber || '—'}
                   </Text>
                 </View>
+                ) : null}
                 {selectedRegion ? (
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>

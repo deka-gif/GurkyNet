@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useWalletStore } from '../../src/store/wallet.store';
@@ -8,6 +8,7 @@ import { useCatalogStore } from '../../src/store/catalog.store';
 import { useBannerStore } from '../../src/store/banner.store';
 import { useAnnouncementStore } from '../../src/store/announcement.store';
 import { useWebsiteStore } from '../../src/store/website.store';
+import { useNotificationStore } from '../../src/store/notification.store';
 import { Category, CategoryIconMap } from '../../src/services/catalog.service';
 import {
   ScreenContainer,
@@ -22,6 +23,7 @@ import {
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import { formatDateTime } from '../../src/utils/date';
+import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 import { GurkyPayBalanceCard } from '../../src/components/wallet/GurkyPayBalanceCard';
 
 /**
@@ -120,12 +122,21 @@ function resolveMarketingIconPath(iconMap: CategoryIconMap, keys: string[]): str
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const fetchUser = useAuthStore((s) => s.fetchUser);
   const { overview, loading, error, fetchWallet } = useWalletStore();
   const { categories, fetchCategories, categoryIcons, fetchCategoryIcons } = useCatalogStore();
   const { banners, fetchBanners } = useBannerStore();
   const { announcements, fetchAnnouncements } = useAnnouncementStore();
   const { logo: platformLogo, fetchSettings } = useWebsiteStore();
+  const unreadNotifications = useNotificationStore((s) => s.unreadCount);
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
   const firstName = user?.name?.split(' ')[0] || 'Kasir';
+  const avatarUri = resolveMediaUrl(user?.avatar || null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUri]);
 
   useEffect(() => {
     fetchWallet();
@@ -134,7 +145,16 @@ export default function HomeScreen() {
     fetchBanners();
     fetchAnnouncements();
     fetchSettings();
-  }, [fetchWallet, fetchCategories, fetchCategoryIcons, fetchBanners, fetchAnnouncements, fetchSettings]);
+    void fetchNotifications();
+  }, [
+    fetchWallet,
+    fetchCategories,
+    fetchCategoryIcons,
+    fetchBanners,
+    fetchAnnouncements,
+    fetchSettings,
+    fetchNotifications,
+  ]);
 
   // Refresh balance every time Home regains focus (e.g. returning from a purchase) —
   // spec section 34: refresh wallet after anything that could have changed it.
@@ -143,7 +163,9 @@ export default function HomeScreen() {
       fetchWallet();
       fetchBanners();
       fetchAnnouncements();
-    }, [fetchWallet, fetchBanners, fetchAnnouncements])
+      void fetchUser();
+      void fetchNotifications({ force: true });
+    }, [fetchWallet, fetchBanners, fetchAnnouncements, fetchUser, fetchNotifications])
   );
 
   const openService = (shortcut: ServiceShortcut) => {
@@ -179,15 +201,49 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Buka akun"
-          onPress={() => router.push('/(tabs)/akun')}
-          style={({ pressed }) => [styles.headerAction, pressed && styles.pressed]}
-          hitSlop={8}
-        >
-          <Ionicons name="person-circle-outline" size={28} color={colors.gray[700]} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              unreadNotifications > 0
+                ? `Notifikasi, ${unreadNotifications} belum dibaca`
+                : 'Notifikasi'
+            }
+            onPress={() => router.push('/(tabs)/notifikasi')}
+            style={({ pressed }) => [styles.headerBellAction, pressed && styles.pressed]}
+            hitSlop={8}
+          >
+            <Ionicons name="notifications-outline" size={22} color={colors.gray[700]} />
+            {unreadNotifications > 0 ? (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>
+                  {unreadNotifications > 9 ? '9+' : String(unreadNotifications)}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Buka akun"
+            onPress={() => router.push('/(tabs)/akun')}
+            style={({ pressed }) => [styles.headerAction, pressed && styles.pressed]}
+            hitSlop={8}
+          >
+            {avatarUri && !avatarFailed ? (
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.headerAvatar}
+                onError={() => setAvatarFailed(true)}
+              />
+            ) : (
+              <View style={styles.headerAvatarFallback}>
+                <Text style={styles.headerAvatarInitial}>
+                  {(user?.name || '?').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       {loading && !overview ? (
@@ -424,6 +480,20 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
     marginTop: 1,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexShrink: 0,
+  },
+  headerBellAction: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    flexShrink: 0,
+  },
   headerAction: {
     width: 40,
     height: 40,
@@ -434,6 +504,43 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.gray[200],
     flexShrink: 0,
+    overflow: 'hidden',
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+  },
+  headerAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary[50],
+  },
+  headerAvatarInitial: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[700],
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 1,
+    minWidth: 17,
+    height: 17,
+    paddingHorizontal: 3,
+    borderRadius: 9,
+    backgroundColor: colors.status.failed,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifBadgeText: {
+    fontSize: 9,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
+    lineHeight: 11,
   },
 
   summaryStrip: {

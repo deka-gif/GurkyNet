@@ -7,9 +7,9 @@ import { useWalletStore } from '../../src/store/wallet.store';
 import { useAuthStore } from '../../src/store/auth.store';
 import { transactionService, ReceiptData } from '../../src/services/transaction.service';
 import { ScreenContainer, Card, Button, LoadingState, StatusBadge } from '../../src/components/ui';
+import { ReceiptSharePrintBar } from '../../src/components/receipt/ReceiptSharePrintBar';
 import { colors, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
-import { runPrintReceiptFlow } from '../../src/utils/printReceiptFlow';
 
 /** Backend's own normalized vocabulary (TransactionResource) — never a client-invented
  * status. Matches the terminal set audited from TransactionStatusMapper. */
@@ -37,8 +37,6 @@ export default function CheckoutResultScreen() {
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
-  const [printMsg, setPrintMsg] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
   const walletRefreshedRef = useRef(false);
   const userName = useAuthStore((s) => s.user?.name);
 
@@ -116,6 +114,31 @@ export default function CheckoutResultScreen() {
       ? receipt.transaction_details.voucher_internet_code
       : null;
 
+  const receiptVoucherCode =
+    typeof receipt?.transaction_details.voucher_code === 'string'
+      ? receipt.transaction_details.voucher_code
+      : null;
+  const activationCode =
+    typeof receipt?.transaction_details.activation_code === 'string'
+      ? receipt.transaction_details.activation_code
+      : null;
+  const activationUrl =
+    typeof receipt?.transaction_details.activation_url === 'string'
+      ? receipt.transaction_details.activation_url
+      : null;
+  const serialNumber =
+    typeof receipt?.transaction_details.serial_number === 'string'
+      ? receipt.transaction_details.serial_number
+      : null;
+
+  /** PLACEHOLDER targets (eSIM → ESIM) must not appear as customer "Nomor Tujuan". */
+  const displayTargetNo = (() => {
+    const raw = String(transaction?.targetNo ?? '').trim();
+    if (!raw) return null;
+    if (raw.toUpperCase() === 'ESIM') return null;
+    return raw;
+  })();
+
   const copyVoucherCode = async () => {
     if (!voucherCode) return;
     try {
@@ -126,19 +149,12 @@ export default function CheckoutResultScreen() {
     }
   };
 
-  const onPrint = async () => {
-    if (!receipt || printing) return;
-    setPrinting(true);
-    setPrintMsg(null);
+  const copyText = async (value: string, okMsg: string) => {
     try {
-      await runPrintReceiptFlow({
-        receipt,
-        userName,
-        router,
-        onMessage: setPrintMsg,
-      });
-    } finally {
-      setPrinting(false);
+      await Clipboard.setStringAsync(value);
+      setCopyMsg(okMsg);
+    } catch {
+      setCopyMsg('Gagal menyalin.');
     }
   };
 
@@ -162,7 +178,7 @@ export default function CheckoutResultScreen() {
       <Card style={styles.statusCard}>
         <StatusBadge status={transaction.status} />
         <Text style={styles.serviceName}>{transaction.serviceName}</Text>
-        <Text style={styles.targetNo}>{transaction.targetNo}</Text>
+        {displayTargetNo ? <Text style={styles.targetNo}>{displayTargetNo}</Text> : null}
         {/* Total dibayar comes straight from the transaction response — never
             recomputed client-side. */}
         <Text style={styles.total}>{formatIDR(transaction.totalPayment)}</Text>
@@ -192,6 +208,56 @@ export default function CheckoutResultScreen() {
         </Card>
       ) : null}
 
+      {/* Delivery fields only when receipt API actually returns them (no invented QR/ICCID). */}
+      {terminal &&
+      !voucherCode &&
+      (receiptVoucherCode || activationCode || activationUrl || (serialNumber && !voucherCode)) ? (
+        <Card style={styles.voucherCard}>
+          <Text style={styles.voucherTitle}>Detail Pengiriman</Text>
+          {receiptVoucherCode ? (
+            <>
+              <Text style={styles.receiptLabel}>Kode</Text>
+              <Text style={styles.voucherCode} selectable>
+                {receiptVoucherCode}
+              </Text>
+              <Button
+                label="Salin Kode"
+                onPress={() => void copyText(receiptVoucherCode, 'Kode disalin.')}
+              />
+            </>
+          ) : null}
+          {activationCode ? (
+            <>
+              <Text style={styles.receiptLabel}>Kode Aktivasi</Text>
+              <Text style={styles.voucherCode} selectable>
+                {activationCode}
+              </Text>
+              <Button
+                label="Salin Kode Aktivasi"
+                onPress={() => void copyText(activationCode, 'Kode aktivasi disalin.')}
+              />
+            </>
+          ) : null}
+          {activationUrl ? (
+            <>
+              <Text style={styles.receiptLabel}>URL Aktivasi</Text>
+              <Text style={styles.voucherCode} selectable>
+                {activationUrl}
+              </Text>
+            </>
+          ) : null}
+          {serialNumber && !receiptVoucherCode ? (
+            <>
+              <Text style={styles.receiptLabel}>Serial Number</Text>
+              <Text style={styles.voucherCode} selectable>
+                {serialNumber}
+              </Text>
+            </>
+          ) : null}
+          {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
+        </Card>
+      ) : null}
+
       {terminal && receipt && (
         <Card style={styles.receiptCard}>
           <Text style={styles.receiptTitle}>Struk Transaksi</Text>
@@ -209,10 +275,10 @@ export default function CheckoutResultScreen() {
               <Text style={styles.receiptLabel}>Kode Token</Text>
               <Text style={styles.receiptValue}>{String(receipt.transaction_details.token_code)}</Text>
             </View>
-          ) : receipt.transaction_details.serial_number && !voucherCode ? (
+          ) : serialNumber && !voucherCode && !receiptVoucherCode && !activationCode ? (
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Serial Number</Text>
-              <Text style={styles.receiptValue}>{receipt.transaction_details.serial_number}</Text>
+              <Text style={styles.receiptValue}>{serialNumber}</Text>
             </View>
           ) : null}
           {typeof receipt.transaction_details.customer_name === 'string' &&
@@ -243,16 +309,16 @@ export default function CheckoutResultScreen() {
       )}
 
       {terminal && String(transaction.status).toLowerCase() === 'success' && receipt ? (
-        <>
-          <Button
-            label={printing ? 'Mencetak…' : 'Cetak Struk'}
-            variant="secondary"
-            onPress={() => void onPrint()}
-            loading={printing}
-            disabled={printing}
-          />
-          {printMsg ? <Text style={styles.printMsg}>{printMsg}</Text> : null}
-        </>
+        <ReceiptSharePrintBar
+          receipt={receipt}
+          userName={userName}
+          onOpenStruk={() =>
+            router.push({
+              pathname: '/riwayat/struk/[id]',
+              params: { id: String(transaction.id) },
+            })
+          }
+        />
       ) : null}
 
       {terminal && <Button label="Mulai Pembelian Baru" onPress={handleNewPurchase} />}
@@ -285,7 +351,6 @@ const styles = StyleSheet.create({
   },
   voucherHint: { fontSize: typography.size.xs, color: colors.gray[500] },
   copyMsg: { fontSize: typography.size.xs, color: colors.status.success, fontWeight: typography.weight.medium },
-  printMsg: { fontSize: typography.size.xs, color: colors.gray[600], textAlign: 'center' },
   receiptCard: { gap: spacing.sm },
   receiptTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between' },

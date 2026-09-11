@@ -8,7 +8,9 @@
     "**/voucherPhysicalScan.test.ts",
     "**/tagihanBrandGrouping.test.ts",
     "**/pajakCustomerNo.test.ts",
-    "**/tagihanCheckout.test.ts"
+    "**/tagihanCheckout.test.ts",
+    "**/receiptSettings.scoping.test.ts",
+    "**/help.cekWilayah.test.ts"
   ]
 }
 

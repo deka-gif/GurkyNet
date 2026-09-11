@@ -20,7 +20,12 @@ import {
 import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
-import { isGasPrepaidCategory } from '../../utils/purchaseCategory';
+import {
+  isEsimCategory,
+  isGasPrepaidCategory,
+  isSerialTargetCategory,
+  literalTargetForCategory,
+} from '../../utils/purchaseCategory';
 
 /**
  * Provider → product browse (Tahap 3B).
@@ -29,14 +34,24 @@ import { isGasPrepaidCategory } from '../../utils/purchaseCategory';
  *
  * Gas Prepaid (FR catalog gas-prepaid / PREPAID_DIRECT + CUSTOMER_NO):
  * providers → ID pelanggan (above) + products → shared checkout (skip Detail Produk).
+ *
+ * Aktivasi Perdana (gurky_transaction_capabilities: PREPAID_DIRECT + target_schema SERIAL):
+ * providers → serial/barcode (above) + products → shared checkout (skip Detail Produk).
+ * Target wajib valid sebelum produk bisa dipilih; disimpan ke checkout store.
+ *
+ * eSIM (PREPAID_DIRECT + PLACEHOLDER): country/provider → products → checkout.
+ * Technical target `ESIM` is set in checkout store only — never shown as customer input.
+ *
  * Other provider-browse categories still open generic /produk/detail/[sku].
  */
 
 type Props = {
-  /** Canonical API category (topup-digital | game | langganan-digital). */
+  /** Canonical API category (topup-digital | game | langganan-digital | aktivasi-perdana | …). */
   category: string;
   purchaseBanner?: string | null;
   providerSearchPlaceholder?: string;
+  /** Optional heading above provider list (e.g. Aktivasi Perdana → "Pilih Provider"). */
+  providerListTitle?: string | null;
 };
 
 type Step = 'providers' | 'products';
@@ -49,10 +64,15 @@ export function ProviderCatalogBrowseFlow({
   category,
   purchaseBanner,
   providerSearchPlaceholder = 'Cari provider...',
+  providerListTitle = null,
 }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
   const gasPrepaid = isGasPrepaidCategory(category);
+  // Category-level SoT: aktivasi-perdana → SERIAL (config/gurky_transaction_capabilities.php).
+  const aktivasiPerdana = isSerialTargetCategory(category);
+  // eSIM → PLACEHOLDER (config/gurky_transaction_capabilities.php).
+  const esim = isEsimCategory(category);
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
@@ -68,7 +88,9 @@ export function ProviderCatalogBrowseFlow({
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  /** Gas: ID pelanggan (digits). Aktivasi Perdana: serial/barcode (trim, min 4). */
   const [customerNo, setCustomerNo] = useState('');
+  const [targetHint, setTargetHint] = useState<string | null>(null);
 
   const loadProviders = useCallback(async () => {
     setProvidersLoading(true);
@@ -100,6 +122,7 @@ export function ProviderCatalogBrowseFlow({
     setProductsError(null);
     setSelectedProduct(null);
     setCustomerNo('');
+    setTargetHint(null);
   }, []);
 
   // ← Header / Android back: products → providers; providers → previous stack.
@@ -128,6 +151,9 @@ export function ProviderCatalogBrowseFlow({
   // Existing Gas Prepaid validation (Web targetMode=phone digits; capability CUSTOMER_NO).
   const gasTarget = customerNo.replace(/\D/g, '').trim();
   const customerReady = gasTarget.length > 0;
+  // Serial validation mirrors checkout/[sku] serialCat (trim length >= 4).
+  const serialTarget = customerNo.trim();
+  const serialReady = serialTarget.length >= 4;
   const canProceedGas =
     gasPrepaid &&
     !!selectedProduct &&
@@ -142,6 +168,7 @@ export function ProviderCatalogBrowseFlow({
     setProductsError(null);
     setSelectedProduct(null);
     setCustomerNo('');
+    setTargetHint(null);
     setProductsLoading(true);
     try {
       const res = await catalogService.getProducts({
@@ -178,6 +205,35 @@ export function ProviderCatalogBrowseFlow({
     router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
   };
 
+  const proceedAktivasiCheckout = (product: Product) => {
+    if (!aktivasiPerdana || !selected) return;
+    if (!isProductPurchasable(product) || !purchaseEnabled) return;
+    const target = customerNo.trim();
+    if (target.length < 4) return;
+
+    startCheckout(product);
+    setTarget(target);
+    setPurchaseContext({
+      operatorLabel: selected.name,
+      selectedRegion: null,
+    });
+    router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
+  };
+
+  /** eSIM: skip Detail Produk; internal PLACEHOLDER target only (not shown in UI). */
+  const proceedEsimCheckout = (product: Product) => {
+    if (!esim || !selected) return;
+    if (!isProductPurchasable(product) || !purchaseEnabled) return;
+
+    startCheckout(product);
+    setTarget(literalTargetForCategory('esim'));
+    setPurchaseContext({
+      operatorLabel: selected.name,
+      selectedRegion: null,
+    });
+    router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
+  };
+
   const openProduct = (product: Product) => {
     if (gasPrepaid) {
       if (!isProductPurchasable(product) || !purchaseEnabled) return;
@@ -189,12 +245,30 @@ export function ProviderCatalogBrowseFlow({
       }
       return;
     }
+    if (aktivasiPerdana) {
+      if (!isProductPurchasable(product) || !purchaseEnabled) return;
+      if (!serialReady) {
+        setTargetHint('Masukkan nomor serial / barcode terlebih dahulu (min. 4 karakter).');
+        return;
+      }
+      setTargetHint(null);
+      setSelectedProduct(product);
+      proceedAktivasiCheckout(product);
+      return;
+    }
+    if (esim) {
+      if (!isProductPurchasable(product) || !purchaseEnabled) return;
+      setSelectedProduct(product);
+      proceedEsimCheckout(product);
+      return;
+    }
     router.push({ pathname: '/produk/detail/[sku]', params: { sku: product.code } });
   };
 
   if (step === 'providers') {
     return (
       <View style={styles.wrap}>
+        {providerListTitle ? <Text style={styles.leadTitle}>{providerListTitle}</Text> : null}
         <TextInput
           placeholder={providerSearchPlaceholder}
           placeholderTextColor={colors.gray[400]}
@@ -271,7 +345,39 @@ export function ProviderCatalogBrowseFlow({
         )
       ) : null}
 
-      {gasPrepaid && purchaseEnabled ? (
+      {aktivasiPerdana ? (
+        !purchaseEnabled ? (
+          <PurchaseFlowNotice
+            icon="time-outline"
+            title="Pembelian Belum Aktif"
+            message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
+          />
+        ) : (
+          <View style={styles.field}>
+            <Text style={styles.label}>Nomor Serial / Barcode</Text>
+            <TextInput
+              value={customerNo}
+              onChangeText={(t) => {
+                setCustomerNo(t);
+                if (targetHint) setTargetHint(null);
+              }}
+              placeholder="Masukkan nomor serial / barcode"
+              placeholderTextColor={colors.gray[400]}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              style={styles.searchInput}
+            />
+            {targetHint ? <Text style={styles.fieldError}>{targetHint}</Text> : null}
+            {!serialReady && !targetHint ? (
+              <Text style={styles.fieldHint}>
+                Isi serial / barcode sebelum memilih produk.
+              </Text>
+            ) : null}
+          </View>
+        )
+      ) : null}
+
+      {(gasPrepaid || aktivasiPerdana || esim) && purchaseEnabled ? (
         <Text style={styles.sectionHeading}>Pilih Produk</Text>
       ) : null}
 
@@ -290,11 +396,18 @@ export function ProviderCatalogBrowseFlow({
           columns={productColumns}
           onPress={openProduct}
           selectedCode={gasPrepaid ? selectedProduct?.code ?? null : null}
-          isDisabled={(p) =>
-            gasPrepaid
-              ? !isProductPurchasable(p) || !purchaseEnabled
-              : p.status !== 'tersedia'
-          }
+          isDisabled={(p) => {
+            if (gasPrepaid) {
+              return !isProductPurchasable(p) || !purchaseEnabled;
+            }
+            if (aktivasiPerdana) {
+              return !isProductPurchasable(p) || !purchaseEnabled || !serialReady;
+            }
+            if (esim) {
+              return !isProductPurchasable(p) || !purchaseEnabled;
+            }
+            return p.status !== 'tersedia';
+          }}
           renderMeta={(p) =>
             p.status !== 'tersedia' ? (
               <Text style={styles.productStatus}>
@@ -318,6 +431,11 @@ export function ProviderCatalogBrowseFlow({
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
+  leadTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[800],
+  },
   banner: {
     backgroundColor: colors.status.pendingBg,
     borderRadius: radius.lg,
@@ -375,5 +493,15 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontWeight: typography.weight.bold,
     color: colors.gray[700],
+  },
+  fieldHint: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+    lineHeight: 16,
+  },
+  fieldError: {
+    fontSize: typography.size.xs,
+    color: colors.status.failed,
+    fontWeight: typography.weight.medium,
   },
 });

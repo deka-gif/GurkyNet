@@ -1,39 +1,91 @@
-import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import {
+  findCekWilayahFaq,
+  helpService,
+  parseCekWilayahAnswer,
+  type HelpFaqItem,
+} from '../../src/services/help.service';
 
 /**
- * Help — Cek Zona (Mobile only).
- * Opened via stack push from Voucher Internet Telkomsel zone steps so Back restores
- * purchase flow state. Provider comes from route params (not global mutable Help search).
- * No invented dial codes / city–zone tables (PDF referensi belum tersedia di repo).
+ * Help — Cek Wilayah Kartu.
+ * Content from FAQ (GET /help), editable by CS via Knowledge Base.
+ * Stack-push from Voucher Internet; Back restores purchase state.
  */
 
-function normalizeProviderParam(raw: string | string[] | undefined): string {
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  return String(v || '')
+type ProviderId = 'telkomsel' | 'indosat' | 'tri' | 'axis' | 'xl' | 'smartfren';
+
+const PROVIDERS: Array<{ id: ProviderId; label: string }> = [
+  { id: 'telkomsel', label: 'Telkomsel' },
+  { id: 'indosat', label: 'Indosat' },
+  { id: 'tri', label: 'Tri' },
+  { id: 'axis', label: 'Axis' },
+  { id: 'xl', label: 'XL' },
+  { id: 'smartfren', label: 'Smartfren' },
+];
+
+function normalizeProviderParam(raw: string | string[] | undefined): ProviderId | null {
+  const v = String(Array.isArray(raw) ? raw[0] : raw || '')
     .trim()
     .toLowerCase();
-}
-
-function providerDisplayName(provider: string): string {
-  if (provider === 'telkomsel') return 'Telkomsel';
-  if (!provider) return 'Provider';
-  return provider.charAt(0).toUpperCase() + provider.slice(1);
+  if (PROVIDERS.some((p) => p.id === v)) return v as ProviderId;
+  return null;
 }
 
 export default function HelpCekZonaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ provider?: string }>();
-  const provider = normalizeProviderParam(params.provider);
-  const brand = providerDisplayName(provider);
+  const fromParam = normalizeProviderParam(params.provider);
+  const [active, setActive] = useState<ProviderId>(fromParam ?? 'telkomsel');
+  const [faqs, setFaqs] = useState<HelpFaqItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const title = useMemo(() => `Cek Zona — ${brand}`, [brand]);
+  useEffect(() => {
+    if (fromParam) setActive(fromParam);
+  }, [fromParam]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await helpService.getHelpCenter();
+      setFaqs(Array.isArray(data.faq) ? data.faq : []);
+    } catch (err: any) {
+      setFaqs([]);
+      setError(err?.message || 'Gagal memuat konten. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const brand = useMemo(
+    () => PROVIDERS.find((p) => p.id === active)?.label ?? 'Provider',
+    [active]
+  );
+
+  const article = useMemo(() => findCekWilayahFaq(faqs, active), [faqs, active]);
+  const parsed = useMemo(
+    () => (article ? parseCekWilayahAnswer(article.answer) : { steps: [], note: null }),
+    [article]
+  );
 
   return (
     <>
@@ -49,52 +101,92 @@ export default function HelpCekZonaScreen() {
             <Ionicons name="chevron-back" size={24} color={colors.gray[900]} />
           </Pressable>
           <Text style={styles.topTitle} numberOfLines={1}>
-            {title}
+            Cek wilayah kartu
           </Text>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-          <Text style={styles.h1}>Cek Zona Voucher</Text>
-          <Text style={styles.lead}>
-            Informasi singkat untuk memastikan voucher berzona cocok dengan wilayah kartu kamu.
-            {provider === 'telkomsel' ? ' Konteks: Telkomsel.' : provider ? ` Konteks: ${brand}.` : ''}
-          </Text>
-
-          <View style={styles.card}>
-            <Text style={styles.h2}>1. Kuota / voucher nasional</Text>
-            <Text style={styles.p}>
-              Produk nasional (tanpa zona wilayah) umumnya dapat dipakai di seluruh Indonesia sesuai
-              ketentuan produk. Tidak perlu memilih zona geografis.
+          <View style={[styles.infoCard, styles.infoGreen]}>
+            <Text style={styles.infoTitle}>Kuota Nasional</Text>
+            <Text style={styles.infoBody}>
+              Kuota Nasional bisa dipakai di seluruh Indonesia tanpa syarat wilayah — cocok kalau
+              kamu tidak yakin dengan zona kartumu.
             </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.h2}>2. Kuota / voucher berzona</Text>
-            <Text style={styles.p}>
-              Produk berzona hanya aktif di wilayah tertentu. Jika zona tidak sesuai dengan lokasi
-              pemakaian kartu, aktivasi dapat gagal dan tidak selalu dapat dikembalikan otomatis.
+          <View style={[styles.infoCard, styles.infoNeutral]}>
+            <Text style={styles.infoTitle}>Kuota Lokal / Zona</Text>
+            <Text style={styles.infoBody}>
+              Kuota Lokal/Zona hanya aktif di kota tempat kartu pertama kali diaktifkan. Salah pilih
+              zona, paket tidak akan aktif.
             </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.h2}>3. Cara mengecek zona</Text>
-            <Text style={styles.p}>
-              Ikuti petunjuk resmi dari operator di aplikasi/USSD/customer service mereka. Daftar
-              dial atau peta kota detail belum tersedia di aplikasi ini sampai dokumentasi resmi
-              terverifikasi.
-            </Text>
-          </View>
+          <Text style={styles.sectionLabel}>Pilih provider</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsRow}
+          >
+            {PROVIDERS.map((p) => {
+              const on = p.id === active;
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setActive(p.id)}
+                  style={[styles.tab, on && styles.tabOn]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={p.label}
+                >
+                  <Text style={[styles.tabText, on && styles.tabTextOn]}>{p.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-          <View style={styles.warn}>
-            <Ionicons name="warning-outline" size={18} color={colors.status.pending} />
-            <Text style={styles.warnText}>
-              Pastikan wilayah yang kamu pilih di aplikasi sama dengan wilayah kartu. Salah pilih zona
-              dapat membuat voucher tidak aktif.
-            </Text>
-          </View>
+          {loading ? (
+            <View style={styles.centerBox}>
+              <ActivityIndicator color={colors.primary[600]} />
+              <Text style={styles.muted}>Memuat panduan {brand}…</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centerBox}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Button label="Coba lagi" variant="secondary" onPress={() => void load()} />
+            </View>
+          ) : !article ? (
+            <View style={styles.fallbackBox}>
+              <Text style={styles.fallbackTitle}>Konten belum tersedia</Text>
+              <Text style={styles.fallbackBody}>
+                Panduan cek wilayah untuk {brand} belum tersedia. Hubungi Customer Service untuk
+                bantuan, atau coba lagi nanti.
+              </Text>
+            </View>
+          ) : parsed.steps.length === 0 ? (
+            <View style={styles.stepsCard}>
+              <Text style={styles.stepsHeading}>Cara cek di {brand}</Text>
+              <Text style={styles.stepText}>{article.answer.trim() || parsed.note || ''}</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.stepsCard}>
+                <Text style={styles.stepsHeading}>Cara cek di {brand}</Text>
+                {parsed.steps.map((step, i) => (
+                  <View key={`step-${i}`} style={styles.stepRow}>
+                    <View style={styles.stepNum}>
+                      <Text style={styles.stepNumText}>{i + 1}</Text>
+                    </View>
+                    <Text style={styles.stepText}>{step}</Text>
+                  </View>
+                ))}
+              </View>
+              {parsed.note ? <Text style={styles.dialNote}>{parsed.note}</Text> : null}
+            </>
+          )}
 
-          <Button label="Kembali ke pembelian" onPress={() => router.back()} />
+          <Button label="Kembali" onPress={() => router.back()} />
         </ScrollView>
       </View>
     </>
@@ -109,7 +201,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
     paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.gray[100],
   },
   backBtn: {
@@ -130,49 +222,116 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing['3xl'],
   },
-  h1: {
-    fontSize: typography.size.lg,
+  infoCard: {
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  infoGreen: {
+    backgroundColor: colors.primary[50],
+    borderColor: colors.primary[200],
+  },
+  infoNeutral: {
+    backgroundColor: colors.gray[50],
+    borderColor: colors.gray[200],
+  },
+  infoTitle: {
+    fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
   },
-  lead: {
+  infoBody: {
+    fontSize: typography.size.sm,
+    color: colors.gray[700],
+    lineHeight: 20,
+  },
+  sectionLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  tabsRow: { gap: spacing.sm, paddingRight: spacing.md },
+  tab: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray[100],
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray[200],
+  },
+  tabOn: {
+    backgroundColor: colors.primary[600],
+    borderColor: colors.primary[600],
+  },
+  tabText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[700],
+  },
+  tabTextOn: { color: colors.white },
+  stepsCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray[200],
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  stepsHeading: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  stepRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  stepNum: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary[600],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  stepNumText: {
+    fontSize: 12,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.gray[800],
+    lineHeight: 20,
+  },
+  dialNote: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+    lineHeight: 18,
+  },
+  centerBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  muted: { fontSize: typography.size.sm, color: colors.gray[500] },
+  errorText: {
+    fontSize: typography.size.sm,
+    color: colors.status.failed,
+    textAlign: 'center',
+  },
+  fallbackBox: {
+    backgroundColor: colors.gray[50],
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray[200],
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  fallbackTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+  },
+  fallbackBody: {
     fontSize: typography.size.sm,
     color: colors.gray[600],
     lineHeight: 20,
-  },
-  card: {
-    backgroundColor: colors.gray[50],
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.gray[100],
-  },
-  h2: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.gray[900],
-  },
-  p: {
-    fontSize: typography.size.xs,
-    color: colors.gray[700],
-    lineHeight: 18,
-  },
-  warn: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: colors.status.pendingBg,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.status.pending,
-  },
-  warnText: {
-    flex: 1,
-    fontSize: typography.size.xs,
-    color: colors.gray[800],
-    lineHeight: 18,
-    fontWeight: typography.weight.medium,
   },
 });

@@ -7,7 +7,7 @@ import {
 } from '../services/receiptSettings.service';
 import { formatIDR } from './currency';
 
-const APP_FALLBACK_NAME = 'GurkyPay';
+const APP_FALLBACK_NAME = 'GurkyNet';
 
 export type ReceiptPrintContext = {
   receipt: ReceiptData | null;
@@ -21,17 +21,24 @@ export type ReceiptPrintContext = {
 };
 
 export type ReceiptLine = {
+  /** Full printable line (thermal driver + share text). */
   text: string;
   align?: 'left' | 'center' | 'right';
   bold?: boolean;
   size?: 1 | 2;
+  /** Structured kinds for on-screen paper (avoids separator wrap). */
+  kind?: 'text' | 'rule' | 'row';
+  label?: string;
+  value?: string;
+  ruleChar?: '=' | '-';
 };
 
-function charsPerLine(width: PaperWidthMm): number {
+/** Characters per line for ESC/POS-style printers (and share text). */
+export function charsPerLine(width: PaperWidthMm): number {
   return width === 80 ? 48 : 32;
 }
 
-function resolveStoreName(store: StoreProfile, userName?: string | null): string {
+export function resolveStoreName(store: StoreProfile, userName?: string | null): string {
   const custom = store.storeName.trim();
   if (custom) return custom;
   const user = (userName || '').trim();
@@ -105,7 +112,6 @@ function fieldValue(
     receipt: ReceiptData;
     store: StoreProfile;
     userName?: string | null;
-    note: string;
   }
 ): { label: string; value: string; headerOnly?: boolean } | null {
   const d = ctx.receipt.transaction_details;
@@ -160,7 +166,8 @@ function fieldValue(
     case 'total_payment':
       return { label: 'TOTAL', value: formatIDR(s.total_payment) };
     case 'note': {
-      const v = ctx.note.trim();
+      // Text from Profil Toko; template only controls visibility of this field.
+      const v = (ctx.store.closingMessage || '').trim();
       return v ? { label: '', value: v, headerOnly: true } : null;
     }
     default:
@@ -168,15 +175,24 @@ function fieldValue(
   }
 }
 
-function padRow(label: string, value: string, width: number): string {
-  if (!label) return value;
-  const sep = ': ';
-  const left = `${label}${sep}`;
-  const available = Math.max(4, width - left.length);
-  if (value.length <= available) {
-    return `${left}${value}`;
-  }
-  return `${left}${value.slice(0, available - 1)}…`;
+/** Label left, value right, spaces between — fits exactly `width` chars (no wrap). */
+export function padRow(label: string, value: string, width: number): string {
+  if (!label) return value.length <= width ? value : `${value.slice(0, width - 1)}…`;
+  const maxValue = Math.max(4, width - label.length - 1);
+  const clipped =
+    value.length <= maxValue ? value : `${value.slice(0, Math.max(1, maxValue - 1))}…`;
+  const gap = width - label.length - clipped.length;
+  if (gap >= 1) return `${label}${' '.repeat(gap)}${clipped}`;
+  return `${label} ${clipped}`.slice(0, width);
+}
+
+function ruleLine(char: '=' | '-', width: number): ReceiptLine {
+  return {
+    text: char.repeat(width),
+    align: 'center',
+    kind: 'rule',
+    ruleChar: char,
+  };
 }
 
 /**
@@ -184,6 +200,8 @@ function padRow(label: string, value: string, width: number): string {
  * Does not log sensitive deliverable values.
  */
 export function buildReceiptLines(ctx: ReceiptPrintContext): ReceiptLine[] {
+  // Only fabricate INV-TEST lines when explicitly previewing (sample === true).
+  if (!ctx.sample && !ctx.receipt) return [];
   const receipt = ctx.sample || !ctx.receipt ? sampleReceipt() : ctx.receipt;
   const width = charsPerLine(ctx.paperWidthMm);
   const lines: ReceiptLine[] = [];
@@ -191,7 +209,6 @@ export function buildReceiptLines(ctx: ReceiptPrintContext): ReceiptLine[] {
     receipt,
     store: ctx.store,
     userName: ctx.userName,
-    note: ctx.template.note,
   };
 
   let wroteHeaderRule = false;
@@ -203,41 +220,65 @@ export function buildReceiptLines(ctx: ReceiptPrintContext): ReceiptLine[] {
     if (!rendered) continue;
 
     if (field.id === 'store_name') {
-      lines.push({ text: rendered.value, align: 'center', bold: true, size: 2 });
+      lines.push({
+        text: rendered.value,
+        align: 'center',
+        bold: true,
+        size: 2,
+        kind: 'text',
+      });
       continue;
     }
-    if (field.id === 'store_address' || field.id === 'store_whatsapp') {
+    if (field.id === 'store_address') {
+      lines.push({ text: rendered.value, align: 'center', kind: 'text' });
+      continue;
+    }
+    if (field.id === 'store_whatsapp') {
       lines.push({
-        text: field.id === 'store_whatsapp' ? `WA: ${rendered.value}` : rendered.value,
+        text: `WA: ${rendered.value}`,
         align: 'center',
+        kind: 'text',
       });
       continue;
     }
     if (field.id === 'note') {
-      lines.push({ text: '-'.repeat(width), align: 'center' });
-      lines.push({ text: rendered.value, align: 'center' });
+      lines.push(ruleLine('-', width));
+      lines.push({ text: rendered.value, align: 'center', kind: 'text' });
       continue;
     }
 
     if (!wroteHeaderRule && !rendered.headerOnly) {
-      lines.push({ text: '='.repeat(width), align: 'center' });
+      lines.push(ruleLine('=', width));
       wroteHeaderRule = true;
     }
 
     if (field.id === 'total_payment') {
-      lines.push({ text: '-'.repeat(width), align: 'center' });
+      lines.push(ruleLine('-', width));
       lines.push({
         text: padRow(rendered.label, rendered.value, width),
         bold: true,
+        kind: 'row',
+        label: rendered.label,
+        value: rendered.value,
       });
       continue;
     }
 
-    lines.push({ text: padRow(rendered.label, rendered.value, width) });
+    lines.push({
+      text: padRow(rendered.label, rendered.value, width),
+      kind: 'row',
+      label: rendered.label,
+      value: rendered.value,
+    });
   }
 
   if (lines.length === 0) {
-    lines.push({ text: resolveStoreName(ctx.store, ctx.userName), align: 'center', bold: true });
+    lines.push({
+      text: resolveStoreName(ctx.store, ctx.userName),
+      align: 'center',
+      bold: true,
+      kind: 'text',
+    });
   }
 
   return lines;

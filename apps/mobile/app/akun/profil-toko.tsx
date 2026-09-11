@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 import { ScreenContainer, Button, Card } from '../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import {
@@ -11,7 +11,7 @@ import {
 import { useAuthStore } from '../../src/store/auth.store';
 
 /**
- * Profil Toko — local identity for receipt header (no catatan field).
+ * Profil Toko — store identity + closing message for receipts (per-user SecureStore).
  */
 export default function ProfilTokoScreen() {
   const userName = useAuthStore((s) => s.user?.name);
@@ -23,28 +23,33 @@ export default function ProfilTokoScreen() {
     setProfile(await receiptSettingsService.getStoreProfile());
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const previewName =
-    profile.storeName.trim() || (userName || '').trim() || 'GurkyPay';
+    profile.storeName.trim() || (userName || '').trim() || 'GurkyNet';
 
   const preview = useMemo(() => {
     const lines = [previewName];
     if (profile.address.trim()) lines.push(profile.address.trim());
     if (profile.whatsapp.trim()) lines.push(`WA: ${profile.whatsapp.trim()}`);
+    if (profile.closingMessage.trim()) lines.push(profile.closingMessage.trim());
     return lines.join('\n');
-  }, [previewName, profile.address, profile.whatsapp]);
+  }, [previewName, profile.address, profile.whatsapp, profile.closingMessage]);
 
   const onSave = async () => {
     setSaving(true);
     setMsg(null);
     try {
       await receiptSettingsService.setStoreProfile(profile);
+      const verified = await receiptSettingsService.getStoreProfile();
+      setProfile(verified);
       setMsg('Profil toko disimpan di perangkat ini.');
-    } catch {
-      setMsg('Gagal menyimpan profil toko.');
+    } catch (err: any) {
+      setMsg(err?.message || 'Gagal menyimpan profil toko.');
     } finally {
       setSaving(false);
     }
@@ -70,7 +75,7 @@ export default function ProfilTokoScreen() {
           placeholderTextColor={colors.gray[400]}
         />
         <Text style={styles.hint}>
-          Kosongkan untuk memakai nama akun ({userName || '—'}) atau GurkyPay.
+          Kosongkan untuk memakai nama akun ({userName || '—'}) atau GurkyNet.
         </Text>
 
         <Text style={styles.label}>Alamat (opsional)</Text>
@@ -92,6 +97,19 @@ export default function ProfilTokoScreen() {
           placeholderTextColor={colors.gray[400]}
           keyboardType="phone-pad"
         />
+
+        <Text style={styles.label}>Pesan penutup struk (opsional)</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={profile.closingMessage}
+          onChangeText={(closingMessage) => setProfile((p) => ({ ...p, closingMessage }))}
+          placeholder="Terima kasih sudah berbelanja."
+          placeholderTextColor={colors.gray[400]}
+          multiline
+        />
+        <Text style={styles.hint}>
+          Pesan ini akan muncul di bagian bawah struk jika diaktifkan di Template Struk.
+        </Text>
       </Card>
 
       <Card style={styles.card}>
@@ -102,7 +120,11 @@ export default function ProfilTokoScreen() {
       </Card>
 
       <Button label="Simpan" onPress={() => void onSave()} loading={saving} disabled={saving} />
-      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+      {msg ? (
+        <Text style={[styles.msg, /gagal/i.test(msg) ? styles.msgError : styles.msgOk]}>
+          {msg}
+        </Text>
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -145,5 +167,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  msg: { fontSize: typography.size.sm, color: colors.status.success },
+  msg: { fontSize: typography.size.sm, lineHeight: 20 },
+  msgOk: { color: colors.status.success },
+  msgError: { color: colors.status.failed },
 });

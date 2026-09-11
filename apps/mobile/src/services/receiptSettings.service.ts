@@ -1,14 +1,47 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { storageService } from './storage.service';
+import { useAuthStore } from '../store/auth.store';
+import {
+  RECEIPT_LEGACY_CONSUMED_FLAG_KEY,
+  canOfferLegacyMigration,
+  parseReceiptSettingsJson,
+  receiptLegacyStorageKey,
+  receiptSettingsStorageKey,
+  scopedRawHasPriority,
+  type ReceiptSettingsKind,
+} from './receiptSettingsKeys';
+import {
+  buildScopedPayloadFromLegacy,
+  extractLegacyTemplateNote,
+} from './receiptSettings.migration';
+
+export {
+  RECEIPT_SETTINGS_KEY_PREFIX,
+  RECEIPT_LEGACY_STORAGE_KEYS,
+  RECEIPT_LEGACY_CONSUMED_FLAG_KEY,
+  receiptSettingsStorageKey,
+  receiptLegacyStorageKey,
+  sanitizeReceiptSettingsUserId,
+  parseReceiptSettingsJson,
+  scopedRawHasPriority,
+  canOfferLegacyMigration,
+  type ReceiptSettingsKind,
+} from './receiptSettingsKeys';
+
+export { buildScopedPayloadFromLegacy, extractLegacyTemplateNote } from './receiptSettings.migration';
 
 /**
  * Local-only receipt print settings (Profil Toko, Template Struk, printer default).
- * No backend / no multi-device sync — Owner-approved for printer v1.
+ * Scoped per authenticated user id — no backend / no multi-device sync.
+ *
+ * IMPORTANT: SecureStore keys must be [A-Za-z0-9._-] only. Using ":" caused silent
+ * write failures → empty profile → receipt fell back to account name.
+ *
+ * Legacy global keys (gurkypay_*) are migrated once into scoped gurkynet_*_{userId}
+ * for the active user, then marked consumed so another account on the same device
+ * cannot inherit that blob.
  */
-
-const STORE_PROFILE_KEY = 'gurkypay_store_profile_v1';
-const RECEIPT_TEMPLATE_KEY = 'gurkypay_receipt_template_v1';
-const PRINTER_PREF_KEY = 'gurkypay_printer_pref_v1';
 
 export type PaperWidthMm = 58 | 80;
 
@@ -16,6 +49,8 @@ export type StoreProfile = {
   storeName: string;
   address: string;
   whatsapp: string;
+  /** Footer message on receipt; visibility controlled by template field `note`. */
+  closingMessage: string;
 };
 
 export type ReceiptFieldId =
@@ -45,7 +80,11 @@ export type ReceiptFieldConfig = {
 
 export type ReceiptTemplate = {
   fields: ReceiptFieldConfig[];
-  note: string;
+  /**
+   * @deprecated Closing text lives on StoreProfile.closingMessage.
+   * Kept empty for backward-compatible JSON shape only.
+   */
+  note?: string;
 };
 
 export type SavedPrinter = {
@@ -111,16 +150,28 @@ export function createDefaultReceiptTemplate(): ReceiptTemplate {
       visible: true,
       locked: LOCKED_RECEIPT_FIELD_IDS.includes(id),
     })),
-    note: 'Terima kasih. Simpan struk ini sebagai bukti transaksi.',
   };
 }
 
 export function createEmptyStoreProfile(): StoreProfile {
-  return { storeName: '', address: '', whatsapp: '' };
+  return { storeName: '', address: '', whatsapp: '', closingMessage: '' };
 }
 
 export function createDefaultPrinterPreferences(): PrinterPreferences {
   return { paperWidthMm: 58, printer: null };
+}
+
+/**
+ * Active user id: persisted storage first, then in-memory auth store.
+ * Survives restart; switches when another user logs in.
+ */
+export async function resolveActiveReceiptUserId(): Promise<string | null> {
+  const persisted = await storageService.getUser();
+  const fromPersist = persisted?.id != null ? String(persisted.id).trim() : '';
+  if (fromPersist) return fromPersist;
+  const fromAuth = useAuthStore.getState().user?.id;
+  const id = fromAuth != null ? String(fromAuth).trim() : '';
+  return id || null;
 }
 
 async function safeGet(key: string): Promise<string | null> {
@@ -132,24 +183,24 @@ async function safeGet(key: string): Promise<string | null> {
   }
 }
 
-async function safeSet(key: string, value: string): Promise<void> {
+async function safeSet(key: string, value: string): Promise<boolean> {
   try {
     if (Platform.OS === 'web') {
       window.localStorage.setItem(key, value);
-      return;
+      return true;
     }
     await SecureStore.setItemAsync(key, value);
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }
 
 function normalizeTemplate(raw: unknown): ReceiptTemplate {
   const fallback = createDefaultReceiptTemplate();
   if (!raw || typeof raw !== 'object') return fallback;
-  const obj = raw as { fields?: unknown; note?: unknown };
-  const note = typeof obj.note === 'string' ? obj.note : fallback.note;
-  if (!Array.isArray(obj.fields)) return { ...fallback, note };
+  const obj = raw as { fields?: unknown };
+  if (!Array.isArray(obj.fields)) return fallback;
 
   const seen = new Set<ReceiptFieldId>();
   const fields: ReceiptFieldConfig[] = [];
@@ -171,7 +222,8 @@ function normalizeTemplate(raw: unknown): ReceiptTemplate {
   for (const def of fallback.fields) {
     if (!seen.has(def.id)) fields.push(def);
   }
-  return { fields, note };
+  // Do not persist template.note — closing text lives on StoreProfile.
+  return { fields };
 }
 
 function normalizeStoreProfile(raw: unknown): StoreProfile {
@@ -182,6 +234,12 @@ function normalizeStoreProfile(raw: unknown): StoreProfile {
     storeName: typeof obj.storeName === 'string' ? obj.storeName : '',
     address: typeof obj.address === 'string' ? obj.address : '',
     whatsapp: typeof obj.whatsapp === 'string' ? obj.whatsapp : '',
+    closingMessage:
+      typeof obj.closingMessage === 'string'
+        ? obj.closingMessage
+        : typeof obj.note === 'string'
+          ? obj.note
+          : '',
   };
 }
 
@@ -208,61 +266,164 @@ function normalizePrinterPreferences(raw: unknown): PrinterPreferences {
   return { paperWidthMm: width, printer };
 }
 
+/**
+ * One-time: copy empty scoped slots from legacy global keys for the active user,
+ * then mark legacy as consumed so another account cannot inherit the same blob.
+ * Legacy key values are left in place (not deleted).
+ * Do not mark consumed if any SecureStore write fails — retry on next read.
+ */
+async function ensureLegacyMigratedForActiveUser(): Promise<void> {
+  const userId = await resolveActiveReceiptUserId();
+  if (!userId) return;
+
+  const consumed = await safeGet(RECEIPT_LEGACY_CONSUMED_FLAG_KEY);
+  if (!canOfferLegacyMigration(consumed)) return;
+
+  const kinds: ReceiptSettingsKind[] = ['store', 'template', 'printer'];
+  for (const kind of kinds) {
+    const scopedKey = receiptSettingsStorageKey(kind, userId);
+    const scopedRaw = await safeGet(scopedKey);
+    if (scopedRawHasPriority(scopedRaw)) continue;
+
+    const legacyRaw = await safeGet(receiptLegacyStorageKey(kind));
+    const parsed = parseReceiptSettingsJson(legacyRaw);
+    if (parsed == null) continue;
+
+    const payload = buildScopedPayloadFromLegacy(kind, parsed);
+    if (payload == null) continue;
+
+    // Promote legacy template.note → store.closingMessage before stripping note.
+    if (kind === 'template') {
+      const note = extractLegacyTemplateNote(parsed);
+      if (note) {
+        const storeKey = receiptSettingsStorageKey('store', userId);
+        const storeRaw = await safeGet(storeKey);
+        const storeParsed = parseReceiptSettingsJson(storeRaw);
+        const storeProfile = storeParsed
+          ? normalizeStoreProfile(storeParsed)
+          : createEmptyStoreProfile();
+        if (!storeProfile.closingMessage.trim()) {
+          const noteOk = await safeSet(
+            storeKey,
+            JSON.stringify({
+              storeName: storeProfile.storeName,
+              address: storeProfile.address,
+              whatsapp: storeProfile.whatsapp,
+              closingMessage: note,
+            })
+          );
+          if (!noteOk) return;
+        }
+      }
+    }
+
+    const scopedOk = await safeSet(scopedKey, JSON.stringify(payload));
+    if (!scopedOk) return;
+  }
+
+  // Mark consumed even when nothing copied (malformed/empty legacy) so User B
+  // never re-applies the same global blob after User A already "claimed" the pass.
+  // Only reached when every attempted scoped write succeeded (or none were needed).
+  await safeSet(RECEIPT_LEGACY_CONSUMED_FLAG_KEY, '1');
+}
+
+async function readScopedJson(kind: ReceiptSettingsKind): Promise<unknown | null> {
+  await ensureLegacyMigratedForActiveUser();
+
+  const userId = await resolveActiveReceiptUserId();
+  if (!userId) return null;
+  const raw = await safeGet(receiptSettingsStorageKey(kind, userId));
+  if (!raw) return null;
+  return parseReceiptSettingsJson(raw);
+}
+
+async function writeScopedJson(kind: ReceiptSettingsKind, value: unknown): Promise<void> {
+  const userId = await resolveActiveReceiptUserId();
+  if (!userId) {
+    throw new Error('Sesi login tidak ditemukan. Masuk kembali lalu simpan ulang.');
+  }
+  const key = receiptSettingsStorageKey(kind, userId);
+  const ok = await safeSet(key, JSON.stringify(value));
+  if (!ok) {
+    throw new Error('Gagal menyimpan ke penyimpanan aman perangkat.');
+  }
+}
+
 export const receiptSettingsService = {
   getStoreProfile: async (): Promise<StoreProfile> => {
-    const raw = await safeGet(STORE_PROFILE_KEY);
-    if (!raw) return createEmptyStoreProfile();
-    try {
-      return normalizeStoreProfile(JSON.parse(raw));
-    } catch {
-      return createEmptyStoreProfile();
+    const parsed = await readScopedJson('store');
+    const profile = parsed ? normalizeStoreProfile(parsed) : createEmptyStoreProfile();
+    // One-time migrate legacy template.note → store.closingMessage (Profil Toko).
+    if (!profile.closingMessage.trim()) {
+      const tplRaw = await readScopedJson('template');
+      const legacyNote =
+        tplRaw && typeof tplRaw === 'object'
+          ? (tplRaw as { note?: unknown }).note
+          : undefined;
+      if (typeof legacyNote === 'string' && legacyNote.trim()) {
+        const migrated = { ...profile, closingMessage: legacyNote.trim() };
+        try {
+          await writeScopedJson('store', {
+            storeName: migrated.storeName,
+            address: migrated.address,
+            whatsapp: migrated.whatsapp,
+            closingMessage: migrated.closingMessage,
+          });
+          // Strip text from template so there is a single source of truth.
+          await writeScopedJson('template', normalizeTemplate(tplRaw));
+        } catch {
+          // Still return migrated for this session if write fails.
+        }
+        return migrated;
+      }
     }
+    return profile;
   },
 
   setStoreProfile: async (profile: StoreProfile): Promise<void> => {
-    await safeSet(
-      STORE_PROFILE_KEY,
-      JSON.stringify({
-        storeName: profile.storeName.trim(),
-        address: profile.address.trim(),
-        whatsapp: profile.whatsapp.trim(),
-      })
-    );
-  },
-
-  getReceiptTemplate: async (): Promise<ReceiptTemplate> => {
-    const raw = await safeGet(RECEIPT_TEMPLATE_KEY);
-    if (!raw) return createDefaultReceiptTemplate();
-    try {
-      return normalizeTemplate(JSON.parse(raw));
-    } catch {
-      return createDefaultReceiptTemplate();
+    const payload = {
+      storeName: profile.storeName.trim(),
+      address: profile.address.trim(),
+      whatsapp: profile.whatsapp.trim(),
+      closingMessage: profile.closingMessage.trim(),
+    };
+    await writeScopedJson('store', payload);
+    // Read-back so UI cannot claim success when storage silently failed.
+    const saved = await receiptSettingsService.getStoreProfile();
+    if (
+      saved.storeName !== payload.storeName ||
+      saved.address !== payload.address ||
+      saved.whatsapp !== payload.whatsapp ||
+      saved.closingMessage !== payload.closingMessage
+    ) {
+      throw new Error('Profil toko gagal diverifikasi setelah disimpan. Coba lagi.');
     }
   },
 
+  getReceiptTemplate: async (): Promise<ReceiptTemplate> => {
+    const parsed = await readScopedJson('template');
+    if (!parsed) return createDefaultReceiptTemplate();
+    return normalizeTemplate(parsed);
+  },
+
   setReceiptTemplate: async (template: ReceiptTemplate): Promise<void> => {
-    const normalized = normalizeTemplate(template);
-    await safeSet(RECEIPT_TEMPLATE_KEY, JSON.stringify(normalized));
+    await writeScopedJson('template', normalizeTemplate(template));
   },
 
   resetReceiptTemplate: async (): Promise<ReceiptTemplate> => {
     const def = createDefaultReceiptTemplate();
-    await safeSet(RECEIPT_TEMPLATE_KEY, JSON.stringify(def));
+    await writeScopedJson('template', def);
     return def;
   },
 
   getPrinterPreferences: async (): Promise<PrinterPreferences> => {
-    const raw = await safeGet(PRINTER_PREF_KEY);
-    if (!raw) return createDefaultPrinterPreferences();
-    try {
-      return normalizePrinterPreferences(JSON.parse(raw));
-    } catch {
-      return createDefaultPrinterPreferences();
-    }
+    const parsed = await readScopedJson('printer');
+    if (!parsed) return createDefaultPrinterPreferences();
+    return normalizePrinterPreferences(parsed);
   },
 
   setPrinterPreferences: async (prefs: PrinterPreferences): Promise<void> => {
-    await safeSet(PRINTER_PREF_KEY, JSON.stringify(normalizePrinterPreferences(prefs)));
+    await writeScopedJson('printer', normalizePrinterPreferences(prefs));
   },
 
   setPaperWidth: async (paperWidthMm: PaperWidthMm): Promise<void> => {

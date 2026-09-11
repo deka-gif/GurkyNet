@@ -72,7 +72,8 @@ const styles = StyleSheet.create({
     borderColor: colors.gray[200],
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    /** Consistent inset so edge-to-edge logo files don’t look larger than padded ones. */
+    padding: 7,
   },
   image: {
     width: '100%',

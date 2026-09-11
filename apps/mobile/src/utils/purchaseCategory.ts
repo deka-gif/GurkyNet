@@ -47,6 +47,8 @@ const PROVIDER_BROWSE_CANONICAL: Record<string, string> = {
   international: 'international',
   /** Gas Prepaid: Pertagas / PGN provider-first (Web ProviderCatalogFlow). */
   'gas-prepaid': 'gas-prepaid',
+  /** Aktivasi Perdana: operator-first, then serial checkout (existing detail → PIN). */
+  'aktivasi-perdana': 'aktivasi-perdana',
 };
 
 /** Postpaid / bill categories — TagihanBillCatalogFlow (inquiry_ref_id). */
@@ -154,6 +156,11 @@ export function isVoucherInternetCategory(slug: string | null | undefined): bool
 export function isLiteralTargetCategory(slug: string | null | undefined): boolean {
   const s = normalizeCategorySlug(slug);
   return s === 'voucher-digital' || s === 'esim';
+}
+
+/** eSIM — PLACEHOLDER target; customer never enters HP/serial (gurky_transaction_capabilities). */
+export function isEsimCategory(slug: string | null | undefined): boolean {
+  return normalizeCategorySlug(slug) === 'esim';
 }
 
 export function literalTargetForCategory(slug: string | null | undefined): string {

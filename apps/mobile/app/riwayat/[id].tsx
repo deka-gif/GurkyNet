@@ -12,6 +12,7 @@ import {
   StatusBadge,
   Button,
 } from '../../src/components/ui';
+import { ReceiptSharePrintBar } from '../../src/components/receipt/ReceiptSharePrintBar';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import {
@@ -25,13 +26,10 @@ import {
 import { openSnapCheckout } from '../../src/utils/topupSnap';
 import { useTopUpStore } from '../../src/store/topup.store';
 import { useAuthStore } from '../../src/store/auth.store';
-import { runPrintReceiptFlow } from '../../src/utils/printReceiptFlow';
 
 /**
  * Transaction detail — GET /transactions/{id}.
- * Top Up pending: resume via paymentResume (no new create).
- * Closing Snap ≠ cancel; sync determines status.
- * Voucher Internet SN: GET …/receipt (voucher_internet_code) — never invent client-side.
+ * Success + receipt: Share | Cetak Struk → /riwayat/struk/[id] (no inline preview / no auto-print).
  */
 export default function RiwayatDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -46,8 +44,6 @@ export default function RiwayatDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
-  const [printMsg, setPrintMsg] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
   const config = useTopUpStore((s) => s.config);
   const loadConfig = useTopUpStore((s) => s.loadConfig);
   const userName = useAuthStore((s) => s.user?.name);
@@ -163,22 +159,6 @@ export default function RiwayatDetailScreen() {
     }
   };
 
-  const onPrint = async () => {
-    if (!receipt || printing) return;
-    setPrinting(true);
-    setPrintMsg(null);
-    try {
-      await runPrintReceiptFlow({
-        receipt,
-        userName,
-        router,
-        onMessage: setPrintMsg,
-      });
-    } finally {
-      setPrinting(false);
-    }
-  };
-
   return (
     <ScreenContainer belowHeader onRefresh={() => void load()} refreshing={loading}>
       <Stack.Screen
@@ -280,15 +260,13 @@ export default function RiwayatDetailScreen() {
           ) : null}
 
           {success && receipt ? (
-            <>
-              <Button
-                label={printing ? 'Mencetak…' : 'Cetak Struk'}
-                onPress={() => void onPrint()}
-                loading={printing}
-                disabled={printing}
-              />
-              {printMsg ? <Text style={styles.printMsg}>{printMsg}</Text> : null}
-            </>
+            <ReceiptSharePrintBar
+              receipt={receipt}
+              userName={userName}
+              onOpenStruk={() =>
+                router.push({ pathname: '/riwayat/struk/[id]', params: { id } })
+              }
+            />
           ) : null}
 
           <Button label="Kembali ke Riwayat" variant="secondary" onPress={() => router.back()} />
@@ -367,5 +345,4 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   copyMsg: { fontSize: typography.size.xs, color: colors.status.success },
-  printMsg: { fontSize: typography.size.sm, color: colors.gray[600], lineHeight: 20 },
 });

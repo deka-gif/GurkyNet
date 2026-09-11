@@ -49,7 +49,15 @@ function browseSearchPlaceholder(canonical: string): string {
   if (canonical === 'voucher-digital') return 'Cari voucher...';
   if (canonical === 'international') return 'Cari negara / operator...';
   if (canonical === 'gas-prepaid') return 'Cari provider gas (Pertagas, PGN)...';
+  if (canonical === 'aktivasi-perdana') return 'Cari provider / operator...';
+  if (canonical === 'esim') return 'Cari negara / provider...';
   return 'Cari provider...';
+}
+
+function browseProviderLead(canonical: string): string | null {
+  if (canonical === 'aktivasi-perdana') return 'Pilih Provider';
+  if (canonical === 'esim') return 'Pilih Negara / Provider';
+  return null;
 }
 
 export default function ProductListScreen() {
@@ -223,6 +231,7 @@ export default function ProductListScreen() {
           category={providerBrowseCategory}
           purchaseBanner={purchaseBanner}
           providerSearchPlaceholder={browseSearchPlaceholder(providerBrowseCategory)}
+          providerListTitle={browseProviderLead(providerBrowseCategory)}
         />
       ) : (
         <>

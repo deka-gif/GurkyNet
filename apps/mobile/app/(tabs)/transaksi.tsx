@@ -80,8 +80,7 @@ function CategoryTile({
       <View style={styles.iconWrap}>
         <CategoryMarketingIcon
           iconPath={iconPath}
-          size={28}
-          contentScale={1.15}
+          size={40}
           fallback={<Ionicons name={iconForSlug(cat.slug)} size={24} color={colors.primary[600]} />}
         />
       </View>
@@ -187,7 +186,9 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary[50],
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray[200],
     alignItems: 'center',
     justifyContent: 'center',
   },

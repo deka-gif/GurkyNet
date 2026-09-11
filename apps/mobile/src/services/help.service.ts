@@ -1,12 +1,17 @@
 import { apiClient } from '../api/client';
 import type { ApiResponse } from '../api/types';
+import type { Ionicons } from '@expo/vector-icons';
+import type { HelpFaqItem } from './help.cekWilayah';
 
-/** FAQ item from GET /help (AccountContentController). */
-export type HelpFaqItem = {
-  id: number;
-  question: string;
-  answer: string;
-};
+export type { HelpFaqItem } from './help.cekWilayah';
+export {
+  CEK_WILAYAH_FAQ_PREFIX,
+  isCekWilayahFaq,
+  customerFacingFaqs,
+  cekWilayahFaqTitle,
+  findCekWilayahFaq,
+  parseCekWilayahAnswer,
+} from './help.cekWilayah';
 
 /** GET /help payload — FAQ + Marketing contacts / hours. */
 export type HelpCenterPayload = {
@@ -51,47 +56,101 @@ export function filterHelpFaqs(items: HelpFaqItem[], query: string): HelpFaqItem
   );
 }
 
-/** Client-side UI topic shortcuts — filters FAQ text; not a backend category. */
-export type HelpTopicShortcut = {
+type IconName = keyof typeof Ionicons.glyphMap;
+
+/**
+ * Fixed Bantuan Populer tiles (Owner-approved v1).
+ * No longer gated by FAQ keyword match — always 4 cards, even if CMS FAQ empty.
+ */
+export type HelpPopularTile = {
   key: string;
   label: string;
-  icon: 'wallet-outline' | 'receipt-outline' | 'shield-checkmark-outline' | 'swap-horizontal-outline' | 'help-circle-outline';
-  keywords: string[];
-};
+  icon: IconName;
+  highlight?: boolean;
+} & (
+  | { action: 'search'; searchQuery: string }
+  | { action: 'cek-zona' }
+);
 
-const TOPIC_SHORTCUTS: HelpTopicShortcut[] = [
+export const FIXED_HELP_POPULAR: HelpPopularTile[] = [
   {
     key: 'topup',
-    label: 'Top Up Saldo',
+    label: 'Top up saldo',
     icon: 'wallet-outline',
-    keywords: ['top up', 'topup', 'isi saldo', 'deposit', 'saldo'],
+    action: 'search',
+    searchQuery: 'top up',
   },
   {
     key: 'transaksi',
     label: 'Transaksi',
     icon: 'receipt-outline',
-    keywords: ['transaksi', 'pulsa', 'paket', 'gagal', 'berhasil', 'pembelian'],
-  },
-  {
-    key: 'akun',
-    label: 'Akun & Keamanan',
-    icon: 'shield-checkmark-outline',
-    keywords: ['akun', 'pin', 'password', 'keamanan', 'login', 'kyc'],
+    action: 'search',
+    searchQuery: 'transaksi',
   },
   {
     key: 'transfer',
     label: 'Transfer & Tarik',
     icon: 'swap-horizontal-outline',
-    keywords: ['transfer', 'tarik', 'withdraw', 'kirim saldo'],
+    action: 'search',
+    searchQuery: 'transfer',
+  },
+  {
+    key: 'cek-zona',
+    label: 'Cek wilayah kartu',
+    icon: 'map-outline',
+    action: 'cek-zona',
+    highlight: true,
   },
 ];
 
-/**
- * Topics that match at least one FAQ (client-side only).
- * Empty FAQ set → empty topics (never invent backend categories).
- */
+/** Local-only FAQ rows (not in CMS). Opens in-app article routes. */
+export const LOCAL_HELP_FAQS = [
+  {
+    id: 'local-voucher-zona',
+    question: 'Kenapa voucher internet saya tidak aktif setelah dibeli?',
+    href: '/help/cek-zona' as const,
+    searchText:
+      'voucher internet tidak aktif zona wilayah kartu telkomsel indosat xl axis tri smartfren',
+  },
+];
+
+/** @deprecated Prefer FIXED_HELP_POPULAR — kept for reference / any leftover imports. */
+export type HelpTopicShortcut = {
+  key: string;
+  label: string;
+  icon: IconName;
+  keywords: string[];
+};
+
+/** @deprecated Dynamic FAQ-gated topics — superseded by FIXED_HELP_POPULAR. */
 export function buildHelpTopicShortcuts(items: HelpFaqItem[]): HelpTopicShortcut[] {
   if (items.length === 0) return [];
+  const TOPIC_SHORTCUTS: HelpTopicShortcut[] = [
+    {
+      key: 'topup',
+      label: 'Top Up Saldo',
+      icon: 'wallet-outline',
+      keywords: ['top up', 'topup', 'isi saldo', 'deposit', 'saldo'],
+    },
+    {
+      key: 'transaksi',
+      label: 'Transaksi',
+      icon: 'receipt-outline',
+      keywords: ['transaksi', 'pulsa', 'paket', 'gagal', 'berhasil', 'pembelian'],
+    },
+    {
+      key: 'akun',
+      label: 'Akun & Keamanan',
+      icon: 'shield-checkmark-outline',
+      keywords: ['akun', 'pin', 'password', 'keamanan', 'login', 'kyc'],
+    },
+    {
+      key: 'transfer',
+      label: 'Transfer & Tarik',
+      icon: 'swap-horizontal-outline',
+      keywords: ['transfer', 'tarik', 'withdraw', 'kirim saldo'],
+    },
+  ];
   return TOPIC_SHORTCUTS.filter((topic) =>
     items.some((f) => {
       const hay = `${f.question} ${f.answer}`.toLowerCase();
@@ -100,7 +159,7 @@ export function buildHelpTopicShortcuts(items: HelpFaqItem[]): HelpTopicShortcut
   );
 }
 
-/** Primary search query string when a topic tile is tapped. */
+/** @deprecated */
 export function topicSearchQuery(topic: HelpTopicShortcut): string {
   return topic.keywords[0] || topic.label;
 }
