@@ -80,9 +80,15 @@ class IdempotencyRequestService
     protected function claimOrReplay(?int $userId, string $key, string $endpoint, string $hash): array
     {
         return DB::transaction(function () use ($userId, $key, $endpoint, $hash) {
+            // P1-B — scope by user_id so User B cannot claim/replay User A's key+endpoint.
             $existing = IdempotencyRequest::query()
                 ->where('key', $key)
                 ->where('endpoint', $endpoint)
+                ->when(
+                    $userId !== null,
+                    fn ($q) => $q->where('user_id', $userId),
+                    fn ($q) => $q->whereNull('user_id')
+                )
                 ->lockForUpdate()
                 ->first();
 
@@ -92,6 +98,13 @@ class IdempotencyRequestService
             }
 
             if ($existing) {
+                // Defense in depth — never replay another principal's snapshot.
+                if ($userId !== null && (int) $existing->user_id !== (int) $userId) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => ['Idempotency key tidak valid untuk pengguna ini.'],
+                    ]);
+                }
+
                 if (!hash_equals((string) $existing->request_hash, $hash)) {
                     throw ValidationException::withMessages([
                         'idempotency_key' => ['Idempotency key reused with a different request payload.'],
@@ -175,8 +188,8 @@ class IdempotencyRequestService
     }
 
     /**
-     * Archive without hard delete (SRS 14.1). Rotates key so the unique (key, endpoint)
-     * slot can be reused after TTL.
+     * Archive without hard delete (SRS 14.1). Rotates key so the unique
+     * (user_id, key, endpoint) slot can be reused after TTL.
      */
     protected function archiveInPlace(IdempotencyRequest $row): void
     {

@@ -296,6 +296,10 @@ class WorkflowEngineTest extends TestCase
 
         Sanctum::actingAs($owner);
         $this->getJson("/api/v1/admin/workflows/{$wfId}")->assertOk();
+        $this->postJson('/api/v1/admin/workflows', [
+            'title' => 'Owner must not create',
+            'targetDivision' => 'finance',
+        ])->assertStatus(403);
         $this->postJson("/api/v1/admin/workflows/{$wfId}/actions", [
             'action' => 'retry',
         ])->assertStatus(403);

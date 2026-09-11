@@ -295,6 +295,7 @@ class LoyaltyPointService
 
         return DB::transaction(function () use ($user, $points, $idempotencyKey) {
             $existing = LoyaltyPointLedger::query()
+                ->where('user_id', $user->id)
                 ->where('idempotency_key', $idempotencyKey)
                 ->where('type', LoyaltyPointLedger::TYPE_REDEEM)
                 ->lockForUpdate()
@@ -504,6 +505,7 @@ class LoyaltyPointService
 
         return DB::transaction(function () use ($target, $points, $direction, $reason, $actor, $idempotencyKey) {
             $existing = LoyaltyPointLedger::query()
+                ->where('user_id', $target->id)
                 ->where('idempotency_key', $idempotencyKey)
                 ->where('type', LoyaltyPointLedger::TYPE_ADJUST)
                 ->lockForUpdate()

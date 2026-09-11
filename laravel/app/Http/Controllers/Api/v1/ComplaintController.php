@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api\v1;
 use App\Http\Controllers\Controller;
 use App\Models\SupportTicket;
 use App\Models\TicketReply;
+use App\Models\Transaction;
 use App\Support\Support\TicketStatus;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 /**
  * User complaints (FR-USR05 / FR-CS-02) — create, list, show with status + reply history.
@@ -52,6 +54,20 @@ class ComplaintController extends Controller
         ]);
 
         $user = $request->user();
+
+        // P1-A — do not trust client transaction_id without ownership check.
+        if (! empty($data['transaction_id'])) {
+            $owns = Transaction::query()
+                ->whereKey((int) $data['transaction_id'])
+                ->where('user_id', $user->id)
+                ->exists();
+            if (! $owns) {
+                throw ValidationException::withMessages([
+                    'transaction_id' => ['Transaksi tidak ditemukan atau bukan milik Anda.'],
+                ]);
+            }
+        }
+
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
             $attachmentPath = $request->file('attachment')->store('complaints/' . $user->id, 'public');

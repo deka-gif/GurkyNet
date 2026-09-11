@@ -26,6 +26,8 @@ class ChatService
 
     public function getOrCreateForUser(User $user, ?int $transactionId = null, ?string $subject = null): Conversation
     {
+        $this->assertOwnedTransaction($user, $transactionId);
+
         $open = Conversation::query()
             ->where('user_id', $user->id)
             ->whereIn('status', ['open', 'waiting', 'assigned'])
@@ -60,6 +62,29 @@ class ChatService
         $this->realtime->publish('chat.user.'.$user->id, 'ConversationUpdated', $this->conversationPayload($conv));
 
         return $conv->fresh(['user', 'assignedAgent']);
+    }
+
+    /**
+     * P1-A — transaction_id is a locator only; must belong to the authenticated user.
+     *
+     * @throws ValidationException
+     */
+    public function assertOwnedTransaction(User $user, ?int $transactionId): void
+    {
+        if ($transactionId === null) {
+            return;
+        }
+
+        $owns = Transaction::query()
+            ->whereKey($transactionId)
+            ->where('user_id', $user->id)
+            ->exists();
+
+        if (! $owns) {
+            throw ValidationException::withMessages([
+                'transaction_id' => ['Transaksi tidak ditemukan atau bukan milik Anda.'],
+            ]);
+        }
     }
 
     /**

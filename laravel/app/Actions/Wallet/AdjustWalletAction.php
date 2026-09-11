@@ -7,6 +7,7 @@ use App\Models\Wallet;
 use App\Models\Transaction;
 use App\Models\WalletMutation;
 use App\Enums\TransactionStatus;
+use App\Services\Transactions\IdempotencyGuard;
 use App\Services\Wallet\WalletLedgerService;
 use App\Support\Finance\FinanceAudit;
 use Illuminate\Support\Facades\DB;
@@ -15,12 +16,15 @@ use Illuminate\Validation\ValidationException;
 class AdjustWalletAction
 {
     public function __construct(
-        protected WalletLedgerService $ledgerService
+        protected WalletLedgerService $ledgerService,
+        protected IdempotencyGuard $idempotencyGuard
     ) {}
 
     /**
-     * Manual wallet adjustment (Finance/Owner). Updates wallet, ledger (mutation+history), and finance ledger.
-     * SRS 14.2 — type=adjustment. Optional idempotency_key stored as transactions mirror only.
+     * Manual wallet adjustment (Finance). Updates wallet, ledger (mutation+history), and finance ledger.
+     * SRS 14.1 / 14.2 — type=adjustment.
+     * P1-D — claim IdempotencyGuard (UNIQUE user_id+idempotency_key on transactions) BEFORE balance
+     * change so HTTP SoT reclaim after post-commit failure cannot double-mutate.
      *
      * @param  'credit'|'debit'  $direction
      */
@@ -57,29 +61,42 @@ class AdjustWalletAction
                 ]);
             }
 
+            $invoiceNumber = 'TRX-ADJ-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
+            $actorLabel = $actor?->email ?? 'system';
+
+            // Claim FIRST (before touching balance) — secondary net under transactions UNIQUE.
+            $claim = $this->idempotencyGuard->claim(
+                $targetUser->id,
+                $idempotencyKey,
+                function () use ($targetUser, $wallet, $invoiceNumber, $amount, $direction, $actorLabel, $reason, $idempotencyKey) {
+                    return Transaction::create([
+                        'user_id' => $targetUser->id,
+                        'invoice_number' => $invoiceNumber,
+                        'service_name' => 'Penyesuaian Saldo',
+                        'target_number' => $wallet->wallet_number,
+                        'amount' => $amount,
+                        'admin_fee' => 0,
+                        'total_payment' => $amount,
+                        'payment_method' => 'adjustment',
+                        'status' => TransactionStatus::SUCCESS->value,
+                        'notes' => "Adjustment ({$direction}) oleh {$actorLabel}: {$reason}",
+                        'idempotency_key' => $idempotencyKey,
+                    ]);
+                }
+            );
+
+            if (! $claim['is_new']) {
+                return $claim['transaction'];
+            }
+
+            $transaction = $claim['transaction'];
+
             if ($direction === 'credit') {
                 $wallet->balance += $amount;
             } else {
                 $wallet->balance -= $amount;
             }
             $wallet->save();
-
-            $invoiceNumber = 'TRX-ADJ-' . now()->format('YmdHis') . '-' . mt_rand(1000, 9999);
-            $actorLabel = $actor?->email ?? 'system';
-
-            $transaction = Transaction::create([
-                'user_id' => $targetUser->id,
-                'invoice_number' => $invoiceNumber,
-                'service_name' => 'Penyesuaian Saldo',
-                'target_number' => $wallet->wallet_number,
-                'amount' => $amount,
-                'admin_fee' => 0,
-                'total_payment' => $amount,
-                'payment_method' => 'adjustment',
-                'status' => TransactionStatus::SUCCESS->value,
-                'notes' => "Adjustment ({$direction}) oleh {$actorLabel}: {$reason}",
-                'idempotency_key' => $idempotencyKey,
-            ]);
 
             $desc = "Adjustment ({$direction}): {$reason}";
             $this->ledgerService->record(

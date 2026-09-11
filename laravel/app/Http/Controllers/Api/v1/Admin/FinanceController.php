@@ -173,7 +173,8 @@ class FinanceController extends Controller
                         (float) $data['amount'],
                         $data['direction'],
                         $data['reason'],
-                        $request->user()
+                        $request->user(),
+                        $data['idempotency_key'] ?? null
                     );
 
                     return $this->idempotentJson('Penyesuaian saldo berhasil diproses.', $transaction);

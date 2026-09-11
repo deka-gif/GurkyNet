@@ -633,18 +633,15 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         // Workflow Engine (Sprint 8.2)
         Route::prefix('admin/workflows')->middleware([EnsureRole::class . ':customer_support,operations,finance,marketing,owner'])->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'store']);
             Route::get('/stats/{division}', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'stats'])
                 ->where('division', 'customer-support|customer_support|operations|finance|marketing|admin|owner');
             Route::get('/{id}', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'show'])->whereNumber('id');
 
-            // Sprint 2 Revision — Finding 1 (Owner Read-Only Bypass):
-            // escalate/actions/close/assign/reassign adalah operasi workflow
-            // OPERASIONAL harian milik divisi (Finance/Operations/Marketing/
-            // CS), bukan mekanisme "Approval Pengecualian/Override" FR-OWN04.
-            // Owner wajib read-only di sini; role divisi (finance/operations/
-            // marketing/customer_support) dan Super Admin tidak terdampak.
+            // Sprint 2 Revision — Finding 1 (Owner Read-Only Bypass) + P1-E:
+            // create/escalate/actions/close/assign/reassign are operasional divisi.
+            // Owner wajib read-only; role divisi dan Super Admin tidak terdampak.
             Route::middleware([EnsureOwnerReadOnly::class])->group(function () {
+                Route::post('/', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'store']);
                 Route::post('/{id}/escalate', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'escalate'])->whereNumber('id');
                 Route::post('/{id}/actions', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'action'])->whereNumber('id');
                 Route::post('/{id}/close', [\App\Http\Controllers\Api\v1\Admin\WorkflowController::class, 'close'])->whereNumber('id');

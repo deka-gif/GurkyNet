@@ -560,11 +560,13 @@ class TransactionController extends Controller
 
                 event(new \App\Events\TransactionFailed($result['transaction']));
             } else {
-                // SRS 14.3 — unclear supplier outcome → PENDING_SUPPLIER
-                $transaction->update([
-                    'status' => \App\Enums\TransactionStatus::PENDING_SUPPLIER->value,
-                    'notes' => 'Sedang diproses oleh operator.',
-                ]);
+                // P1-F — locked PENDING writer (never TOCTOU-overwrite SUCCESS/refunded).
+                app(\App\Services\Transactions\TransactionPendingTransitionService::class)
+                    ->apply((int) $transaction->id, [
+                        'source' => 'digiflazz_webhook',
+                        'notes' => 'Sedang diproses oleh operator.',
+                        'provider_last_status' => 'pending',
+                    ]);
             }
         }
 
@@ -768,11 +770,13 @@ class TransactionController extends Controller
 
                 event(new \App\Events\TransactionFailed($result['transaction']));
             } else {
-                // SRS 14.3 — unclear supplier outcome → PENDING_SUPPLIER; polling may still resolve later.
-                $transaction->update([
-                    'status' => \App\Enums\TransactionStatus::PENDING_SUPPLIER->value,
-                    'notes' => 'Sedang diproses oleh operator.',
-                ]);
+                // P1-F — locked PENDING writer (never TOCTOU-overwrite SUCCESS/refunded).
+                app(\App\Services\Transactions\TransactionPendingTransitionService::class)
+                    ->apply((int) $transaction->id, [
+                        'source' => 'vip_webhook',
+                        'notes' => 'Sedang diproses oleh operator.',
+                        'provider_last_status' => $normalized,
+                    ]);
             }
         }
 

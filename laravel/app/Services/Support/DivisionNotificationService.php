@@ -26,9 +26,38 @@ class DivisionNotificationService
 
     public function markRead(DivisionNotification $n, User $user): DivisionNotification
     {
+        // P1-E — staff may only mark notifications visible to their role (or assigned to them).
+        if (! $this->userCanAccess($user, $n)) {
+            abort(404);
+        }
+
         $n->update(['read_at' => now()]);
 
         return $n;
+    }
+
+    /**
+     * Same visibility rules as listForUser (role inbox + direct user_id + owner/super_admin).
+     */
+    public function userCanAccess(User $user, DivisionNotification $n): bool
+    {
+        $role = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
+
+        if ($n->user_id !== null && (int) $n->user_id === (int) $user->id) {
+            return true;
+        }
+
+        if ((string) $n->role === (string) $role) {
+            return true;
+        }
+
+        if (in_array($role, ['owner', 'super_admin'], true)
+            && in_array((string) $n->role, ['customer_support', 'operations', 'finance', 'marketing', 'owner'], true)
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     public function markAllRead(User $user): int

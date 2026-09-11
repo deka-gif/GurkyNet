@@ -170,11 +170,13 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
 
                 event(new \App\Events\TransactionFailed($result['transaction']));
             } else {
-                // SRS 14.3 — unclear supplier outcome → PENDING_SUPPLIER
-                $transaction->update([
-                    'status' => TransactionStatus::PENDING_SUPPLIER->value,
-                    'notes' => 'Sedang diproses oleh operator.',
-                ]);
+                // P1-F — locked PENDING writer (never TOCTOU-overwrite SUCCESS/refunded).
+                app(\App\Services\Transactions\TransactionPendingTransitionService::class)
+                    ->apply((int) $transaction->id, [
+                        'source' => 'digiflazz_legacy_job',
+                        'notes' => 'Sedang diproses oleh operator.',
+                        'provider_last_status' => 'pending',
+                    ]);
             }
         } catch (\Exception $e) {
             Log::error('ProcessDigiflazzTransaction job execution failure', [
