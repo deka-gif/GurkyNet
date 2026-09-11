@@ -331,4 +331,79 @@ class CustomerSupportTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_support_user_can_update_knowledge_base_faq(): void
+    {
+        Sanctum::actingAs($this->supportUser);
+
+        $faq = Faq::create([
+            'question' => 'Cek Wilayah Kartu — Telkomsel',
+            'answer' => "1. Langkah lama.\n2. Langkah dua.\n3. Langkah tiga.",
+            'order' => 100,
+        ]);
+
+        $response = $this->putJson('/api/v1/admin/customer-support/knowledge-base/faq/'.$faq->id, [
+            'answer' => "1. Buka MyTelkomsel.\n2. Info Kuota.\n3. Lihat wilayah.\n\nAlternatif: cek kode di aplikasi resmi.",
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.id', $faq->id);
+
+        $this->assertDatabaseHas('faq', [
+            'id' => $faq->id,
+            'answer' => "1. Buka MyTelkomsel.\n2. Info Kuota.\n3. Lihat wilayah.\n\nAlternatif: cek kode di aplikasi resmi.",
+        ]);
+    }
+
+    public function test_cek_wilayah_faq_title_cannot_be_changed(): void
+    {
+        Sanctum::actingAs($this->supportUser);
+
+        $faq = Faq::create([
+            'question' => 'Cek Wilayah Kartu — Telkomsel',
+            'answer' => "1. Langkah satu.\n2. Langkah dua.\n3. Langkah tiga.",
+            'order' => 100,
+        ]);
+
+        $response = $this->putJson('/api/v1/admin/customer-support/knowledge-base/faq/'.$faq->id, [
+            'question' => 'Cek Wilayah Kartu — Telkomsel MyTS',
+            'answer' => "1. Buka MyTelkomsel.\n2. Info Kuota.\n3. Lihat wilayah.",
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertDatabaseHas('faq', [
+            'id' => $faq->id,
+            'question' => 'Cek Wilayah Kartu — Telkomsel',
+        ]);
+    }
+
+    public function test_cek_wilayah_faq_seeder_titles_match_mobile_contract(): void
+    {
+        $this->seed(\Database\Seeders\CekWilayahKartuFaqSeeder::class);
+
+        $expected = [
+            'Cek Wilayah Kartu — Telkomsel',
+            'Cek Wilayah Kartu — Indosat',
+            'Cek Wilayah Kartu — Tri',
+            'Cek Wilayah Kartu — Axis',
+            'Cek Wilayah Kartu — XL',
+            'Cek Wilayah Kartu — Smartfren',
+        ];
+
+        foreach ($expected as $question) {
+            $this->assertDatabaseHas('faq', ['question' => $question]);
+            $row = Faq::query()->where('question', $question)->first();
+            $this->assertNotNull($row);
+            $this->assertMatchesRegularExpression('/^\d+\.\s+.+/m', (string) $row->answer);
+        }
+
+        Sanctum::actingAs($this->regularUser);
+        $help = $this->getJson('/api/v1/help');
+        $help->assertStatus(200);
+        $questions = collect($help->json('data.faq'))->pluck('question')->all();
+        foreach ($expected as $question) {
+            $this->assertContains($question, $questions);
+        }
+    }
 }

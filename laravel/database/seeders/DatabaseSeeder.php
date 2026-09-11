@@ -305,6 +305,8 @@ class DatabaseSeeder extends Seeder
             );
         }
 
+        $this->call(CekWilayahKartuFaqSeeder::class);
+
         // 7. BANNERS, PROMOTIONS, & VOUCHERS
         $this->command?->info('Seeding Banners, Promotions, and Vouchers...');
         $banners = [

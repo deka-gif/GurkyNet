@@ -11,9 +11,10 @@ use App\Actions\Admin\CustomerSupport\InvestigationAction;
 use App\Actions\Admin\CustomerSupport\RefundQueueAction;
 use App\Actions\Admin\CustomerSupport\KnowledgeBaseAction;
 use App\Http\Requests\Admin\CustomerSupport\TicketFilterRequest;
+use App\Http\Requests\Admin\CustomerSupport\CustomerFilterRequest;
 use App\Http\Requests\Admin\CustomerSupport\ReplyTicketRequest;
 use App\Http\Requests\Admin\CustomerSupport\UpdateStatusRequest;
-use App\Http\Requests\Admin\CustomerSupport\CustomerFilterRequest;
+use App\Http\Requests\Admin\CustomerSupport\UpdateKnowledgeBaseFaqRequest;
 use App\Http\Resources\SupportTicketResource;
 use App\Http\Resources\TicketReplyResource;
 use App\Http\Resources\CustomerResource;
@@ -414,5 +415,25 @@ class CustomerSupportController extends Controller
         }
 
         return $this->successResponse('Artikel knowledge base berhasil dimuat.', $article);
+    }
+
+    /**
+     * Update FAQ article content (CS Knowledge Base edit).
+     * PUT /api/v1/admin/customer-support/knowledge-base/faq/{id}
+     */
+    public function updateKnowledgeBaseFaq(
+        int $id,
+        UpdateKnowledgeBaseFaqRequest $request,
+        KnowledgeBaseAction $action
+    ): JsonResponse {
+        try {
+            $article = $action->updateFaq($id, $request->validated());
+
+            return $this->successResponse('Artikel FAQ berhasil diperbarui.', $article);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
     }
 }

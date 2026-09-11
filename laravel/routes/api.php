@@ -606,6 +606,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/refunds/{id}/escalate', [CustomerSupportController::class, 'escalateRefund']);
             Route::get('/knowledge-base', [CustomerSupportController::class, 'knowledgeBase']);
             Route::get('/knowledge-base/{id}', [CustomerSupportController::class, 'knowledgeBaseArticle']);
+            Route::put('/knowledge-base/faq/{id}', [CustomerSupportController::class, 'updateKnowledgeBaseFaq'])->whereNumber('id');
             // FR-KYC-05 — CS KYC review queue
             Route::get('/kyc', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'index']);
             Route::get('/kyc/{id}', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'show'])->whereNumber('id');
