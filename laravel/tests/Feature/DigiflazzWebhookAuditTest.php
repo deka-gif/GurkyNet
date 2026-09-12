@@ -99,7 +99,9 @@ class DigiflazzWebhookAuditTest extends TestCase
         $hub = $headers['X-Hub-Signature'] ?? null;
         $legacy = $headers['X-Digiflazz-Signature'] ?? null;
 
-        if ($hub === '__AUTO__') {
+        if ($hub === '__NONE__' || $legacy === '__NONE__') {
+            // Intentionally omit signature headers (unsigned ping path).
+        } elseif ($hub === '__AUTO__') {
             $server['HTTP_X_HUB_SIGNATURE'] = $autoSig;
         } elseif (is_string($hub)) {
             $server['HTTP_X_HUB_SIGNATURE'] = $hub;
@@ -278,6 +280,70 @@ class DigiflazzWebhookAuditTest extends TestCase
         Log::shouldHaveReceived('info')->withArgs(function ($message) {
             return $message === 'Digiflazz webhook ping';
         })->atLeast()->once();
+    }
+
+    public function test_unsigned_ping_event_is_accepted_without_signature(): void
+    {
+        Log::spy();
+
+        $payload = [
+            'sed' => 'AgXXtVAHp',
+            'hook_id' => 'oPVJ2W',
+            'hook' => [
+                'url' => 'https://gurkynet.my.id/api/v1/webhooks/digiflazz',
+                'secret' => 'somesecretkeywords',
+                'type' => 'application/json',
+                'status' => 1,
+            ],
+        ];
+
+        $response = $this->postDigiflazzWebhook($payload, [
+            'X-Hub-Signature' => '__NONE__',
+            'X-Digiflazz-Event' => 'ping',
+            'User-Agent' => 'Go-http-client/1.1',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Webhook ping acknowledged.');
+
+        Log::shouldHaveReceived('info')->withArgs(function ($message, $context = null) {
+            return $message === 'Digiflazz webhook ping'
+                && is_array($context)
+                && ($context['hook_id'] ?? null) === 'oPVJ2W'
+                && ($context['signature_required'] ?? null) === false;
+        })->atLeast()->once();
+    }
+
+    public function test_transaction_payload_with_spoofed_ping_keys_still_requires_signature(): void
+    {
+        [, , $payload] = $this->seedPendingTransaction('Sukses');
+
+        // Attacker tries to skip signature by adding ping-shaped keys beside `data`.
+        $spoofed = array_merge($payload, [
+            'sed' => 'fake',
+            'hook_id' => 'fake',
+            'hook' => ['url' => 'https://evil.example/', 'status' => 1],
+        ]);
+
+        $response = $this->postDigiflazzWebhook($spoofed, [
+            'X-Hub-Signature' => '__NONE__',
+            'X-Digiflazz-Event' => 'update',
+        ]);
+
+        $response->assertStatus(401)->assertJsonPath('success', false);
+    }
+
+    public function test_unsigned_transaction_payload_is_rejected(): void
+    {
+        [, , $payload] = $this->seedPendingTransaction('Sukses');
+
+        $response = $this->postDigiflazzWebhook($payload, [
+            'X-Hub-Signature' => '__NONE__',
+            'X-Digiflazz-Event' => 'update',
+        ]);
+
+        $response->assertStatus(401)->assertJsonPath('success', false);
     }
 
     public function test_user_agent_prepaid_is_classified(): void

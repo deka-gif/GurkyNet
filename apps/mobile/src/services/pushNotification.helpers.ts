@@ -42,6 +42,41 @@ export function logPushObservability(
   console.info(`[push] ${event} ${parts.join(' ')}`);
 }
 
+/**
+ * Canonical Expo `data.category` from backend NotificationService::buildPushData:
+ * `transaction` | `announcement` | `promotion`.
+ * Fallback: `data.type` (backend sets type = same category string).
+ *
+ * Transaction → show OS banner/list even in foreground (audit GRK-20260912-000008).
+ * Non-transaction → keep legacy suppress (no tray in foreground).
+ */
+export function resolvePushPresentation(data: {
+  category?: string | null;
+  type?: string | null;
+}): {
+  category: string;
+  isTransaction: boolean;
+  shouldShowBanner: boolean;
+  shouldShowList: boolean;
+  shouldPlaySound: boolean;
+  shouldSetBadge: boolean;
+  bannerDecision: 'show' | 'suppress';
+} {
+  const category = String(data.category || data.type || '')
+    .trim()
+    .toLowerCase();
+  const isTransaction = category === 'transaction';
+  return {
+    category: category || 'unknown',
+    isTransaction,
+    shouldShowBanner: isTransaction,
+    shouldShowList: isTransaction,
+    shouldPlaySound: false,
+    shouldSetBadge: true,
+    bannerDecision: isTransaction ? 'show' : 'suppress',
+  };
+}
+
 /** Expected sync outcomes for documentation / tests. */
 export type PushSyncReason =
   | 'registered'

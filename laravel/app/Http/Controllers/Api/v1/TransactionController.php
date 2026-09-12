@@ -333,9 +333,39 @@ class TransactionController extends Controller
      * - Signature header: X-Hub-Signature = sha1=HMAC-SHA1(rawBody, secret)
      * - X-Digiflazz-Signature is accepted only as legacy compatibility.
      * - Events: create | update | resend (+ ping payload without transaction data)
+     *
+     * Ops note (observed Digiflazz production): ping deliveries may omit X-Hub-Signature
+     * even when Secret is set. Ping is connectivity-only (no saldo / state machine) so we
+     * acknowledge unsigned ping by payload shape. Transaction events remain signature-required.
+     * // FR-OPS Digiflazz webhook / Bagian 14.3 status updates via callback
      */
     public function digiflazzCallback(Request $request): JsonResponse
     {
+        $event = strtolower(trim((string) $request->header('X-Digiflazz-Event', '')));
+        $userAgent = (string) $request->header('User-Agent', '');
+        $agentClass = $this->classifyDigiflazzWebhookUserAgent($userAgent);
+
+        $payload = $request->json()->all();
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        // Ping Event (Webhooks.pdf): sed + hook_id + hook — not a transaction callback.
+        // Accept without signature: Digiflazz often omits signing on ping-only deliveries.
+        if ($this->isDigiflazzWebhookPing($payload)) {
+            \Illuminate\Support\Facades\Log::info('Digiflazz webhook ping', [
+                'event' => $event !== '' ? $event : 'ping',
+                'hook_id' => $payload['hook_id'] ?? null,
+                'user_agent_class' => $agentClass,
+                'signature_required' => false,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Webhook ping acknowledged.',
+            ], 200);
+        }
+
         $secret = (string) (
             config('services.digiflazz.webhook_secret')
             ?: env('DIGIFLAZZ_WEBHOOK_SECRET')
@@ -382,10 +412,6 @@ class TransactionController extends Controller
             ], 401);
         }
 
-        $event = strtolower(trim((string) $request->header('X-Digiflazz-Event', '')));
-        $userAgent = (string) $request->header('User-Agent', '');
-        $agentClass = $this->classifyDigiflazzWebhookUserAgent($userAgent);
-
         \Illuminate\Support\Facades\Log::info('Digiflazz webhook received', [
             'event' => $event !== '' ? $event : null,
             'user_agent' => $userAgent !== '' ? $userAgent : null,
@@ -393,25 +419,6 @@ class TransactionController extends Controller
             'signature_source' => $signatureSource,
             'signature_valid' => true,
         ]);
-
-        $payload = $request->json()->all();
-        if (! is_array($payload)) {
-            $payload = [];
-        }
-
-        // Ping Event (Webhooks.pdf): sed + hook_id + hook — not a transaction callback.
-        if ($this->isDigiflazzWebhookPing($payload)) {
-            \Illuminate\Support\Facades\Log::info('Digiflazz webhook ping', [
-                'event' => $event !== '' ? $event : 'ping',
-                'hook_id' => $payload['hook_id'] ?? null,
-                'user_agent_class' => $agentClass,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Webhook ping acknowledged.',
-            ], 200);
-        }
 
         $data = $payload['data'] ?? null;
         if (! $data) {
@@ -578,14 +585,27 @@ class TransactionController extends Controller
 
     /**
      * Digiflazz ping payload shape (Webhooks.pdf).
+     * Must NOT look like a transaction callback (`data` / ref_id) so unsigned ping
+     * cannot be used to bypass signature on create/update/resend.
      *
      * @param  array<string, mixed>  $payload
      */
     protected function isDigiflazzWebhookPing(array $payload): bool
     {
-        return array_key_exists('sed', $payload)
-            && array_key_exists('hook_id', $payload)
-            && array_key_exists('hook', $payload);
+        if (! array_key_exists('sed', $payload)
+            || ! array_key_exists('hook_id', $payload)
+            || ! array_key_exists('hook', $payload)
+            || ! is_array($payload['hook'])
+        ) {
+            return false;
+        }
+
+        // Transaction webhooks carry `data` (ref_id/status) — never treat as ping.
+        if (array_key_exists('data', $payload)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

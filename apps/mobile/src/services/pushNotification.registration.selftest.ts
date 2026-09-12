@@ -6,6 +6,7 @@ import {
   classifyTokenFetchFailure,
   isExpoPushToken,
   resolveEasProjectId,
+  resolvePushPresentation,
   sanitizePushErrorMessage,
 } from './pushNotification.helpers';
 
@@ -68,5 +69,27 @@ assert(
   resolveEasProjectId({ easConfig: null, expoConfig: { extra: {} } }) === undefined,
   'missing projectId returns undefined → sync fails clearly'
 );
+
+// F. Foreground presentation: transaction shows tray; announcement/promotion stay suppressed
+const tx = resolvePushPresentation({ category: 'transaction', type: 'transaction' });
+assert(tx.isTransaction === true, 'transaction category');
+assert(tx.shouldShowBanner === true && tx.shouldShowList === true, 'transaction must show tray');
+assert(tx.bannerDecision === 'show', 'transaction bannerDecision=show');
+assert(tx.shouldPlaySound === false, 'sound stays off (scope)');
+
+const ann = resolvePushPresentation({ category: 'announcement' });
+assert(ann.isTransaction === false, 'announcement not transaction');
+assert(ann.shouldShowBanner === false && ann.shouldShowList === false, 'announcement suppress');
+assert(ann.bannerDecision === 'suppress', 'announcement bannerDecision=suppress');
+
+const promo = resolvePushPresentation({ category: 'promotion', type: 'promotion' });
+assert(promo.shouldShowBanner === false, 'promotion suppress');
+
+const viaTypeOnly = resolvePushPresentation({ type: 'transaction' });
+assert(viaTypeOnly.shouldShowBanner === true, 'fallback data.type=transaction shows tray');
+
+const unknown = resolvePushPresentation({});
+assert(unknown.category === 'unknown', 'empty → unknown');
+assert(unknown.shouldShowBanner === false, 'unknown suppresses (legacy)');
 
 console.log('PASS pushNotification.registration.selftest');

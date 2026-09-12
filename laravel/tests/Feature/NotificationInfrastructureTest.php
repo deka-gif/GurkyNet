@@ -186,7 +186,7 @@ class NotificationInfrastructureTest extends TestCase
     public function test_push_failure_does_not_remove_inbox(): void
     {
         Http::fake([
-            'exp.host/*' => Http::response(['errors' => [['message' => 'fail']]], 500),
+            'exp.host/--/api/v2/push/send' => Http::response(['errors' => [['message' => 'fail']]], 500),
         ]);
 
         UserDevice::create([
@@ -362,11 +362,15 @@ class NotificationInfrastructureTest extends TestCase
     public function test_expo_push_succeeds_without_fcm_server_key(): void
     {
         Http::fake([
-            'exp.host/*' => Http::response(['data' => ['status' => 'ok', 'id' => 'ticket-1']], 200),
+            'exp.host/--/api/v2/push/send' => Http::response(['data' => ['status' => 'ok', 'id' => 'ticket-1']], 200),
+            'exp.host/--/api/v2/push/getReceipts' => Http::response([
+                'data' => ['ticket-1' => ['status' => 'ok']],
+            ], 200),
         ]);
 
         // Ensure FCM path is not required for Expo tokens.
         config(['services.fcm.server_key' => null]);
+        config(['services.expo.receipt_delay_seconds' => 5]);
 
         UserDevice::create([
             'user_id' => $this->user->id,
@@ -390,19 +394,113 @@ class NotificationInfrastructureTest extends TestCase
         $this->assertTrue($result['database']);
         $this->assertTrue($result['push']);
         Http::assertSent(function ($request) {
-            return str_contains($request->url(), 'exp.host')
+            return str_contains($request->url(), '/push/send')
                 && ($request['to'] ?? null) === 'ExponentPushToken[audit-ok]'
                 && ($request['channelId'] ?? null) === 'default'
                 && ($request['data']['type'] ?? null) === 'announcement';
         });
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/push/getReceipts')
+                && ($request['ids'][0] ?? null) === 'ticket-1';
+        });
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'fcm.googleapis.com'));
+
+        $notification = Notification::where('title', 'Expo Push OK')->first();
+        $this->assertNotNull($notification);
+        $tickets = $notification->payload['expo_push_tickets'] ?? null;
+        $this->assertIsArray($tickets);
+        $this->assertSame('ticket-1', $tickets[0]['ticket_id'] ?? null);
+        $this->assertSame('ok', $tickets[0]['receipt_status'] ?? null);
+    }
+
+    public function test_expo_push_ticket_error_is_failure_not_silent_success(): void
+    {
+        Http::fake([
+            'exp.host/--/api/v2/push/send' => Http::response([
+                'data' => [
+                    'status' => 'error',
+                    'message' => '\"ExponentPushToken[bad]\" is not a registered push notification recipient',
+                    'details' => ['error' => 'DeviceNotRegistered'],
+                ],
+            ], 200),
+        ]);
+
+        UserDevice::create([
+            'user_id' => $this->user->id,
+            'device_uuid' => 'device-expo-ticket-err',
+            'platform' => 'android',
+            'push_token' => 'ExponentPushToken[bad]',
+            'push_provider' => 'expo',
+            'is_active' => true,
+            'last_seen_at' => now(),
+        ]);
+
+        $svc = resolve(NotificationService::class);
+        $result = $svc->send(
+            $this->user,
+            'Pembelian Berhasil',
+            'Should fail ticket',
+            'transaction_success',
+            ['database', 'push'],
+            [
+                'category' => 'transaction',
+                'transaction_id' => 501,
+                'invoice_number' => 'GRK-TICKET-ERR',
+                'dedupe_key' => 'customer_final:501',
+            ]
+        );
+
+        $this->assertTrue($result['database']);
+        $this->assertFalse($result['push']);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/push/getReceipts'));
+    }
+
+    public function test_expo_push_missing_ticket_id_is_failure(): void
+    {
+        Http::fake([
+            'exp.host/--/api/v2/push/send' => Http::response([
+                'data' => ['status' => 'ok'],
+            ], 200),
+        ]);
+
+        UserDevice::create([
+            'user_id' => $this->user->id,
+            'device_uuid' => 'device-expo-no-id',
+            'platform' => 'android',
+            'push_token' => 'ExponentPushToken[noid]',
+            'push_provider' => 'expo',
+            'is_active' => true,
+            'last_seen_at' => now(),
+        ]);
+
+        $svc = resolve(NotificationService::class);
+        $result = $svc->send(
+            $this->user,
+            'Pembelian Berhasil',
+            'Missing ticket id',
+            'transaction_success',
+            ['database', 'push'],
+            [
+                'category' => 'transaction',
+                'transaction_id' => 502,
+                'invoice_number' => 'GRK-NO-TICKET',
+                'dedupe_key' => 'customer_final:502',
+            ]
+        );
+
+        $this->assertTrue($result['database']);
+        $this->assertFalse($result['push']);
     }
 
     public function test_duplicate_dedupe_skips_second_push(): void
     {
         Http::fake([
-            'exp.host/*' => Http::response(['data' => ['status' => 'ok', 'id' => 'ticket-dup']], 200),
+            'exp.host/--/api/v2/push/send' => Http::response(['data' => ['status' => 'ok', 'id' => 'ticket-dup']], 200),
+            'exp.host/--/api/v2/push/getReceipts' => Http::response([
+                'data' => ['ticket-dup' => ['status' => 'ok']],
+            ], 200),
         ]);
+        config(['services.expo.receipt_delay_seconds' => 5]);
 
         UserDevice::create([
             'user_id' => $this->user->id,
@@ -431,6 +529,7 @@ class NotificationInfrastructureTest extends TestCase
         $this->assertTrue($second['database']);
         $this->assertFalse($second['push']);
         $this->assertSame(1, Notification::where('dedupe_key', 'customer_final:99')->count());
-        Http::assertSentCount(1);
+        // One send + one receipt query (sync queue runs delayed job immediately).
+        Http::assertSentCount(2);
     }
 }

@@ -36,6 +36,13 @@ return [
         'default' => env('PAYMENT_GATEWAY', 'midtrans'),
     ],
 
+    // Expo Push API — ticket + receipt observability for mobile push.
+    'expo' => [
+        'push_url' => env('EXPO_PUSH_URL', 'https://exp.host/--/api/v2/push/send'),
+        'receipts_url' => env('EXPO_PUSH_RECEIPTS_URL', 'https://exp.host/--/api/v2/push/getReceipts'),
+        'receipt_delay_seconds' => (int) env('EXPO_PUSH_RECEIPT_DELAY_SECONDS', 20),
+    ],
+
     'digiflazz' => [
         'username' => env('DIGIFLAZZ_USERNAME'),
         'api_key' => env('DIGIFLAZZ_API_KEY'),

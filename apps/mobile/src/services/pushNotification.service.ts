@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
@@ -11,6 +11,7 @@ import {
   isExpoPushToken,
   logPushObservability,
   resolveEasProjectId,
+  resolvePushPresentation,
   sanitizePushErrorMessage,
   type PushSyncReason,
 } from './pushNotification.helpers';
@@ -18,6 +19,7 @@ import {
 export {
   isExpoPushToken,
   resolveEasProjectId,
+  resolvePushPresentation,
   sanitizePushErrorMessage,
   logPushObservability,
 } from './pushNotification.helpers';
@@ -33,17 +35,6 @@ export {
 /** Stable Android channel — one channel for all customer pushes (not per-transaction). */
 export const ANDROID_NOTIFICATION_CHANNEL_ID = 'default';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    // Foreground: refresh inbox; avoid OS banner that duplicates in-app state.
-    // Do not change until background tray delivery is proven.
-    shouldShowBanner: false,
-    shouldShowList: false,
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-  }),
-});
-
 type PushData = {
   type?: string;
   category?: string;
@@ -54,24 +45,6 @@ type PushData = {
   campaign_id?: string;
   deep_link?: string;
 };
-
-export type PushSyncResult = {
-  ok: boolean;
-  reason: PushSyncReason;
-  permission?: Notifications.PermissionStatus;
-  tokenPresent: boolean;
-  provider?: 'expo';
-};
-
-/** Prevent cold-start double navigation (lastResponse + response listener). */
-let lastHandledResponseKey: string | null = null;
-let androidChannelReady: Promise<void> | null = null;
-/** Bound concurrent sync attempts (startup + allow + auth). */
-let syncInFlight: Promise<PushSyncResult> | null = null;
-
-function platform(): 'android' | 'ios' {
-  return Platform.OS === 'ios' ? 'ios' : 'android';
-}
 
 function asPushData(raw: unknown): PushData {
   if (!raw || typeof raw !== 'object') return {};
@@ -91,6 +64,49 @@ function asPushData(raw: unknown): PushData {
     if (v != null && String(v) !== '') out[key] = String(v);
   }
   return out;
+}
+
+/**
+ * Transaction (`data.category === 'transaction'`) → show tray even in foreground.
+ * Announcement/promotion → legacy suppress (no banner/list/sound).
+ * // Audit: GRK-20260912-000008 — foreground suppress hid successful Expo pushes.
+ */
+Notifications.setNotificationHandler({
+  handleNotification: async (notification) => {
+    const data = asPushData(notification.request.content.data);
+    const presentation = resolvePushPresentation(data);
+    logPushObservability('HANDLE_NOTIFICATION', {
+      appState: AppState.currentState,
+      category: presentation.category,
+      bannerDecision: presentation.bannerDecision,
+      invoice_number: data.invoice_number ?? null,
+      transaction_id: data.transaction_id ?? null,
+    });
+    return {
+      shouldShowBanner: presentation.shouldShowBanner,
+      shouldShowList: presentation.shouldShowList,
+      shouldPlaySound: presentation.shouldPlaySound,
+      shouldSetBadge: presentation.shouldSetBadge,
+    };
+  },
+});
+
+export type PushSyncResult = {
+  ok: boolean;
+  reason: PushSyncReason;
+  permission?: Notifications.PermissionStatus;
+  tokenPresent: boolean;
+  provider?: 'expo';
+};
+
+/** Prevent cold-start double navigation (lastResponse + response listener). */
+let lastHandledResponseKey: string | null = null;
+let androidChannelReady: Promise<void> | null = null;
+/** Bound concurrent sync attempts (startup + allow + auth). */
+let syncInFlight: Promise<PushSyncResult> | null = null;
+
+function platform(): 'android' | 'ios' {
+  return Platform.OS === 'ios' ? 'ios' : 'android';
 }
 
 function responseKey(response: Notifications.NotificationResponse): string {

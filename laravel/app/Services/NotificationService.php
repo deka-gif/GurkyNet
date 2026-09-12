@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\VerifyExpoPushReceiptJob;
 use App\Models\Notification;
 use App\Models\UserNotification;
 use App\Models\User;
@@ -444,7 +445,16 @@ class NotificationService
                     || str_starts_with($token, 'ExpoPushToken');
 
                 $ok = $isExpo
-                    ? $this->deliverExpoPush($device->id, $token, $title, $message, $data)
+                    ? $this->deliverExpoPush(
+                        $device->id,
+                        $token,
+                        $title,
+                        $message,
+                        $data,
+                        $user->id,
+                        is_array($dbMeta) ? $dbMeta : null,
+                        is_array($payload) ? $payload : null,
+                    )
                     : $this->deliverFcmPush($device->id, $token, $title, $message, $data, (string) $device->platform);
 
                 if ($ok) {
@@ -462,27 +472,61 @@ class NotificationService
     }
 
     /**
+     * Expo Push API send — ticket must be status=ok with id, else failure.
+     * Receipt is verified asynchronously (VerifyExpoPushReceiptJob); never silent-success.
+     *
      * @param  array<string, mixed>  $data
+     * @param  array{ok?:bool,created?:bool,notification_id?:?int,user_notification_id?:?int}|null  $dbMeta
+     * @param  array<string, mixed>|null  $notifyPayload
      */
-    protected function deliverExpoPush(int $deviceId, string $token, string $title, string $message, array $data): bool
-    {
+    protected function deliverExpoPush(
+        int $deviceId,
+        string $token,
+        string $title,
+        string $message,
+        array $data,
+        int $userId,
+        ?array $dbMeta = null,
+        ?array $notifyPayload = null,
+    ): bool {
         // Expo Push API — no FCM_SERVER_KEY required.
         // channelId must match mobile Android channel + app.json defaultChannel.
-        $response = Http::acceptJson()
-            ->asJson()
-            ->post('https://exp.host/--/api/v2/push/send', [
-                'to' => $token,
-                'title' => $title,
-                'body' => $message,
-                'sound' => 'default',
-                'channelId' => 'default',
-                'priority' => 'high',
-                'data' => $data,
+        // Top-level title/body = display notification (not data-only).
+        $pushUrl = (string) config('services.expo.push_url', 'https://exp.host/--/api/v2/push/send');
+
+        try {
+            $response = Http::acceptJson()
+                ->asJson()
+                ->timeout(30)
+                ->post($pushUrl, [
+                    'to' => $token,
+                    'title' => $title,
+                    'body' => $message,
+                    'sound' => 'default',
+                    'channelId' => 'default',
+                    'priority' => 'high',
+                    'data' => $data,
+                ]);
+        } catch (\Throwable $e) {
+            Log::warning('Expo push HTTP exception', [
+                'device_id' => $deviceId,
+                'user_id' => $userId,
+                'notification_id' => $dbMeta['notification_id'] ?? null,
+                'transaction_id' => $notifyPayload['transaction_id'] ?? null,
+                'invoice_number' => $notifyPayload['invoice_number'] ?? null,
+                'error' => $e->getMessage(),
             ]);
+
+            return false;
+        }
 
         if (! $response->successful()) {
             Log::warning('Expo push delivery failed', [
                 'device_id' => $deviceId,
+                'user_id' => $userId,
+                'notification_id' => $dbMeta['notification_id'] ?? null,
+                'transaction_id' => $notifyPayload['transaction_id'] ?? null,
+                'invoice_number' => $notifyPayload['invoice_number'] ?? null,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
@@ -490,15 +534,35 @@ class NotificationService
             return false;
         }
 
-        $payload = $response->json();
-        $ticket = $payload['data'] ?? null;
+        $responsePayload = $response->json();
+        $ticket = is_array($responsePayload) ? ($responsePayload['data'] ?? null) : null;
         // Single-send returns object; batch returns array.
         if (is_array($ticket) && array_is_list($ticket)) {
             $ticket = $ticket[0] ?? null;
         }
-        if (is_array($ticket) && ($ticket['status'] ?? null) === 'error') {
+
+        if (! is_array($ticket)) {
+            Log::warning('Expo push ticket missing/malformed', [
+                'device_id' => $deviceId,
+                'user_id' => $userId,
+                'notification_id' => $dbMeta['notification_id'] ?? null,
+                'transaction_id' => $notifyPayload['transaction_id'] ?? null,
+                'invoice_number' => $notifyPayload['invoice_number'] ?? null,
+                'raw' => $responsePayload,
+            ]);
+
+            return false;
+        }
+
+        $ticketStatus = (string) ($ticket['status'] ?? '');
+        if ($ticketStatus === 'error') {
             Log::warning('Expo push ticket error', [
                 'device_id' => $deviceId,
+                'user_id' => $userId,
+                'notification_id' => $dbMeta['notification_id'] ?? null,
+                'transaction_id' => $notifyPayload['transaction_id'] ?? null,
+                'invoice_number' => $notifyPayload['invoice_number'] ?? null,
+                'ticket_status' => $ticketStatus,
                 'message' => $ticket['message'] ?? null,
                 'details' => $ticket['details'] ?? null,
             ]);
@@ -506,7 +570,78 @@ class NotificationService
             return false;
         }
 
+        $ticketId = isset($ticket['id']) && is_string($ticket['id']) ? $ticket['id'] : '';
+        if ($ticketStatus !== 'ok' || $ticketId === '') {
+            Log::warning('Expo push ticket not ok or missing id', [
+                'device_id' => $deviceId,
+                'user_id' => $userId,
+                'notification_id' => $dbMeta['notification_id'] ?? null,
+                'transaction_id' => $notifyPayload['transaction_id'] ?? null,
+                'invoice_number' => $notifyPayload['invoice_number'] ?? null,
+                'ticket_status' => $ticketStatus !== '' ? $ticketStatus : 'missing',
+                'ticket_id' => $ticketId !== '' ? $ticketId : null,
+                'raw_ticket' => $ticket,
+            ]);
+
+            return false;
+        }
+
+        $notificationId = isset($dbMeta['notification_id']) ? (int) $dbMeta['notification_id'] : null;
+        $context = [
+            'ticket_id' => $ticketId,
+            'device_id' => $deviceId,
+            'user_id' => $userId,
+            'notification_id' => $notificationId,
+            'transaction_id' => $notifyPayload['transaction_id'] ?? null,
+            'invoice_number' => $notifyPayload['invoice_number'] ?? null,
+        ];
+
+        Log::info('Expo push ticket accepted', [
+            'ticket_id' => $ticketId,
+            'ticket_status' => $ticketStatus,
+            'device_id' => $deviceId,
+            'user_id' => $userId,
+            'notification_id' => $notificationId,
+            'transaction_id' => $context['transaction_id'],
+            'invoice_number' => $context['invoice_number'],
+        ]);
+
+        $this->persistExpoTicketOnNotification($notificationId, [
+            'ticket_id' => $ticketId,
+            'ticket_status' => $ticketStatus,
+            'device_id' => $deviceId,
+            'sent_at' => now()->toIso8601String(),
+            'receipt_status' => null,
+        ]);
+
+        $delaySeconds = max(5, (int) config('services.expo.receipt_delay_seconds', 20));
+        VerifyExpoPushReceiptJob::dispatch($context)->delay(now()->addSeconds($delaySeconds));
+
         return true;
+    }
+
+    /**
+     * Persist Expo ticket id on the inbox notification payload (no new table).
+     *
+     * @param  array<string, mixed>  $entry
+     */
+    protected function persistExpoTicketOnNotification(?int $notificationId, array $entry): void
+    {
+        if ($notificationId === null || $notificationId <= 0) {
+            return;
+        }
+
+        $notification = Notification::query()->find($notificationId);
+        if (! $notification) {
+            return;
+        }
+
+        $payload = is_array($notification->payload) ? $notification->payload : [];
+        $tickets = is_array($payload['expo_push_tickets'] ?? null) ? $payload['expo_push_tickets'] : [];
+        $tickets[] = $entry;
+        $payload['expo_push_tickets'] = $tickets;
+        $notification->payload = $payload;
+        $notification->save();
     }
 
     /**
