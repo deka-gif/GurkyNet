@@ -36,12 +36,8 @@ import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
  *
  * 1) phone → MSISDN prefix detects operator (local; no catalog dump)
  * 2) operator → DATA_PAKET_CONFIGS confirms Digi brand / providerApiName (local)
- * 3) taxonomy chips (default + GET /catalog/{op}-data/taxonomy — fast, separate)
- * 4) on-demand GET /products?category=data&provider=… (server SearchProductAction TTL 300s)
- *
- * Provider is confirmed BEFORE any product list call. We do NOT block on
- * GET /products/providers?category=data — that endpoint is cold-expensive (~5s) and
- * brand is already known from the phone prefix map (same pattern as Pulsa P0).
+ * 3) taxonomy chips from GET /catalog/{op}-data/taxonomy (Digi `type`, inventory-backed)
+ * 4) on-demand GET /products?category=data&provider=…&data_type=… (exact Digi type)
  */
 
 type Props = {
@@ -100,8 +96,9 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
         if (res.success && Array.isArray(res.data?.chips) && res.data.chips.length > 0) {
           setChips(res.data.chips as DataChip[]);
         }
+        // API fail / empty → keep Semua skeleton only (never restore hardcode taxonomy).
       } catch {
-        // Keep default chips — same as Web fallback.
+        // Keep Semua skeleton.
       }
     })();
     return () => {
@@ -132,13 +129,12 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
     setLoading(true);
     setError(null);
     try {
-      // Server cache TTL 300s (SearchProductAction). Same filters as web catalog.
       const res = await catalogService.getProducts({
         category: 'data',
         provider,
         keyword: debouncedKeyword || undefined,
+        data_type: activeGroup || undefined,
         data_group: activeGroup || undefined,
-        telkomsel_group: activeGroup || undefined,
         sort: 'price_asc',
         page: 1,
         per_page: 40,

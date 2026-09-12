@@ -71,6 +71,8 @@ export interface ProductFilters {
   page?: number;
   data_group?: string;
   telkomsel_group?: string;
+  /** Exact Digi paket-data type (preferred filter). */
+  data_type?: string;
   sort?: string;
   /** Customer surface — backend filters capability.mobile_purchase when set to mobile. */
   surface?: 'mobile' | 'web';
@@ -101,6 +103,7 @@ export type DataTaxonomyChip = {
   key: string;
   label: string;
   group: string | null;
+  data_type?: string | null;
 };
 
 export type OperatorDataTaxonomy = {

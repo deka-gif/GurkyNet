@@ -95,7 +95,7 @@ class ProductRepository implements ProductRepositoryInterface
         }
 
         $merged = $this->mergeDuplicateCatalogProducts($all);
-        $merged = $this->applyTelkomselGroupFilter($merged, $filters);
+        $merged = $this->applyDataTypeFilter($merged, $filters);
         $merged = $this->sortCatalogProducts($merged, $filters);
         $merged = $this->filterCustomerPurchasableCatalog($merged, $filters);
 
@@ -580,35 +580,30 @@ class ProductRepository implements ProductRepositoryInterface
     }
 
     /**
-     * Filter operator data products by UX taxonomy group (keyword classification).
-     * Accepts telkomsel_group (legacy) or data_group.
+     * Filter Paket Data by exact Digi `type` (digiflazz_products.type).
+     * Accepts data_type (preferred), or data_group / telkomsel_group carrying the Digi type string.
+     * Keyword group matching is intentionally NOT used for customer catalog chips.
      *
      * @param  \Illuminate\Support\Collection<int, Product>  $products
      * @return \Illuminate\Support\Collection<int, Product>
      */
-    protected function applyTelkomselGroupFilter(\Illuminate\Support\Collection $products, array $filters): \Illuminate\Support\Collection
+    protected function applyDataTypeFilter(\Illuminate\Support\Collection $products, array $filters): \Illuminate\Support\Collection
     {
-        $group = Str::lower(trim((string) (
-            $filters['data_group']
+        $dataType = trim((string) (
+            $filters['data_type']
+            ?? $filters['data_group']
             ?? $filters['telkomsel_group']
             ?? ''
-        )));
-        if ($group === '' || $group === 'semua' || $group === 'all') {
+        ));
+        if ($dataType === '' || Str::lower($dataType) === 'semua' || Str::lower($dataType) === 'all') {
             return $products;
         }
 
-        /** @var \App\Services\Catalog\OperatorDataTaxonomyResolver $resolver */
-        $resolver = app(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
+        /** @var \App\Services\Catalog\DynamicOperatorDataTaxonomyService $dynamic */
+        $dynamic = app(\App\Services\Catalog\DynamicOperatorDataTaxonomyService::class);
 
         return $products
-            ->filter(function (Product $product) use ($resolver, $group) {
-                $taxonomy = $resolver->forBrand($product->provider?->name);
-                if (!$taxonomy) {
-                    return false;
-                }
-
-                return $taxonomy->productMatchesGroup($product, $group);
-            })
+            ->filter(fn (Product $product) => $dynamic->productMatchesDigiType($product, $dataType))
             ->values();
     }
 

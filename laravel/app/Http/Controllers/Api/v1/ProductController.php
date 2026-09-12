@@ -78,7 +78,7 @@ class ProductController extends Controller
     {
         $filters = $request->only([
             'category', 'provider', 'provider_id', 'status', 'keyword', 'per_page', 'page',
-            'telkomsel_group', 'data_group', 'sort', 'surface',
+            'telkomsel_group', 'data_group', 'data_type', 'sort', 'surface',
             // Voucher Internet Digi category split (Voucher vs Aktivasi Voucher).
             'vi_mode', 'digiflazz_category',
         ]);

@@ -20,7 +20,7 @@ function stub(code: string, name: string, operatorName = 'TV PASCABAYAR'): Produ
     status: 'tersedia',
     category: 'tv-pascabayar',
     operatorName,
-  } as Product;
+  } as unknown as Product;
 }
 
 assert.equal(stripTrailingTagihanNominal('K-Vision Pascabayar 50.000'), 'K-Vision Pascabayar');

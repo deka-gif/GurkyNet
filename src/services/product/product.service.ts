@@ -11,6 +11,8 @@ export interface ProductFilters {
   page?: number;
   telkomsel_group?: string;
   data_group?: string;
+  /** Exact Digi paket-data type (preferred filter). */
+  data_type?: string;
   sort?: string;
   /** Customer surface for capability filtering (web keeps postpaid; mobile hides web-only). */
   surface?: 'mobile' | 'web';
@@ -48,6 +50,7 @@ export const productService = {
       if (filters.status) params.append('status', filters.status);
       if (filters.keyword) params.append('keyword', filters.keyword);
       if (filters.data_group) params.append('data_group', filters.data_group);
+      if (filters.data_type) params.append('data_type', filters.data_type);
       if (filters.telkomsel_group) params.append('telkomsel_group', filters.telkomsel_group);
       if (filters.sort) params.append('sort', filters.sort);
       if (filters.vi_mode) params.append('vi_mode', filters.vi_mode);

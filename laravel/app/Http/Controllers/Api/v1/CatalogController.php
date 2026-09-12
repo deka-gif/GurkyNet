@@ -100,101 +100,49 @@ class CatalogController extends Controller
     }
 
     /**
-     * Telkomsel Paket Data UX chips / taxonomy (master template).
+     * Paket Data chips from Digi `type` (inventory-backed) — reusable for all operators.
      */
+    protected function operatorDataTaxonomyResponse(string $operatorKey, string $message): JsonResponse
+    {
+        $payload = app(\App\Services\Catalog\DynamicOperatorDataTaxonomyService::class)
+            ->taxonomyFor($operatorKey);
+
+        return $this->successResponse($message, $payload);
+    }
+
     public function telkomselDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\TelkomselDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data Telkomsel.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'Telkomsel',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('telkomsel', 'Taksonomi Paket Data Telkomsel.');
     }
 
-    /**
-     * XL Paket Data UX chips / taxonomy (same master template as Telkomsel).
-     */
     public function xlDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\XlDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data XL.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'XL',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('xl', 'Taksonomi Paket Data XL.');
     }
 
-    /**
-     * Indosat Paket Data UX chips / taxonomy (same master template as Telkomsel).
-     */
     public function indosatDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\IndosatDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data Indosat.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'Indosat',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('indosat', 'Taksonomi Paket Data Indosat.');
     }
 
-    /**
-     * Tri Paket Data UX chips / taxonomy (same master template as Telkomsel).
-     */
     public function triDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\TriDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data Tri.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'Tri',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('tri', 'Taksonomi Paket Data Tri.');
     }
 
-    /**
-     * Smartfren Paket Data UX chips / taxonomy (same master template as Telkomsel).
-     */
     public function smartfrenDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\SmartfrenDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data Smartfren.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'Smartfren',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('smartfren', 'Taksonomi Paket Data Smartfren.');
     }
 
-    /**
-     * AXIS Paket Data UX chips / taxonomy (same master template as Telkomsel).
-     */
     public function axisDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\AxisDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data AXIS.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'AXIS',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('axis', 'Taksonomi Paket Data AXIS.');
     }
 
-    /**
-     * by.U Paket Data UX chips / taxonomy (same master template as Telkomsel).
-     */
     public function byuDataTaxonomy(): JsonResponse
     {
-        $taxonomy = app(\App\Services\Catalog\ByuDataTaxonomyService::class);
-
-        return $this->successResponse('Taksonomi Paket Data by.U.', [
-            'chips' => $taxonomy->chips(),
-            'operator' => 'by.U',
-            'regionOptions' => $taxonomy->regionOptions(),
-        ]);
+        return $this->operatorDataTaxonomyResponse('byu', 'Taksonomi Paket Data by.U.');
     }
 
     /**

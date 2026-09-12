@@ -9,6 +9,7 @@ type Chip = {
   key: string;
   label: string;
   group: string | null;
+  data_type?: string | null;
 };
 
 export type OperatorPaketCatalogConfig = {
@@ -19,6 +20,7 @@ export type OperatorPaketCatalogConfig = {
   /** Taxonomy API key for operator Paket Data */
   taxonomyKey: 'telkomsel' | 'xl' | 'indosat' | 'tri' | 'smartfren' | 'axis' | 'byu';
   searchPlaceholder: string;
+  /** Loading skeleton only — Digi taxonomy API is source of truth. */
   defaultChips: Chip[];
 };
 
@@ -31,50 +33,15 @@ type Props = {
   config?: OperatorPaketCatalogConfig;
 };
 
-const TELKOMSEL_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'internet-sakti', label: 'Internet Sakti', group: 'internet-sakti' },
-  { key: 'combo-sakti', label: 'Combo Sakti', group: 'combo-sakti' },
-  { key: 'promo', label: 'Promo', group: 'promo' },
-  { key: 'sosial', label: 'Sosial', group: 'sosial' },
-  { key: 'games', label: 'Games', group: 'games' },
-  { key: 'streaming', label: 'Streaming', group: 'streaming' },
-  { key: 'harian', label: 'Harian', group: 'harian' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming' },
-  { key: 'bisnis', label: 'Bisnis', group: 'bisnis' },
-];
-
-const XL_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'paket-akrab', label: 'Paket Akrab', group: 'paket-akrab' },
-  { key: 'xtra-combo', label: 'Xtra Combo', group: 'xtra-combo' },
-  { key: 'combo-lite', label: 'Combo Lite', group: 'combo-lite' },
-  { key: 'murah', label: 'Murah', group: 'murah' },
-  { key: 'kuota-tambahan', label: 'Kuota Tambahan', group: 'kuota-tambahan' },
-  { key: 'gift', label: 'Gift', group: 'gift' },
-  { key: '5g', label: '5G', group: '5g' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming' },
-];
-
-const INDOSAT_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'freedom', label: 'Freedom', group: 'freedom' },
-  { key: 'freedom-apps', label: 'Freedom Apps', group: 'freedom-apps' },
-  { key: 'gift', label: 'Gift', group: 'gift' },
-  { key: '5g', label: '5G', group: '5g' },
-  { key: 'bisnis', label: 'Bisnis', group: 'bisnis' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming' },
-];
+/** Skeleton while taxonomy API loads — never a curated chip taxonomy. */
+const SEMUA_CHIP_SKELETON: Chip[] = [{ key: 'semua', label: 'Semua', group: null, data_type: null }];
 
 export const TELKOMSEL_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   operatorLabel: 'Telkomsel',
   providerApiName: 'Telkomsel',
   taxonomyKey: 'telkomsel',
   searchPlaceholder: 'Cari paket Telkomsel...',
-  defaultChips: TELKOMSEL_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
 
 export const XL_PAKET_CONFIG: OperatorPaketCatalogConfig = {
@@ -82,7 +49,7 @@ export const XL_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   providerApiName: 'XL',
   taxonomyKey: 'xl',
   searchPlaceholder: 'Cari paket XL...',
-  defaultChips: XL_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
 
 export const INDOSAT_PAKET_CONFIG: OperatorPaketCatalogConfig = {
@@ -90,80 +57,39 @@ export const INDOSAT_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   providerApiName: 'Indosat',
   taxonomyKey: 'indosat',
   searchPlaceholder: 'Cari paket Indosat...',
-  defaultChips: INDOSAT_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
-
-const TRI_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'alwayson', label: 'AlwaysOn', group: 'alwayson' },
-  { key: 'happy', label: 'Happy', group: 'happy' },
-  { key: 'paket-harian', label: 'Paket Harian', group: 'paket-harian' },
-  { key: 'unlimited', label: 'Unlimited', group: 'unlimited' },
-  { key: 'hiburan', label: 'Hiburan', group: 'hiburan' },
-  { key: 'khusus', label: 'Khusus', group: 'khusus' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming' },
-];
 
 export const TRI_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   operatorLabel: 'Tri',
   providerApiName: 'Tri',
   taxonomyKey: 'tri',
   searchPlaceholder: 'Cari paket Tri...',
-  defaultChips: TRI_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
-
-const SMARTFREN_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'unlimited', label: 'Unlimited', group: 'unlimited' },
-  { key: 'aplikasi', label: 'Aplikasi', group: 'aplikasi' },
-  { key: 'hiburan', label: 'Hiburan', group: 'hiburan' },
-  { key: 'router', label: 'Router', group: 'router' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming' },
-];
 
 export const SMARTFREN_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   operatorLabel: 'Smartfren',
   providerApiName: 'Smartfren',
   taxonomyKey: 'smartfren',
   searchPlaceholder: 'Cari paket Smartfren...',
-  defaultChips: SMARTFREN_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
-
-const AXIS_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'warnet', label: 'Warnet', group: 'warnet' },
-  { key: 'aplikasi', label: 'Aplikasi', group: 'aplikasi' },
-  { key: 'hiburan', label: 'Hiburan', group: 'hiburan' },
-  { key: 'produktivitas', label: 'Produktivitas', group: 'produktivitas' },
-  { key: 'umroh', label: 'Umroh', group: 'umroh' },
-];
 
 export const AXIS_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   operatorLabel: 'AXIS',
   providerApiName: 'AXIS',
   taxonomyKey: 'axis',
   searchPlaceholder: 'Cari paket AXIS...',
-  defaultChips: AXIS_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
-
-const BYU_DEFAULT_CHIPS: Chip[] = [
-  { key: 'semua', label: 'Semua', group: null },
-  { key: 'favorit', label: 'Favorit', group: 'favorit' },
-  { key: 'unlimited', label: 'Unlimited', group: 'unlimited' },
-  { key: 'topping', label: 'Topping', group: 'topping' },
-  { key: 'jajan', label: 'Jajan', group: 'jajan' },
-  { key: 'roaming', label: 'Roaming', group: 'roaming' },
-];
 
 export const BYU_PAKET_CONFIG: OperatorPaketCatalogConfig = {
   operatorLabel: 'by.U',
   providerApiName: 'by.U',
   taxonomyKey: 'byu',
   searchPlaceholder: 'Cari paket by.U...',
-  defaultChips: BYU_DEFAULT_CHIPS,
+  defaultChips: SEMUA_CHIP_SKELETON,
 };
 
 const SORT_OPTIONS = [
@@ -242,12 +168,14 @@ export function TelkomselPaketDataCatalog({
               key: c.key,
               label: c.label,
               group: c.group ?? null,
+              data_type: (c as Chip).data_type ?? c.group ?? null,
             }))
           );
         }
+        // API fail / empty → keep Semua skeleton (never restore hardcode taxonomy).
       })
       .catch(() => {
-        /* keep defaultChips */
+        /* keep Semua skeleton */
       });
   }, [config.taxonomyKey]);
 
@@ -258,7 +186,7 @@ export function TelkomselPaketDataCatalog({
 
   const activeGroup = useMemo(() => {
     const chip = chips.find((c) => c.key === activeChip);
-    return chip?.group || null;
+    return chip?.data_type || chip?.group || null;
   }, [chips, activeChip]);
 
   const loadPage = useCallback(
@@ -270,8 +198,8 @@ export function TelkomselPaketDataCatalog({
           category: 'data',
           provider: config.providerApiName,
           keyword: debouncedSearch || undefined,
+          data_type: activeGroup || undefined,
           data_group: activeGroup || undefined,
-          telkomsel_group: activeGroup || undefined,
           sort,
           page: pageNum,
           per_page: PER_PAGE,

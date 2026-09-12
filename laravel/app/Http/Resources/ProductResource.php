@@ -71,16 +71,25 @@ class ProductResource extends JsonResource
         $dataGroup = null;
         $badge = null;
         $requiresRegion = false;
+        $digiDataType = null;
 
         if ($this->needsOperatorTaxonomy()) {
             $resolver = resolve(\App\Services\Catalog\OperatorDataTaxonomyResolver::class);
             $metaSvc = $resolver->meta();
             $description = $metaSvc->descriptionFor($this->resource);
             $meta = $metaSvc->parseMeta((string) $this->name, $description);
+            $dynamic = resolve(\App\Services\Catalog\DynamicOperatorDataTaxonomyService::class);
+            $digiDataType = $dynamic->digiTypeForProduct($this->resource);
+            $dataGroup = [
+                'group' => $dynamic->chipKeyForType($digiDataType),
+                'label' => $dynamic->displayLabelForType($digiDataType),
+                'section' => null,
+            ];
             $operatorTaxonomy = $resolver->forBrand($this->provider?->name);
             if ($operatorTaxonomy) {
-                $dataGroup = $operatorTaxonomy->classify((string) $this->name, $description);
-                $badge = $operatorTaxonomy->badgeFor($this->resource, $dataGroup);
+                // Badges / region hints still use legacy keyword helpers (not chip source of truth).
+                $classified = $operatorTaxonomy->classify((string) $this->name, $description);
+                $badge = $operatorTaxonomy->badgeFor($this->resource, $classified);
                 $requiresRegion = $operatorTaxonomy->mentionsRegion((string) $this->name, $description);
             }
         }
@@ -94,11 +103,12 @@ class ProductResource extends JsonResource
             'quota' => $meta['quota'],
             'validity' => $meta['validity'],
             'badge' => $badge,
-            // Legacy keys kept for Telkomsel master template consumers.
+            // Legacy keys: now Digi type identity (not curated keyword groups).
             'telkomselGroup' => $dataGroup['group'] ?? null,
             'telkomselGroupLabel' => $dataGroup['label'] ?? null,
             'dataGroup' => $dataGroup['group'] ?? null,
             'dataGroupLabel' => $dataGroup['label'] ?? null,
+            'dataType' => $digiDataType,
             'requiresRegion' => $requiresRegion,
             'basePrice' => (float) $pricingDetails['base_price'],
             'providerCost' => (float) ($pricingDetails['provider_cost'] ?? $pricingDetails['base_price']),
