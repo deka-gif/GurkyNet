@@ -14,7 +14,7 @@ type Props = {
 };
 
 /**
- * GurkyPay / GurkyNet brand mark for auth screens.
+ * GurkyNet brand mark for auth screens.
  * Prefers Marketing platform logo; falls back to splash asset then wordmark.
  */
 export function AuthBrandHeader({ subtitle, compact = false }: Props) {
@@ -37,7 +37,7 @@ export function AuthBrandHeader({ subtitle, compact = false }: Props) {
           source={require('../../../assets/splash-icon.png')}
           style={{ width: fallbackSize, height: fallbackSize }}
           resizeMode="contain"
-          accessibilityLabel="GurkyPay"
+          accessibilityLabel="GurkyNet"
         />
       )}
       <Text
@@ -47,7 +47,7 @@ export function AuthBrandHeader({ subtitle, compact = false }: Props) {
           fontsLoaded && styles.brandModern,
         ]}
       >
-        {websiteName || 'GurkyPay'}
+        {websiteName || 'GurkyNet'}
       </Text>
       {subtitle ? (
         <Text style={[styles.sub, fontsLoaded && styles.subModern]}>{subtitle}</Text>

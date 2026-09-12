@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "GurkyPay",
+    "name": "GurkyNet",
     "owner": "dechaprios-team",
     "slug": "gurkypay",
     "scheme": "gurkypay",
@@ -13,10 +13,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.gurkynet.gurkypay",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "GurkyPay menggunakan Face ID untuk membuka aplikasi dengan aman di perangkat ini.",
-        "NSBluetoothAlwaysUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
-        "NSBluetoothPeripheralUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
-        "NSLocalNetworkUsageDescription": "GurkyPay membutuhkan akses jaringan lokal untuk mencetak ke printer thermal melalui Wi‑Fi/TCP jika tersedia."
+        "NSFaceIDUsageDescription": "GurkyNet menggunakan Face ID untuk membuka aplikasi dengan aman di perangkat ini.",
+        "NSBluetoothAlwaysUsageDescription": "GurkyNet membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
+        "NSBluetoothPeripheralUsageDescription": "GurkyNet membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
+        "NSLocalNetworkUsageDescription": "GurkyNet membutuhkan akses jaringan lokal untuk mencetak ke printer thermal melalui Wi‑Fi/TCP jika tersedia."
       }
     },
     "android": {
@@ -59,7 +59,7 @@
         {
           "backgroundColor": "#0F6A4D",
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160
+          "imageWidth": 200
         }
       ],
       "expo-sharing",
@@ -68,14 +68,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "GurkyPay membutuhkan akses galeri untuk mengganti foto profil.",
-          "cameraPermission": "GurkyPay membutuhkan akses kamera hanya saat kamu memilih ambil foto profil."
+          "photosPermission": "GurkyNet membutuhkan akses galeri untuk mengganti foto profil.",
+          "cameraPermission": "GurkyNet membutuhkan akses kamera hanya saat kamu memilih ambil foto profil."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "GurkyPay membutuhkan akses kamera untuk memindai barcode atau QR nomor seri voucher fisik.",
+          "cameraPermission": "GurkyNet membutuhkan akses kamera untuk memindai barcode atau QR nomor seri voucher fisik.",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
@@ -93,8 +93,8 @@
       [
         "react-native-thermal-printer-driver",
         {
-          "bluetoothAlwaysUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
-          "bluetoothPeripheralUsageDescription": "GurkyPay membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi."
+          "bluetoothAlwaysUsageDescription": "GurkyNet membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi.",
+          "bluetoothPeripheralUsageDescription": "GurkyNet membutuhkan Bluetooth untuk menghubungkan printer thermal dan mencetak struk transaksi."
         }
       ]
     ],

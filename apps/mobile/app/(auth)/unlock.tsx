@@ -176,7 +176,7 @@ export default function UnlockScreen() {
     setBioBusy(true);
     setError(null);
     try {
-      const ok = await promptBiometric('Masuk ke GurkyPay');
+      const ok = await promptBiometric('Masuk ke GurkyNet');
       // Batal / gagal biometrik: diam saja, user bisa lanjut pakai PIN.
       if (!ok) return;
       const sessionOk = await unlockWithExistingSession();
@@ -254,7 +254,7 @@ export default function UnlockScreen() {
                 source={require('../../assets/splash-icon.png')}
                 style={styles.logoFallback}
                 resizeMode="contain"
-                accessibilityLabel={websiteName || 'GurkyPay'}
+                accessibilityLabel={websiteName || 'GurkyNet'}
               />
             )}
           </View>

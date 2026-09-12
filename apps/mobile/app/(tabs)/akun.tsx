@@ -195,7 +195,7 @@ export default function AkunScreen() {
         />
       </Section>
 
-      <Section title="Tentang GurkyPay">
+      <Section title="Tentang GurkyNet">
         <MenuRow
           icon="document-text-outline"
           label="Syarat & Ketentuan"

@@ -49,7 +49,7 @@ export async function promptOsBiometric(reason: string): Promise<boolean> {
 }
 
 /** Toggle 1 — Unlock. Requires Unlock pref ON. */
-export async function promptBiometric(reason = 'Masuk ke GurkyPay'): Promise<boolean> {
+export async function promptBiometric(reason = 'Masuk ke GurkyNet'): Promise<boolean> {
   const enabled = await storageService.getBiometricUnlockEnabled();
   if (!enabled) return false;
   return promptOsBiometric(reason);

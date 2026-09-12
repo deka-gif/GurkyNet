@@ -1,4 +1,4 @@
-# GurkyPay Mobile
+# GurkyNet Mobile
 
 Counter-transaction client for GurkyNet. Talks to the **same** Laravel API the web
 dashboard uses (`../../laravel`) — no separate backend, no mock data. See

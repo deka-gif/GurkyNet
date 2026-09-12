@@ -38,9 +38,9 @@ export default function Index() {
           source={require('../assets/splash-icon.png')}
           style={styles.logo}
           resizeMode="contain"
-          accessibilityLabel="GurkyPay"
+          accessibilityLabel="GurkyNet"
         />
-        <Text style={styles.brand}>GurkyPay</Text>
+        <Text style={styles.brand}>GurkyNet</Text>
         <ActivityIndicator color={colors.white} style={{ marginTop: spacing.lg }} />
       </View>
     );
@@ -60,9 +60,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary[600],
+    backgroundColor: colors.primary[700],
   },
-  logo: { width: 96, height: 96 },
+  logo: { width: 112, height: 112 },
   brand: {
     marginTop: spacing.md,
     fontSize: typography.size.xl,

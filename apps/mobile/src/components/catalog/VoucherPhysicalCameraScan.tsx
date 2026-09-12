@@ -269,7 +269,7 @@ export function VoucherPhysicalCameraScan({
         <Text style={styles.permText}>
           {blocked
             ? 'Aktifkan kamera di Pengaturan perangkat untuk memindai barcode/QR, atau gunakan Input Manual.'
-            : 'GurkyPay membutuhkan kamera untuk memindai nomor seri voucher fisik.'}
+            : 'GurkyNet membutuhkan kamera untuk memindai nomor seri voucher fisik.'}
         </Text>
         <View style={styles.permActions}>
           {blocked ? (
