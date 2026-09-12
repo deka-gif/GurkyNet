@@ -37,16 +37,16 @@ export default function RootLayout() {
         } catch {
           // ignore
         }
-        await storageService.clear();
+        // Definitive session invalid — full identity clear (not soft clear).
+        await storageService.clearAuthIdentity();
         useNotificationStore.getState().reset();
-        const identity = await storageService.getRememberedIdentity();
         useAuthStore.setState({
           user: null,
           token: null,
-          rememberedIdentity: identity,
-          gate: identity ? 'unlock' : 'login',
+          rememberedIdentity: null,
+          gate: 'login',
         });
-        router.replace(identity ? '/(auth)/unlock' : '/(auth)/login');
+        router.replace('/(auth)/login');
       })();
     });
     return unsubscribe;

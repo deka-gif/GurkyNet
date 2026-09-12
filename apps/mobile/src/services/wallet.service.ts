@@ -201,7 +201,7 @@ export const walletService = {
     });
 
     if (result.status === 401) {
-      await storageService.clear();
+      await storageService.clearAuthIdentity();
       appEvents.emit(AUTH_UNAUTHORIZED_EVENT);
       throw { status: 401, message: 'Sesi telah berakhir.' };
     }

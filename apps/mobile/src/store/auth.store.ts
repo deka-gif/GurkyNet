@@ -10,7 +10,17 @@ import { storageService } from '../services/storage.service';
 import { profileService } from '../services/profile.service';
 import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
 import { User } from '../api/types';
-import { parseApiError } from '../api/client';
+import {
+  beginSuppressUnauthorizedEmit,
+  endSuppressUnauthorizedEmit,
+  parseApiError,
+} from '../api/client';
+import {
+  classifyMeValidationError,
+  resolveColdStartGate,
+  shouldClearIdentityOnPinLoginFailure,
+  isDefinitiveSessionInvalidError,
+} from '../utils/authSession.helpers';
 import { useNotificationStore } from './notification.store';
 function normalizeRole(role: string | undefined | null): string {
   if (!role) return 'User';
@@ -152,6 +162,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearError: () => set({ error: null, validationErrors: null }),
 
   hydrate: async () => {
+    // Stay gate=booting / hydrated=false until decision — avoids unlock flash.
     const [token, storedUser, identity, returning] = await Promise.all([
       storageService.getToken(),
       storageService.getUser(),
@@ -160,26 +171,84 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     ]);
     const user = storedUser ? normalizeUserPayload(storedUser) : null;
 
-    let gate: AuthGate = 'login';
-    if (returning || identity) {
-      gate = 'unlock';
-    } else if (token && user) {
-      // Session present but no returning flag — still require unlock if hasPin path preferred.
-      // Cold start with token: validate later on unlock / or go home if unlocked this session.
-      gate = 'unlock';
+    if (token) {
+      beginSuppressUnauthorizedEmit();
+      try {
+        const response = await authService.me();
+        if (response.success) {
+          const payload: any = response.data;
+          const normalizedUser = normalizeUserPayload(payload?.user ?? payload);
+          await storageService.setUser(normalizedUser as unknown as Record<string, unknown>);
+          const decided = resolveColdStartGate({
+            validation: { kind: 'valid' },
+            returning: true,
+            hasIdentity: !!(identity || returning),
+          });
+          set({
+            token,
+            user: normalizedUser,
+            rememberedIdentity: identity,
+            hydrated: true,
+            gate: decided.gate,
+          });
+          void syncDeviceRegistration();
+          return;
+        }
+        // Non-success body without throw — treat as invalid session.
+        await storageService.clearAuthIdentity();
+        set({
+          token: null,
+          user: null,
+          rememberedIdentity: null,
+          hydrated: true,
+          gate: 'login',
+        });
+        return;
+      } catch (err: unknown) {
+        const parsed = parseApiError(err);
+        const kind = classifyMeValidationError(parsed);
+        if (kind === 'invalid') {
+          await storageService.clearAuthIdentity();
+          set({
+            token: null,
+            user: null,
+            rememberedIdentity: null,
+            hydrated: true,
+            gate: 'login',
+          });
+          return;
+        }
+        // Network / timeout / 5xx — do not wipe identity; keep unlock if returning.
+        const decided = resolveColdStartGate({
+          validation: { kind: 'inconclusive' },
+          returning: !!(returning || identity),
+          hasIdentity: !!identity,
+        });
+        set({
+          token,
+          user,
+          rememberedIdentity: identity,
+          hydrated: true,
+          gate: decided.gate,
+        });
+        return;
+      } finally {
+        endSuppressUnauthorizedEmit();
+      }
     }
 
+    const decided = resolveColdStartGate({
+      validation: { kind: 'no_token' },
+      returning: !!(returning || identity),
+      hasIdentity: !!identity,
+    });
     set({
-      token,
-      user,
+      token: null,
+      user: null,
       rememberedIdentity: identity,
       hydrated: true,
-      gate,
+      gate: decided.gate,
     });
-
-    if (token) {
-      void syncDeviceRegistration();
-    }
   },
 
   applySession: async (token, userRaw, identity) => {
@@ -277,6 +346,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false;
     } catch (err: unknown) {
       const parsed = parseApiError(err);
+      if (shouldClearIdentityOnPinLoginFailure(parsed)) {
+        await storageService.clearAuthIdentity();
+        useNotificationStore.getState().reset();
+        set({
+          user: null,
+          token: null,
+          rememberedIdentity: null,
+          loading: false,
+          error: parsed.message || 'Sesi tidak valid. Silakan masuk kembali.',
+          validationErrors: null,
+          twoFactorChallenge: null,
+          gate: 'login',
+        });
+        return false;
+      }
       set({
         error: parsed.message || 'PIN tidak valid.',
         validationErrors: parsed.errors || null,
@@ -306,10 +390,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         void syncDeviceRegistration();
         return true;
       }
-      await storageService.clear();
-      set({ token: null, user: null, loading: false });
+      await storageService.clearAuthIdentity();
+      useNotificationStore.getState().reset();
+      set({
+        token: null,
+        user: null,
+        rememberedIdentity: null,
+        loading: false,
+        gate: 'login',
+      });
       return false;
-    } catch {
+    } catch (err: unknown) {
+      const parsed = parseApiError(err);
+      if (isDefinitiveSessionInvalidError(parsed)) {
+        await storageService.clearAuthIdentity();
+        useNotificationStore.getState().reset();
+        set({
+          token: null,
+          user: null,
+          rememberedIdentity: null,
+          loading: false,
+          gate: 'login',
+          error: null,
+        });
+        return false;
+      }
       set({ loading: false });
       return false;
     }

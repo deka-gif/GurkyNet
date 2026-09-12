@@ -131,6 +131,12 @@ export default function UnlockScreen() {
         router.replace('/(auth)/login');
         return;
       }
+      // Account/session definitively invalid → pinLogin cleared identity → Login.
+      const after = useAuthStore.getState();
+      if (after.gate === 'login' && !after.rememberedIdentity) {
+        router.replace('/(auth)/login');
+        return;
+      }
       setError('PIN SALAH');
       clearPinDigits();
     } finally {
@@ -174,6 +180,10 @@ export default function UnlockScreen() {
       const sessionOk = await unlockWithExistingSession();
       if (sessionOk) {
         await goHome();
+        return;
+      }
+      if (useAuthStore.getState().gate === 'login') {
+        router.replace('/(auth)/login');
         return;
       }
       setError('Sesi sudah tidak valid. Masukkan PIN atau gunakan akun lain.');

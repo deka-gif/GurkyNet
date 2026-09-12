@@ -9,8 +9,8 @@ import { colors, spacing, typography } from '../src/theme';
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 /**
- * Bootstrap — wait hydrate, then route WITHOUT flashing Login for returning users.
- * gate: unlock | login | authenticated
+ * Bootstrap — wait hydrate (+ server session check when token exists), then route.
+ * gate: unlock | login | authenticated — never route while gate === 'booting'.
  */
 export default function Index() {
   const hydrated = useAuthStore((s) => s.hydrated);
@@ -26,12 +26,12 @@ export default function Index() {
   }, [fetchSettings]);
 
   useEffect(() => {
-    if (hydrated && minSplashDone) {
+    if (hydrated && minSplashDone && gate !== 'booting') {
       void SplashScreen.hideAsync().catch(() => undefined);
     }
-  }, [hydrated, minSplashDone]);
+  }, [hydrated, minSplashDone, gate]);
 
-  if (!hydrated || !minSplashDone) {
+  if (!hydrated || !minSplashDone || gate === 'booting') {
     return (
       <View style={styles.splash}>
         <Image

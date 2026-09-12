@@ -10,7 +10,10 @@
     "**/pajakCustomerNo.test.ts",
     "**/tagihanCheckout.test.ts",
     "**/receiptSettings.scoping.test.ts",
-    "**/help.cekWilayah.test.ts"
+    "**/help.cekWilayah.test.ts",
+    "**/authSession.helpers.selftest.ts",
+    "**/ewalletBrand.selftest.ts",
+    "**/telkomselVoucherZone.selftest.ts"
   ]
 }
 

@@ -3,7 +3,19 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { storageService } from '../services/storage.service';
 import { appEvents, AUTH_UNAUTHORIZED_EVENT } from '../utils/eventEmitter';
+import { isCredentialAuthRequest } from '../utils/authSession.helpers';
 import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
+
+/** Suppress AUTH_UNAUTHORIZED_EVENT while cold-start hydrate validates /auth/me. */
+let unauthorizedEmitSuppressCount = 0;
+
+export function beginSuppressUnauthorizedEmit(): void {
+  unauthorizedEmitSuppressCount += 1;
+}
+
+export function endSuppressUnauthorizedEmit(): void {
+  unauthorizedEmitSuppressCount = Math.max(0, unauthorizedEmitSuppressCount - 1);
+}
 
 /**
  * Same base-URL / v1-prefix handling as src/services/api.ts on web. Set
@@ -38,9 +50,34 @@ export interface StandardApiError {
  * src/services/api.ts::parseApiError exactly, including the field-error extraction
  * order, so mobile and web show the identical message for the identical failure.
  */
+function sanitizeCustomerFacingErrorMessage(message: string): string {
+  const raw = String(message || '').trim();
+  if (!raw) return 'Terjadi kesalahan. Silakan coba kembali.';
+
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('idempotency key reused') ||
+    lower.includes('different request payload') ||
+    lower.includes('already in progress')
+  ) {
+    return 'Transaksi sebelumnya masih diproses, mohon tunggu sebentar sebelum mencoba lagi.';
+  }
+  if (lower.includes('idempotency key') && lower.includes('tidak valid')) {
+    return raw; // already Indonesian from API
+  }
+  if (/sqlstate|integrity constraint|stack trace|exception\b|errorexception/i.test(raw)) {
+    return 'Terjadi kesalahan. Silakan coba kembali.';
+  }
+  return raw;
+}
+
 export function parseApiError(error: any): StandardApiError {
   if (error && typeof error === 'object' && 'status' in error && 'message' in error && !axios.isAxiosError(error)) {
-    return error as StandardApiError;
+    const existing = error as StandardApiError;
+    return {
+      ...existing,
+      message: sanitizeCustomerFacingErrorMessage(String(existing.message || '')),
+    };
   }
 
   if (axios.isAxiosError(error)) {
@@ -79,7 +116,7 @@ export function parseApiError(error: any): StandardApiError {
 
     return {
       status,
-      message: errorMessage,
+      message: sanitizeCustomerFacingErrorMessage(String(errorMessage)),
       errors: data?.errors || {},
       code: data?.code ?? data?.provider_code,
       provider: data?.provider,
@@ -91,7 +128,9 @@ export function parseApiError(error: any): StandardApiError {
 
   return {
     status: 'unknown',
-    message: error instanceof Error ? error.message : 'Terjadi kesalahan tidak terduga.',
+    message: sanitizeCustomerFacingErrorMessage(
+      error instanceof Error ? error.message : 'Terjadi kesalahan tidak terduga.'
+    ),
   };
 }
 
@@ -130,10 +169,15 @@ apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const parsed = parseApiError(error);
+    const requestUrl = error.config?.url ?? error.config?.baseURL;
 
-    if (parsed.status === 401) {
-      await storageService.clear();
-      appEvents.emit(AUTH_UNAUTHORIZED_EVENT);
+    // Credential login/PIN/2FA 401 = wrong password etc. — do not wipe returning identity.
+    // Authenticated session 401 = definitive invalid → full identity clear → Login.
+    if (parsed.status === 401 && !isCredentialAuthRequest(requestUrl)) {
+      await storageService.clearAuthIdentity();
+      if (unauthorizedEmitSuppressCount === 0) {
+        appEvents.emit(AUTH_UNAUTHORIZED_EVENT);
+      }
     }
 
     return Promise.reject(parsed);
