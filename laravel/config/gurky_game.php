@@ -45,6 +45,16 @@ return [
             'formatter' => 'single',
             'primary_key' => 'user_id',
         ],
+        // Ragnarok M etc. — same single Digi customer_no field, Character ID label.
+        'CHARACTER_ID' => [
+            'schema_key' => 'CHARACTER_ID',
+            'delivery' => 'account',
+            'fields' => [
+                ['key' => 'user_id', 'label' => 'Character ID', 'required' => true],
+            ],
+            'formatter' => 'single',
+            'primary_key' => 'user_id',
+        ],
         'GARENA_ID' => [
             'schema_key' => 'GARENA_ID',
             'delivery' => 'account',
@@ -150,6 +160,84 @@ return [
                 'confidence' => 'verified',
             ],
         ],
+
+        // Stage 4 — Owner research (Codashop/UniPin/GGWP) cross-checked against Digi Games SKUs.
+        // Digi Voucher-category PIN SKUs under same brand names stay fail-closed via sku_overrides.
+        'pubg-mobile' => [
+            'schema_key' => 'USER_ID',
+            'label' => 'PUBG Mobile',
+            'aliases' => ['pubg mobile', 'pubg', 'pubgm', 'pubg mobile (id)', 'pubg mobile (global)'],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'Codashop/BuffBuff User ID; Digi Games brand SKUs are UC/pass packs (single customer_no); Digi category=Voucher UC pin SKUs excluded',
+                'confidence' => 'verified',
+            ],
+        ],
+        'arena-of-valor' => [
+            'schema_key' => 'USER_ID',
+            'label' => 'Arena of Valor',
+            'aliases' => ['arena of valor', 'aov'],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'Codashop Player ID; Digi Games SKUs are AOV N Vouchers (in-game currency name, not Digi Voucher category)',
+                'confidence' => 'verified',
+            ],
+        ],
+        'call-of-duty-mobile' => [
+            'schema_key' => 'USER_ID',
+            'label' => 'Call of Duty Mobile',
+            'aliases' => ['call of duty mobile', 'call of duty moblie', 'codm', 'cod mobile'],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'Codashop User ID; Digi Games SKUs are uniform CP packs',
+                'confidence' => 'verified',
+            ],
+        ],
+        'laplace-m' => [
+            'schema_key' => 'USER_ID',
+            'label' => 'Laplace M',
+            'aliases' => ['laplace m', 'laplace'],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'Codashop User ID; Digi Games SKUs are Spirals packs only',
+                'confidence' => 'verified',
+            ],
+        ],
+        'ragnarok-m-eternal-love' => [
+            'schema_key' => 'CHARACTER_ID',
+            'label' => 'Ragnarok M: Eternal Love',
+            'aliases' => [
+                'ragnarok m: eternal love',
+                'ragnarok m eternal love',
+                'ragnarok m eternal love (sea)',
+            ],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'Codashop Character ID / ID Char; Digi Games SKUs are Big Cat Coins packs only',
+                'confidence' => 'verified',
+            ],
+        ],
+        'speed-drifters' => [
+            'schema_key' => 'USER_ID',
+            'label' => 'Speed Drifters',
+            'aliases' => ['speed drifters', 'speed drifter'],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'UniPin ID Pengguna; Digi Games SKUs are Diamonds packs (desc=-)',
+                'confidence' => 'verified',
+            ],
+        ],
+        'point-blank' => [
+            'schema_key' => 'USER_ID_SERVER_ID',
+            'label' => 'POINT BLANK',
+            'aliases' => ['point blank'],
+            'provenance' => [
+                'source' => 'OWNER_RESEARCH_CROSSCHECK',
+                'evidence' => 'GGWP User ID + Server; Digi Games SKUs are PB Cash packs only (no server enum in Digi — free-text server_id); Digi Voucher-category PB pin SKUs excluded',
+                'confidence' => 'verified',
+            ],
+        ],
+        // Honor of Kings: NOT activated — Digi desc has no account format; Codashop flow may be code/redeem. Fail-closed.
     ],
 
     /**
@@ -224,6 +312,17 @@ return [
     'non_purchase_skus' => [
         'pre33639299', // Mobile Legends Cek Username
         'pre33817254', // PUBG MOBILE Cek Username
+        // Digi category=Voucher PIN products miscategorized into slug=game via brand_override —
+        // must NOT inherit Games direct-fill game_profiles.
+        'pre33926646', // Voucher 1.200 PB Cash
+        'pre33926647', // Voucher 2.400 PB Cash
+        'pre33926648', // Voucher 6.000 PB Cash
+        'pre33926649', // Voucher 12.000 PB Cash
+        'pre33926660', // Voucher PUBG Mobile 60 UC
+        'pre33926661', // Voucher PUBG Mobile 325 UC
+        'pre33926662', // Voucher PUBG Mobile 660 UC
+        'pre33926664', // Voucher PUBG Mobile 3850 UC
+        'pre33926665', // Voucher PUBG Mobile 8100 UC
     ],
 
     /** VIP provider_sku overrides (empty — VIP purchase schema OFF). */

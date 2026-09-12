@@ -113,7 +113,8 @@ class GameBrandVisibilityTest extends TestCase
     public function test_unknown_only_brand_hidden_while_ml_visible(): void
     {
         $digi = $this->digiOnline();
-        $this->seedGameSku('PUBG Mobile', 'pubg-no-evidence', $digi);
+        // Brand without game_profiles / Digi desc evidence must stay hidden.
+        $this->seedGameSku('Totally Unknown Galaxy Game', 'unk-galaxy-no-evidence', $digi);
         $this->seedGameSku('Mobile Legends', 'pre33639301', $digi);
 
         $response = $this->getJson('/api/v1/products/providers?category=game');
@@ -121,6 +122,31 @@ class GameBrandVisibilityTest extends TestCase
 
         $names = collect($response->json('data'))->pluck('name')->all();
         $this->assertContains('Mobile Legends', $names);
+        $this->assertNotContains('Totally Unknown Galaxy Game', $names);
+    }
+
+    public function test_stage4_pubg_profile_makes_brand_visible(): void
+    {
+        $digi = $this->digiOnline();
+        $this->seedGameSku('PUBG Mobile', 'pre33817255', $digi);
+
+        $response = $this->getJson('/api/v1/products/providers?category=game');
+        $response->assertOk();
+
+        $names = collect($response->json('data'))->pluck('name')->all();
+        $this->assertContains('PUBG Mobile', $names);
+    }
+
+    public function test_digi_voucher_pin_sku_under_pubg_stays_hidden_from_count(): void
+    {
+        $digi = $this->digiOnline();
+        // Only Digi Voucher-category PIN SKU — non_purchase; brand must stay hidden.
+        $this->seedGameSku('PUBG Mobile', 'pre33926660', $digi);
+
+        $response = $this->getJson('/api/v1/products/providers?category=game');
+        $response->assertOk();
+
+        $names = collect($response->json('data'))->pluck('name')->all();
         $this->assertNotContains('PUBG Mobile', $names);
     }
 

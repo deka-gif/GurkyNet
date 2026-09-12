@@ -260,4 +260,51 @@ class GameNicknameResolverTest extends TestCase
         $this->assertSame('unknown', $schema['delivery']);
         $this->assertSame([], $schema['fields']);
     }
+
+    public function test_stage4_owner_research_profiles(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+
+        $pubg = $resolver->resolveForProduct('PUBG Mobile', 'pre33817255');
+        $this->assertTrue($pubg['purchasable']);
+        $this->assertSame('game_profile', $pubg['source']);
+        $this->assertSame(['user_id'], collect($pubg['fields'])->pluck('key')->all());
+        $this->assertSame('User ID', $pubg['fields'][0]['label']);
+
+        $aov = $resolver->resolveForProduct('Arena of Valor', 'pre33817247');
+        $this->assertTrue($aov['purchasable']);
+        $this->assertSame(['user_id'], collect($aov['fields'])->pluck('key')->all());
+
+        $cod = $resolver->resolveForProduct('Call of Duty Mobile', 'pre33817263');
+        $this->assertTrue($cod['purchasable']);
+
+        $laplace = $resolver->resolveForProduct('Laplace M', 'pre33817266');
+        $this->assertTrue($laplace['purchasable']);
+
+        $rag = $resolver->resolveForProduct('Ragnarok M: Eternal Love', 'pre33817241');
+        $this->assertTrue($rag['purchasable']);
+        $this->assertSame('Character ID', $rag['fields'][0]['label']);
+
+        $speed = $resolver->resolveForProduct('Speed Drifters', 'pre33817270');
+        $this->assertTrue($speed['purchasable']);
+
+        $pb = $resolver->resolveForProduct('POINT BLANK', 'pre33817238');
+        $this->assertTrue($pb['purchasable']);
+        $this->assertSame(['user_id', 'server_id'], collect($pb['fields'])->pluck('key')->all());
+
+        // Honor of Kings stays fail-closed (no profile).
+        $hok = $resolver->resolveForProduct('Honor of Kings', 'pre33926561');
+        $this->assertFalse($hok['purchasable']);
+    }
+
+    public function test_digi_voucher_pin_skus_are_non_purchase(): void
+    {
+        $resolver = app(GameNicknameResolver::class);
+        $this->assertTrue($resolver->isNonPurchaseSku('pre33926646'));
+        $this->assertTrue($resolver->isNonPurchaseSku('pre33926660'));
+
+        $pbPin = $resolver->resolveForProduct('POINT BLANK', 'pre33926646');
+        $this->assertFalse($pbPin['purchasable']);
+        $this->assertSame('NON_PURCHASE', $pbPin['not_purchasable_reason']);
+    }
 }
