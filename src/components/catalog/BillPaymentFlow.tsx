@@ -15,6 +15,7 @@ import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { tagihanService, TagihanInquiryResult } from '../../services/tagihan/tagihan.service';
 import { isCatalogListed } from '../../utils/catalogAvailability';
+import { groupTvPascabayarVendors } from '../../utils/tagihanTvBrandGrouping';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 
 export type BillPaymentFlowProps = {
@@ -87,9 +88,14 @@ export function BillPaymentFlow({
 
   const vendors = useMemo(() => {
     if (!isCatalogReady) return [];
+    const listed = products.filter((p) => isCatalogListed(p));
+    // TV only: Digi brand is umbrella — group by product.name minus trailing nominal.
+    // Other tagihan categories keep operatorName grouping (PDAM city etc.).
+    if (category.trim().toLowerCase() === 'tv-pascabayar') {
+      return groupTvPascabayarVendors(listed);
+    }
     const map = new Map<string, { name: string; products: Product[] }>();
-    for (const p of products) {
-      if (!isCatalogListed(p)) continue;
+    for (const p of listed) {
       const name = (p.operatorName || p.name || 'Lainnya').trim();
       const key = name.toLowerCase();
       const prev = map.get(key);
@@ -100,7 +106,7 @@ export function BillPaymentFlow({
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [products, isCatalogReady]);
+  }, [products, isCatalogReady, category]);
 
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();

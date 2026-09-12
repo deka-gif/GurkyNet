@@ -53,7 +53,7 @@ type Props = {
   targetPlaceholder?: string;
 };
 
-type Step = 'products' | 'input' | 'review';
+type Step = 'products' | 'denoms' | 'input' | 'review';
 
 export function TagihanBillCatalogFlow({
   category,
@@ -69,11 +69,14 @@ export function TagihanBillCatalogFlow({
 
   const brandFirst = isTagihanBrandFirstCategory(category);
   const directInput = isTagihanBillDirectInputCategory(category);
+  /** Owner-scoped: strip Digi trailing bill amounts only for TV Pascabayar brand tiles. */
+  const tvStripNominal = category.trim().toLowerCase() === 'tv-pascabayar';
 
   const [step, setStep] = useState<Step>(directInput ? 'input' : 'products');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<TagihanBrandGroup | null>(null);
   const [selected, setSelected] = useState<Product | null>(null);
   const [customerNo, setCustomerNo] = useState('');
   /** Identifier used for the current local inquiry session (mirror Token PLN inquiredFor). */
@@ -87,7 +90,7 @@ export function TagihanBillCatalogFlow({
     clearTagihanContext();
   }, [clearTagihanContext]);
 
-  /** Brand-first only: identifier → brand list; review → identifier. Product-first unchanged. */
+  /** Brand-first: review → input → denoms (if any) → brand list. */
   const goBackBrandFirstStep = useCallback(() => {
     if (step === 'review') {
       invalidateInquirySession();
@@ -99,9 +102,21 @@ export function TagihanBillCatalogFlow({
       setSelected(null);
       invalidateInquirySession();
       setCustomerNo('');
+      if (selectedBrand?.hasDistinctProductNames) {
+        setStep('denoms');
+        return;
+      }
+      setSelectedBrand(null);
+      setStep('products');
+      return;
+    }
+    if (step === 'denoms') {
+      setError(null);
+      setSelectedBrand(null);
+      setSelected(null);
       setStep('products');
     }
-  }, [step, invalidateInquirySession]);
+  }, [step, selectedBrand, invalidateInquirySession]);
 
   useEffect(() => {
     if (!brandFirst) return;
@@ -165,9 +180,19 @@ export function TagihanBillCatalogFlow({
   );
 
   const brands = useMemo(
-    () => (brandFirst ? groupTagihanBrandsByProductName(listed) : []),
-    [brandFirst, listed]
+    () =>
+      brandFirst
+        ? groupTagihanBrandsByProductName(listed, {
+            stripTrailingNominal: tvStripNominal,
+          })
+        : [],
+    [brandFirst, listed, tvStripNominal]
   );
+
+  const denomProducts = useMemo(() => {
+    if (!selectedBrand) return [];
+    return sortProductsByPriceAsc(selectedBrand.products);
+  }, [selectedBrand]);
 
   /** Auto-bind catalog SKU for PLN bill direct-input; fail-closed on Digi duplicates. */
   useEffect(() => {
@@ -201,6 +226,16 @@ export function TagihanBillCatalogFlow({
 
   const onSelectBrand = (brand: TagihanBrandGroup) => {
     if (!purchaseEnabled) return;
+    setError(null);
+    // Multi Digi product_name under one brand tile (TV K-Vision nominals) → pick denom first.
+    if (brand.hasDistinctProductNames) {
+      setSelectedBrand(brand);
+      setSelected(null);
+      invalidateInquirySession();
+      setCustomerNo('');
+      setStep('denoms');
+      return;
+    }
     const resolved = resolveTagihanBrandSelection(brand);
     if (!resolved.ok) {
       setError(
@@ -210,6 +245,7 @@ export function TagihanBillCatalogFlow({
       );
       return;
     }
+    setSelectedBrand(brand);
     onSelectProduct(resolved.product);
   };
 
@@ -281,6 +317,29 @@ export function TagihanBillCatalogFlow({
 
   if (error && products.length === 0 && step === 'products') {
     return <ErrorState message={error} onRetry={() => void load()} />;
+  }
+
+  if (step === 'denoms' && selectedBrand) {
+    return (
+      <View style={styles.wrap}>
+        {purchaseBanner ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{purchaseBanner}</Text>
+          </View>
+        ) : null}
+        {!purchaseEnabled ? (
+          <PurchaseFlowNotice
+            icon="time-outline"
+            title="Pembelian Belum Aktif"
+            message={purchaseBanner || 'Fitur pembelian produk belum diaktifkan.'}
+          />
+        ) : null}
+        <Text style={styles.productName}>{selectedBrand.label}</Text>
+        <Text style={styles.label}>Pilih nominal / produk</Text>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <ProductCatalogGrid products={denomProducts} onPress={onSelectProduct} columns={2} />
+      </View>
+    );
   }
 
   if (step === 'input' && selected) {

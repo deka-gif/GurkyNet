@@ -18,6 +18,7 @@ import {
   preferTagihanCatalogProductAmong,
   resolvePlnBillDirectSku,
   resolveTagihanBrandSelection,
+  stripTrailingTagihanNominal,
 } from './tagihanBrandGrouping';
 import {
   resolveTagihanCheckoutSession,
@@ -88,7 +89,44 @@ if (preferredDup.ok) assert.equal(preferredDup.product.code, 'post999999');
 
 assert.equal(normalizeTagihanBrandKey('  BIG TV  '), 'big tv');
 
-// --- PDAM: different names stay separate (union) ---
+assert.equal(stripTrailingTagihanNominal('K-Vision Pascabayar 50.000'), 'K-Vision Pascabayar');
+assert.equal(stripTrailingTagihanNominal('K-Vision Pascabayar 500.000'), 'K-Vision Pascabayar');
+assert.equal(stripTrailingTagihanNominal('BIG TV'), 'BIG TV');
+assert.equal(stripTrailingTagihanNominal('Biznet Home TV Pascabayar'), 'Biznet Home TV Pascabayar');
+
+// --- TV prod: K-Vision nominals merge only when stripTrailingNominal (TV-scoped) ---
+const productionTvWithKvision = [
+  ...productionTv,
+  stubProduct('post737897', 'NEX MEDIA'),
+  stubProduct('post737898', 'TELKOMVISION'),
+  stubProduct('post737900', 'K-Vision Pascabayar 50.000'),
+  stubProduct('post737901', 'K-Vision Pascabayar 75.000'),
+  stubProduct('post737902', 'K-Vision Pascabayar 100.000'),
+  stubProduct('post737903', 'K-Vision Pascabayar 125.000'),
+  stubProduct('post737904', 'K-Vision Pascabayar 150.000'),
+  stubProduct('post737905', 'K-Vision Pascabayar 200.000'),
+  stubProduct('post737909', 'K-Vision Pascabayar 300.000'),
+  stubProduct('post737908', 'K-Vision Pascabayar 500.000'),
+];
+
+const tvWithoutStrip = groupTagihanBrandsByProductName(productionTvWithKvision);
+assert.equal(tvWithoutStrip.length, 16, 'without strip: each Digi product_name is its own tile');
+
+const tvWithStrip = groupTagihanBrandsByProductName(productionTvWithKvision, {
+  stripTrailingNominal: true,
+});
+assert.equal(tvWithStrip.length, 9, 'TV strip: 8 single brands + 1 K-Vision tile');
+const kvision = tvWithStrip.find((g) => g.key === 'k-vision pascabayar');
+assert.ok(kvision);
+assert.equal(kvision!.label, 'K-Vision Pascabayar');
+assert.equal(kvision!.products.length, 8);
+assert.equal(kvision!.hasDistinctProductNames, true);
+assert.equal(kvision!.hasMultipleOffers, true);
+const kvisionResolve = resolveTagihanBrandSelection(kvision!);
+assert.equal(kvisionResolve.ok, false);
+if (!kvisionResolve.ok) assert.equal(kvisionResolve.reason, 'needs_product_pick');
+
+// --- PDAM: different names stay separate (union) — strip OFF by default ---
 const productionPdam = [
   stubProduct('post733471', 'PDAM Aetra', { category: 'pdam', operatorName: 'PDAM' }),
   stubProduct('post733472', 'PDAM Batam', { category: 'pdam', operatorName: 'PDAM' }),
