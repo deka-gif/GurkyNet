@@ -45,6 +45,8 @@ class WithdrawWalletAction
             ]);
         }
 
+        app(\App\Services\AccountDeletion\AccountDeletionGate::class)->assertNotPendingDeletion($user);
+
         // FR-USR07 + FR-KYC-02..04 — eligibility wired for future activation (gate still OFF).
         app(\App\Services\Kyc\WithdrawEligibilityService::class)->assertEligible($user, $accountHolder);
 

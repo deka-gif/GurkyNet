@@ -20,6 +20,8 @@ class CreateManualDepositAction
         UploadedFile $proof,
         ?string $notes = null
     ): DepositRequest {
+        app(\App\Services\AccountDeletion\AccountDeletionGate::class)->assertNotPendingDeletion($user);
+
         if ($amount < 10000) {
             throw ValidationException::withMessages([
                 'amount' => ['Minimal deposit manual adalah Rp 10.000.'],

@@ -50,6 +50,9 @@ export interface User {
   emailVerified?: boolean;
   userType?: string;
   wallet?: Wallet | null;
+  /** pending_deletion | purged | null */
+  deletionStatus?: string | null;
+  deletionScheduledFor?: string | null;
 }
 
 export type TransactionStatus =

@@ -44,6 +44,8 @@ class TransferWalletAction
         // FR-KYC-01 / SRS Bagian 21 — Tier 1 before identity-gated transfers.
         app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1($sender);
 
+        app(\App\Services\AccountDeletion\AccountDeletionGate::class)->assertNotPendingDeletion($sender);
+
         // 1. PIN Validation (pre-checks before transaction to fail fast)
         if ($sender->transaction_pin === null) {
             throw ValidationException::withMessages([

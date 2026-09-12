@@ -50,6 +50,8 @@ class CreateVoucherPhysicalBatchAction
     ): VoucherPhysicalBatch {
         app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1RequiredForPurchase($user);
 
+        app(\App\Services\AccountDeletion\AccountDeletionGate::class)->assertNotPendingDeletion($user);
+
         $gate = app(\App\Support\Features\TransactionFeatureGate::class);
         if (! $gate->purchaseEnabled()) {
             throw ValidationException::withMessages([

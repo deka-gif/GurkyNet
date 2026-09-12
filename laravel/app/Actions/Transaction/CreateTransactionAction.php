@@ -79,6 +79,8 @@ class CreateTransactionAction
         // FR-KYC-01 / SRS Bagian 21 — Tier 1 before identity-gated transactions (configurable).
         app(\App\Services\Kyc\IdentityVerificationGate::class)->assertTier1RequiredForPurchase($user);
 
+        app(\App\Services\AccountDeletion\AccountDeletionGate::class)->assertNotPendingDeletion($user);
+
         // Sprint 8 / .cursorrules #8 — public purchase disabled until explicit go-live.
         $gate = app(\App\Support\Features\TransactionFeatureGate::class);
         if (! $gate->purchaseEnabled()) {

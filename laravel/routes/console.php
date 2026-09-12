@@ -122,3 +122,16 @@ Schedule::command('integration:retry-failed')
     ->everyFifteenMinutes()
     ->withoutOverlapping(10)
     ->runInBackground();
+
+// Account deletion — 30-day grace purge + H-7/H-1 reminders (Owner-approved)
+Schedule::command('accounts:process-pending-deletions')
+    ->dailyAt('02:30')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(120)
+    ->runInBackground();
+
+Schedule::command('accounts:remind-pending-deletions')
+    ->dailyAt('09:00')
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping(60)
+    ->runInBackground();

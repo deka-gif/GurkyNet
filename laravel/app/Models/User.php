@@ -51,6 +51,12 @@ class User extends Authenticatable
         'notify_transactions' => 'boolean',
         'notify_announcements' => 'boolean',
         'notify_promotions' => 'boolean',
+        'deletion_requested_at' => 'datetime',
+        'deletion_scheduled_for' => 'datetime',
+        'deletion_cancelled_at' => 'datetime',
+        'deletion_executed_at' => 'datetime',
+        'deletion_reminder_h7_sent_at' => 'datetime',
+        'deletion_reminder_h1_sent_at' => 'datetime',
     ];
 
     /**
@@ -59,6 +65,16 @@ class User extends Authenticatable
     public function hasPin(): bool
     {
         return $this->transaction_pin !== null && $this->transaction_pin !== '';
+    }
+
+    public function isPendingDeletion(): bool
+    {
+        return (string) $this->deletion_status === \App\Enums\AccountDeletionStatus::PENDING_DELETION->value;
+    }
+
+    public function accountDeletionEvents(): HasMany
+    {
+        return $this->hasMany(AccountDeletionEvent::class);
     }
 
     /**

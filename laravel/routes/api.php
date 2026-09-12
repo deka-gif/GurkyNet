@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\v1\AccountController;
 use App\Http\Controllers\Api\v1\AccountContentController;
 use App\Http\Controllers\Api\v1\ComplaintController;
 use App\Http\Controllers\Api\v1\AccountSecurityController;
+use App\Http\Controllers\Api\v1\AccountDeletionController;
 use App\Http\Controllers\Api\v1\ProfileController;
 use App\Http\Controllers\Api\v1\KycController;
 use App\Http\Controllers\Api\v1\Public\PublicWebsiteController;
@@ -201,6 +202,14 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
         Route::post('/pin/create', [AccountController::class, 'createPin']);
         Route::put('/pin/change', [AccountController::class, 'changePin']);
         Route::post('/pin/forgot', [AccountController::class, 'forgotPin']);
+
+        // Customer account deletion — 30-day grace (mobile fase 1)
+        Route::get('/account/deletion', [AccountDeletionController::class, 'show']);
+        Route::post('/account/deletion', [AccountDeletionController::class, 'store'])
+            ->middleware('throttle:5,1');
+        Route::post('/account/deletion/cancel', [AccountDeletionController::class, 'cancel'])
+            ->middleware('throttle:5,1');
+
         Route::prefix('account-security')->group(function () {
             Route::post('/password/change/request', [AccountSecurityController::class, 'requestPasswordChange']);
             Route::post('/password/change/confirm', [AccountSecurityController::class, 'confirmPasswordChange']);
@@ -262,17 +271,22 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/wallet/statements/{period}', [WalletController::class, 'statement']);
             Route::get('/wallet/statements/{period}/pdf', [WalletController::class, 'statementPdf']);
             Route::get('/wallet/payment-config', [WalletController::class, 'paymentConfig']);
-            Route::post('/wallet/topup', [WalletController::class, 'topUp']);
-            Route::post('/wallet/deposit-manual', [WalletController::class, 'depositManual']); // FR-FIN-03
+            Route::post('/wallet/topup', [WalletController::class, 'topUp'])
+                ->middleware('account.not_pending_deletion');
+            Route::post('/wallet/deposit-manual', [WalletController::class, 'depositManual']) // FR-FIN-03
+                ->middleware('account.not_pending_deletion');
             Route::get('/wallet/transfer/recipient/{walletNumber}', [WalletController::class, 'transferRecipient'])
                 ->where('walletNumber', '[A-Za-z0-9]+');
-            Route::post('/wallet/transfer', [WalletController::class, 'transfer']);
-            Route::post('/wallet/withdraw', [WalletController::class, 'withdraw']);
+            Route::post('/wallet/transfer', [WalletController::class, 'transfer'])
+                ->middleware('account.not_pending_deletion');
+            Route::post('/wallet/withdraw', [WalletController::class, 'withdraw'])
+                ->middleware('account.not_pending_deletion');
 
             // FR-DIFF-01 / FR-DIFF-08 — Poin & Loyalitas (own data only)
             Route::get('/loyalty', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'summary']);
             Route::get('/loyalty/history', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'history']);
-            Route::post('/loyalty/redeem', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'redeem']);
+            Route::post('/loyalty/redeem', [\App\Http\Controllers\Api\v1\LoyaltyController::class, 'redeem'])
+                ->middleware('account.not_pending_deletion');
 
             // SRS 31 / FR-REF-07 — Referral (own data only)
             Route::get('/referral', [\App\Http\Controllers\Api\v1\ReferralController::class, 'summary']);
@@ -330,7 +344,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::get('/transactions/{id_or_invoice}/receipt.pdf', [TransactionController::class, 'receiptPdf']);
         });
         Route::post('/transactions', [TransactionController::class, 'store'])
-            ->middleware('throttle:15,1');
+            ->middleware(['throttle:15,1', 'account.not_pending_deletion']);
 
         // Voucher Fisik bulk activation — batch header is a Transaction row (see above),
         // but scan/validate/retry state lives on its own resource.
@@ -342,7 +356,7 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
                 ->whereNumber('item');
         });
         Route::post('/voucher-internet/physical-batches', [VoucherPhysicalBatchController::class, 'store'])
-            ->middleware('throttle:10,1');
+            ->middleware(['throttle:10,1', 'account.not_pending_deletion']);
 
         // Postpaid bill inquiry (Digiflazz inq-pasca) — no wallet debit
         Route::middleware('throttle:20,1')->group(function () {

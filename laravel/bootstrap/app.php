@@ -25,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'renew.token' => \App\Http\Middleware\RenewTokenExpiration::class,
             'partner.api' => \App\Http\Middleware\AuthenticatePartnerApi::class,
             'partner.api.rate' => \App\Http\Middleware\PartnerApiRateLimit::class,
+            'account.not_pending_deletion' => \App\Http\Middleware\EnsureAccountNotPendingDeletion::class,
         ]);
         $middleware->api(prepend: [
             \App\Http\Middleware\TraceRequest::class,
@@ -35,5 +36,18 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(function (\Illuminate\Http\Request $request, \Throwable $e) {
             return $request->is('api/*') || $request->expectsJson();
+        });
+
+        $exceptions->render(function (\App\Exceptions\AccountDeletionException $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'code' => $e->errorCode,
+                    'data' => null,
+                    'meta' => null,
+                    'errors' => $e->errors ?: null,
+                ], $e->statusCode);
+            }
         });
     })->create();

@@ -277,4 +277,43 @@ export const profileService = {
     );
     return response.data;
   },
+
+  /** GET /account/deletion — pending deletion status. */
+  getAccountDeletion: async (): Promise<
+    ApiResponse<{
+      status: string | null;
+      scheduled_for: string | null;
+      requested_at: string | null;
+      reason_code: string | null;
+      can_cancel: boolean;
+    }>
+  > => {
+    const response = await apiClient.get('/account/deletion');
+    return response.data;
+  },
+
+  /** POST /account/deletion — schedule deletion (PIN ×2 must match client-side + server). */
+  requestAccountDeletion: async (payload: {
+    reason_code: string;
+    reason_text?: string;
+    pin: string;
+    pin_confirmation: string;
+  }): Promise<
+    ApiResponse<{
+      status: string;
+      scheduled_for: string;
+      requested_at: string;
+    }>
+  > => {
+    const response = await apiClient.post('/account/deletion', payload);
+    return response.data;
+  },
+
+  /** POST /account/deletion/cancel — PIN ×1. */
+  cancelAccountDeletion: async (payload: {
+    pin: string;
+  }): Promise<ApiResponse<{ status: null; cancelled_at: string }>> => {
+    const response = await apiClient.post('/account/deletion/cancel', payload);
+    return response.data;
+  },
 };

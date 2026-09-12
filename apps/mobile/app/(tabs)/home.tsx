@@ -25,6 +25,7 @@ import { formatIDR } from '../../src/utils/currency';
 import { formatDateTime } from '../../src/utils/date';
 import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 import { GurkyPayBalanceCard } from '../../src/components/wallet/GurkyPayBalanceCard';
+import { AccountDeletionBanner } from '../../src/components/AccountDeletionBanner';
 
 /**
  * Home "Layanan" shortcuts (exactly 8 = 4×2). Slug candidates map to existing
@@ -252,6 +253,8 @@ export default function HomeScreen() {
         <ErrorState message={error} onRetry={fetchWallet} />
       ) : (
         <>
+          <AccountDeletionBanner />
+
           {/* 2. WALLET CARD — left info + right action column */}
           <GurkyPayBalanceCard
             showAccent

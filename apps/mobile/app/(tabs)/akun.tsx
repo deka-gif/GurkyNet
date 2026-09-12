@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../../src/store/auth.store';
 import { ScreenContainer } from '../../src/components/ui';
+import { AccountDeletionBanner } from '../../src/components/AccountDeletionBanner';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 
@@ -100,6 +101,8 @@ export default function AkunScreen() {
     <ScreenContainer scroll style={styles.screen}>
       <Text style={styles.pageTitle}>Akun</Text>
 
+      <AccountDeletionBanner />
+
       <Section title="Profile">
         <Pressable
           onPress={() => router.push('/akun/profile')}
@@ -144,6 +147,12 @@ export default function AkunScreen() {
           label="Keamanan & PIN"
           subtitle="Kelola PIN transaksi dan keamanan akun"
           onPress={() => router.push('/akun/security')}
+        />
+        <MenuRow
+          icon="trash-outline"
+          label="Hapus Akun"
+          subtitle="Jadwalkan penghapusan akun (masa tunggu 30 hari)"
+          onPress={() => router.push('/akun/hapus-akun')}
           isLast
         />
       </Section>

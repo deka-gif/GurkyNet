@@ -36,6 +36,8 @@ class TopUpWalletAction
         ?string $topupMethod = 'qris',
         ?string $topupChannel = null
     ): Transaction {
+        app(\App\Services\AccountDeletion\AccountDeletionGate::class)->assertNotPendingDeletion($user);
+
         $gateway = $this->paymentGatewayFactory->default();
         $catalog = app(MidtransTopUpChannelCatalog::class);
         $resolved = $catalog->resolve((string) ($topupMethod ?: 'qris'), $topupChannel);

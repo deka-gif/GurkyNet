@@ -59,6 +59,8 @@ function normalizeUserPayload(raw: any): User {
     phoneVerified: !!(src.phoneVerified ?? src.phone_verified),
     emailVerified: !!(src.emailVerified ?? src.email_verified ?? src.email_verified_at),
     userType: src.userType ?? src.user_type,
+    deletionStatus: src.deletionStatus ?? src.deletion_status ?? null,
+    deletionScheduledFor: src.deletionScheduledFor ?? src.deletion_scheduled_for ?? null,
   };
 }
 
