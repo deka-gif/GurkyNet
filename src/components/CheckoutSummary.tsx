@@ -118,9 +118,9 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     void fetchNotifications({ force: true });
   };
 
-  /** Poll backend until VIP status sync settles SUCCESS/FAILED (aligned with 60s timeout ladder). */
+  /** Poll until SUCCESS/FAILED — align with backend timeout (180s) + Digi Pasca webhook lag. */
   const pollTransactionUntilSettled = async (idOrInvoice: string) => {
-    const maxAttempts = 12; // ~60s at 5s interval (server WatchPendingTransactionJob is SSOT)
+    const maxAttempts = 48; // ~4 min at 5s (GET only; never re-POSTs)
     const intervalMs = 5000;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {

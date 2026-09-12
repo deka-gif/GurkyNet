@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { catalogService, Product } from '../../services/catalog.service';
@@ -13,15 +13,19 @@ import {
 import { PhoneOperatorInput } from './PhoneOperatorInput';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
-import { detectOperatorFromPhone } from '../../utils/detectOperator';
+import { detectOperatorFromPhone, providerApiName } from '../../utils/detectOperator';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 
 /**
- * Mobile phone-operator catalog — mirrors Web PhoneOperatorCatalogFlow / PulsaPage:
- * phone → prefix operator detect → GET /products?category=… → client filter by brand
+ * Mobile phone-operator catalog — mirrors Web PhoneOperatorCatalogFlow / PulsaPage.
+ *
+ * Pulsa (category=pulsa): phone → prefix detect → GET /products?provider=… on-demand
+ * (no full-category dump). Other categories using this component keep legacy load until
+ * their own optimisations land.
+ *
  * → checkout (existing Mobile transaction pipeline).
  *
  * Used for pulsa, sms-telepon, masa-aktif, international.
@@ -49,17 +53,23 @@ export function PulsaCatalogFlow({
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadSeq = useRef(0);
 
   const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
   const phoneReady = skipOperatorFilter
     ? phoneNo.replace(/\D/g, '').length >= 8
     : isValidPhoneTarget(phoneNo);
 
-  const load = useCallback(async () => {
+  /** P0 — only Pulsa uses provider-scoped fetch; other categories unchanged. */
+  const pulsaOnDemand = category === 'pulsa' && !skipOperatorFilter;
+
+  const loadLegacyFullDump = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
     try {
       const res = await catalogService.getProducts({ category, per_page: 5000 });
+      if (seq !== loadSeq.current) return;
       if (res.success && Array.isArray(res.data)) {
         setAllProducts(res.data);
       } else {
@@ -67,16 +77,63 @@ export function PulsaCatalogFlow({
         setAllProducts([]);
       }
     } catch (err: any) {
+      if (seq !== loadSeq.current) return;
       setError(err?.message || 'Gagal memuat produk.');
       setAllProducts([]);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [category]);
 
+  const loadPulsaForOperator = useCallback(async (op: NonNullable<typeof operator>) => {
+    const seq = ++loadSeq.current;
+    const provider = providerApiName(op);
+    if (!provider) {
+      setAllProducts([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // Same contract as web PhoneOperatorCatalogFlow — server cache TTL 300s (SearchProductAction).
+      const res = await catalogService.getProducts({
+        category: 'pulsa',
+        provider,
+        per_page: 500,
+        sort: 'price_asc',
+      });
+      if (seq !== loadSeq.current) return;
+      if (res.success && Array.isArray(res.data)) {
+        setAllProducts(res.data);
+      } else {
+        setError(res.message || 'Gagal memuat produk.');
+        setAllProducts([]);
+      }
+    } catch (err: any) {
+      if (seq !== loadSeq.current) return;
+      setError(err?.message || 'Gagal memuat produk.');
+      setAllProducts([]);
+    } finally {
+      if (seq === loadSeq.current) setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!pulsaOnDemand) {
+      void loadLegacyFullDump();
+      return;
+    }
+    if (!operator) {
+      loadSeq.current += 1;
+      setAllProducts([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    void loadPulsaForOperator(operator);
+  }, [pulsaOnDemand, operator, loadLegacyFullDump, loadPulsaForOperator]);
 
   const listed = useMemo(() => {
     if (skipOperatorFilter) {
@@ -105,6 +162,13 @@ export function PulsaCatalogFlow({
   };
 
   const needOperator = !skipOperatorFilter && !operator;
+  const onRetry = () => {
+    if (pulsaOnDemand) {
+      if (operator) void loadPulsaForOperator(operator);
+      return;
+    }
+    void loadLegacyFullDump();
+  };
 
   return (
     <View style={styles.wrap}>
@@ -124,7 +188,7 @@ export function PulsaCatalogFlow({
       ) : loading && listed.length === 0 ? (
         <LoadingState label="Memuat produk..." />
       ) : error ? (
-        <ErrorState message={error} onRetry={load} />
+        <ErrorState message={error} onRetry={onRetry} />
       ) : listed.length === 0 ? (
         <EmptyState title="Belum Ada Produk" message="Produk untuk kategori ini belum tersedia." />
       ) : !purchaseEnabled ? (

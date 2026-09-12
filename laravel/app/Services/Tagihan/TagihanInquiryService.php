@@ -76,48 +76,14 @@ class TagihanInquiryService
             ]);
         }
 
-        $refId = 'GNQ' . Str::upper(Str::random(18));
-
-        try {
-            $response = $this->digiflazz->inquiryPasca($providerSku, $customerNo, $refId, $year, $amount);
-        } catch (\Throwable $e) {
-            throw ValidationException::withMessages([
-                'inquiry' => ['Gagal menghubungi provider. Silakan coba lagi.'],
-            ]);
-        }
-
-        $data = $response['data'] ?? null;
-        if (!is_array($data)) {
-            throw ValidationException::withMessages([
-                'inquiry' => ['Respons inquiry provider tidak valid.'],
-            ]);
-        }
-
-        $status = strtolower(trim((string) ($data['status'] ?? '')));
-        $rc = DigiflazzResponseCodeClassifier::normalize($data['rc'] ?? null);
-        $classifier = $rc !== null
-            ? DigiflazzResponseCodeClassifier::classify($rc)
-            : null;
-
-        Log::info('Digiflazz tagihan inquiry classified', array_merge(
-            [
-                'sku' => $providerSku,
-                'customer_no' => $customerNo,
-                'ref_id' => $refId,
-                'status' => $status !== '' ? $status : null,
-            ],
-            $classifier?->toLogContext() ?? [
-                'rc' => null,
-                'category' => null,
-            ]
-        ));
-
-        // Status remains the primary success/failure indicator.
-        if (! in_array($status, ['sukses', 'success'], true)) {
-            throw ValidationException::withMessages([
-                'inquiry' => [$this->resolveFailureUserMessage($data, $classifier)],
-            ]);
-        }
+        // Soft-retry once on provider/network flakes (inquiry never debits wallet).
+        // Evidence 2026-09-12 OVO: Digi RC 02 "Transaksi Gagal" then success on next attempt.
+        [$data, $refId] = $this->runInquiryPascaWithOptionalRetry(
+            $providerSku,
+            $customerNo,
+            $year,
+            $amount
+        );
 
         $normalized = $this->normalizeInquiryData(
             $data,
@@ -162,12 +128,143 @@ class TagihanInquiryService
     }
 
     /**
+     * Call Digiflazz inq-pasca; soft-retry once when RC is provider/network flake (not validation).
+     * Inquiry never debits — retry is safe and uses a fresh ref_id (no double-charge risk).
+     *
+     * @return array{0: array<string, mixed>, 1: string} [data, ref_id]
+     */
+    protected function runInquiryPascaWithOptionalRetry(
+        string $providerSku,
+        string $customerNo,
+        ?int $year,
+        ?int $amount
+    ): array {
+        $attempt = 0;
+        $maxAttempts = 2;
+        $lastData = null;
+        $lastClassifier = null;
+
+        while ($attempt < $maxAttempts) {
+            $attempt++;
+            $refId = 'GNQ'.Str::upper(Str::random(18));
+
+            try {
+                $response = $this->digiflazz->inquiryPasca($providerSku, $customerNo, $refId, $year, $amount);
+            } catch (\Throwable $e) {
+                if ($attempt < $maxAttempts) {
+                    Log::warning('Digiflazz tagihan inquiry transport error — soft-retry', [
+                        'sku' => $providerSku,
+                        'customer_no' => $customerNo,
+                        'attempt' => $attempt,
+                        'error' => $e->getMessage(),
+                    ]);
+                    usleep(400_000);
+
+                    continue;
+                }
+
+                throw ValidationException::withMessages([
+                    'inquiry' => ['Gagal menghubungi provider. Silakan coba lagi.'],
+                ]);
+            }
+
+            $data = $response['data'] ?? null;
+            if (! is_array($data)) {
+                throw ValidationException::withMessages([
+                    'inquiry' => ['Respons inquiry provider tidak valid.'],
+                ]);
+            }
+
+            $status = strtolower(trim((string) ($data['status'] ?? '')));
+            $rc = DigiflazzResponseCodeClassifier::normalize($data['rc'] ?? null);
+            $classifier = $rc !== null
+                ? DigiflazzResponseCodeClassifier::classify($rc)
+                : null;
+
+            Log::info('Digiflazz tagihan inquiry classified', array_merge(
+                [
+                    'sku' => $providerSku,
+                    'customer_no' => $customerNo,
+                    'ref_id' => $refId,
+                    'attempt' => $attempt,
+                    'status' => $status !== '' ? $status : null,
+                ],
+                $classifier?->toLogContext() ?? [
+                    'rc' => null,
+                    'category' => null,
+                ]
+            ));
+
+            if (in_array($status, ['sukses', 'success'], true)) {
+                return [$data, $refId];
+            }
+
+            $lastData = $data;
+            $lastClassifier = $classifier;
+
+            if ($attempt < $maxAttempts && $this->shouldSoftRetryInquiry($classifier)) {
+                Log::info('Digiflazz tagihan inquiry soft-retry scheduled', [
+                    'sku' => $providerSku,
+                    'customer_no' => $customerNo,
+                    'ref_id' => $refId,
+                    'rc' => $classifier?->code,
+                    'category' => $classifier?->category,
+                ]);
+                usleep(400_000);
+
+                continue;
+            }
+
+            break;
+        }
+
+        throw ValidationException::withMessages([
+            'inquiry' => [$this->resolveFailureUserMessage(
+                is_array($lastData) ? $lastData : [],
+                $lastClassifier
+            )],
+        ]);
+    }
+
+    /**
+     * Soft-retry only for provider/network flakes — never for invalid-number validation RCs.
+     */
+    protected function shouldSoftRetryInquiry(?DigiflazzResponseCodeClassifier $classifier): bool
+    {
+        if ($classifier === null) {
+            return true;
+        }
+
+        if ($classifier->isValidationFailure() || $classifier->isAuthenticationFailure()) {
+            return false;
+        }
+
+        if ($classifier->isProviderFailure() || $classifier->isRetryable() || $classifier->category === DigiflazzResponseCodeClassifier::NETWORK) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * User-facing failure message: prefer Digiflazz `message`, then RC Message column, then raw rc / default.
+     * Provider RC 02 "Transaksi Gagal" on inquiry is remapped to retry guidance (not a charged failure).
      *
      * @param  array<string, mixed>  $data
      */
     protected function resolveFailureUserMessage(array $data, ?DigiflazzResponseCodeClassifier $classifier): string
     {
+        // Inquiry is never a wallet debit — generic Digi "Transaksi Gagal" (RC 02) misleads as final.
+        if ($classifier !== null
+            && ! $classifier->isValidationFailure()
+            && ($classifier->isProviderFailure() || $classifier->isRetryable() || $classifier->category === DigiflazzResponseCodeClassifier::NETWORK)
+        ) {
+            $digiMsg = strtolower(trim((string) ($data['message'] ?? '')));
+            if ($digiMsg === '' || $digiMsg === 'transaksi gagal' || $classifier->code === '02') {
+                return 'Provider sementara gagal memverifikasi nomor. Silakan coba lagi.';
+            }
+        }
+
         $message = trim((string) ($data['message'] ?? ''));
         if ($message !== '') {
             return $message;
@@ -185,7 +282,7 @@ class TagihanInquiryService
             return 'Inquiry gagal (RC '.$rcRaw.').';
         }
 
-        return 'Inquiry gagal.';
+        return 'Inquiry gagal. Silakan coba lagi.';
     }
 
     /**
@@ -353,8 +450,12 @@ class TagihanInquiryService
             $periodeRaw = implode(', ', array_unique($periods));
         }
 
+        // E-Wallet (amount set): Digi may return Sukses/rc=00 with empty customer_name (GoPay
+        // production 2026-09-12). Empty name must NOT block — only Digi status/rc failure does.
+        // Regular tagihan still requires a name for bill identity verification.
         $customerName = trim((string) ($data['customer_name'] ?? ''));
-        if ($customerName === '') {
+        $isEwalletInquiry = $requestedAmount !== null && $requestedAmount > 0;
+        if ($customerName === '' && ! $isEwalletInquiry) {
             throw ValidationException::withMessages([
                 'inquiry' => ['Nama pelanggan tidak tersedia dari provider.'],
             ]);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,18 +13,15 @@ import { catalogService, Product } from '../../services/catalog.service';
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
 import {
-  Card,
   LoadingState,
   ErrorState,
   EmptyState,
-  BrandLogo,
   Button,
   PurchaseFlowNotice,
 } from '../ui';
 import { PhoneOperatorInput } from './PhoneOperatorInput';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
 import { colors, radius, spacing, typography } from '../../theme';
-import { formatIDR } from '../../utils/currency';
 import {
   DetectedOperator,
   detectOperatorFromPhone,
@@ -37,14 +33,22 @@ import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 
 /**
  * Mobile Paket Data pre-checkout — mirrors Web PaketDataPage + TelkomselPaketDataCatalog:
- * phone → operator → taxonomy chips → GET /products?category=data&provider=…
- * → optional region when requiresRegion → existing Mobile checkout pipeline.
- * Region is confirmation UI only (not sent on POST /transactions).
+ *
+ * 1) phone → MSISDN prefix detects operator (local; no catalog dump)
+ * 2) operator → DATA_PAKET_CONFIGS confirms Digi brand / providerApiName (local)
+ * 3) taxonomy chips (default + GET /catalog/{op}-data/taxonomy — fast, separate)
+ * 4) on-demand GET /products?category=data&provider=… (server SearchProductAction TTL 300s)
+ *
+ * Provider is confirmed BEFORE any product list call. We do NOT block on
+ * GET /products/providers?category=data — that endpoint is cold-expensive (~5s) and
+ * brand is already known from the phone prefix map (same pattern as Pulsa P0).
  */
 
 type Props = {
   purchaseBanner?: string | null;
 };
+
+const KEYWORD_DEBOUNCE_MS = 300;
 
 export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
   const router = useRouter();
@@ -55,6 +59,7 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
 
   const [phoneNo, setPhoneNo] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [chips, setChips] = useState<DataChip[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -62,20 +67,31 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [regionProduct, setRegionProduct] = useState<Product | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const loadSeq = useRef(0);
 
   const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
   const config = operator ? DATA_PAKET_CONFIGS[operator as DetectedOperator] : null;
   const regionOptions = useMemo(() => regionOptionsForOperator(operator), [operator]);
   const phoneReady = isValidPhoneTarget(phoneNo);
 
+  // Mirror web TelkomselPaketDataCatalog — debounce search before product refetch.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword.trim()), KEYWORD_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
   useEffect(() => {
     if (!config) {
       setChips([]);
       setActiveGroup(null);
+      setKeyword('');
+      setDebouncedKeyword('');
       return;
     }
     setChips(config.defaultChips);
     setActiveGroup(null);
+    setKeyword('');
+    setDebouncedKeyword('');
     let cancelled = false;
     void (async () => {
       try {
@@ -102,23 +118,32 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
   }, [regionOptions]);
 
   const loadProducts = useCallback(async () => {
+    // Gate: no product API until operator → provider brand is confirmed locally.
     if (!config) {
+      loadSeq.current += 1;
       setProducts([]);
+      setError(null);
+      setLoading(false);
       return;
     }
+
+    const seq = ++loadSeq.current;
+    const provider = config.providerApiName;
     setLoading(true);
     setError(null);
     try {
+      // Server cache TTL 300s (SearchProductAction). Same filters as web catalog.
       const res = await catalogService.getProducts({
         category: 'data',
-        provider: config.providerApiName,
-        keyword: keyword.trim() || undefined,
+        provider,
+        keyword: debouncedKeyword || undefined,
         data_group: activeGroup || undefined,
         telkomsel_group: activeGroup || undefined,
         sort: 'price_asc',
         page: 1,
         per_page: 40,
       });
+      if (seq !== loadSeq.current) return;
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data);
       } else {
@@ -126,12 +151,13 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
         setProducts([]);
       }
     } catch (err: any) {
+      if (seq !== loadSeq.current) return;
       setError(err?.message || 'Gagal memuat paket data.');
       setProducts([]);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [config, keyword, activeGroup]);
+  }, [config, debouncedKeyword, activeGroup]);
 
   useEffect(() => {
     void loadProducts();
@@ -196,7 +222,7 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
           <TextInput
             value={keyword}
             onChangeText={setKeyword}
-            onSubmitEditing={() => void loadProducts()}
+            onSubmitEditing={() => setDebouncedKeyword(keyword.trim())}
             placeholder={config.searchPlaceholder}
             placeholderTextColor={colors.gray[400]}
             returnKeyType="search"
@@ -312,8 +338,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
     lineHeight: 18,
   },
-  field: { gap: spacing.xs },
-  label: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[700] },
   input: {
     borderWidth: 1,
     borderColor: colors.gray[200],
@@ -336,14 +360,8 @@ const styles = StyleSheet.create({
   chipText: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.gray[700] },
   chipTextActive: { color: colors.white },
   list: { gap: spacing.sm },
-  card: { padding: spacing.md },
-  cardDisabled: { opacity: 0.55 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  info: { flex: 1, gap: 2 },
-  name: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.gray[900] },
   meta: { fontSize: typography.size.xs, color: colors.gray[500] },
   regionFlag: { fontSize: typography.size.xs, color: colors.primary[600], fontWeight: typography.weight.medium },
-  price: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',

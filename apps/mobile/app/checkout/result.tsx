@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useCheckoutStore } from '../../src/store/checkout.store';
@@ -10,17 +10,22 @@ import { ScreenContainer, Card, Button, LoadingState, StatusBadge } from '../../
 import { ReceiptSharePrintBar } from '../../src/components/receipt/ReceiptSharePrintBar';
 import { colors, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
+import { appEvents, TRANSACTION_STATUS_PUSH_EVENT } from '../../src/utils/eventEmitter';
+import {
+  pushHintMatchesCheckoutTransaction,
+  type TransactionPushHint,
+} from '../../src/utils/transactionStatusFromPush';
 
 /** Backend's own normalized vocabulary (TransactionResource) — never a client-invented
  * status. Matches the terminal set audited from TransactionStatusMapper. */
 const TERMINAL_STATUSES = ['success', 'failed', 'expired', 'cancelled', 'refunded'];
 
-// Mirrors web's CheckoutSummary.pollTransactionUntilSettled exactly: 5s interval,
-// 12 attempts (~60s), GET only, silently stops (leaves last-known state) if it never
-// settles within that window — the backend's own TransactionTimeoutService (up to
-// 180s) is the real reconciliation authority, this is just a UI convenience.
+// Align with backend TransactionTimeoutService (default 180s) + Digi Pasca-Hookshot lag.
+// Evidence 2026-09-12 ShopeePay: pay-pasca Pending → webhook SUCCESS ~148s later; old
+// 12×5s (~60s) poll stopped early and left the UI stuck on Tertunda despite settle+push.
 const POLL_INTERVAL_MS = 5000;
-const POLL_MAX_ATTEMPTS = 12;
+const POLL_MAX_ATTEMPTS = 48; // ~4 minutes, GET only — never re-POSTs purchase
+// Push (TRANSACTION_STATUS_PUSH_EVENT) remains the safety net after this window.
 
 function isTerminal(status: string): boolean {
   return TERMINAL_STATUSES.includes(status.toLowerCase());
@@ -64,6 +69,24 @@ export default function CheckoutResultScreen() {
     void loadReceipt(finalTransaction.id);
   };
 
+  /** GET once — used by poll, AppState resume, and push safety-net. Never POSTs. */
+  const refreshFromServer = async (txId: string): Promise<boolean> => {
+    try {
+      const res = await transactionService.getById(txId);
+      if (res.success && res.data) {
+        setTransaction(res.data);
+        setStatus(res.data.status);
+        if (isTerminal(res.data.status)) {
+          onSettled(res.data);
+          return true;
+        }
+      }
+    } catch {
+      // Transient network error — keep trying, never POST.
+    }
+    return false;
+  };
+
   useEffect(() => {
     if (!transaction) return;
 
@@ -75,34 +98,57 @@ export default function CheckoutResultScreen() {
     let cancelled = false;
     const txId = transaction.id;
 
+    const pollOnce = async () => {
+      if (cancelled) return false;
+      return refreshFromServer(txId);
+    };
+
     const run = async () => {
       for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         if (cancelled) return;
-
-        try {
-          // GET only — polling never re-submits a purchase.
-          const res = await transactionService.getById(txId);
-          if (res.success && res.data) {
-            setTransaction(res.data);
-            setStatus(res.data.status);
-            if (isTerminal(res.data.status)) {
-              onSettled(res.data);
-              return;
-            }
-          }
-        } catch {
-          // Transient network error during a poll tick — keep trying, never POST.
-        }
+        if (await pollOnce()) return;
       }
     };
+
+    // Resume from background: Digi Pasca-Hookshot may have settled while UI was paused.
+    const appSub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && !cancelled) {
+        void pollOnce();
+      }
+    });
 
     void run();
     return () => {
       cancelled = true;
+      appSub.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transaction?.id]);
+
+  // Push safety-net: lives for the whole screen lifetime — still works after poll ends.
+  // Reuses Expo transaction push infra (tray + payload); does not trust push body for status.
+  useEffect(() => {
+    if (!transaction?.id) return;
+    const txId = transaction.id;
+
+    return appEvents.on(TRANSACTION_STATUS_PUSH_EVENT, (raw) => {
+      const hint = (raw || {}) as TransactionPushHint;
+      const current = useCheckoutStore.getState().transaction;
+      if (!pushHintMatchesCheckoutTransaction(current, hint)) return;
+      void refreshFromServer(txId);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transaction?.id]);
+
+  // When push sync updates the store while this screen is mounted, settle receipt/wallet.
+  useEffect(() => {
+    if (!transaction) return;
+    if (isTerminal(transaction.status)) {
+      onSettled(transaction);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transaction?.id, transaction?.status]);
 
   const handleNewPurchase = () => {
     startNewPurchase();
@@ -189,7 +235,9 @@ export default function CheckoutResultScreen() {
         <View style={styles.processingWrap}>
           <LoadingState label="Menunggu konfirmasi dari sistem..." />
           <Text style={styles.processingHint}>
-            Transaksi sedang diproses. Halaman ini akan diperbarui otomatis.
+            Transaksi sedang diproses provider. Status bisa tetap Tertunda beberapa menit
+            meskipun saldo tujuan sudah masuk — halaman ini diperbarui otomatis (jangan ulang
+            transaksi).
           </Text>
         </View>
       )}

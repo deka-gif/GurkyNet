@@ -426,6 +426,120 @@ class EwalletTopUpFlowTest extends TestCase
         });
     }
 
+    public function test_ewallet_inquiry_allows_empty_customer_name_when_digi_sukses(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNQEMPTYNAME01',
+                    'customer_no' => '08123456789',
+                    'customer_name' => '',
+                    'buyer_sku_code' => 'post733506',
+                    'admin' => 1500,
+                    'message' => 'Transaksi Sukses',
+                    'status' => 'Sukses',
+                    'rc' => '00',
+                    'price' => 25000,
+                    'selling_price' => 26500,
+                    'desc' => ['lembar_tagihan' => 1],
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/ewallet/inquiry', [
+            'sku_code' => 'post733506',
+            'customer_no' => '08123456789',
+            'amount' => 25000,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.customer_name', '')
+            ->assertJsonPath('data.is_ewallet', true);
+    }
+
+    public function test_ewallet_inquiry_soft_retries_provider_rc02_then_succeeds(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::sequence()
+                ->push([
+                    'data' => [
+                        'ref_id' => 'GNQRETRYFAIL01',
+                        'customer_no' => '08123456789',
+                        'buyer_sku_code' => 'post733506',
+                        'message' => 'Transaksi Gagal',
+                        'status' => 'Gagal',
+                        'rc' => '02',
+                        'sn' => '',
+                    ],
+                ], 200)
+                ->push([
+                    'data' => [
+                        'ref_id' => 'GNQRETRYOK01',
+                        'customer_no' => '08123456789',
+                        'customer_name' => 'REZA ADITYA',
+                        'buyer_sku_code' => 'post733506',
+                        'admin' => 1500,
+                        'message' => 'Transaksi Sukses',
+                        'status' => 'Sukses',
+                        'rc' => '00',
+                        'price' => 25000,
+                        'selling_price' => 26500,
+                        'desc' => ['lembar_tagihan' => 1],
+                    ],
+                ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/ewallet/inquiry', [
+            'sku_code' => 'post733506',
+            'customer_no' => '08123456789',
+            'amount' => 25000,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.customer_name', 'REZA ADITYA');
+
+        Http::assertSentCount(2);
+    }
+
+    public function test_ewallet_inquiry_provider_rc02_twice_returns_retry_message(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GNQRETRYFAIL02',
+                    'customer_no' => '08123456789',
+                    'buyer_sku_code' => 'post733506',
+                    'message' => 'Transaksi Gagal',
+                    'status' => 'Gagal',
+                    'rc' => '02',
+                    'sn' => '',
+                ],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        $response = $this->postJson('/api/v1/ewallet/inquiry', [
+            'sku_code' => 'post733506',
+            'customer_no' => '08123456789',
+            'amount' => 25000,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath(
+                'message',
+                'Provider sementara gagal memverifikasi nomor. Silakan coba lagi.'
+            );
+
+        Http::assertSentCount(2);
+    }
+
     public function test_ewallet_pay_uses_same_inquiry_ref_and_debits_selling_price(): void
     {
         $inquiryRef = 'GNQEWALLETREF99';

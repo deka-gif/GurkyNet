@@ -470,9 +470,17 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
           </View>
 
           <View style={styles.confirmCard}>
-            {inquiry.customer_name ? (
-              <Row label="Nama Tujuan" value={inquiry.customer_name} emphasizeName />
-            ) : null}
+            {/* Show Digiflazz customer_name as-is (may already contain provider asterisks).
+                Empty name is allowed after successful Digi inquiry — never mask/hide for privacy. */}
+            <Row
+              label="Nama Tujuan"
+              value={
+                inquiry.customer_name?.trim()
+                  ? inquiry.customer_name.trim()
+                  : 'Nama pelanggan tidak tersedia dari provider, pastikan nomor tujuan sudah benar'
+              }
+              emphasizeName={Boolean(inquiry.customer_name?.trim())}
+            />
             <Row label="No. Tujuan" value={inquiry.customer_no} />
             <Row label="Nominal" value={formatIDR(nominal)} />
             <Row label="Biaya Transfer" value={formatIDR(transferFee)} />

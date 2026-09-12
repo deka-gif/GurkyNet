@@ -1,10 +1,14 @@
 /**
  * React Native has no `window` — this is the mobile equivalent of the web app's
  * `window.dispatchEvent(new Event('auth-unauthorized'))` / `window.addEventListener(...)`
- * pattern in src/services/api.ts and src/App.tsx, scoped to just the one event the app
- * actually needs to broadcast app-wide (a 401 anywhere means "session expired, log out").
+ * pattern in src/services/api.ts and src/App.tsx.
+ *
+ * Events:
+ * - auth-unauthorized — 401 anywhere means session expired
+ * - transaction-status-push — Expo transaction push arrived; screens GET fresh status
+ *   (independent of checkout result poll timer)
  */
-type Listener = () => void;
+type Listener = (payload?: unknown) => void;
 
 class AppEventEmitter {
   private listeners = new Map<string, Set<Listener>>();
@@ -17,10 +21,12 @@ class AppEventEmitter {
     return () => this.listeners.get(event)?.delete(listener);
   }
 
-  emit(event: string): void {
-    this.listeners.get(event)?.forEach((listener) => listener());
+  emit(event: string, payload?: unknown): void {
+    this.listeners.get(event)?.forEach((listener) => listener(payload));
   }
 }
 
 export const appEvents = new AppEventEmitter();
 export const AUTH_UNAUTHORIZED_EVENT = 'auth-unauthorized';
+/** Payload: TransactionPushHint — result screen refreshes via GET, not push body. */
+export const TRANSACTION_STATUS_PUSH_EVENT = 'transaction-status-push';

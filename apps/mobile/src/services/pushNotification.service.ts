@@ -5,7 +5,15 @@ import { router } from 'expo-router';
 import { apiClient } from '../api/client';
 import { storageService } from './storage.service';
 import { useNotificationStore } from '../store/notification.store';
+import { useCheckoutStore } from '../store/checkout.store';
 import { getDeviceModel, getOsVersion } from '../utils/deviceInfo';
+import { appEvents, TRANSACTION_STATUS_PUSH_EVENT } from '../utils/eventEmitter';
+import {
+  isTransactionPushHint,
+  pushHintMatchesCheckoutTransaction,
+  type TransactionPushHint,
+} from '../utils/transactionStatusFromPush';
+import { syncCheckoutTransactionFromPushHint } from './transactionStatusFromPush.sync';
 import {
   classifyTokenFetchFailure,
   isExpoPushToken,
@@ -64,6 +72,41 @@ function asPushData(raw: unknown): PushData {
     if (v != null && String(v) !== '') out[key] = String(v);
   }
   return out;
+}
+
+function pushHintFromData(data: PushData): TransactionPushHint {
+  return {
+    transactionId: data.transaction_id ?? null,
+    invoiceNumber: data.invoice_number ?? null,
+  };
+}
+
+/**
+ * Transaction push → broadcast + GET refresh checkout (if matching).
+ * Independent of Status Transaksi poll timer (Pulsa / Data / E-Wallet / …).
+ */
+async function propagateTransactionStatusPush(raw: unknown): Promise<TransactionPushHint | null> {
+  const data = asPushData(raw);
+  if (
+    !isTransactionPushHint({
+      category: data.category,
+      type: data.type,
+      transactionId: data.transaction_id,
+      invoiceNumber: data.invoice_number,
+    })
+  ) {
+    return null;
+  }
+
+  const hint = pushHintFromData(data);
+  appEvents.emit(TRANSACTION_STATUS_PUSH_EVENT, hint);
+  const syncResult = await syncCheckoutTransactionFromPushHint(hint);
+  logPushObservability('TRANSACTION_STATUS_SYNC', {
+    transaction_id: hint.transactionId ?? null,
+    invoice_number: hint.invoiceNumber ?? null,
+    sync_result: syncResult,
+  });
+  return hint;
 }
 
 /**
@@ -388,11 +431,25 @@ export const pushNotificationService = {
       }
     }
 
+    // Always refresh authoritative status from API when push is transaction-related
+    // (before navigate) — works even if Status Transaksi poll already timed out.
+    const hint = await propagateTransactionStatusPush(raw);
+
     const deepLink = data.deep_link?.trim();
     const category = (data.category || data.type || '').toLowerCase();
     const fallback = opts?.fallbackToInbox !== false;
 
     try {
+      // If this push matches the in-flight checkout tx, keep user on Status Transaksi
+      // (GET already refreshed store) instead of only jumping to Riwayat.
+      if (hint) {
+        const checkoutTx = useCheckoutStore.getState().transaction;
+        if (pushHintMatchesCheckoutTransaction(checkoutTx, hint)) {
+          router.replace('/checkout/result');
+          return true;
+        }
+      }
+
       if (category === 'transaction' || data.transaction_id || data.invoice_number) {
         const id = data.transaction_id || data.invoice_number;
         if (id) {
@@ -444,8 +501,10 @@ export const pushNotificationService = {
   attachListeners: (): (() => void) => {
     void ensureAndroidChannel();
 
-    const receivedSub = Notifications.addNotificationReceivedListener(() => {
+    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
       void useNotificationStore.getState().fetchNotifications({ force: true });
+      // Foreground tray / silent receive — refresh Status Transaksi without requiring a tap.
+      void propagateTransactionStatusPush(notification.request.content.data);
     });
 
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {

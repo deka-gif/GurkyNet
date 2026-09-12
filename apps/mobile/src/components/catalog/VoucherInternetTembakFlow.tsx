@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ import {
 import { PhoneOperatorInput } from './PhoneOperatorInput';
 import { VoucherInternetProductList } from './VoucherInternetProductList';
 import { colors, radius, spacing, typography } from '../../theme';
-import { detectOperatorFromPhone } from '../../utils/detectOperator';
+import { detectOperatorFromPhone, providerApiName } from '../../utils/detectOperator';
 import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
@@ -32,8 +32,15 @@ import {
 
 /**
  * Voucher Internet — Tembak Langsung.
- * Flow: phone → (zone if Telkomsel gate) → products → existing checkout confirm/PIN.
- * Catalog: GET /products?category=voucher-internet. Purchase: POST /transactions via checkout.
+ *
+ * Flow: phone → detect operator → (zone if Telkomsel gate) → products → checkout/PIN.
+ *
+ * Catalog (aligned with Elektronik/Fisik providers-first, adapted for phone-first UX):
+ *  1) GET /products/providers?category=voucher-internet (brand ids; TTL 300s)
+ *  2) After MSISDN operator detect → GET /products?provider_id=… (on-demand; no full 5000 dump)
+ *
+ * Preserves: operator↔product mismatch gate, Telkomsel zone gate, Nasional first,
+ * Wilayah Lainnya (orphan Digi zones).
  */
 
 type Props = {
@@ -58,42 +65,108 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
   const fetchWallet = useWalletStore((s) => s.fetchWallet);
 
   const [step, setStep] = useState<Step>('phone');
+  const [brandProviders, setBrandProviders] = useState<{ name: string; providerId: number }[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [phoneNo, setPhoneNo] = useState('');
   const [nationalSelected, setNationalSelected] = useState(false);
   const [zoneLabel, setZoneLabel] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [loadedForOperator, setLoadedForOperator] = useState<string | null>(null);
+  const loadSeq = useRef(0);
 
   const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
   const phoneReady = isValidPhoneTarget(phoneNo) && !!operator;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loadProviders = useCallback(async () => {
+    setProvidersLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getProducts({ category: 'voucher-internet', per_page: 5000 });
-      if (res.success && Array.isArray(res.data)) {
-        setAllProducts(res.data.filter((p) => isCatalogListed(p)));
+      const res = await catalogService.getCategoryProviders('voucher-internet');
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        setBrandProviders(
+          res.data
+            .filter((p) => p?.providerId && p?.name)
+            .map((p) => ({ name: String(p.name).trim(), providerId: p.providerId }))
+        );
       } else {
-        setAllProducts([]);
-        setError(res.message || 'Gagal memuat katalog voucher internet.');
+        setBrandProviders([]);
       }
-    } catch (err: any) {
-      setAllProducts([]);
-      setError(err?.message || 'Gagal memuat katalog voucher internet.');
+    } catch {
+      setBrandProviders([]);
     } finally {
-      setLoading(false);
+      setProvidersLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-    void fetchWallet();
-  }, [load, fetchWallet]);
+  const loadOperatorProducts = useCallback(
+    async (op: NonNullable<typeof operator>): Promise<Product[]> => {
+      const seq = ++loadSeq.current;
+      setProductsLoading(true);
+      setError(null);
+      try {
+        const match = brandProviders.find((b) => operatorsMatch(b.name, op));
+        const providerName = providerApiName(op);
+        const res = match
+          ? await catalogService.getProducts({
+              category: 'voucher-internet',
+              provider_id: match.providerId,
+              per_page: 500,
+            })
+          : await catalogService.getProducts({
+              category: 'voucher-internet',
+              provider: providerName,
+              per_page: 500,
+            });
+        if (seq !== loadSeq.current) return [];
+        if (res.success && Array.isArray(res.data)) {
+          const listed = res.data.filter((p) => isCatalogListed(p));
+          const forOp = listed.filter((p) =>
+            operatorsMatch(p.operatorName || p.providerDetails?.name, op)
+          );
+          setAllProducts(forOp);
+          setLoadedForOperator(op);
+          return forOp;
+        }
+        setAllProducts([]);
+        setLoadedForOperator(op);
+        setError(res.message || 'Gagal memuat katalog voucher internet.');
+        return [];
+      } catch (err: any) {
+        if (seq !== loadSeq.current) return [];
+        setAllProducts([]);
+        setLoadedForOperator(op);
+        setError(err?.message || 'Gagal memuat katalog voucher internet.');
+        return [];
+      } finally {
+        if (seq === loadSeq.current) setProductsLoading(false);
+      }
+    },
+    [brandProviders]
+  );
 
-  // Prefetch catalog in background — phone step must not wait on full VI list.
+  useEffect(() => {
+    void loadProviders();
+    void fetchWallet();
+  }, [loadProviders, fetchWallet]);
+
+  // Prefetch operator-scoped catalog after detect — phone step must not wait on full VI dump.
+  useEffect(() => {
+    if (!operator) {
+      loadSeq.current += 1;
+      setAllProducts([]);
+      setLoadedForOperator(null);
+      setProductsLoading(false);
+      setError(null);
+      return;
+    }
+    // Wait for providers map when available (warm TTL); still fetch via provider= if empty.
+    if (providersLoading) return;
+    if (loadedForOperator === operator) return;
+    void loadOperatorProducts(operator);
+  }, [operator, providersLoading, brandProviders, loadOperatorProducts, loadedForOperator]);
 
   const operatorProducts = useMemo(() => {
     if (!operator) return [];
@@ -126,8 +199,7 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     return [];
   }, [operator, zoneGate, operatorProducts, nationalSelected, nationalProducts, zoneLabel]);
 
-  const displayZone =
-    zoneLabel || (nationalSelected ? 'Nasional' : null);
+  const displayZone = zoneLabel || (nationalSelected ? 'Nasional' : null);
 
   const resetZoneSelection = useCallback(() => {
     setNationalSelected(false);
@@ -167,7 +239,7 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     return unsub;
   }, [navigation, goBackStep]);
 
-  const continueFromPhone = () => {
+  const continueFromPhone = async () => {
     setFormError(null);
     if (!isValidPhoneTarget(phoneNo)) {
       setFormError('Nomor HP penerima tidak valid.');
@@ -177,7 +249,17 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
       setFormError('Operator tidak dikenali dari nomor ini.');
       return;
     }
-    if (zoneGate) {
+
+    // Ensure operator catalog is ready before choosing zone vs products (zoneGate needs SKUs).
+    let products = operatorProducts;
+    if (productsLoading || loadedForOperator !== operator || products.length === 0) {
+      products = await loadOperatorProducts(operator);
+    }
+    if (error && products.length === 0) return;
+
+    const telkomsel = isTelkomselOperator(operator) && products.length > 0;
+    const needsZone = telkomsel && telkomselNeedsZoneGate(products);
+    if (needsZone) {
       setStep('zone');
       return;
     }
@@ -233,6 +315,8 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
   };
 
+  const catalogBusy = productsLoading && allProducts.length === 0;
+
   return (
     <View style={styles.wrap}>
       {purchaseBanner ? (
@@ -254,19 +338,25 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
             helperWhenDetected="Operator terdeteksi otomatis dari nomor kamu"
           />
           {formError ? <Text style={styles.error}>{formError}</Text> : null}
-          {loading && allProducts.length === 0 ? (
+          {operator && catalogBusy ? (
             <Text style={styles.hint}>Menyiapkan katalog voucher…</Text>
           ) : null}
           <Button
             label="Lanjut"
-            onPress={continueFromPhone}
-            disabled={!phoneReady || (loading && allProducts.length === 0)}
+            onPress={() => void continueFromPhone()}
+            disabled={!phoneReady || catalogBusy}
           />
         </>
-      ) : loading && allProducts.length === 0 ? (
+      ) : catalogBusy ? (
         <LoadingState label="Memuat voucher internet..." />
       ) : error && allProducts.length === 0 ? (
-        <ErrorState message={error} onRetry={load} />
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            if (operator) void loadOperatorProducts(operator);
+            else void loadProviders();
+          }}
+        />
       ) : step === 'zone' ? (
         <>
           <Text style={styles.kategoriLabel}>Kategori</Text>
@@ -541,24 +631,5 @@ const styles = StyleSheet.create({
   },
   zoneTitleActive: { color: colors.primary[700] },
   zoneMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
-  rowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  rowBody: { flex: 1, gap: 2 },
-  rowTitle: {
-    fontSize: typography.size.base,
-    fontWeight: typography.weight.bold,
-    color: colors.gray[900],
-  },
-  rowMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
-  price: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.gray[900],
-  },
-  disabled: { opacity: 0.55 },
   error: { fontSize: typography.size.xs, color: colors.status.failed },
 });
