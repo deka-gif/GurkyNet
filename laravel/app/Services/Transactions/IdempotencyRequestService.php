@@ -106,8 +106,11 @@ class IdempotencyRequestService
                 }
 
                 if (!hash_equals((string) $existing->request_hash, $hash)) {
+                    // Customer-facing copy — never leak English/debug idempotency internals (Bagian 24).
                     throw ValidationException::withMessages([
-                        'idempotency_key' => ['Idempotency key reused with a different request payload.'],
+                        'idempotency_key' => [
+                            'Transaksi sebelumnya masih diproses atau data permintaan berubah. Mohon tunggu sebentar sebelum mencoba lagi.',
+                        ],
                     ]);
                 }
 
@@ -125,7 +128,9 @@ class IdempotencyRequestService
                         // Stale claim after crash — free the unique slot via key rotation, then reclaim.
                         $this->rotateKey($existing, 'stale');
                     } else {
-                        throw new ConflictHttpException('A request with this idempotency key is already in progress.');
+                        throw new ConflictHttpException(
+                            'Transaksi sebelumnya masih diproses, mohon tunggu sebentar sebelum mencoba lagi.'
+                        );
                     }
                 }
 
