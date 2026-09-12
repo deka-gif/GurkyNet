@@ -20,7 +20,9 @@ class SearchProductAction
     public function execute(array $filters = []): LengthAwarePaginator
     {
         $cacheKey = ProductCatalogCache::searchKey($filters);
-        $ttl = 60;
+        // Catalog SKUs change mainly on Digi/VIP sync (ProductCatalogCache::bump).
+        // Longer TTL cuts repeated heavy ProductResource builds for VI / game hubs.
+        $ttl = 300;
         $loader = fn () => $this->productRepository->getPaginatedProducts($filters);
 
         try {
