@@ -3,6 +3,7 @@
 namespace App\Actions\Product;
 
 use App\Repositories\Contracts\ProductRepositoryInterface;
+use App\Services\Catalog\EwalletBrandResolver;
 use App\Services\Catalog\ProductPurchaseLifecycleService;
 use App\Services\ProductProviders\ProductCatalogCache;
 use Illuminate\Support\Facades\Cache;
@@ -14,6 +15,7 @@ class GetCategoryProviderSummaryAction
     public function __construct(
         protected ProductRepositoryInterface $productRepository,
         protected ProductPurchaseLifecycleService $lifecycle,
+        protected EwalletBrandResolver $ewalletBrands,
     ) {}
 
     /**
@@ -22,14 +24,19 @@ class GetCategoryProviderSummaryAction
      * Only counts products that are PURCHASABLE (schema + capability + availability).
      * Brands with zero purchasable SKUs are omitted — avoids empty Game → Brand pages.
      *
-     * @return list<array{providerId: int, name: string, logo: ?string, count: int}>
+     * For topup-digital (E-Wallet): brands are canonicalized (GO PAY→GoPay), open-amount
+     * (Bebas Nominal) metadata is attached, and prepaid-only brands without an open-amount
+     * SKU are omitted from the customer-facing list.
+     *
+     * @return list<array<string, mixed>>
      */
     public function execute(string $category): array
     {
         $cacheKey = ProductCatalogCache::providerSummaryKey($category);
-        $ttl = 60;
+        $ttl = 300;
         $loader = function () use ($category) {
             $products = $this->productRepository->getActiveProductsForCategory($category);
+            $isEwallet = $this->isEwalletCategory($category);
 
             $groups = [];
             foreach ($products as $product) {
@@ -39,24 +46,89 @@ class GetCategoryProviderSummaryAction
                     continue;
                 }
 
-                $name = trim((string) ($product->provider?->name ?? 'Lainnya'));
-                if ($name === '') {
-                    $name = 'Lainnya';
+                $rawName = trim((string) ($product->provider?->name ?? 'Lainnya'));
+                if ($rawName === '') {
+                    $rawName = 'Lainnya';
                 }
-                $key = Str::lower($name);
+
+                $displayName = $isEwallet
+                    ? $this->ewalletBrands->canonicalize($rawName, (string) $product->name)
+                    : $rawName;
+
+                if ($isEwallet && $this->ewalletBrands->isGenericBrand($rawName) && $displayName === $rawName) {
+                    // Generic E-MONEY bucket without a resolvable wallet — skip.
+                    continue;
+                }
+
+                $key = Str::lower($displayName);
+                $providerId = (int) $product->provider_id;
+                $isOpen = $isEwallet && $this->ewalletBrands->isOpenAmountProduct($product)
+                    && ! $this->ewalletBrands->isCekNamaProduct($product);
+
                 if (! isset($groups[$key])) {
                     $groups[$key] = [
-                        'providerId' => (int) $product->provider_id,
-                        'name' => $name,
+                        'providerId' => $providerId,
+                        'providerIds' => [$providerId],
+                        'name' => $displayName,
                         'logo' => $product->provider?->logo,
                         'count' => 1,
+                        'open_amount_sku' => null,
+                        'open_amount_product' => null,
                     ];
                 } else {
                     $groups[$key]['count']++;
+                    if (! in_array($providerId, $groups[$key]['providerIds'], true)) {
+                        $groups[$key]['providerIds'][] = $providerId;
+                    }
+                    if (! $groups[$key]['logo'] && $product->provider?->logo) {
+                        $groups[$key]['logo'] = $product->provider->logo;
+                    }
+                }
+
+                if ($isOpen) {
+                    // Prefer Digiflazz pasca Bebas Nominal as the brand's open-amount SKU.
+                    $groups[$key]['open_amount_sku'] = (string) $product->sku_code;
+                    $groups[$key]['open_amount_product'] = $product;
+                    $groups[$key]['providerId'] = $providerId;
                 }
             }
 
-            $out = array_values($groups);
+            $out = [];
+            foreach ($groups as $group) {
+                if ($isEwallet) {
+                    $openProduct = $group['open_amount_product'] ?? null;
+                    if ($openProduct === null) {
+                        // E-Wallet customer list: only brands with Bebas Nominal / Pascabayar.
+                        continue;
+                    }
+
+                    $limits = $this->ewalletBrands->openAmountLimitsForProduct($openProduct);
+                    if ($limits === null) {
+                        continue;
+                    }
+
+                    $out[] = [
+                        'providerId' => (int) $group['providerId'],
+                        'providerIds' => array_values($group['providerIds']),
+                        'name' => $group['name'],
+                        'logo' => $group['logo'],
+                        'count' => 1,
+                        'is_open_amount' => true,
+                        'sku_code' => (string) $group['open_amount_sku'],
+                        'min_amount' => $limits['min_amount'],
+                        'max_amount' => $limits['max_amount'],
+                    ];
+                    continue;
+                }
+
+                $out[] = [
+                    'providerId' => (int) $group['providerId'],
+                    'name' => $group['name'],
+                    'logo' => $group['logo'],
+                    'count' => (int) $group['count'],
+                ];
+            }
+
             usort($out, fn (array $a, array $b) => strcoll($a['name'], $b['name']));
 
             return $out;
@@ -76,5 +148,12 @@ class GetCategoryProviderSummaryAction
 
             return $loader();
         }
+    }
+
+    protected function isEwalletCategory(string $category): bool
+    {
+        $slug = Str::lower(trim($category));
+
+        return in_array($slug, ['topup-digital', 'ewallet', 'e-wallet', 'e-money', 'emoney'], true);
     }
 }

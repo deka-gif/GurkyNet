@@ -51,6 +51,10 @@ export interface Product {
   operatorName: string;
   /** From ProductResource — taxonomy mentionsRegion; UI-only until purchase (not sent on POST). */
   requiresRegion?: boolean;
+  /** Digiflazz Pascabayar / Bebas Nominal open-amount SKU. */
+  is_open_amount?: boolean;
+  min_amount?: number;
+  max_amount?: number;
   /** Optional — present when API loads provider relation; used for Marketing brand logos. */
   providerDetails?: ProviderDetails | null;
 }
@@ -76,9 +80,16 @@ export interface ProductFilters {
  */
 export interface CategoryProviderSummary {
   providerId: number;
+  /** Merged provider ids when API canonicalizes GO PAY + GoPay, etc. */
+  providerIds?: number[];
   name: string;
   logo: string | null;
   count: number;
+  /** E-Wallet Bebas Nominal metadata (topup-digital only). */
+  is_open_amount?: boolean;
+  sku_code?: string;
+  min_amount?: number;
+  max_amount?: number;
 }
 
 export type DataTaxonomyChip = {

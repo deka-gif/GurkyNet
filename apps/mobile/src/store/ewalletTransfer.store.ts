@@ -5,20 +5,26 @@ import { Product } from '../services/catalog.service';
 import { ewalletService, EwalletInquiryResult } from '../services/ewallet.service';
 import { transactionService } from '../services/transaction.service';
 import { Transaction } from '../api/types';
-import { resolveEwalletProductForAmount } from '../utils/ewalletBrand';
-import { TRANSFER_MIN_AMOUNT } from './transfer.store';
+import {
+  resolveEwalletOpenAmountProduct,
+  validateEwalletOpenAmount,
+  openAmountLimitsForBrand,
+} from '../utils/ewalletBrand';
 
 /**
  * Transfer E-Wallet UI session — PPOB path (inquiry + POST /transactions).
  * Never uses /wallet/transfer. Never stores PIN.
  * UX: brand → nomor + nominal manual → inquiry → confirm → PIN → purchase.
- * SKU resolved internally from catalog denomination match (Web SoT).
+ * Engine: Digiflazz Pascabayar / Bebas Nominal open-amount SKU only.
  */
 interface EwalletTransferState {
   brandKey: string;
   brandName: string;
   brandLogo: string | null;
   providerIds: number[];
+  skuCode: string | null;
+  minAmount: number | null;
+  maxAmount: number | null;
   /** Manual nominal digits (GurkyPay parity). */
   amount: number;
   product: Product | null;
@@ -37,12 +43,21 @@ interface EwalletTransferState {
     name: string;
     logo: string | null;
     providerIds: number[];
+    skuCode: string | null;
+    minAmount: number | null;
+    maxAmount: number | null;
+  }) => void;
+  /** Fill Bebas Nominal SKU / min-max after catalog resolve (legacy provider summary). */
+  applyOpenAmountMeta: (meta: {
+    skuCode: string | null;
+    minAmount: number | null;
+    maxAmount: number | null;
   }) => void;
   setAmount: (value: number) => void;
   setCustomerNo: (value: string) => void;
   clearInquiry: () => void;
   /**
-   * Resolve SKU from catalog for typed amount, then POST /ewallet/inquiry.
+   * Resolve Bebas Nominal SKU, then POST /ewallet/inquiry with client amount.
    * Catalog list is internal only — never shown as chips.
    */
   runInquiry: (catalogProducts: Product[]) => Promise<{ ok: boolean; message?: string }>;
@@ -61,6 +76,9 @@ const IDLE = {
   brandName: '',
   brandLogo: null as string | null,
   providerIds: [] as number[],
+  skuCode: null as string | null,
+  minAmount: null as number | null,
+  maxAmount: null as number | null,
   amount: 0,
   product: null as Product | null,
   customerNo: '',
@@ -98,8 +116,18 @@ export const useEwalletTransferStore = create<EwalletTransferState>((set, get) =
       brandName: brand.name,
       brandLogo: brand.logo,
       providerIds: [...brand.providerIds],
+      skuCode: brand.skuCode,
+      minAmount: brand.minAmount,
+      maxAmount: brand.maxAmount,
     });
   },
+
+  applyOpenAmountMeta: (meta) =>
+    set({
+      skuCode: meta.skuCode,
+      minAmount: meta.minAmount,
+      maxAmount: meta.maxAmount,
+    }),
 
   setAmount: (value) =>
     set({
@@ -130,7 +158,7 @@ export const useEwalletTransferStore = create<EwalletTransferState>((set, get) =
     }),
 
   runInquiry: async (catalogProducts) => {
-    const { amount, customerNo, inquiring, brandName } = get();
+    const { amount, customerNo, inquiring, brandName, skuCode, minAmount, maxAmount } = get();
     if (inquiring) return { ok: false, message: 'Sedang memvalidasi...' };
 
     const phone = customerNo.replace(/\D/g, '');
@@ -139,21 +167,35 @@ export const useEwalletTransferStore = create<EwalletTransferState>((set, get) =
       set({ inquiryError: message });
       return { ok: false, message };
     }
-    if (!Number.isFinite(amount) || amount < TRANSFER_MIN_AMOUNT) {
-      const message = `Nominal transfer minimal Rp ${TRANSFER_MIN_AMOUNT.toLocaleString('id-ID')}.`;
-      set({ inquiryError: message });
-      return { ok: false, message };
-    }
 
-    const product = resolveEwalletProductForAmount(catalogProducts, amount);
+    const product = resolveEwalletOpenAmountProduct(catalogProducts, skuCode);
     if (!product?.code) {
-      const message = `Nominal tidak tersedia untuk transfer ${brandName || 'E-Wallet'}.`;
+      const message = `Produk Bebas Nominal untuk ${brandName || 'E-Wallet'} tidak tersedia.`;
       set({ inquiryError: message, product: null });
       return { ok: false, message };
     }
 
+    const fallback = openAmountLimitsForBrand(brandName);
+    // Prefer API/product limits when catalog product carries them.
+    const effectiveMin =
+      typeof product.min_amount === 'number' && product.min_amount > 0
+        ? product.min_amount
+        : minAmount ?? fallback?.min ?? null;
+    const effectiveMax =
+      typeof product.max_amount === 'number' && product.max_amount > 0
+        ? product.max_amount
+        : maxAmount ?? fallback?.max ?? null;
+    const limitError = validateEwalletOpenAmount(amount, effectiveMin, effectiveMax);
+    if (limitError) {
+      set({ inquiryError: limitError });
+      return { ok: false, message: limitError };
+    }
+
     set({
       product,
+      skuCode: product.code,
+      minAmount: effectiveMin ?? null,
+      maxAmount: effectiveMax ?? null,
       inquiring: true,
       inquiryError: null,
       inquiry: null,
@@ -162,7 +204,7 @@ export const useEwalletTransferStore = create<EwalletTransferState>((set, get) =
     });
 
     try {
-      const response = await ewalletService.inquire(product.code, phone);
+      const response = await ewalletService.inquire(product.code, phone, amount);
       if (response.success && response.data?.inquiry_ref_id) {
         const data = response.data;
         const inquiredNominal = Number(data.nominal_amount ?? data.bill_amount ?? 0);

@@ -18,9 +18,14 @@ export interface ProductFilters {
 
 export interface CategoryProviderSummary {
   providerId: number;
+  providerIds?: number[];
   name: string;
   logo: string | null;
   count: number;
+  is_open_amount?: boolean;
+  sku_code?: string;
+  min_amount?: number;
+  max_amount?: number;
 }
 
 export const productService = {

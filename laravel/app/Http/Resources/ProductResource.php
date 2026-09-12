@@ -132,7 +132,7 @@ class ProductResource extends JsonResource
             // Operations spot products that fell through to the unmapped fallback instead
             // of a confident provider-category/brand-override match (Phase 20).
             'categoryMappingSource' => $this->category_mapping_source,
-'operatorName' => $this->provider?->name ?? 'System',
+            'operatorName' => $this->provider?->name ?? 'System',
             // Operator brand (Telkomsel, PLN, …) — kept as `provider` for existing UI.
             'provider' => $this->provider?->name ?? 'System',
             'providerDetails' => new ProviderResource($this->whenLoaded('provider')),
@@ -146,6 +146,29 @@ class ProductResource extends JsonResource
             'lastSyncedAt' => $this->productProvider?->last_sync_at?->toIso8601String(),
             'createdAt' => $this->created_at?->toIso8601String(),
             'lastUpdated' => $this->updated_at?->toIso8601String(),
+            ...$this->ewalletOpenAmountMeta(),
+        ];
+    }
+
+    /**
+     * @return array{is_open_amount?: bool, min_amount?: int, max_amount?: int}
+     */
+    protected function ewalletOpenAmountMeta(): array
+    {
+        $resolver = resolve(\App\Services\Catalog\EwalletBrandResolver::class);
+        if (! $resolver->isOpenAmountProduct($this->resource)) {
+            return ['is_open_amount' => false];
+        }
+
+        $limits = $resolver->openAmountLimitsForProduct($this->resource);
+        if ($limits === null) {
+            return ['is_open_amount' => true];
+        }
+
+        return [
+            'is_open_amount' => true,
+            'min_amount' => $limits['min_amount'],
+            'max_amount' => $limits['max_amount'],
         ];
     }
 

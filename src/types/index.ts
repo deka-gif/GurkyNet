@@ -110,6 +110,9 @@ export interface Product {
   telkomselGroupLabel?: string | null;
   zoneLabel?: string | null;
   requiresRegion?: boolean;
+  is_open_amount?: boolean;
+  min_amount?: number;
+  max_amount?: number;
 }
 
 export interface PaymentResumeInfo {

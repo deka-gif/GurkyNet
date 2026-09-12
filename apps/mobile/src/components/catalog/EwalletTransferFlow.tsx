@@ -13,7 +13,6 @@ import {
   isEwalletInquiryValid,
   useEwalletTransferStore,
 } from '../../store/ewalletTransfer.store';
-import { TRANSFER_MIN_AMOUNT } from '../../store/transfer.store';
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useWalletStore } from '../../store/wallet.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
@@ -28,6 +27,11 @@ import {
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { parseApiError } from '../../api/client';
+import {
+  validateEwalletOpenAmount,
+  resolveEwalletOpenAmountProduct,
+  openAmountLimitsForBrand,
+} from '../../utils/ewalletBrand';
 
 /** Same mental model as Sesama GurkyPay: nomor + nominal manual → validate → confirm → PIN. */
 type Step = 'input' | 'confirm';
@@ -73,6 +77,9 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
   const brandName = useEwalletTransferStore((s) => s.brandName);
   const brandLogo = useEwalletTransferStore((s) => s.brandLogo);
   const providerIds = useEwalletTransferStore((s) => s.providerIds);
+  const minAmount = useEwalletTransferStore((s) => s.minAmount);
+  const maxAmount = useEwalletTransferStore((s) => s.maxAmount);
+  const skuCode = useEwalletTransferStore((s) => s.skuCode);
   const product = useEwalletTransferStore((s) => s.product);
   const customerNo = useEwalletTransferStore((s) => s.customerNo);
   const storedAmount = useEwalletTransferStore((s) => s.amount);
@@ -86,6 +93,7 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
   const setCustomerNo = useEwalletTransferStore((s) => s.setCustomerNo);
   const runInquiry = useEwalletTransferStore((s) => s.runInquiry);
   const clearInquiry = useEwalletTransferStore((s) => s.clearInquiry);
+  const applyOpenAmountMeta = useEwalletTransferStore((s) => s.applyOpenAmountMeta);
   const submitPurchase = useEwalletTransferStore((s) => s.submitPurchase);
   const clearSubmitError = useEwalletTransferStore((s) => s.clearSubmitError);
 
@@ -165,6 +173,33 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
     void loadCatalog();
   }, [loadCatalog]);
 
+  // Legacy provider summary may omit sku/min/max — resolve from Bebas Nominal catalog SKU.
+  useEffect(() => {
+    if (catalogProducts.length === 0) return;
+    const open = resolveEwalletOpenAmountProduct(catalogProducts, skuCode);
+    if (!open?.code) return;
+    const fallback = brandName ? openAmountLimitsForBrand(brandName) : null;
+    const nextMin =
+      typeof open.min_amount === 'number' && open.min_amount > 0
+        ? open.min_amount
+        : minAmount ?? fallback?.min ?? null;
+    const nextMax =
+      typeof open.max_amount === 'number' && open.max_amount > 0
+        ? open.max_amount
+        : maxAmount ?? fallback?.max ?? null;
+    if (
+      open.code !== skuCode ||
+      nextMin !== minAmount ||
+      nextMax !== maxAmount
+    ) {
+      applyOpenAmountMeta({
+        skuCode: open.code,
+        minAmount: nextMin,
+        maxAmount: nextMax,
+      });
+    }
+  }, [catalogProducts, skuCode, minAmount, maxAmount, brandName, applyOpenAmountMeta]);
+
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
       if (!isBackAction(e.data.action)) return;
@@ -182,8 +217,31 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
   const phoneDigits = customerNo.replace(/\D/g, '');
   const phoneOk = phoneDigits.length >= 10 && phoneDigits.length <= 15;
   const amount = amountDigits ? Number(amountDigits) : 0;
-  const amountOk =
-    Number.isFinite(amount) && Number.isInteger(amount) && amount >= TRANSFER_MIN_AMOUNT;
+  const resolvedOpen = useMemo(
+    () => resolveEwalletOpenAmountProduct(catalogProducts, skuCode),
+    [catalogProducts, skuCode]
+  );
+  const brandFallbackLimits = useMemo(
+    () => (brandName ? openAmountLimitsForBrand(brandName) : null),
+    [brandName]
+  );
+  const effectiveMin =
+    minAmount ??
+    (typeof resolvedOpen?.min_amount === 'number' ? resolvedOpen.min_amount : null) ??
+    brandFallbackLimits?.min ??
+    null;
+  const effectiveMax =
+    maxAmount ??
+    (typeof resolvedOpen?.max_amount === 'number' ? resolvedOpen.max_amount : null) ??
+    brandFallbackLimits?.max ??
+    null;
+  const effectiveSku = skuCode || resolvedOpen?.code || null;
+  const amountValidation = amountDigits
+    ? validateEwalletOpenAmount(amount, effectiveMin, effectiveMax)
+    : null;
+  const amountOk = amountDigits.length > 0 && amountValidation === null;
+  const limitsReady =
+    effectiveMin != null && effectiveMax != null && Boolean(effectiveSku);
 
   const phoneError = useMemo(() => {
     if (!phoneTouched) return null;
@@ -195,12 +253,21 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
   const amountError = useMemo(() => {
     if (!amountTouched) return null;
     if (!amountDigits) return 'Masukkan nominal transfer';
-    if (!amountOk) return `Minimal ${formatIDR(TRANSFER_MIN_AMOUNT)}`;
-    return null;
-  }, [amountTouched, amountDigits, amountOk]);
+    return amountValidation;
+  }, [amountTouched, amountDigits, amountValidation]);
+
+  const limitHint =
+    effectiveMin != null && effectiveMax != null
+      ? `Min. ${formatIDR(effectiveMin)} — Maks. ${formatIDR(effectiveMax)}`
+      : null;
 
   const canContinue =
-    phoneOk && amountOk && !inquiring && !catalogLoading && catalogProducts.length > 0;
+    phoneOk &&
+    amountOk &&
+    limitsReady &&
+    !inquiring &&
+    !catalogLoading &&
+    catalogProducts.length > 0;
 
   const onContinue = async () => {
     setPhoneTouched(true);
@@ -377,7 +444,7 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
               />
             </View>
             {amountError ? <Text style={styles.error}>{amountError}</Text> : null}
-            <Text style={styles.hint}>Minimal {formatIDR(TRANSFER_MIN_AMOUNT)}</Text>
+            {limitHint ? <Text style={styles.hint}>{limitHint}</Text> : null}
           </View>
 
           {catalogError ? <Text style={styles.error}>{catalogError}</Text> : null}

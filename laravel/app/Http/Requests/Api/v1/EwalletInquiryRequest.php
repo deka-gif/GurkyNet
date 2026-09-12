@@ -18,6 +18,13 @@ class EwalletInquiryRequest extends FormRequest
         return [
             'sku_code' => 'required|string|max:64',
             'customer_no' => 'required|string|max:20',
+            // Open-amount (Bebas Nominal) — client-typed face value for Digi inq-pasca.
+            // Digiflazz E-Money requires multiples of 1000 (RC 87); enforced in inquireEwallet too.
+            'amount' => ['required', 'integer', 'min:1', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! is_numeric($value) || (int) $value % 1000 !== 0) {
+                    $fail('Nominal harus kelipatan Rp1.000');
+                }
+            }],
         ];
     }
 
@@ -26,6 +33,9 @@ class EwalletInquiryRequest extends FormRequest
         return [
             'sku_code.required' => 'SKU produk wajib dipilih.',
             'customer_no.required' => 'Nomor HP e-wallet wajib diisi.',
+            'amount.required' => 'Nominal top up wajib diisi.',
+            'amount.integer' => 'Nominal harus berupa angka bulat.',
+            'amount.min' => 'Nominal tidak valid.',
         ];
     }
 

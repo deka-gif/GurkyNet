@@ -189,11 +189,12 @@ class TagihanInquiryService
     }
 
     /**
-     * Digiflazz E-Money inquiry (inq-pasca + amount). Denomination resolved server-side from product.
+     * Digiflazz E-Money inquiry (inq-pasca + amount).
+     * GurkyNet E-Wallet uses Pascabayar / Bebas Nominal only — face amount comes from the client.
      *
      * @return array<string, mixed>
      */
-    public function inquireEwallet(User $user, string $skuCode, string $customerNo): array
+    public function inquireEwallet(User $user, string $skuCode, string $customerNo, int $amount): array
     {
         $customerNo = preg_replace('/\D/', '', $customerNo) ?? '';
         if (strlen($customerNo) < 10 || strlen($customerNo) > 15) {
@@ -209,40 +210,43 @@ class TagihanInquiryService
             ]);
         }
 
-        $amount = $this->resolveEwalletDenomination($product);
-        if ($amount <= 0) {
+        $brandResolver = app(\App\Services\Catalog\EwalletBrandResolver::class);
+        if (! $brandResolver->isOpenAmountProduct($product)) {
             throw ValidationException::withMessages([
-                'sku_code' => ['Denominasi produk tidak valid.'],
+                'sku_code' => ['Produk E-Wallet harus Bebas Nominal / Pascabayar.'],
+            ]);
+        }
+        if ($brandResolver->isCekNamaProduct($product)) {
+            throw ValidationException::withMessages([
+                'sku_code' => ['Produk Cek Nama tidak dapat digunakan untuk top up.'],
+            ]);
+        }
+
+        $limits = $brandResolver->openAmountLimitsForProduct($product);
+        if ($limits === null) {
+            throw ValidationException::withMessages([
+                'amount' => ['Batas nominal untuk brand ini belum dikonfigurasi.'],
+            ]);
+        }
+
+        if ($amount < $limits['min_amount'] || $amount > $limits['max_amount']) {
+            throw ValidationException::withMessages([
+                'amount' => [sprintf(
+                    'Nominal harus antara Rp%s — Rp%s.',
+                    number_format($limits['min_amount'], 0, ',', '.'),
+                    number_format($limits['max_amount'], 0, ',', '.')
+                )],
+            ]);
+        }
+
+        // Digiflazz E-Money RC 87 — face amount must be a multiple of Rp1.000.
+        if ($amount % 1000 !== 0) {
+            throw ValidationException::withMessages([
+                'amount' => ['Nominal harus kelipatan Rp1.000'],
             ]);
         }
 
         return $this->inquire($user, $skuCode, $customerNo, null, $amount);
-    }
-
-    protected function resolveEwalletDenomination(Product $product): int
-    {
-        if (preg_match('/(\d{1,3}(?:[.\s]?\d{3})+|\d+)\s*(ribu|rb|k)?/iu', (string) $product->name, $m)) {
-            $n = (int) preg_replace('/\D/', '', $m[1]);
-            $suffix = strtolower((string) ($m[2] ?? ''));
-            if (in_array($suffix, ['ribu', 'rb', 'k'], true) && $n < 1000) {
-                $n *= 1000;
-            }
-            if ($n > 0) {
-                return $n;
-            }
-        }
-
-        $base = (int) round((float) $product->base_price);
-        if ($base > 0) {
-            return $base;
-        }
-
-        $sell = (int) round((float) $product->sell_price);
-        if ($sell > 0) {
-            return $sell;
-        }
-
-        return 0;
     }
 
     /**

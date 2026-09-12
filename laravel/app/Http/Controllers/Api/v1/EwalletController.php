@@ -27,7 +27,8 @@ class EwalletController extends Controller
             $data = $inquiryService->inquireEwallet(
                 $user,
                 (string) $request->input('sku_code'),
-                (string) $request->input('customer_no')
+                (string) $request->input('customer_no'),
+                (int) $request->input('amount')
             );
 
             return response()->json([

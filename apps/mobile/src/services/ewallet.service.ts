@@ -24,11 +24,13 @@ export type EwalletInquiryResult = {
 export const ewalletService = {
   inquire: async (
     skuCode: string,
-    customerNo: string
+    customerNo: string,
+    amount: number
   ): Promise<ApiResponse<EwalletInquiryResult>> => {
     const response = await apiClient.post<ApiResponse<EwalletInquiryResult>>('/ewallet/inquiry', {
       sku_code: skuCode,
       customer_no: customerNo,
+      amount,
     });
     return response.data;
   },

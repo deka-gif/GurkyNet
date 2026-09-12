@@ -18,6 +18,7 @@ import { formatIDR } from '../../utils/currency';
 import { parseApiError } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import { ewalletService, EwalletInquiryResult } from '../../services/ewallet/ewallet.service';
+import { CategoryProviderSummary } from '../../services/product/product.service';
 import {
   gameService,
   GameAccountField,
@@ -133,8 +134,12 @@ export function ProviderCatalogFlow({
   const [step, setStep] = useState<'provider' | 'products'>('provider');
   const [providerQuery, setProviderQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [selectedProviderMeta, setSelectedProviderMeta] = useState<CategoryProviderSummary | null>(
+    null
+  );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [targetNo, setTargetNo] = useState('');
+  const [ewalletAmount, setEwalletAmount] = useState('');
   const [secondaryValue, setSecondaryValue] = useState('');
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [resumePin, setResumePin] = useState(false);
@@ -257,10 +262,14 @@ export function ProviderCatalogFlow({
           isCatalogListed(p) &&
           isProductPurchasable(p) &&
           String(p.operatorName ?? '').trim().toLowerCase() === selectedProvider.toLowerCase() &&
-          !(isGameInquiry && (String(p.code ?? '').toUpperCase().startsWith('VIP-') || isGameNonPurchaseSku(p.code)))
+          !(isGameInquiry && (String(p.code ?? '').toUpperCase().startsWith('VIP-') || isGameNonPurchaseSku(p.code))) &&
+          // E-Wallet: Digiflazz Bebas Nominal / Pascabayar only — never prepaid fixed denoms.
+          (!isEwalletInquiry ||
+            p.is_open_amount === true ||
+            /bebas\s*nominal/i.test(String(p.name ?? '')))
       )
       .sort((a, b) => a.price - b.price);
-  }, [products, selectedProvider, isGameInquiry]);
+  }, [products, selectedProvider, isGameInquiry, isEwalletInquiry]);
 
   const phoneReady = !isEwalletInquiry || targetNo.replace(/\D/g, '').length >= 10;
   const gameAccountReady =
@@ -300,10 +309,12 @@ export function ProviderCatalogFlow({
         ? 'Masukkan ID Game'
         : 'Masukkan nomor tujuan');
 
-  const selectProvider = (name: string, providerId: number) => {
-    setSelectedProvider(name);
+  const selectProvider = (cp: CategoryProviderSummary) => {
+    setSelectedProvider(cp.name);
+    setSelectedProviderMeta(cp);
     setSelectedProduct(null);
     setEwalletInquiry(null);
+    setEwalletAmount('');
     setGameInquiry(null);
     setTargetNo('');
     setSecondaryValue('');
@@ -312,14 +323,16 @@ export function ProviderCatalogFlow({
     setLanggananAccount({});
     setLanggananDelivery('unknown');
     setStep('products');
-    void fetchProducts({ category, provider_id: providerId });
+    void fetchProducts({ category, provider_id: cp.providerId });
   };
 
   const goBackToProviders = () => {
     setStep('provider');
     setSelectedProvider(null);
+    setSelectedProviderMeta(null);
     setSelectedProduct(null);
     setEwalletInquiry(null);
+    setEwalletAmount('');
     setGameInquiry(null);
     setGameFields([]);
     setGameAccount({});
@@ -374,8 +387,21 @@ export function ProviderCatalogFlow({
   };
 
   const handleEwalletNext = async () => {
-    if (!selectedProduct || !selectedProvider) {
-      showFlowError('Pilih provider dan nominal terlebih dahulu.');
+    if (!selectedProvider) {
+      showFlowError('Pilih provider terlebih dahulu.');
+      return;
+    }
+    const openProduct =
+      selectedProduct ||
+      providerProducts.find(
+        (p) => p.is_open_amount === true || /bebas\s*nominal/i.test(String(p.name ?? ''))
+      ) ||
+      null;
+    const sku =
+      openProduct?.code ||
+      (typeof selectedProviderMeta?.sku_code === 'string' ? selectedProviderMeta.sku_code : '');
+    if (!sku) {
+      showFlowError('Produk Bebas Nominal tidak tersedia untuk brand ini.');
       return;
     }
     const phone = targetNo.replace(/\D/g, '');
@@ -383,10 +409,28 @@ export function ProviderCatalogFlow({
       showFlowError('Nomor HP e-wallet harus 10–15 digit.');
       return;
     }
+    const amount = Number(String(ewalletAmount).replace(/\D/g, ''));
+    const minAmount =
+      openProduct?.min_amount ?? selectedProviderMeta?.min_amount ?? null;
+    const maxAmount =
+      openProduct?.max_amount ?? selectedProviderMeta?.max_amount ?? null;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showFlowError('Masukkan nominal top up.');
+      return;
+    }
+    if (minAmount != null && amount < minAmount) {
+      showFlowError(`Minimal ${formatIDR(minAmount)}`);
+      return;
+    }
+    if (maxAmount != null && amount > maxAmount) {
+      showFlowError(`Maksimal ${formatIDR(maxAmount)}`);
+      return;
+    }
 
     setInquiring(true);
     try {
-      const res = await ewalletService.inquire(selectedProduct.code, phone);
+      if (openProduct) setSelectedProduct(openProduct);
+      const res = await ewalletService.inquire(sku, phone, amount);
       if (!res.success || !res.data) {
         showFlowError(
           humanizeCatalogError(
@@ -982,7 +1026,12 @@ export function ProviderCatalogFlow({
                 <button
                   key={p.name}
                   type="button"
-                  onClick={() => selectProvider(p.name, p.providerId)}
+                  onClick={() => {
+                    const meta =
+                      categoryProviders.find((cp) => cp.providerId === p.providerId && cp.name === p.name) ||
+                      categoryProviders.find((cp) => cp.name === p.name);
+                    if (meta) selectProvider(meta);
+                  }}
                   className="group text-left p-4 rounded-3xl border border-gray-100 bg-white hover:border-primary-300 hover:shadow-lg hover:shadow-primary-900/8 hover:-translate-y-0.5 transition-all duration-200"
                 >
                   <BrandAvatar name={p.name} logoUrl={p.logo} size="md" className="mb-3" />
@@ -1021,7 +1070,7 @@ export function ProviderCatalogFlow({
                   {isGameInquiry
                     ? 'Isi data akun, lalu pilih produk dari katalog.'
                     : isEwalletInquiry
-                      ? 'Masukkan nomor HP, lalu pilih nominal dari katalog.'
+                      ? 'Masukkan nomor HP dan nominal Bebas Nominal.'
                       : isLanggananMode
                         ? 'Pilih paket langganan. Setelah paket dipilih, lengkapi data tujuan jika diperlukan.'
                         : isVoucherMode
@@ -1079,7 +1128,6 @@ export function ProviderCatalogFlow({
                           targetMode === 'phone' ? e.target.value.replace(/\D/g, '') : e.target.value
                         );
                         if (isEwalletInquiry) {
-                          setSelectedProduct(null);
                           setEwalletInquiry(null);
                         }
                       }}
@@ -1102,10 +1150,40 @@ export function ProviderCatalogFlow({
                 </div>
               ) : null}
 
-              {showProducts ? (
+              {showProducts && isEwalletInquiry ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700">Nominal</label>
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200">
+                      <span className="text-sm font-bold text-gray-500">Rp</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={ewalletAmount}
+                        onChange={(e) => {
+                          setEwalletAmount(e.target.value.replace(/\D/g, ''));
+                          setEwalletInquiry(null);
+                        }}
+                        placeholder="0"
+                        className="flex-1 bg-transparent text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+                    {(selectedProviderMeta?.min_amount != null ||
+                      selectedProviderMeta?.max_amount != null) && (
+                      <p className="text-xs text-gray-500 font-semibold">
+                        Min.{' '}
+                        {formatIDR(selectedProviderMeta?.min_amount ?? 0)}
+                        {' — '}
+                        Maks.{' '}
+                        {formatIDR(selectedProviderMeta?.max_amount ?? 0)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : showProducts ? (
                 <div className="space-y-2.5">
                   <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-                    {isEwalletInquiry || isVoucherMode
+                    {isVoucherMode
                       ? 'Pilih Nominal'
                       : isLanggananMode
                         ? 'Pilih Paket'

@@ -60,9 +60,32 @@ export interface StandardApiError {
   data?: unknown;
 }
 
+/** Spec Bagian 24 — never leak English/debug internals to the counter-staff UI. */
+function sanitizeCustomerFacingErrorMessage(message: string): string {
+  const raw = String(message || '').trim();
+  if (!raw) return 'Terjadi kesalahan. Silakan coba kembali.';
+
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('idempotency key reused') ||
+    lower.includes('different request payload') ||
+    lower.includes('already in progress')
+  ) {
+    return 'Transaksi sebelumnya masih diproses, mohon tunggu sebentar sebelum mencoba lagi.';
+  }
+  if (/sqlstate|integrity constraint|stack trace|exception\b|errorexception/i.test(raw)) {
+    return 'Terjadi kesalahan. Silakan coba kembali.';
+  }
+  return raw;
+}
+
 export function parseApiError(error: any): StandardApiError {
   if (error && typeof error === 'object' && 'status' in error && 'message' in error && !axios.isAxiosError(error)) {
-    return error as StandardApiError;
+    const existing = error as StandardApiError;
+    return {
+      ...existing,
+      message: sanitizeCustomerFacingErrorMessage(String(existing.message || '')),
+    };
   }
 
   if (axios.isAxiosError(error)) {
@@ -108,7 +131,7 @@ export function parseApiError(error: any): StandardApiError {
 
     return {
       status,
-      message: errorMessage,
+      message: sanitizeCustomerFacingErrorMessage(String(errorMessage)),
       errors: data?.errors || {},
       code: data?.code ?? data?.provider_code,
       provider: data?.provider,
@@ -127,10 +150,11 @@ export function parseApiError(error: any): StandardApiError {
 
   return {
     status: 'unknown',
-    message:
+    message: sanitizeCustomerFacingErrorMessage(
       error instanceof Error
         ? error.message
-        : 'Terjadi kesalahan tidak terduga.',
+        : 'Terjadi kesalahan tidak terduga.'
+    ),
   };
 }
 

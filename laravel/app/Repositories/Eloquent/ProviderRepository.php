@@ -156,14 +156,13 @@ class ProviderRepository implements ProviderRepositoryInterface
                     $providerName = $country;
                 }
             }
+            // E-Wallet: canonicalize Digi brands (E-MONEY→GoPay from name, GO PAY→GoPay)
+            // so customer-facing API never exposes duplicate GoPay / SHOPEE PAY tiles.
             if ($mapped['slug'] === 'topup-digital') {
-                $resolver = app(EwalletBrandResolver::class);
-                if ($resolver->isGenericBrand($providerName)) {
-                    $wallet = $resolver->extractWallet((string) ($dp['product_name'] ?? ''));
-                    if ($wallet !== null) {
-                        $providerName = $wallet;
-                    }
-                }
+                $providerName = app(EwalletBrandResolver::class)->canonicalize(
+                    $providerName,
+                    (string) ($dp['product_name'] ?? '')
+                );
             }
             if (in_array($mapped['slug'], ['voucher-digital', 'game'], true)) {
                 $canonical = app(\App\Services\Catalog\VoucherBrandResolver::class)

@@ -117,6 +117,9 @@ export default function ProductListScreen() {
       name: brand.name,
       logo: brand.logo,
       providerIds: brand.providerIds,
+      skuCode: brand.skuCode,
+      minAmount: brand.minAmount,
+      maxAmount: brand.maxAmount,
     });
     router.push('/produk/ewallet');
   };
