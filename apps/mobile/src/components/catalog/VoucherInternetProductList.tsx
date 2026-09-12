@@ -12,7 +12,7 @@ import { Card, Button } from '../ui';
 import type { Product } from '../../services/catalog.service';
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
-import { isTelkomselGeographicZoneLabel } from '../../utils/telkomselVoucherZone';
+import { isTelkomselSelectableZoneLabel } from '../../utils/telkomselVoucherZone';
 import { formatIDR } from '../../utils/currency';
 import { colors, radius, spacing, typography } from '../../theme';
 
@@ -52,7 +52,7 @@ export function VoucherInternetProductList({
     return bits.length > 0 ? bits.join(' · ') : 'Ketuk Lihat Detail untuk informasi produk.';
   };
 
-  const showZoneNote = (p: Product) => isTelkomselGeographicZoneLabel(p.zoneLabel);
+  const showZoneNote = (p: Product) => isTelkomselSelectableZoneLabel(p.zoneLabel);
 
   return (
     <View style={styles.list}>

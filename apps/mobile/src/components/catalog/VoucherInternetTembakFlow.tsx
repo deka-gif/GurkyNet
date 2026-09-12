@@ -22,7 +22,8 @@ import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 import {
-  collectTelkomselZoneLabels,
+  collectGeographicTelkomselZoneLabels,
+  collectOrphanTelkomselZoneLabels,
   filterProductsByZoneLabel,
   isTelkomselOperator,
   telkomselNationalProducts,
@@ -92,6 +93,8 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     void fetchWallet();
   }, [load, fetchWallet]);
 
+  // Prefetch catalog in background — phone step must not wait on full VI list.
+
   const operatorProducts = useMemo(() => {
     if (!operator) return [];
     return allProducts
@@ -102,7 +105,11 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
   const telkomselActive = !!operator && isTelkomselOperator(operator) && operatorProducts.length > 0;
   const zoneGate = telkomselActive && telkomselNeedsZoneGate(operatorProducts);
   const zoneLabels = useMemo(
-    () => (telkomselActive ? collectTelkomselZoneLabels(operatorProducts) : []),
+    () => (telkomselActive ? collectGeographicTelkomselZoneLabels(operatorProducts) : []),
+    [telkomselActive, operatorProducts]
+  );
+  const orphanLabels = useMemo(
+    () => (telkomselActive ? collectOrphanTelkomselZoneLabels(operatorProducts) : []),
     [telkomselActive, operatorProducts]
   );
   const nationalProducts = useMemo(
@@ -236,11 +243,7 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
 
       {step !== 'zone' ? <Text style={styles.modeTag}>Tembak Langsung</Text> : null}
 
-      {loading && allProducts.length === 0 ? (
-        <LoadingState label="Memuat voucher internet..." />
-      ) : error && allProducts.length === 0 ? (
-        <ErrorState message={error} onRetry={load} />
-      ) : step === 'phone' ? (
+      {step === 'phone' ? (
         <>
           <Text style={styles.lead}>Masukkan nomor HP</Text>
           <PhoneOperatorInput
@@ -251,8 +254,19 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
             helperWhenDetected="Operator terdeteksi otomatis dari nomor kamu"
           />
           {formError ? <Text style={styles.error}>{formError}</Text> : null}
-          <Button label="Lanjut" onPress={continueFromPhone} disabled={!phoneReady} />
+          {loading && allProducts.length === 0 ? (
+            <Text style={styles.hint}>Menyiapkan katalog voucher…</Text>
+          ) : null}
+          <Button
+            label="Lanjut"
+            onPress={continueFromPhone}
+            disabled={!phoneReady || (loading && allProducts.length === 0)}
+          />
         </>
+      ) : loading && allProducts.length === 0 ? (
+        <LoadingState label="Memuat voucher internet..." />
+      ) : error && allProducts.length === 0 ? (
+        <ErrorState message={error} onRetry={load} />
       ) : step === 'zone' ? (
         <>
           <Text style={styles.kategoriLabel}>Kategori</Text>
@@ -292,33 +306,64 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
 
           <Text style={styles.section}>Voucher per wilayah</Text>
 
-          {zoneLabels.length === 0 && !hasNational ? (
+          {zoneLabels.length === 0 && orphanLabels.length === 0 && !hasNational ? (
             <EmptyState
               title="Belum Ada Wilayah"
               message="Belum ada paket tersedia untuk wilayah ini."
             />
-          ) : zoneLabels.length === 0 ? (
+          ) : zoneLabels.length === 0 && orphanLabels.length === 0 ? (
             <EmptyState
               title="Belum Ada Wilayah"
               message="Belum ada paket per wilayah untuk operator ini."
             />
           ) : (
-            <View style={styles.list}>
-              {zoneLabels.map((label) => {
-                const active = zoneLabel === label;
-                const count = filterProductsByZoneLabel(operatorProducts, label).length;
-                return (
-                  <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
-                    <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
-                      <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
-                        {label}
-                      </Text>
-                      <Text style={styles.zoneMeta}>{count} produk</Text>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <>
+              {zoneLabels.length > 0 ? (
+                <View style={styles.list}>
+                  {zoneLabels.map((label) => {
+                    const active = zoneLabel === label;
+                    const count = filterProductsByZoneLabel(operatorProducts, label).length;
+                    return (
+                      <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
+                        <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
+                          <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
+                            {label}
+                          </Text>
+                          <Text style={styles.zoneMeta}>{count} produk</Text>
+                        </Card>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {orphanLabels.length > 0 ? (
+                <>
+                  <Text style={[styles.section, zoneLabels.length > 0 ? styles.orphanSection : null]}>
+                    Wilayah Lainnya
+                  </Text>
+                  <Text style={styles.orphanHint}>
+                    Zona Digiflazz yang belum dikelompokkan ke pulau di atas.
+                  </Text>
+                  <View style={styles.list}>
+                    {orphanLabels.map((label) => {
+                      const active = zoneLabel === label;
+                      const count = filterProductsByZoneLabel(operatorProducts, label).length;
+                      return (
+                        <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
+                          <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
+                            <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
+                              {label}
+                            </Text>
+                            <Text style={styles.zoneMeta}>{count} produk</Text>
+                          </Card>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+            </>
           )}
         </>
       ) : (
@@ -398,11 +443,23 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
   },
+  hint: {
+    fontSize: typography.size.sm,
+    color: colors.gray[500],
+  },
   phoneMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
   section: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
+  },
+  orphanSection: {
+    marginTop: spacing.md,
+  },
+  orphanHint: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+    marginBottom: spacing.xs,
   },
   zoneWarn: {
     backgroundColor: colors.status.pendingBg,

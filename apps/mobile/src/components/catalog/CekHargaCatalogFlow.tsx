@@ -31,7 +31,8 @@ import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvaila
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
 import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
 import {
-  collectTelkomselZoneLabels,
+  collectGeographicTelkomselZoneLabels,
+  collectOrphanTelkomselZoneLabels,
   filterProductsByZoneLabel,
   isTelkomselOperator,
   telkomselNationalProducts,
@@ -124,7 +125,11 @@ export function CekHargaCatalogFlow() {
     isVoucherInternet && isTelkomselProvider && telkomselNeedsZoneGate(products);
 
   const zoneLabels = useMemo(
-    () => (showZoneFilter ? collectTelkomselZoneLabels(products) : []),
+    () => (showZoneFilter ? collectGeographicTelkomselZoneLabels(products) : []),
+    [showZoneFilter, products]
+  );
+  const orphanLabels = useMemo(
+    () => (showZoneFilter ? collectOrphanTelkomselZoneLabels(products) : []),
     [showZoneFilter, products]
   );
 
@@ -137,8 +142,11 @@ export function CekHargaCatalogFlow() {
     for (const label of zoneLabels) {
       opts.push({ value: label, label });
     }
+    for (const label of orphanLabels) {
+      opts.push({ value: label, label: `${label} (Wilayah Lainnya)` });
+    }
     return opts;
-  }, [showZoneFilter, products, zoneLabels]);
+  }, [showZoneFilter, products, zoneLabels, orphanLabels]);
 
   const loadCategories = useCallback(async () => {
     setCategoriesLoading(true);

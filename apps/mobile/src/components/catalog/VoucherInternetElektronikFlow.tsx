@@ -22,7 +22,8 @@ import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 import {
-  collectTelkomselZoneLabels,
+  collectGeographicTelkomselZoneLabels,
+  collectOrphanTelkomselZoneLabels,
   filterProductsByZoneLabel,
   isTelkomselOperator,
   telkomselNationalProducts,
@@ -80,8 +81,13 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
   const fetchWallet = useWalletStore((s) => s.fetchWallet);
 
   const [step, setStep] = useState<Step>('brands');
+  const [brands, setBrands] = useState<BrandRow[]>([]);
+  const [brandProviders, setBrandProviders] = useState<
+    { name: string; providerId: number }[]
+  >([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [brand, setBrand] = useState<string | null>(null);
   const [brandQuery, setBrandQuery] = useState('');
@@ -91,40 +97,92 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
   const [nationalSelected, setNationalSelected] = useState(false);
   const [zoneLabel, setZoneLabel] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const loadBrands = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getProducts({ category: 'voucher-internet', per_page: 5000 });
-      if (res.success && Array.isArray(res.data)) {
-        setAllProducts(res.data.filter((p) => isCatalogListed(p)));
+      const res = await catalogService.getCategoryProviders('voucher-internet');
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        const rows = res.data
+          .filter((p) => p?.providerId && p?.name)
+          .map((p) => ({
+            name: String(p.name).trim(),
+            count: Number(p.count || 0),
+            logo: p.logo ?? null,
+            providerId: p.providerId,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'id'));
+        setBrands(rows.map(({ name, count, logo }) => ({ name, count, logo })));
+        setBrandProviders(rows.map(({ name, providerId }) => ({ name, providerId })));
       } else {
-        setAllProducts([]);
-        setError(res.message || 'Gagal memuat katalog voucher internet.');
+        // Fallback: full catalog (slower) if provider summary empty.
+        const full = await catalogService.getProducts({
+          category: 'voucher-internet',
+          per_page: 5000,
+        });
+        if (full.success && Array.isArray(full.data)) {
+          const listed = full.data.filter((p) => isCatalogListed(p));
+          setAllProducts(listed);
+          const map = new Map<string, BrandRow>();
+          for (const p of listed) {
+            const name = (p.operatorName || p.providerDetails?.name || 'Umum').trim();
+            const prev = map.get(name);
+            if (prev) prev.count += 1;
+            else map.set(name, { name, count: 1, logo: p.providerDetails?.logo ?? null });
+          }
+          setBrands(Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'id')));
+          setBrandProviders([]);
+        } else {
+          setBrands([]);
+          setError(res.message || full.message || 'Gagal memuat katalog voucher internet.');
+        }
       }
     } catch (err: any) {
-      setAllProducts([]);
+      setBrands([]);
       setError(err?.message || 'Gagal memuat katalog voucher internet.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-    void fetchWallet();
-  }, [load, fetchWallet]);
-
-  const brands = useMemo((): BrandRow[] => {
-    const map = new Map<string, BrandRow>();
-    for (const p of allProducts) {
-      const name = (p.operatorName || p.providerDetails?.name || 'Umum').trim();
-      const prev = map.get(name);
-      if (prev) prev.count += 1;
-      else map.set(name, { name, count: 1, logo: p.providerDetails?.logo ?? null });
+  const loadBrandProducts = useCallback(async (brandName: string): Promise<Product[]> => {
+    setProductsLoading(true);
+    setError(null);
+    try {
+      const match = brandProviders.find((b) => operatorsMatch(b.name, brandName));
+      const res = match
+        ? await catalogService.getProducts({
+            category: 'voucher-internet',
+            provider_id: match.providerId,
+            per_page: 5000,
+          })
+        : await catalogService.getProducts({ category: 'voucher-internet', per_page: 5000 });
+      if (res.success && Array.isArray(res.data)) {
+        const listed = res.data.filter((p) => isCatalogListed(p));
+        const forBrand = match
+          ? listed
+          : listed.filter((p) =>
+              operatorsMatch(p.operatorName || p.providerDetails?.name, brandName)
+            );
+        setAllProducts(forBrand);
+        return forBrand;
+      }
+      setAllProducts([]);
+      setError(res.message || 'Gagal memuat produk voucher internet.');
+      return [];
+    } catch (err: any) {
+      setAllProducts([]);
+      setError(err?.message || 'Gagal memuat produk voucher internet.');
+      return [];
+    } finally {
+      setProductsLoading(false);
     }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [allProducts]);
+  }, [brandProviders]);
+
+  useEffect(() => {
+    void loadBrands();
+    void fetchWallet();
+  }, [loadBrands, fetchWallet]);
 
   const filteredBrands = useMemo(() => {
     const q = brandQuery.trim().toLowerCase();
@@ -142,7 +200,11 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
   const telkomselActive = !!brand && isTelkomselOperator(brand) && brandProducts.length > 0;
   const zoneGate = telkomselActive && telkomselNeedsZoneGate(brandProducts);
   const zoneLabels = useMemo(
-    () => (telkomselActive ? collectTelkomselZoneLabels(brandProducts) : []),
+    () => (telkomselActive ? collectGeographicTelkomselZoneLabels(brandProducts) : []),
+    [telkomselActive, brandProducts]
+  );
+  const orphanLabels = useMemo(
+    () => (telkomselActive ? collectOrphanTelkomselZoneLabels(brandProducts) : []),
     [telkomselActive, brandProducts]
   );
   const nationalProducts = useMemo(
@@ -243,21 +305,17 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
     return unsub;
   }, [navigation, goBackStep]);
 
-  const selectBrand = (name: string) => {
+  const selectBrand = async (name: string) => {
     setBrand(name);
     setSelected(null);
     setOptionalPhone('');
     setFormError(null);
     resetZoneSelection();
-
-    const productsForBrand = allProducts.filter((p) =>
-      operatorsMatch(p.operatorName || p.providerDetails?.name, name)
-    );
+    const productsForBrand = await loadBrandProducts(name);
     const needsZone =
       isTelkomselOperator(name) &&
       productsForBrand.length > 0 &&
       telkomselNeedsZoneGate(productsForBrand);
-
     setStep(needsZone ? 'zone' : 'products');
   };
 
@@ -316,10 +374,12 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
 
       {step !== 'zone' ? <Text style={styles.modeTag}>Voucher Elektronik</Text> : null}
 
-      {loading && allProducts.length === 0 ? (
+      {loading && brands.length === 0 ? (
         <LoadingState label="Memuat voucher internet..." />
-      ) : error && allProducts.length === 0 ? (
-        <ErrorState message={error} onRetry={load} />
+      ) : productsLoading ? (
+        <LoadingState label="Memuat produk..." />
+      ) : error && brands.length === 0 ? (
+        <ErrorState message={error} onRetry={loadBrands} />
       ) : step === 'brands' ? (
         <>
           <Text style={styles.lead}>Pilih Brand</Text>
@@ -385,33 +445,64 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
 
           <Text style={styles.section}>Voucher per wilayah</Text>
 
-          {zoneLabels.length === 0 && !hasNational ? (
+          {zoneLabels.length === 0 && orphanLabels.length === 0 && !hasNational ? (
             <EmptyState
               title="Belum Ada Wilayah"
               message="Belum ada voucher tersedia untuk wilayah ini."
             />
-          ) : zoneLabels.length === 0 ? (
+          ) : zoneLabels.length === 0 && orphanLabels.length === 0 ? (
             <EmptyState
               title="Belum Ada Wilayah"
               message="Belum ada paket per wilayah untuk brand ini."
             />
           ) : (
-            <View style={styles.list}>
-              {zoneLabels.map((label) => {
-                const active = zoneLabel === label;
-                const count = filterProductsByZoneLabel(brandProducts, label).length;
-                return (
-                  <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
-                    <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
-                      <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
-                        {label}
-                      </Text>
-                      <Text style={styles.zoneMeta}>{count} produk</Text>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <>
+              {zoneLabels.length > 0 ? (
+                <View style={styles.list}>
+                  {zoneLabels.map((label) => {
+                    const active = zoneLabel === label;
+                    const count = filterProductsByZoneLabel(brandProducts, label).length;
+                    return (
+                      <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
+                        <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
+                          <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
+                            {label}
+                          </Text>
+                          <Text style={styles.zoneMeta}>{count} produk</Text>
+                        </Card>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {orphanLabels.length > 0 ? (
+                <>
+                  <Text style={[styles.section, zoneLabels.length > 0 ? styles.orphanSection : null]}>
+                    Wilayah Lainnya
+                  </Text>
+                  <Text style={styles.orphanHint}>
+                    Zona Digiflazz yang belum dikelompokkan ke pulau di atas.
+                  </Text>
+                  <View style={styles.list}>
+                    {orphanLabels.map((label) => {
+                      const active = zoneLabel === label;
+                      const count = filterProductsByZoneLabel(brandProducts, label).length;
+                      return (
+                        <TouchableOpacity key={label} activeOpacity={0.7} onPress={() => selectZone(label)}>
+                          <Card style={[styles.zoneCard, active && styles.zoneCardActive]}>
+                            <Text style={[styles.zoneTitle, active && styles.zoneTitleActive]} numberOfLines={2}>
+                              {label}
+                            </Text>
+                            <Text style={styles.zoneMeta}>{count} produk</Text>
+                          </Card>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+            </>
           )}
         </>
       ) : step === 'products' ? (
@@ -531,6 +622,14 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
+  },
+  orphanSection: {
+    marginTop: spacing.md,
+  },
+  orphanHint: {
+    fontSize: typography.size.xs,
+    color: colors.gray[500],
+    marginBottom: spacing.xs,
   },
   search: {
     borderWidth: 1,
