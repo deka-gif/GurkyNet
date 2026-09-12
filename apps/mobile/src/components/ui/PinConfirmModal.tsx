@@ -16,6 +16,11 @@ import {
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { colors, spacing, typography } from '../../theme';
+import { getBiometricAvailability } from '../../utils/biometric';
+import {
+  isTransactionBiometricEnabled,
+  readTransactionPinWithBiometric,
+} from '../../utils/transactionPinVault';
 
 export type PinConfirmModalProps = {
   visible: boolean;
@@ -36,25 +41,25 @@ export type PinConfirmModalProps = {
    */
   onForgotPin?: () => void;
   /**
-   * Optional secondary UI under error / Lupa PIN (e.g. biometric, resend OTP).
+   * Optional secondary UI under error / Lupa PIN (e.g. resend OTP).
    */
   footer?: React.ReactNode;
   /** Hide the "Lupa PIN?" row entirely (auth create/confirm flows). */
   hideForgotPin?: boolean;
+  /**
+   * When true (default), show fingerprint if Toggle 2 vault is enabled.
+   * Set false for create/change PIN flows.
+   */
+  enableTransactionBiometric?: boolean;
 };
 
 const PIN_LEN = 6;
-const KEYS: Array<Array<string | 'backspace' | 'blank'>> = [
-  ['1', '2', '3'],
-  ['4', '5', '6'],
-  ['7', '8', '9'],
-  ['blank', '0', 'backspace'],
-];
 
 /**
  * MASTER PIN UI — full-screen white layout (mirror unlock PIN / OTP).
  * Used by checkout, transfer, create/confirm/change PIN, PinKeypadPanel.
- * PIN lives only in local component state. Never Zustand / SecureStore / logs.
+ * Typed PIN lives only in local component state.
+ * Optional Toggle 2: biometric unlocks SecureStore vault → same onSubmit(pin) to server.
  */
 export function PinConfirmModal({
   visible,
@@ -69,6 +74,7 @@ export function PinConfirmModal({
   onForgotPin,
   footer,
   hideForgotPin = false,
+  enableTransactionBiometric = true,
 }: PinConfirmModalProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -78,6 +84,9 @@ export function PinConfirmModal({
   });
   const [pin, setPin] = useState('');
   const submittingRef = useRef(false);
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioLabel, setBioLabel] = useState('Fingerprint');
+  const [bioBusy, setBioBusy] = useState(false);
 
   const keyHit = Math.min(68, Math.max(56, Math.round(windowWidth * 0.15)));
   const colGap = Math.max(36, Math.round(windowWidth * 0.14));
@@ -89,11 +98,38 @@ export function PinConfirmModal({
   useEffect(() => {
     setPin('');
     submittingRef.current = false;
+    setBioBusy(false);
   }, [visible]);
 
-  const locked = loading;
+  useEffect(() => {
+    if (!visible || !enableTransactionBiometric) {
+      setBioAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const avail = await getBiometricAvailability();
+      const txOn = await isTransactionBiometricEnabled();
+      if (cancelled) return;
+      setBioLabel(avail.label);
+      setBioAvailable(!!(avail.supported && avail.enrolled && txOn));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, enableTransactionBiometric]);
+
+  const locked = loading || bioBusy;
   const canDismiss = dismissible && !loading;
   const showForgot = !hideForgotPin;
+  const showBioKey = enableTransactionBiometric && bioAvailable;
+
+  const keyRows: Array<Array<string | 'backspace' | 'blank' | 'bio'>> = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    [showBioKey ? 'bio' : 'blank', '0', 'backspace'],
+  ];
 
   const handleComplete = async (entered: string) => {
     if (submittingRef.current || loading) return;
@@ -104,6 +140,19 @@ export function PinConfirmModal({
     } finally {
       setPin('');
       submittingRef.current = false;
+    }
+  };
+
+  const tryTransactionBiometric = async () => {
+    if (!showBioKey || locked || submittingRef.current) return;
+    setBioBusy(true);
+    onEditing?.();
+    try {
+      const vaultPin = await readTransactionPinWithBiometric();
+      if (!vaultPin) return;
+      await handleComplete(vaultPin);
+    } finally {
+      setBioBusy(false);
     }
   };
 
@@ -193,10 +242,12 @@ export function PinConfirmModal({
             })}
           </View>
 
-          {loading ? (
+          {loading || bioBusy ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator color={colors.primary[600]} />
-              <Text style={styles.loadingText}>Memproses...</Text>
+              <Text style={styles.loadingText}>
+                {bioBusy ? `Menunggu ${bioLabel}...` : 'Memproses...'}
+              </Text>
             </View>
           ) : null}
 
@@ -208,11 +259,37 @@ export function PinConfirmModal({
         <View style={styles.midSpacer} />
 
         <View style={[styles.keypad, { gap: rowGap }]}>
-          {KEYS.map((row, rowIndex) => (
+          {keyRows.map((row, rowIndex) => (
             <View key={`row-${rowIndex}`} style={[styles.keypadRow, { gap: colGap }]}>
               {row.map((key) => {
                 if (key === 'blank') {
                   return <View key="blank" style={slotStyle} />;
+                }
+
+                if (key === 'bio') {
+                  return (
+                    <View key="bio-col" style={sideColStyle}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Bayar dengan ${bioLabel}`}
+                        disabled={locked}
+                        hitSlop={12}
+                        onPress={() => void tryTransactionBiometric()}
+                        style={({ pressed }) => [
+                          styles.iconSlot,
+                          slotStyle,
+                          pressed && !locked && styles.pressed,
+                          locked && styles.disabled,
+                        ]}
+                      >
+                        <Ionicons
+                          name="finger-print-outline"
+                          size={30}
+                          color={colors.primary[600]}
+                        />
+                      </Pressable>
+                    </View>
+                  );
                 }
 
                 if (key === 'backspace') {

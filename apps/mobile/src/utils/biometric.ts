@@ -9,9 +9,11 @@ export type BiometricAvailability = {
 };
 
 /**
- * Local biometric unlock for an already-valid SecureStore session.
- * Never stores fingerprints. Never invents success without OS prompt.
+ * Local biometric helpers.
+ * Toggle 1 = app Unlock (session resume) — never stores PIN.
+ * Toggle 2 = transaction vault — see transactionPinVault.ts.
  */
+
 export async function getBiometricAvailability(): Promise<BiometricAvailability> {
   if (Platform.OS === 'web') {
     return { supported: false, enrolled: false, label: 'Fingerprint' };
@@ -28,12 +30,10 @@ export async function getBiometricAvailability(): Promise<BiometricAvailability>
   }
 }
 
-export async function promptBiometric(reason = 'Masuk ke GurkyPay'): Promise<boolean> {
+/** Raw OS biometric challenge — does not check Toggle prefs. */
+export async function promptOsBiometric(reason: string): Promise<boolean> {
   const avail = await getBiometricAvailability();
   if (!avail.supported || !avail.enrolled) return false;
-
-  const enabled = await storageService.getBiometricEnabled();
-  if (!enabled) return false;
 
   try {
     const result = await LocalAuthentication.authenticateAsync({
@@ -48,16 +48,32 @@ export async function promptBiometric(reason = 'Masuk ke GurkyPay'): Promise<boo
   }
 }
 
+/** Toggle 1 — Unlock. Requires Unlock pref ON. */
+export async function promptBiometric(reason = 'Masuk ke GurkyPay'): Promise<boolean> {
+  const enabled = await storageService.getBiometricUnlockEnabled();
+  if (!enabled) return false;
+  return promptOsBiometric(reason);
+}
+
 /**
- * Persist biometric unlock preference. Call ONLY after explicit user consent
- * (e.g. unlock screen "Aktifkan Face ID / Fingerprint"). Never auto-call after login.
+ * Enable Toggle 1 after a successful OS biometric challenge (never set flag without auth).
  */
 export async function enableBiometricIfAvailable(): Promise<boolean> {
   const avail = await getBiometricAvailability();
   if (!avail.supported || !avail.enrolled) {
-    await storageService.setBiometricEnabled(false);
+    await storageService.setBiometricUnlockEnabled(false);
     return false;
   }
-  await storageService.setBiometricEnabled(true);
+
+  const ok = await promptOsBiometric(`Aktifkan ${avail.label} untuk buka aplikasi`);
+  if (!ok) {
+    return false;
+  }
+
+  await storageService.setBiometricUnlockEnabled(true);
   return true;
+}
+
+export async function disableUnlockBiometric(): Promise<void> {
+  await storageService.setBiometricUnlockEnabled(false);
 }

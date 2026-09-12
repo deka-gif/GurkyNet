@@ -26,6 +26,8 @@ type Props = {
   dismissible?: boolean;
   /** Required for back navigation while the PIN sheet is open. */
   onClose: () => void;
+  /** Default false — account create/change/forgot must not use tx vault. */
+  enableTransactionBiometric?: boolean;
 };
 
 /**
@@ -44,6 +46,7 @@ export function PinKeypadPanel({
   onForgotPin,
   dismissible = false,
   onClose,
+  enableTransactionBiometric = false,
 }: Props) {
   return (
     <View style={styles.fill} pointerEvents="box-none">
@@ -57,6 +60,7 @@ export function PinKeypadPanel({
         hideForgotPin={!showForgotPin}
         onForgotPin={showForgotPin ? onForgotPin : undefined}
         dismissible={dismissible && !disabled}
+        enableTransactionBiometric={enableTransactionBiometric}
         onClose={() => {
           if (disabled) return;
           onClose();

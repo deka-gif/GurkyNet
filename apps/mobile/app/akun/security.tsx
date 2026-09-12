@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -7,6 +15,7 @@ import {
   ScreenContainer,
   LoadingState,
   ErrorState,
+  PinConfirmModal,
 } from '../../src/components/ui';
 import { useAuthStore } from '../../src/store/auth.store';
 import {
@@ -17,6 +26,16 @@ import {
 import { parseApiError } from '../../src/api/client';
 import { storageService } from '../../src/services/storage.service';
 import { getDeviceModel, getOsVersion } from '../../src/utils/deviceInfo';
+import {
+  disableUnlockBiometric,
+  enableBiometricIfAvailable,
+  getBiometricAvailability,
+} from '../../src/utils/biometric';
+import {
+  disableTransactionBiometric,
+  enrollTransactionBiometricWithVerifiedPin,
+  revokeSanctumTokenBestEffort,
+} from '../../src/utils/transactionPinVault';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
 function formatWhen(value: string | null | undefined): string {
@@ -67,19 +86,41 @@ function platformLabel(platform: string | null | undefined): string | null {
 }
 
 /**
- * Keamanan & PIN — compact PIN status + Sesi & Perangkat.
+ * Keamanan & PIN — PIN status, biometrik (2 toggle terpisah), Sesi & Perangkat.
+ * Toggle 1 = Unlock (no PIN vault). Toggle 2 = transaksi (vault PIN + requireAuthentication).
  * Ubah PIN → PUT /pin/change. Lupa PIN → OTP email recovery.
  */
 export default function AccountSecurityScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const fetchUser = useAuthStore((s) => s.fetchUser);
+  const applySession = useAuthStore((s) => s.applySession);
+  const rememberedIdentity = useAuthStore((s) => s.rememberedIdentity);
 
   const [data, setData] = useState<SecurityOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
   const lockRef = useRef(false);
+
+  const [bioLabel, setBioLabel] = useState('Fingerprint');
+  const [bioHardware, setBioHardware] = useState(false);
+  const [unlockBioOn, setUnlockBioOn] = useState(false);
+  const [txBioOn, setTxBioOn] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  const [enrollPinOpen, setEnrollPinOpen] = useState(false);
+  const [enrollPinError, setEnrollPinError] = useState<string | null>(null);
+  const [enrollPinLoading, setEnrollPinLoading] = useState(false);
+
+  const loadBioPrefs = useCallback(async () => {
+    const avail = await getBiometricAvailability();
+    const unlockOn = await storageService.getBiometricUnlockEnabled();
+    const txOn = await storageService.getBiometricTxEnabled();
+    setBioLabel(avail.label);
+    setBioHardware(!!(avail.supported && avail.enrolled));
+    setUnlockBioOn(unlockOn);
+    setTxBioOn(txOn);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,6 +143,7 @@ export default function AccountSecurityScreen() {
       }
 
       await fetchUser();
+      await loadBioPrefs();
       const res = await profileService.getSecurity();
       if (res.success && res.data) {
         setData(res.data);
@@ -115,13 +157,124 @@ export default function AccountSecurityScreen() {
     } finally {
       setLoading(false);
     }
-  }, [fetchUser]);
+  }, [fetchUser, loadBioPrefs]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const hasPin = !!(user?.hasPin || data?.has_pin);
+
+  const resolveIdentity = (): string => {
+    return (
+      rememberedIdentity?.trim() ||
+      user?.email?.trim() ||
+      user?.phone?.trim() ||
+      ''
+    );
+  };
+
+  const onToggleUnlockBio = (next: boolean) => {
+    if (bioBusy) return;
+    if (!bioHardware) {
+      Alert.alert(
+        `${bioLabel} tidak tersedia`,
+        'Perangkat ini tidak punya biometrik terdaftar di sistem.'
+      );
+      return;
+    }
+    void (async () => {
+      setBioBusy(true);
+      try {
+        if (!next) {
+          await disableUnlockBiometric();
+          setUnlockBioOn(false);
+          return;
+        }
+        const ok = await enableBiometricIfAvailable();
+        if (ok) {
+          setUnlockBioOn(true);
+        } else {
+          setUnlockBioOn(false);
+          Alert.alert('Dibatalkan', `${bioLabel} dibatalkan atau gagal. Toggle tidak diaktifkan.`);
+        }
+      } finally {
+        setBioBusy(false);
+      }
+    })();
+  };
+
+  const onToggleTxBio = (next: boolean) => {
+    if (bioBusy) return;
+    if (!hasPin) {
+      Alert.alert('PIN belum dibuat', 'Buat PIN transaksi dulu sebelum mengaktifkan biometrik transaksi.');
+      return;
+    }
+    if (!bioHardware) {
+      Alert.alert(
+        `${bioLabel} tidak tersedia`,
+        'Perangkat ini tidak punya biometrik terdaftar di sistem.'
+      );
+      return;
+    }
+    if (!next) {
+      void (async () => {
+        setBioBusy(true);
+        try {
+          await disableTransactionBiometric();
+          setTxBioOn(false);
+        } finally {
+          setBioBusy(false);
+        }
+      })();
+      return;
+    }
+
+    // Toggle 2 ON — wajib penjelasan + verifikasi PIN ke server sebelum vault diisi.
+    Alert.alert(
+      `Aktifkan ${bioLabel} untuk transaksi?`,
+      'Fitur ini akan menyimpan PIN kamu dalam bentuk terenkripsi di perangkat ini, dilindungi biometrik sistem operasi (Keychain/Keystore). PIN tetap dikirim dan dicek ke server saat transaksi. Kamu bisa menonaktifkannya kapan saja; mengganti PIN atau logout akan menghapus PIN tersimpan.',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Lanjut',
+          onPress: () => {
+            setEnrollPinError(null);
+            setEnrollPinOpen(true);
+          },
+        },
+      ]
+    );
+  };
+
+  const onEnrollPinSubmit = async (pin: string) => {
+    const identity = resolveIdentity();
+    if (!identity) {
+      setEnrollPinError('Sesi identitas tidak ditemukan. Login ulang.');
+      return;
+    }
+    setEnrollPinLoading(true);
+    setEnrollPinError(null);
+    try {
+      const result = await enrollTransactionBiometricWithVerifiedPin({ identity, pin });
+      if (!result.ok) {
+        setEnrollPinError(result.message);
+        return;
+      }
+      await applySession(result.token, result.user, identity);
+      // After switching to the enroll token, drop the prior session so it does not linger.
+      if (result.previousToken && result.previousToken !== result.token) {
+        await revokeSanctumTokenBestEffort(result.previousToken);
+      }
+      setTxBioOn(true);
+      setEnrollPinOpen(false);
+      Alert.alert('Berhasil', `${bioLabel} untuk konfirmasi transaksi sudah aktif.`);
+    } catch (err: unknown) {
+      setEnrollPinError(parseApiError(err).message || 'Gagal mengaktifkan biometrik transaksi.');
+    } finally {
+      setEnrollPinLoading(false);
+    }
+  };
 
   const revokeOne = (token: SecuritySessionToken) => {
     Alert.alert(
@@ -237,6 +390,53 @@ export default function AccountSecurityScreen() {
             </View>
           </View>
 
+          <Text style={styles.sectionLabel}>Biometrik</Text>
+          <View style={styles.card}>
+            {!bioHardware ? (
+              <Text style={styles.meta}>
+                Biometrik tidak tersedia atau belum terdaftar di perangkat ini. Gunakan PIN
+                seperti biasa.
+              </Text>
+            ) : null}
+
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleText}>
+                <Text style={styles.statusLabel}>Sidik jari untuk buka aplikasi</Text>
+                <Text style={styles.meta}>
+                  Buka layar Unlock dengan {bioLabel}. Tidak menyimpan PIN.
+                </Text>
+              </View>
+              <Switch
+                value={unlockBioOn}
+                onValueChange={onToggleUnlockBio}
+                disabled={bioBusy || !bioHardware}
+                trackColor={{ false: colors.gray[200], true: colors.primary[200] }}
+                thumbColor={unlockBioOn ? colors.primary[600] : colors.gray[100]}
+                accessibilityLabel="Sidik jari untuk buka aplikasi"
+              />
+            </View>
+
+            <View style={styles.toggleDivider} />
+
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleText}>
+                <Text style={styles.statusLabel}>Sidik jari untuk konfirmasi transaksi</Text>
+                <Text style={styles.meta}>
+                  Menyimpan PIN terenkripsi di perangkat (dilindungi biometrik OS). Bisa
+                  diaktifkan terpisah dari buka aplikasi.
+                </Text>
+              </View>
+              <Switch
+                value={txBioOn}
+                onValueChange={onToggleTxBio}
+                disabled={bioBusy || !bioHardware || !hasPin}
+                trackColor={{ false: colors.gray[200], true: colors.primary[200] }}
+                thumbColor={txBioOn ? colors.primary[600] : colors.gray[100]}
+                accessibilityLabel="Sidik jari untuk konfirmasi transaksi"
+              />
+            </View>
+          </View>
+
           <View style={styles.sessionHeaderRow}>
             <Text style={styles.sectionLabel}>Sesi & Perangkat</Text>
             <Pressable
@@ -310,6 +510,23 @@ export default function AccountSecurityScreen() {
           </View>
         </View>
       )}
+
+      <PinConfirmModal
+        visible={enrollPinOpen}
+        title="Verifikasi PIN"
+        subtitle={`Masukkan PIN untuk mengaktifkan ${bioLabel} transaksi`}
+        loading={enrollPinLoading}
+        error={enrollPinError}
+        hideForgotPin
+        enableTransactionBiometric={false}
+        onClose={() => {
+          if (enrollPinLoading) return;
+          setEnrollPinOpen(false);
+          setEnrollPinError(null);
+        }}
+        onEditing={() => setEnrollPinError(null)}
+        onSubmit={(pin) => void onEnrollPinSubmit(pin)}
+      />
     </ScreenContainer>
   );
 }
@@ -380,6 +597,17 @@ const styles = StyleSheet.create({
     color: colors.primary[700],
   },
   btnPressed: { opacity: 0.88 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  toggleText: { flex: 1, minWidth: 0, gap: 4 },
+  toggleDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.gray[100],
+    marginVertical: spacing.xs,
+  },
   sessionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

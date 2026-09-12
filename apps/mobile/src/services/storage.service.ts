@@ -1,17 +1,24 @@
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
+import { PIN_VAULT_KEY, PIN_VAULT_SERVICE } from '../utils/transactionPinVault.pure';
 
 /**
  * Session/device keys via expo-secure-store (Keychain/Keystore).
- * Never store password or PIN here.
+ *
+ * Password: never stored.
+ * PIN: never stored in general keys. Exception — transaction PIN vault
+ * (Toggle 2) lives in transactionPinVault.ts with requireAuthentication.
  */
 const TOKEN_KEY = 'gurkynet_auth_token';
 const USER_KEY = 'gurkynet_user_data';
 const REMEMBERED_IDENTITY_KEY = 'gurkynet_remembered_identity';
 const DEVICE_UUID_KEY = 'gurkynet_device_uuid';
 const TRUSTED_DEVICE_IDENTITIES_KEY = 'gurkynet_trusted_device_identities';
-const BIOMETRIC_ENABLED_KEY = 'gurkynet_biometric_enabled';
+/** Toggle 1 — Unlock biometric (legacy key name kept for existing installs). */
+const BIOMETRIC_UNLOCK_KEY = 'gurkynet_biometric_enabled';
+/** Toggle 2 — transaction biometric pref (vault content is separate). */
+const BIOMETRIC_TX_KEY = 'gurkynet_biometric_tx_enabled';
 const RETURNING_USER_KEY = 'gurkynet_returning_user';
 const PUSH_PREPROMPT_SEEN_KEY = 'gurkynet_push_preprompt_seen';
 
@@ -118,12 +125,43 @@ export const storageService = {
     return list.includes(identity.toLowerCase());
   },
 
-  getBiometricEnabled: async (): Promise<boolean> => {
-    return (await safeGet(BIOMETRIC_ENABLED_KEY)) === '1';
+  /** Toggle 1 — Unlock biometric (no PIN stored). */
+  getBiometricUnlockEnabled: async (): Promise<boolean> => {
+    return (await safeGet(BIOMETRIC_UNLOCK_KEY)) === '1';
   },
-  setBiometricEnabled: async (enabled: boolean): Promise<void> => {
-    if (enabled) await safeSet(BIOMETRIC_ENABLED_KEY, '1');
-    else await safeDelete(BIOMETRIC_ENABLED_KEY);
+  setBiometricUnlockEnabled: async (enabled: boolean): Promise<void> => {
+    if (enabled) await safeSet(BIOMETRIC_UNLOCK_KEY, '1');
+    else await safeDelete(BIOMETRIC_UNLOCK_KEY);
+  },
+
+  /** @deprecated Use getBiometricUnlockEnabled — kept for older call sites during migration. */
+  getBiometricEnabled: async (): Promise<boolean> => storageService.getBiometricUnlockEnabled(),
+  /** @deprecated Use setBiometricUnlockEnabled */
+  setBiometricEnabled: async (enabled: boolean): Promise<void> =>
+    storageService.setBiometricUnlockEnabled(enabled),
+
+  /** Toggle 2 pref only — vault payload is in transactionPinVault. */
+  getBiometricTxEnabled: async (): Promise<boolean> => {
+    return (await safeGet(BIOMETRIC_TX_KEY)) === '1';
+  },
+  setBiometricTxEnabled: async (enabled: boolean): Promise<void> => {
+    if (enabled) await safeSet(BIOMETRIC_TX_KEY, '1');
+    else await safeDelete(BIOMETRIC_TX_KEY);
+  },
+
+  /**
+   * Wipe biometric-protected PIN vault bytes (Toggle 2).
+   * Safe to call from logout / identity clear without importing vault helpers.
+   */
+  wipeTransactionPinVaultBytes: async (): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') return;
+      await SecureStore.deleteItemAsync(PIN_VAULT_KEY, {
+        keychainService: PIN_VAULT_SERVICE,
+      });
+    } catch {
+      // ignore
+    }
   },
 
   /** Soft push permission pre-prompt — not OS permission itself. */
@@ -133,18 +171,25 @@ export const storageService = {
     await safeSet(PUSH_PREPROMPT_SEEN_KEY, '1');
   },
 
-  /** Clears session token/user. Keeps device UUID, returning identity, biometric pref. */
+  /** Clears session token/user. Keeps device UUID, returning identity, Unlock pref. */
   clear: async (): Promise<void> => {
+    await storageService.wipeTransactionPinVaultBytes();
+    await safeDelete(BIOMETRIC_TX_KEY);
     await safeDelete(TOKEN_KEY);
     await safeDelete(USER_KEY);
   },
 
-  /** Full sign-out of returning-user state (e.g. "Gunakan akun lain"). */
+  /**
+   * Full sign-out of returning-user state (e.g. "Gunakan akun lain").
+   * Clears Unlock pref + Toggle 2 pref + PIN vault.
+   */
   clearAuthIdentity: async (): Promise<void> => {
+    await storageService.wipeTransactionPinVaultBytes();
     await safeDelete(TOKEN_KEY);
     await safeDelete(USER_KEY);
     await safeDelete(REMEMBERED_IDENTITY_KEY);
     await safeDelete(RETURNING_USER_KEY);
-    await safeDelete(BIOMETRIC_ENABLED_KEY);
+    await safeDelete(BIOMETRIC_UNLOCK_KEY);
+    await safeDelete(BIOMETRIC_TX_KEY);
   },
 };

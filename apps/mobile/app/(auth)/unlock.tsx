@@ -69,6 +69,8 @@ export default function UnlockScreen() {
   const [bioBusy, setBioBusy] = useState(false);
   const lockRef = useRef(false);
   const submittingRef = useRef(false);
+  /** Cold-start Unlock: auto-prompt at most once per screen mount (no cancel loop). */
+  const autoBioAttemptedRef = useRef(false);
 
   const canUseBioUnlock = bioHardware && bioEnabled && !!token;
   const locked = loading || bioBusy;
@@ -95,7 +97,7 @@ export default function UnlockScreen() {
   useEffect(() => {
     void (async () => {
       const avail = await getBiometricAvailability();
-      const enabled = await storageService.getBiometricEnabled();
+      const enabled = await storageService.getBiometricUnlockEnabled();
       setBioLabel(avail.label);
       setBioHardware(avail.supported && avail.enrolled);
       setBioEnabled(enabled);
@@ -190,7 +192,15 @@ export default function UnlockScreen() {
     } finally {
       setBioBusy(false);
     }
-  }, [bioBusy, canUseBioUnlock, goHome, token, unlockWithExistingSession]);
+  }, [bioBusy, canUseBioUnlock, goHome, token, unlockWithExistingSession, router]);
+
+  // Cold-start Unlock only: auto-prompt once when Toggle 1 ready. No resume/re-lock loop.
+  useEffect(() => {
+    if (!canUseBioUnlock) return;
+    if (autoBioAttemptedRef.current) return;
+    autoBioAttemptedRef.current = true;
+    void tryBiometric();
+  }, [canUseBioUnlock, tryBiometric]);
 
   const consentEnableBiometric = async () => {
     if (bioBusy || loading || !bioHardware) return;
@@ -201,7 +211,7 @@ export default function UnlockScreen() {
       if (ok) {
         setBioEnabled(true);
       } else {
-        setError(`${bioLabel} tidak tersedia di perangkat ini.`);
+        setError(`${bioLabel} dibatalkan atau tidak tersedia.`);
       }
     } finally {
       setBioBusy(false);

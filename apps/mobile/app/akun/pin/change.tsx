@@ -138,6 +138,8 @@ export default function ChangePinScreen() {
       );
       if (res.success) {
         clearSensitive();
+        const { clearTransactionPinVault } = await import('../../../src/utils/transactionPinVault');
+        await clearTransactionPinVault();
         await fetchUser();
         setStep('success');
         return;
