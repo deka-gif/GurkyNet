@@ -197,12 +197,14 @@ class CustomerProductCatalogFilterTest extends TestCase
     public function test_i_game_brand_all_non_purchasable_hidden_from_providers(): void
     {
         $digi = $this->digiOnline();
-        $this->seedProduct('game', 'Game', 'PUBG Mobile', 'pubg-no-schema', $digi);
+        // Must use an unmapped brand — profiled brands (e.g. PUBG Mobile / Stage 4) inherit
+        // game_profiles and correctly appear; that path is covered by GameBrandVisibilityTest.
+        $this->seedProduct('game', 'Game', 'Mystery Unmapped Game', 'myst-unk-no-schema', $digi);
 
         $response = $this->getJson('/api/v1/products/providers?category=game');
         $response->assertOk();
         $names = collect($response->json('data'))->pluck('name')->all();
-        $this->assertNotContains('PUBG Mobile', $names);
+        $this->assertNotContains('Mystery Unmapped Game', $names);
     }
 
     public function test_j_game_brand_with_purchasable_sku_lists_only_purchasable(): void
