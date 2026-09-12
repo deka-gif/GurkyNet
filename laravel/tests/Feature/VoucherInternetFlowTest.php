@@ -79,6 +79,35 @@ class VoucherInternetFlowTest extends TestCase
             'admin_fee' => 0,
             'status' => true,
         ]);
+
+        $digi = ProductProvider::digiflazz();
+        if ($digi) {
+            $this->product->update(['product_provider_id' => $digi->id]);
+            \App\Models\DigiflazzProduct::create([
+                'buyer_sku_code' => 'XLVI5GB',
+                'list_type' => 'prepaid',
+                'product_name' => 'Voucher Internet XL 5GB',
+                'category' => 'Voucher',
+                'brand' => 'XL',
+                'type' => 'Umum',
+                'seller_name' => 'Test',
+                'seller_price' => 24000,
+                'buyer_product_status' => true,
+                'seller_product_status' => true,
+                'unlimited_stock' => true,
+                'stock' => '0',
+                'multi' => true,
+                'desc' => 'Voucher paket',
+            ]);
+            \App\Models\ProductProviderSku::create([
+                'product_id' => $this->product->id,
+                'product_provider_id' => $digi->id,
+                'provider_sku' => 'XLVI5GB',
+                'base_price' => 24000,
+                'is_preferred' => true,
+                'is_active' => true,
+            ]);
+        }
     }
 
     public function test_tembak_langsung_purchase_debits_wallet_and_flags_voucher_internet(): void

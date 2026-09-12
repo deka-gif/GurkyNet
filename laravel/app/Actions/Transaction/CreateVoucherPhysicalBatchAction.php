@@ -122,6 +122,10 @@ class CreateVoucherPhysicalBatchAction
                 ]);
             }
 
+            // Digi category fail-closed: physical serials only on Aktivasi Voucher SKUs.
+            app(\App\Services\Catalog\VoucherInternetDigiCategoryGate::class)
+                ->assertAllowedForPhysicalBatch($product);
+
             if (! $this->availabilityService->isAvailable($product)) {
                 $statusAvailability = $this->availabilityService->getStatus($product);
                 throw ValidationException::withMessages([

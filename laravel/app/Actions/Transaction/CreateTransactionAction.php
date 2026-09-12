@@ -164,6 +164,11 @@ class CreateTransactionAction
                 ]);
             }
 
+            // Voucher Internet: Digi Aktivasi Voucher SKUs cannot use POST /transactions
+            // (Tembak/Elektronik). Physical serial activation must use physical-batches.
+            app(\App\Services\Catalog\VoucherInternetDigiCategoryGate::class)
+                ->assertAllowedForSinglePurchase($product);
+
             $inquirySession = null;
             $isPasca = is_string($inquiryRefId) && trim($inquiryRefId) !== '';
 

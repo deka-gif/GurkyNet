@@ -51,7 +51,7 @@ export const VoucherElektronikZonaPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category: 'voucher-internet' });
+    fetchProducts({ category: 'voucher-internet', vi_mode: 'elektronik' });
     const pending = consumePendingCheckout(`/dashboard/voucher-internet/elektronik/${encodeURIComponent(zona)}`);
     if (pending?.data) {
       setCheckoutData(pending.data);

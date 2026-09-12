@@ -146,7 +146,9 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getCategoryProviders('voucher-internet');
+      const res = await catalogService.getCategoryProviders('voucher-internet', {
+        vi_mode: 'fisik',
+      });
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
         const rows = res.data
           .filter((p) => p?.providerId && p?.name)
@@ -162,6 +164,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
       } else {
         const full = await catalogService.getProducts({
           category: 'voucher-internet',
+          vi_mode: 'fisik',
           per_page: 5000,
         });
         if (full.success && Array.isArray(full.data)) {
@@ -197,10 +200,15 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
       const res = match
         ? await catalogService.getProducts({
             category: 'voucher-internet',
+            vi_mode: 'fisik',
             provider_id: match.providerId,
             per_page: 5000,
           })
-        : await catalogService.getProducts({ category: 'voucher-internet', per_page: 5000 });
+        : await catalogService.getProducts({
+            category: 'voucher-internet',
+            vi_mode: 'fisik',
+            per_page: 5000,
+          });
       if (res.success && Array.isArray(res.data)) {
         const listed = res.data.filter((p) => isCatalogListed(p));
         const forBrand = match

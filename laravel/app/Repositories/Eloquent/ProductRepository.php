@@ -200,7 +200,7 @@ class ProductRepository implements ProductRepositoryInterface
         return new EloquentCollection($merged->all());
     }
 
-    public function getActiveProductsForCategory(string $category): EloquentCollection
+    public function getActiveProductsForCategory(string $category, array $filters = []): EloquentCollection
     {
         ProductResource::resetListingCache();
         static::$vipTraceBudget = 30;
@@ -212,7 +212,7 @@ class ProductRepository implements ProductRepositoryInterface
             ->with(['category', 'provider', 'productProvider', 'providerSkus.productProvider']);
 
         $this->applyControlCenterVisibility($query);
-        $this->applyListFilters($query, ['category' => $category]);
+        $this->applyListFilters($query, array_merge($filters, ['category' => $category]));
 
         $all = $query->orderBy('id')->get();
         $merged = $this->sortCatalogProducts($this->mergeDuplicateCatalogProducts($all));
@@ -829,6 +829,49 @@ class ProductRepository implements ProductRepositoryInterface
                     });
             });
         }
+
+        // Voucher Internet: Digi category split (Voucher vs Aktivasi Voucher) by vi_mode / digiflazz_category.
+        $digiCategories = $this->resolveVoucherInternetDigiCategoryFilter($filters);
+        if ($digiCategories !== null) {
+            $query->whereExists(function ($sub) use ($digiCategories) {
+                $sub->selectRaw('1')
+                    ->from('product_provider_skus as pps')
+                    ->join('digiflazz_products as dp', 'dp.buyer_sku_code', '=', 'pps.provider_sku')
+                    ->whereColumn('pps.product_id', 'products.id')
+                    ->where('pps.is_active', true)
+                    ->whereIn('dp.category', $digiCategories);
+            });
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return list<string>|null  null = no Digi-category gate
+     */
+    protected function resolveVoucherInternetDigiCategoryFilter(array $filters): ?array
+    {
+        $category = strtolower(trim((string) ($filters['category'] ?? '')));
+        $isVi = $category === 'voucher-internet'
+            || in_array($category, config('gurky_catalog.filter_aliases.voucher-internet', []), true);
+        if (! $isVi) {
+            return null;
+        }
+
+        $rawCategory = trim((string) ($filters['digiflazz_category'] ?? ''));
+        if ($rawCategory !== '') {
+            $gate = app(\App\Services\Catalog\VoucherInternetDigiCategoryGate::class);
+
+            return [$gate->normalizeDigiCategory($rawCategory)];
+        }
+
+        $mode = trim((string) ($filters['vi_mode'] ?? ''));
+        if ($mode === '') {
+            return null;
+        }
+
+        // Fail-closed: unknown mode throws via gate.
+        return app(\App\Services\Catalog\VoucherInternetDigiCategoryGate::class)
+            ->digiCategoriesForMode($mode);
     }
 
     /**

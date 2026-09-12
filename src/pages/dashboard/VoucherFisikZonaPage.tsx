@@ -64,7 +64,7 @@ export const VoucherFisikZonaPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category: 'voucher-internet' });
+    fetchProducts({ category: 'voucher-internet', vi_mode: 'fisik' });
 
     if (!restoredScanOnce.current) {
       restoredScanOnce.current = true;

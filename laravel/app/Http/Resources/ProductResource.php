@@ -127,6 +127,7 @@ class ProductResource extends JsonResource
                 'webPurchase' => $lifecycle['capability']['web_purchase'] ?? false,
             ],
             'category' => $this->category?->slug ?? 'pulsa', // Frontend expected category slug
+            'digiflazzCategory' => $this->resolveDigiflazzCategory(),
             'categoryDetails' => new CategoryResource($this->whenLoaded('category')),
             // How this product's category was resolved by ProductMappingService — lets
             // Operations spot products that fell through to the unmapped fallback instead
@@ -148,6 +149,19 @@ class ProductResource extends JsonResource
             'lastUpdated' => $this->updated_at?->toIso8601String(),
             ...$this->ewalletOpenAmountMeta(),
         ];
+    }
+
+    /**
+     * Digiflazz prepaid category for voucher-internet mode split (Voucher vs Aktivasi Voucher).
+     */
+    protected function resolveDigiflazzCategory(): ?string
+    {
+        if ((string) ($this->category?->slug ?? '') !== 'voucher-internet') {
+            return null;
+        }
+
+        return resolve(\App\Services\Catalog\VoucherInternetDigiCategoryGate::class)
+            ->resolveDigiCategory($this->resource);
     }
 
     /**

@@ -84,7 +84,9 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     setProvidersLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getCategoryProviders('voucher-internet');
+      const res = await catalogService.getCategoryProviders('voucher-internet', {
+        vi_mode: 'tembak',
+      });
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
         setBrandProviders(
           res.data
@@ -112,11 +114,13 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
         const res = match
           ? await catalogService.getProducts({
               category: 'voucher-internet',
+              vi_mode: 'tembak',
               provider_id: match.providerId,
               per_page: 500,
             })
           : await catalogService.getProducts({
               category: 'voucher-internet',
+              vi_mode: 'tembak',
               provider: providerName,
               per_page: 500,
             });

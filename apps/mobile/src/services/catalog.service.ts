@@ -48,6 +48,8 @@ export interface Product {
   status: 'tersedia' | 'maintenance' | 'gangguan';
   isPurchasable: boolean;
   category: string;
+  /** Digiflazz prepaid category when slug is voucher-internet (Voucher | Aktivasi Voucher). */
+  digiflazzCategory?: string | null;
   operatorName: string;
   /** From ProductResource — taxonomy mentionsRegion; UI-only until purchase (not sent on POST). */
   requiresRegion?: boolean;
@@ -72,6 +74,9 @@ export interface ProductFilters {
   sort?: string;
   /** Customer surface — backend filters capability.mobile_purchase when set to mobile. */
   surface?: 'mobile' | 'web';
+  /** Voucher Internet Digi category split: tembak|elektronik → Voucher; fisik → Aktivasi Voucher. */
+  vi_mode?: 'tembak' | 'elektronik' | 'fisik';
+  digiflazz_category?: string;
 }
 
 /**
@@ -130,11 +135,12 @@ export const catalogService = {
 
   /** GET /products/providers?category= — Web ProviderCatalogFlow step 1. */
   getCategoryProviders: async (
-    category: string
+    category: string,
+    opts?: { vi_mode?: 'tembak' | 'elektronik' | 'fisik' }
   ): Promise<ApiResponse<CategoryProviderSummary[]>> => {
     const response = await apiClient.get<ApiResponse<CategoryProviderSummary[]>>(
       '/products/providers',
-      { params: { category } }
+      { params: { category, ...(opts?.vi_mode ? { vi_mode: opts.vi_mode } : {}) } }
     );
     return response.data;
   },

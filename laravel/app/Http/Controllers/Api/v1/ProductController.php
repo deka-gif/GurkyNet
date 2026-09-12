@@ -79,6 +79,8 @@ class ProductController extends Controller
         $filters = $request->only([
             'category', 'provider', 'provider_id', 'status', 'keyword', 'per_page', 'page',
             'telkomsel_group', 'data_group', 'sort', 'surface',
+            // Voucher Internet Digi category split (Voucher vs Aktivasi Voucher).
+            'vi_mode', 'digiflazz_category',
         ]);
         
         $paginatedProducts = $this->searchProductAction->execute($filters);
@@ -116,7 +118,10 @@ class ProductController extends Controller
             return $this->errorResponse('Parameter category wajib diisi.', 400);
         }
 
-        $providers = $this->getCategoryProviderSummaryAction->execute($category);
+        $providers = $this->getCategoryProviderSummaryAction->execute($category, [
+            'vi_mode' => $request->query('vi_mode'),
+            'digiflazz_category' => $request->query('digiflazz_category'),
+        ]);
 
         return $this->successResponse('Daftar provider kategori berhasil didapatkan.', $providers);
     }

@@ -19,23 +19,15 @@ class GetCategoryProviderSummaryAction
     ) {}
 
     /**
-     * Customer-facing brand/provider summary for a category.
-     *
-     * Only counts products that are PURCHASABLE (schema + capability + availability).
-     * Brands with zero purchasable SKUs are omitted — avoids empty Game → Brand pages.
-     *
-     * For topup-digital (E-Wallet): brands are canonicalized (GO PAY→GoPay), open-amount
-     * (Bebas Nominal) metadata is attached, and prepaid-only brands without an open-amount
-     * SKU are omitted from the customer-facing list.
-     *
+     * @param  array<string, mixed>  $filters
      * @return list<array<string, mixed>>
      */
-    public function execute(string $category): array
+    public function execute(string $category, array $filters = []): array
     {
-        $cacheKey = ProductCatalogCache::providerSummaryKey($category);
+        $cacheKey = ProductCatalogCache::providerSummaryKey($category, $filters);
         $ttl = 300;
-        $loader = function () use ($category) {
-            $products = $this->productRepository->getActiveProductsForCategory($category);
+        $loader = function () use ($category, $filters) {
+            $products = $this->productRepository->getActiveProductsForCategory($category, $filters);
             $isEwallet = $this->isEwalletCategory($category);
 
             $groups = [];

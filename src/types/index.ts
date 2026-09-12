@@ -109,6 +109,8 @@ export interface Product {
   telkomselGroup?: string | null;
   telkomselGroupLabel?: string | null;
   zoneLabel?: string | null;
+  /** Digiflazz prepaid category for voucher-internet (Voucher | Aktivasi Voucher). */
+  digiflazzCategory?: string | null;
   requiresRegion?: boolean;
   is_open_amount?: boolean;
   min_amount?: number;

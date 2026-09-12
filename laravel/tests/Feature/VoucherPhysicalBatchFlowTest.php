@@ -72,12 +72,41 @@ class VoucherPhysicalBatchFlowTest extends TestCase
             'product_category_id' => $category->id,
             'provider_id' => $provider->id,
             'sku_code' => 'XLVIFISIK5GB',
-            'name' => 'Voucher Fisik XL 5GB',
+            'name' => 'Aktivasi Voucher XL 5GB',
             'base_price' => 20000,
             'sell_price' => 20500,
             'admin_fee' => 0,
             'status' => true,
         ]);
+
+        $digi = ProductProvider::digiflazz();
+        if ($digi) {
+            $this->product->update(['product_provider_id' => $digi->id]);
+            \App\Models\DigiflazzProduct::create([
+                'buyer_sku_code' => 'XLVIFISIK5GB',
+                'list_type' => 'prepaid',
+                'product_name' => 'Aktivasi Voucher XL 5GB',
+                'category' => 'Aktivasi Voucher',
+                'brand' => 'XL',
+                'type' => 'Umum',
+                'seller_name' => 'Test',
+                'seller_price' => 20000,
+                'buyer_product_status' => true,
+                'seller_product_status' => true,
+                'unlimited_stock' => true,
+                'stock' => '0',
+                'multi' => true,
+                'desc' => 'Aktivasi Voucher fisik',
+            ]);
+            \App\Models\ProductProviderSku::create([
+                'product_id' => $this->product->id,
+                'product_provider_id' => $digi->id,
+                'provider_sku' => 'XLVIFISIK5GB',
+                'base_price' => 20000,
+                'is_preferred' => true,
+                'is_active' => true,
+            ]);
+        }
     }
 
     /**

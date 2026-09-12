@@ -14,6 +14,9 @@ export interface ProductFilters {
   sort?: string;
   /** Customer surface for capability filtering (web keeps postpaid; mobile hides web-only). */
   surface?: 'mobile' | 'web';
+  /** Voucher Internet Digi category split. */
+  vi_mode?: 'tembak' | 'elektronik' | 'fisik';
+  digiflazz_category?: string;
 }
 
 export interface CategoryProviderSummary {
@@ -47,6 +50,8 @@ export const productService = {
       if (filters.data_group) params.append('data_group', filters.data_group);
       if (filters.telkomsel_group) params.append('telkomsel_group', filters.telkomsel_group);
       if (filters.sort) params.append('sort', filters.sort);
+      if (filters.vi_mode) params.append('vi_mode', filters.vi_mode);
+      if (filters.digiflazz_category) params.append('digiflazz_category', filters.digiflazz_category);
       if (filters.surface) params.append('surface', filters.surface);
       else params.append('surface', 'web');
       if (filters.page) params.append('page', String(filters.page));
@@ -63,8 +68,12 @@ export const productService = {
     return response.data;
   },
 
-  getCategoryProviders: async (category: string): Promise<ApiResponse<CategoryProviderSummary[]>> => {
+  getCategoryProviders: async (
+    category: string,
+    opts?: { vi_mode?: 'tembak' | 'elektronik' | 'fisik' }
+  ): Promise<ApiResponse<CategoryProviderSummary[]>> => {
     const params = new URLSearchParams({ category });
+    if (opts?.vi_mode) params.append('vi_mode', opts.vi_mode);
     const response = await apiClient.get<ApiResponse<CategoryProviderSummary[]>>(
       `/products/providers?${params.toString()}`
     );

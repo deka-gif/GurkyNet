@@ -68,8 +68,15 @@ class ProductCatalogCache
         return 'product_categories_cf_v'.self::version();
     }
 
-    public static function providerSummaryKey(string $category): string
+    public static function providerSummaryKey(string $category, array $filters = []): string
     {
-        return 'products_provider_summary_v'.self::version().'_'.md5($category);
+        $extra = [];
+        foreach (['vi_mode', 'digiflazz_category'] as $k) {
+            if (! empty($filters[$k])) {
+                $extra[$k] = $filters[$k];
+            }
+        }
+
+        return 'products_provider_summary_v'.self::version().'_'.md5($category.'|'.serialize($extra));
     }
 }

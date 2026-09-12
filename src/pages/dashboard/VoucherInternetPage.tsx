@@ -53,15 +53,17 @@ export const VoucherInternetPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category: 'voucher-internet' }).then(() => {
-      // no-op; store replaces list. If empty UI will say sync needed.
-    });
     const pending = consumePendingCheckout('/dashboard/voucher-internet');
     if (pending?.data) {
       setCheckoutData(pending.data);
       setResumePin(!!pending.resumePin);
     }
-  }, [fetchWallet, fetchProducts]);
+  }, [fetchWallet]);
+
+  useEffect(() => {
+    const viMode = mode === 'fisik' ? 'fisik' : mode === 'elektronik' ? 'elektronik' : 'tembak';
+    void fetchProducts({ category: 'voucher-internet', vi_mode: viMode });
+  }, [fetchProducts, mode]);
 
   useEffect(() => {
     void productService.getTelkomselVoucherZoneReference().then((res) => {

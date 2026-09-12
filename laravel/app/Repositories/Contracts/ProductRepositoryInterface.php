@@ -12,5 +12,8 @@ interface ProductRepositoryInterface
     public function findBySku(string $skuCode): ?Product;
     public function getActiveProducts(): \Illuminate\Database\Eloquent\Collection;
 
-    public function getActiveProductsForCategory(string $category): \Illuminate\Database\Eloquent\Collection;
+    /**
+     * @param  array<string, mixed>  $filters  Optional list filters (e.g. vi_mode for voucher-internet Digi category split).
+     */
+    public function getActiveProductsForCategory(string $category, array $filters = []): \Illuminate\Database\Eloquent\Collection;
 }
