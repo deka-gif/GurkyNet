@@ -65,6 +65,8 @@ import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 /**
  * Voucher Internet — Fisik.
  * Flow: provider → (Telkomsel tipe) → (zona jika Per Wilayah) → SN → produk → review → PIN → batch.
+ * Per Wilayah: zona cannot be read from QR/SN (normalizeScanPayloadToSerial = SN only) —
+ * mandatory zone checkbox BEFORE scan (Item 1 / TD-2026-09-13-VI-FISIK-ZONE).
  * Purchase: POST /voucher-internet/physical-batches (not POST /transactions).
  * PIN: PinConfirmModal local state only.
  */
@@ -144,6 +146,8 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
 
   const [selected, setSelected] = useState<Product | null>(null);
   const [zoneAck, setZoneAck] = useState(false);
+  /** Per Wilayah: must confirm selected zone before camera/manual SN (Item 1). */
+  const [scanZoneAck, setScanZoneAck] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [pinVisible, setPinVisible] = useState(false);
@@ -367,6 +371,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setScannedList([]);
     setSelected(null);
     setZoneAck(false);
+    setScanZoneAck(false);
     setScanError(null);
     setScanNotice(null);
     setScanTab('camera');
@@ -473,6 +478,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setScanTab('camera');
     setSelected(null);
     setZoneAck(false);
+    setScanZoneAck(false);
     setStep('scan');
   };
 
@@ -486,6 +492,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setScanTab('camera');
     setSelected(null);
     setZoneAck(false);
+    setScanZoneAck(false);
     setStep('zone');
   };
 
@@ -498,11 +505,15 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setScanTab('camera');
     setSelected(null);
     setZoneAck(false);
+    setScanZoneAck(false);
     setStep('scan');
   };
 
   const handleCameraDetected = useCallback(
     (serial: string): CameraScanOutcome => {
+      if (isZonalBatch && !scanZoneAck) {
+        return 'ignored';
+      }
       // Defensive: camera already canonicalizes; keep shared path safe.
       const normalized = normalizeScanPayloadToSerial(serial);
       if (!normalized.ok) {
@@ -539,7 +550,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
       });
       return outcome;
     },
-    [snMax]
+    [snMax, isZonalBatch, scanZoneAck]
   );
 
   const handleUnrecognizedScanCode = useCallback((message: string) => {
@@ -582,6 +593,10 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   const addManualDraftToList = () => {
     setScanError(null);
     setScanNotice(null);
+    if (isZonalBatch && !scanZoneAck) {
+      setScanError('Centang konfirmasi zona sebelum input SN.');
+      return;
+    }
     if (snDraftValidation.empty) {
       setScanError('Masukkan minimal 1 nomor seri voucher.');
       return;
@@ -607,6 +622,10 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
 
   const continueFromScan = () => {
     setScanError(null);
+    if (isZonalBatch && !scanZoneAck) {
+      setScanError('Centang konfirmasi zona sebelum lanjut.');
+      return;
+    }
     let list = scannedList;
 
     if (rawSnInput.trim()) {
@@ -886,13 +905,42 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
             {[brand, typeLabel, zoneLabel].filter(Boolean).join(' · ')}
           </Text>
 
-          {isZonalBatch ? (
-            <View style={styles.zoneWarnStrong}>
-              <Ionicons name="warning" size={20} color={colors.status.pending} />
-              <Text style={styles.zoneWarnStrongText}>{ZONE_WARN}</Text>
-            </View>
+          {isZonalBatch && zoneLabel ? (
+            <>
+              <View style={styles.scanZoneBanner}>
+                <Text style={styles.scanZoneBannerKicker}>Zona yang dipilih</Text>
+                <Text style={styles.scanZoneBannerTitle}>{zoneLabel}</Text>
+              </View>
+              <View style={styles.zoneWarnStrong}>
+                <Ionicons name="warning" size={20} color={colors.status.pending} />
+                <Text style={styles.zoneWarnStrongText}>{ZONE_WARN}</Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setScanZoneAck((v) => !v);
+                  setScanError(null);
+                }}
+                style={styles.ackRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: scanZoneAck }}
+              >
+                <View style={[styles.checkbox, scanZoneAck && styles.checkboxOn]}>
+                  {scanZoneAck ? <Ionicons name="checkmark" size={14} color={colors.white} /> : null}
+                </View>
+                <Text style={styles.ackText}>
+                  Saya yakin kartu yang akan di-scan untuk zona {zoneLabel}
+                </Text>
+              </Pressable>
+              {!scanZoneAck ? (
+                <Text style={styles.notice}>
+                  Centang konfirmasi zona di atas sebelum scan kamera atau input SN.
+                </Text>
+              ) : null}
+            </>
           ) : null}
 
+          {(!isZonalBatch || scanZoneAck) ? (
+          <>
           <View style={styles.scanTabRow}>
             <TouchableOpacity
               style={[styles.scanTab, scanTab === 'camera' && styles.scanTabOn]}
@@ -1041,10 +1089,10 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
           )}
 
           <VoucherPhysicalCameraScan
-            visible={step === 'scan' && scanTab === 'camera'}
+            visible={step === 'scan' && scanTab === 'camera' && (!isZonalBatch || scanZoneAck)}
             list={scannedList}
             maxItems={snMax}
-            scanningEnabled={!atSnCapacity}
+            scanningEnabled={!atSnCapacity && (!isZonalBatch || scanZoneAck)}
             limitReached={atSnCapacity}
             notice={scanNotice}
             onDetected={handleCameraDetected}
@@ -1055,6 +1103,8 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
             onSwitchManual={() => setScanTab('manual')}
             onClose={() => setScanTab('manual')}
           />
+          </>
+          ) : null}
         </>
       ) : step === 'products' ? (
         <>
@@ -1477,6 +1527,29 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
   },
   zoneMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
+  scanZoneBanner: {
+    backgroundColor: colors.primary[50] ?? '#eef2ff',
+    borderWidth: 1.5,
+    borderColor: colors.primary[600],
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    gap: 4,
+  },
+  scanZoneBannerKicker: {
+    fontSize: typography.size.xs,
+    color: colors.primary[700],
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  scanZoneBannerTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+    textAlign: 'center',
+  },
   zoneWarnStrong: {
     flexDirection: 'row',
     alignItems: 'flex-start',

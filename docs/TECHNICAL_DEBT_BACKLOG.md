@@ -31,8 +31,8 @@ Non-urgent items. Do not block APK / release gates unless Owner re-prioritizes.
 ## TD-2026-09-13-VI-FISIK-ZONE — Soft-validation zona kartu fisik (UX)
 
 **Logged:** 2026-09-13  
-**Priority:** backlog (iterasi berikutnya)  
-**Work:** Soft-validation / peringatan zona untuk Voucher Fisik Per Wilayah. Fokus hari ini hanya bug struktural batch (pre-fulfill fail+refund).
+**Status:** implemented 2026-09-13 — checkbox wajib *sebelum scan* (poin 3). QR/SN tidak mengandung zona; validasi silang otomatis (poin 2) tidak mungkin.  
+**Residual:** user yang centang asal tetap bisa scan kartu zona salah (gagal di Digiflazz). Jangan hapus pilihan Per Wilayah.
 
 ## TD-2026-09-13 — Catalog SQL server-side pagination (Fase 4)
 
