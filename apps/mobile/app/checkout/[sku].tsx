@@ -246,6 +246,7 @@ export default function CheckoutScreen() {
         ...(tagihanCat && tagihanContext?.inquiry?.inquiry_ref_id
           ? { inquiry_ref_id: tagihanContext.inquiry.inquiry_ref_id }
           : {}),
+        ...(voucherInternetMode ? { voucher_internet_mode: voucherInternetMode } : {}),
       });
 
       if (response.success && response.data) {

@@ -11,6 +11,8 @@ export interface CreateTransactionPayload {
   pin: string;
   idempotency_key: string;
   inquiry_ref_id?: string;
+  /** Voucher Internet: tembak | elektronik — required for Elektronik MSISDN hard-guard. */
+  voucher_internet_mode?: 'tembak' | 'elektronik';
 }
 
 /**

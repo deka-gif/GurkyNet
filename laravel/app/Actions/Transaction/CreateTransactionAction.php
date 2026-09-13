@@ -96,7 +96,11 @@ class CreateTransactionAction
         // caller can skip re-dispatching the provider job / re-arming the timeout below.
         $isReplay = false;
 
-        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $inquiryRefId, $idempotencyKey, $trustedSubscription, &$isReplay) {
+        $voucherInternetMode = isset($options['voucher_internet_mode']) && is_string($options['voucher_internet_mode'])
+            ? $options['voucher_internet_mode']
+            : null;
+
+        $transaction = DB::transaction(function () use ($user, $skuCode, $targetNumber, $pin, $inquiryRefId, $idempotencyKey, $trustedSubscription, $voucherInternetMode, &$isReplay) {
 
             // 1. Create INITIATED — first write; idempotency claim must precede any wallet side effect.
             // (Conceptual draft→INITIATED: claim row starts as INITIATED per SRS 14.3.)
@@ -170,6 +174,10 @@ class CreateTransactionAction
             // (Tembak/Elektronik). Physical serial activation must use physical-batches.
             app(\App\Services\Catalog\VoucherInternetDigiCategoryGate::class)
                 ->assertAllowedForSinglePurchase($product);
+
+            // Digi Voucher + Elektronik: never accept real MSISDN as customer_no (mobile + web).
+            app(\App\Services\Catalog\VoucherInternetElektronikCustomerNoGuard::class)
+                ->assertAllowed($product, $targetNumber, $voucherInternetMode);
 
             $inquirySession = null;
             $isPasca = is_string($inquiryRefId) && trim($inquiryRefId) !== '';

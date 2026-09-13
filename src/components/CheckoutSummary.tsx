@@ -32,6 +32,8 @@ export interface CheckoutData {
   skuCode?: string;
   /** Digiflazz inq-pasca session — required for postpaid bill payment */
   inquiryRefId?: string;
+  /** Voucher Internet mode for backend customer_no hard-guard (elektronik never uses MSISDN). */
+  voucherInternetMode?: 'tembak' | 'elektronik';
   customDetails?: Record<string, string | number>;
 }
 
@@ -212,6 +214,9 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ data, onClose,
     };
     if (data.inquiryRefId) {
       requestPayload.inquiry_ref_id = data.inquiryRefId;
+    }
+    if (data.voucherInternetMode) {
+      requestPayload.voucher_internet_mode = data.voucherInternetMode;
     }
 
     const trx = await createTransaction(requestPayload);

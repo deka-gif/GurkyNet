@@ -73,16 +73,20 @@ class TransactionController extends Controller
             return $this->withIdempotency(
                 $request,
                 'POST /api/v1/transactions',
-                $request->only(['sku_code', 'target_number', 'inquiry_ref_id', 'pin']),
+                $request->only(['sku_code', 'target_number', 'inquiry_ref_id', 'pin', 'voucher_internet_mode', 'vi_mode']),
                 function () use ($request, $createAction, $user) {
                     // status / admin_fee / settlement values are never accepted from the client.
+                    $viMode = $request->input('voucher_internet_mode') ?? $request->input('vi_mode');
                     $transaction = $createAction->execute(
                         $user,
                         $request->input('sku_code'),
                         $request->input('target_number'),
                         $request->input('pin'),
                         $request->input('inquiry_ref_id'),
-                        $request->input('idempotency_key')
+                        $request->input('idempotency_key'),
+                        [
+                            'voucher_internet_mode' => is_string($viMode) ? $viMode : null,
+                        ]
                     );
 
                     return $this->idempotentJson(

@@ -29,7 +29,6 @@ export const VoucherElektronikZonaPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
   const { products, loading: productsLoading, fetchProducts } = useProductStore();
 
-  const [phoneNo, setPhoneNo] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [resumePin, setResumePin] = useState(false);
@@ -129,7 +128,7 @@ export const VoucherElektronikZonaPage = () => {
       setErrorMsg('Produk sedang maintenance atau tidak tersedia untuk dibeli.');
       return;
     }
-    const target = phoneNo || wallet?.walletNo || 'EVOUCHER';
+    const target = wallet?.walletNo || 'EVOUCHER';
     if (!wallet || wallet.balance < selectedProduct.price) {
       setErrorMsg('Saldo GurkyPay tidak mencukupi.');
       return;
@@ -142,6 +141,7 @@ export const VoucherElektronikZonaPage = () => {
       amount: selectedProduct.price,
       adminFee: 0,
       skuCode: selectedProduct.code,
+      voucherInternetMode: 'elektronik',
       customDetails: {
         Mode: 'elektronik',
         Zona: zona || '-',
@@ -235,17 +235,6 @@ export const VoucherElektronikZonaPage = () => {
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-gray-700">Nomor HP (opsional untuk pengiriman)</label>
-          <input
-            type="tel"
-            value={phoneNo}
-            onChange={(e) => setPhoneNo(e.target.value.replace(/\D/g, ''))}
-            placeholder="08xxxxxxxxxx"
-            className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
-
         {productsLoading ? (
           <div className="py-8 text-center">
             <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />

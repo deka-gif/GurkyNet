@@ -23,6 +23,9 @@ class CreateTransactionRequest extends FormRequest
             'inquiry_ref_id' => 'nullable|string|max:64',
             // SRS 14.1 — required for balance-mutating purchase.
             'idempotency_key' => 'required|string|max:80',
+            // Voucher Internet mode (tembak | elektronik) — used for Elektronik customer_no hard-guard.
+            'voucher_internet_mode' => 'nullable|string|in:tembak,elektronik',
+            'vi_mode' => 'nullable|string|in:tembak,elektronik',
             // Intentionally omit status, admin_fee, amount, total_payment — server-calculated only.
         ];
     }

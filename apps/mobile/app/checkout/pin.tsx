@@ -26,6 +26,7 @@ export default function CheckoutPinScreen() {
   const skuCode = useCheckoutStore((s) => s.skuCode);
   const categorySlug = useCheckoutStore((s) => s.categorySlug);
   const targetNumber = useCheckoutStore((s) => s.targetNumber);
+  const voucherInternetMode = useCheckoutStore((s) => s.voucherInternetMode);
   const plnContext = useCheckoutStore((s) => s.plnContext);
   const clearPlnContext = useCheckoutStore((s) => s.clearPlnContext);
   const idempotencyKey = useCheckoutStore((s) => s.idempotencyKey);
@@ -83,6 +84,7 @@ export default function CheckoutPinScreen() {
         target_number: targetNumber,
         pin: enteredPin,
         idempotency_key: idempotencyKey,
+        ...(voucherInternetMode ? { voucher_internet_mode: voucherInternetMode } : {}),
       });
 
       if (response.success && response.data) {
