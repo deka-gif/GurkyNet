@@ -35,10 +35,12 @@ import {
   PurchaseFlowNotice,
 } from '../ui';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
+import { CatalogLoadMoreButton } from './CatalogLoadMoreButton';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 
 /**
  * Streaming / Langganan Digital (DigiFlazz schema SoT).
@@ -105,9 +107,17 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
   const [brandQuery, setBrandQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<CategoryProviderSummary | null>(null);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [productsError, setProductsError] = useState<string | null>(null);
+  const {
+    products,
+    visibleProducts: pagedProducts,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    error: productsError,
+    canLoadMore: productsCanLoadMore,
+    loadInitial: loadProductsInitial,
+    loadMore: loadProductsMore,
+    reset: resetProducts,
+  } = useProviderProductPager();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const [schema, setSchema] = useState<LanggananAccountSchema | null>(null);
@@ -169,8 +179,8 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
   }, [brands, brandQuery]);
 
   const listedProducts = useMemo(
-    () => products.filter((p) => isCatalogListed(p) && !isVipSku(p.code)),
-    [products]
+    () => pagedProducts.filter((p) => isCatalogListed(p) && !isVipSku(p.code)),
+    [pagedProducts]
   );
 
   const canLanjut =
@@ -202,12 +212,11 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     }
     if (step === 'buy') {
       setSelectedBrand(null);
-      setProducts([]);
-      setProductsError(null);
+      resetProducts();
       clearSchemaState();
       setStep('brands');
     }
-  }, [step, clearSchemaState]);
+  }, [step, clearSchemaState, resetProducts]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
@@ -355,31 +364,23 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
   const selectBrand = async (brand: CategoryProviderSummary) => {
     setSelectedBrand(brand);
     setStep('buy');
-    setProducts([]);
-    setProductsError(null);
+    resetProducts();
     clearSchemaState();
-    setProductsLoading(true);
     setSchemaLoading(true);
     try {
-      const res = await catalogService.getProducts({
+      const result = await loadProductsInitial({
         category: 'langganan-digital',
         provider_id: brand.providerId,
-        per_page: 5000,
       });
-      if (res.success && Array.isArray(res.data)) {
-        setProducts(res.data);
-        await loadBrandDigiSchema(brand.name, res.data);
+      const loaded = result?.products ?? [];
+      if (loaded.length > 0) {
+        await loadBrandDigiSchema(brand.name, loaded);
       } else {
-        setProducts([]);
-        setProductsError(res.message || 'Gagal memuat paket.');
         setSchemaLoading(false);
       }
     } catch (err: unknown) {
-      setProducts([]);
-      setProductsError(parseApiError(err).message || 'Gagal memuat paket.');
       setSchemaLoading(false);
-    } finally {
-      setProductsLoading(false);
+      setFormError(parseApiError(err).message || 'Gagal memuat paket.');
     }
   };
 
@@ -622,20 +623,27 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
             message="Paket DigiFlazz untuk layanan ini belum tersedia."
           />
         ) : (
-          <ProductCatalogGrid
-            products={listedProducts}
-            columns={3}
-            selectedCode={selectedProduct?.code ?? null}
-            onPress={onSelectProduct}
-            isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
-            renderMeta={(p) =>
-              !isProductPurchasable(p) ? (
-                <Text style={styles.productStatus}>
-                  {p.status === 'maintenance' ? 'Maintenance' : 'Tidak tersedia'}
-                </Text>
-              ) : null
-            }
-          />
+          <>
+            <ProductCatalogGrid
+              products={listedProducts}
+              columns={3}
+              selectedCode={selectedProduct?.code ?? null}
+              onPress={onSelectProduct}
+              isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
+              renderMeta={(p) =>
+                !isProductPurchasable(p) ? (
+                  <Text style={styles.productStatus}>
+                    {p.status === 'maintenance' ? 'Maintenance' : 'Tidak tersedia'}
+                  </Text>
+                ) : null
+              }
+            />
+            <CatalogLoadMoreButton
+              visible={productsCanLoadMore}
+              loading={productsLoadingMore}
+              onPress={() => void loadProductsMore()}
+            />
+          </>
         )}
 
         {formError ? <Text style={styles.error}>{formError}</Text> : null}

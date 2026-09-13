@@ -94,6 +94,7 @@ export interface Product {
   code: string;
   name: string;
   price: number;
+  adminFee?: number;
   category: 'pulsa' | 'data' | 'pln' | 'ewallet' | 'voucher' | 'voucher-internet' | 'game' | 'transfer' | 'tagihan' | string;
   operatorName: string;
   status: 'tersedia' | 'gangguan' | 'maintenance';
@@ -115,6 +116,13 @@ export interface Product {
   is_open_amount?: boolean;
   min_amount?: number;
   max_amount?: number;
+  transactionCapability?: {
+    mode?: string | null;
+    targetSchema?: unknown;
+    inquiryRequired?: boolean;
+    mobilePurchase?: boolean;
+    webPurchase?: boolean;
+  } | null;
 }
 
 export interface PaymentResumeInfo {

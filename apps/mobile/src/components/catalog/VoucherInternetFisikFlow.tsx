@@ -31,6 +31,7 @@ import {
   PinConfirmModal,
 } from '../ui';
 import { VoucherInternetProductList } from './VoucherInternetProductList';
+import { CatalogLoadMoreButton } from './CatalogLoadMoreButton';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { createIdempotencyKey } from '../../utils/idempotency';
@@ -58,6 +59,7 @@ import {
   VoucherPhysicalCameraScan,
   type CameraScanOutcome,
 } from './VoucherPhysicalCameraScan';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 
 /**
  * Voucher Internet — Fisik.
@@ -109,9 +111,21 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   const [brandProviders, setBrandProviders] = useState<
     { name: string; providerId: number }[]
   >([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const {
+    products: allProducts,
+    visibleProducts,
+    setProducts,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    error: productsError,
+    setError: setProductsError,
+    canLoadMore: productsCanLoadMore,
+    loadInitial: loadProductsInitial,
+    loadMore: loadProductsMore,
+    loadAllRemainingPages,
+    reset: resetProducts,
+  } = useProviderProductPager();
   const [loading, setLoading] = useState(false);
-  const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [brand, setBrand] = useState<string | null>(null);
   const [brandQuery, setBrandQuery] = useState('');
@@ -169,7 +183,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
         });
         if (full.success && Array.isArray(full.data)) {
           const listed = full.data.filter((p) => isCatalogListed(p));
-          setAllProducts(listed);
+          setProducts(listed);
           const map = new Map<string, BrandRow>();
           for (const p of listed) {
             const name = (p.operatorName || p.providerDetails?.name || 'Umum').trim();
@@ -190,46 +204,45 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setProducts]);
 
   const loadBrandProducts = useCallback(async (brandName: string): Promise<Product[]> => {
-    setProductsLoading(true);
-    setError(null);
+    setProductsError(null);
     try {
       const match = brandProviders.find((b) => operatorsMatch(b.name, brandName));
-      const res = match
-        ? await catalogService.getProducts({
-            category: 'voucher-internet',
-            vi_mode: 'fisik',
-            provider_id: match.providerId,
-            per_page: 5000,
-          })
-        : await catalogService.getProducts({
-            category: 'voucher-internet',
-            vi_mode: 'fisik',
-            per_page: 5000,
-          });
-      if (res.success && Array.isArray(res.data)) {
-        const listed = res.data.filter((p) => isCatalogListed(p));
-        const forBrand = match
-          ? listed
-          : listed.filter((p) =>
-              operatorsMatch(p.operatorName || p.providerDetails?.name, brandName)
-            );
-        setAllProducts(forBrand);
-        return forBrand;
+      const result = await loadProductsInitial(
+        match
+          ? {
+              category: 'voucher-internet',
+              vi_mode: 'fisik',
+              provider_id: match.providerId,
+            }
+          : {
+              category: 'voucher-internet',
+              vi_mode: 'fisik',
+            }
+      );
+      if (!result) {
+        return [];
       }
-      setAllProducts([]);
-      setError(res.message || 'Gagal memuat produk voucher internet.');
+      let rows = result.products;
+      if (result.paginated) {
+        rows = await loadAllRemainingPages();
+      }
+      const listed = rows.filter((p) => isCatalogListed(p));
+      const forBrand = match
+        ? listed
+        : listed.filter((p) =>
+            operatorsMatch(p.operatorName || p.providerDetails?.name, brandName)
+          );
+      setProducts(forBrand);
+      return forBrand;
+    } catch (err: unknown) {
+      setProducts([]);
+      setProductsError(parseApiError(err).message || 'Gagal memuat produk voucher internet.');
       return [];
-    } catch (err: any) {
-      setAllProducts([]);
-      setError(err?.message || 'Gagal memuat produk voucher internet.');
-      return [];
-    } finally {
-      setProductsLoading(false);
     }
-  }, [brandProviders]);
+  }, [brandProviders, loadAllRemainingPages, loadProductsInitial, setProducts, setProductsError]);
 
   useEffect(() => {
     void loadBrands();
@@ -248,6 +261,13 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
       .filter((p) => operatorsMatch(p.operatorName || p.providerDetails?.name, brand))
       .sort((a, b) => a.price - b.price);
   }, [allProducts, brand]);
+
+  const visibleBrandProducts = useMemo(() => {
+    if (!brand) return [];
+    return visibleProducts
+      .filter((p) => operatorsMatch(p.operatorName || p.providerDetails?.name, brand))
+      .sort((a, b) => a.price - b.price);
+  }, [visibleProducts, brand]);
 
   const telkomselActive = !!brand && isTelkomselOperator(brand) && brandProducts.length > 0;
   const brandNeedsType = telkomselActive && telkomselNeedsZoneGate(brandProducts);
@@ -268,15 +288,15 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   const catalogProducts = useMemo(() => {
     if (!brand) return [];
     if (physicalType === 'perWilayah' && zoneLabel) {
-      return filterProductsByZoneLabel(brandProducts, zoneLabel);
+      return filterProductsByZoneLabel(visibleBrandProducts, zoneLabel);
     }
     if (physicalType === 'nasional') {
-      return telkomselNationalProducts(brandProducts);
+      return telkomselNationalProducts(visibleBrandProducts);
     }
     // Non-Telkomsel / no type gate: full brand catalog
-    if (!brandNeedsType) return brandProducts;
+    if (!brandNeedsType) return visibleBrandProducts;
     return [];
-  }, [brand, brandProducts, physicalType, zoneLabel, brandNeedsType]);
+  }, [brand, visibleBrandProducts, physicalType, zoneLabel, brandNeedsType]);
 
   const isZonalBatch = physicalType === 'perWilayah' && !!zoneLabel;
   const totalPayment = selected ? selected.price * scannedList.length : 0;
@@ -369,6 +389,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
       } else {
         setBrand(null);
         resetAfterBrandChange();
+        resetProducts();
         setStep('brands');
       }
       return;
@@ -381,11 +402,12 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     if (step === 'type') {
       setBrand(null);
       resetAfterBrandChange();
+      resetProducts();
       setStep('brands');
       return;
     }
     onBack();
-  }, [step, onBack, pinVisible, pinLoading, physicalType, brandNeedsType]);
+  }, [step, onBack, pinVisible, pinLoading, physicalType, brandNeedsType, resetProducts]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
@@ -407,6 +429,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   const selectBrand = async (name: string) => {
     setBrand(name);
     resetAfterBrandChange();
+    resetProducts();
     const productsForBrand = await loadBrandProducts(name);
     const needsType =
       isTelkomselOperator(name) &&
@@ -694,6 +717,7 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
     setBatch(null);
     setBrand(null);
     resetAfterBrandChange();
+    resetProducts();
     setStep('brands');
     onBack();
   };
@@ -713,10 +737,10 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
 
       {loading && brands.length === 0 ? (
         <LoadingState label="Memuat voucher internet..." />
-      ) : productsLoading ? (
+      ) : productsLoading || (productsLoadingMore && step === 'brands') ? (
         <LoadingState label="Memuat produk..." />
-      ) : error && brands.length === 0 ? (
-        <ErrorState message={error} onRetry={loadBrands} />
+      ) : (error || productsError) && brands.length === 0 ? (
+        <ErrorState message={error || productsError || ''} onRetry={loadBrands} />
       ) : step === 'brands' ? (
         <>
           <Text style={styles.lead}>Pilih Provider</Text>
@@ -1024,18 +1048,25 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
               message="Belum ada voucher tersedia untuk wilayah ini."
             />
           ) : (
-            <VoucherInternetProductList
-              products={catalogProducts}
-              onSelect={selectProduct}
-              isDisabled={(p) => !isProductPurchasable(p)}
-              getMetaLabel={(p) =>
-                p.zoneLabel
-                  ? p.zoneLabel
-                  : physicalType === 'nasional'
-                    ? 'Nasional'
-                    : null
-              }
-            />
+            <>
+              <VoucherInternetProductList
+                products={catalogProducts}
+                onSelect={selectProduct}
+                isDisabled={(p) => !isProductPurchasable(p)}
+                getMetaLabel={(p) =>
+                  p.zoneLabel
+                    ? p.zoneLabel
+                    : physicalType === 'nasional'
+                      ? 'Nasional'
+                      : null
+                }
+              />
+              <CatalogLoadMoreButton
+                visible={productsCanLoadMore}
+                loading={productsLoadingMore}
+                onPress={() => void loadProductsMore()}
+              />
+            </>
           )}
         </>
       ) : step === 'review' && selected ? (

@@ -18,6 +18,7 @@ import {
   PurchaseFlowNotice,
 } from '../ui';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
+import { CatalogLoadMoreButton } from './CatalogLoadMoreButton';
 import { colors, radius, spacing, typography } from '../../theme';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import {
@@ -26,6 +27,7 @@ import {
   isSerialTargetCategory,
   literalTargetForCategory,
 } from '../../utils/purchaseCategory';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 
 /**
  * Provider → product browse (Tahap 3B).
@@ -84,9 +86,16 @@ export function ProviderCatalogBrowseFlow({
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [providerQuery, setProviderQuery] = useState('');
   const [selected, setSelected] = useState<CategoryProviderSummary | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [productsError, setProductsError] = useState<string | null>(null);
+  const {
+    visibleProducts: pagedProducts,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    error: productsError,
+    canLoadMore: productsCanLoadMore,
+    loadInitial: loadProductsInitial,
+    loadMore: loadProductsMore,
+    reset: resetProducts,
+  } = useProviderProductPager();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   /** Gas: ID pelanggan (digits). Aktivasi Perdana: serial/barcode (trim, min 4). */
   const [customerNo, setCustomerNo] = useState('');
@@ -118,12 +127,11 @@ export function ProviderCatalogBrowseFlow({
   const goBackToProviders = useCallback(() => {
     setStep('providers');
     setSelected(null);
-    setProducts([]);
-    setProductsError(null);
+    resetProducts();
     setSelectedProduct(null);
     setCustomerNo('');
     setTargetHint(null);
-  }, []);
+  }, [resetProducts]);
 
   // ← Header / Android back: products → providers; providers → previous stack.
   useEffect(() => {
@@ -143,8 +151,8 @@ export function ProviderCatalogBrowseFlow({
   }, [providers, providerQuery]);
 
   const listedProducts = useMemo(() => {
-    return products.filter((p) => isCatalogListed(p));
-  }, [products]);
+    return pagedProducts.filter((p) => isCatalogListed(p));
+  }, [pagedProducts]);
 
   const productColumns = category === 'game' ? 5 : 2;
 
@@ -164,30 +172,14 @@ export function ProviderCatalogBrowseFlow({
   const selectProvider = async (provider: CategoryProviderSummary) => {
     setSelected(provider);
     setStep('products');
-    setProducts([]);
-    setProductsError(null);
+    resetProducts();
     setSelectedProduct(null);
     setCustomerNo('');
     setTargetHint(null);
-    setProductsLoading(true);
-    try {
-      const res = await catalogService.getProducts({
-        category,
-        provider_id: provider.providerId,
-        per_page: 5000,
-      });
-      if (res.success && Array.isArray(res.data)) {
-        setProducts(res.data);
-      } else {
-        setProducts([]);
-        setProductsError(res.message || 'Gagal memuat produk.');
-      }
-    } catch (err: any) {
-      setProducts([]);
-      setProductsError(err?.message || 'Gagal memuat produk.');
-    } finally {
-      setProductsLoading(false);
-    }
+    await loadProductsInitial({
+      category,
+      provider_id: provider.providerId,
+    });
   };
 
   const proceedGasCheckout = (product: Product) => {
@@ -391,31 +383,38 @@ export function ProviderCatalogBrowseFlow({
       ) : listedProducts.length === 0 ? (
         <EmptyState title="Belum Ada Produk" message="Produk untuk provider ini belum tersedia." />
       ) : (
-        <ProductCatalogGrid
-          products={listedProducts}
-          columns={productColumns}
-          onPress={openProduct}
-          selectedCode={gasPrepaid ? selectedProduct?.code ?? null : null}
-          isDisabled={(p) => {
-            if (gasPrepaid) {
-              return !isProductPurchasable(p) || !purchaseEnabled;
+        <>
+          <ProductCatalogGrid
+            products={listedProducts}
+            columns={productColumns}
+            onPress={openProduct}
+            selectedCode={gasPrepaid ? selectedProduct?.code ?? null : null}
+            isDisabled={(p) => {
+              if (gasPrepaid) {
+                return !isProductPurchasable(p) || !purchaseEnabled;
+              }
+              if (aktivasiPerdana) {
+                return !isProductPurchasable(p) || !purchaseEnabled || !serialReady;
+              }
+              if (esim) {
+                return !isProductPurchasable(p) || !purchaseEnabled;
+              }
+              return p.status !== 'tersedia';
+            }}
+            renderMeta={(p) =>
+              p.status !== 'tersedia' ? (
+                <Text style={styles.productStatus}>
+                  {p.status === 'maintenance' ? 'Maintenance' : 'Gangguan'}
+                </Text>
+              ) : null
             }
-            if (aktivasiPerdana) {
-              return !isProductPurchasable(p) || !purchaseEnabled || !serialReady;
-            }
-            if (esim) {
-              return !isProductPurchasable(p) || !purchaseEnabled;
-            }
-            return p.status !== 'tersedia';
-          }}
-          renderMeta={(p) =>
-            p.status !== 'tersedia' ? (
-              <Text style={styles.productStatus}>
-                {p.status === 'maintenance' ? 'Maintenance' : 'Gangguan'}
-              </Text>
-            ) : null
-          }
-        />
+          />
+          <CatalogLoadMoreButton
+            visible={productsCanLoadMore}
+            loading={productsLoadingMore}
+            onPress={() => void loadProductsMore()}
+          />
+        </>
       )}
 
       {gasPrepaid && purchaseEnabled && selectedProduct ? (

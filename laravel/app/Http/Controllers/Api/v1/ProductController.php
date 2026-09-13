@@ -10,6 +10,7 @@ use App\Actions\Product\SearchProductAction;
 use App\Actions\Product\GetProviderAction;
 use App\Http\Resources\CategoryResource;
 use App\Http\Resources\ProviderResource;
+use App\Http\Resources\ProductListResource;
 use App\Http\Resources\ProductResource;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
@@ -85,7 +86,9 @@ class ProductController extends Controller
         
         $paginatedProducts = $this->searchProductAction->execute($filters);
 
-        $resourceCollection = ProductResource::collection($paginatedProducts);
+        // Sparse list DTO — never expose margin/providerCost/basePrice on customer list.
+        ProductListResource::resetListingCache();
+        $resourceCollection = ProductListResource::collection($paginatedProducts);
 
         return $this->paginatedResponse(
             'Daftar produk berhasil didapatkan.',

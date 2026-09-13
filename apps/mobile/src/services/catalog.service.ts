@@ -128,9 +128,13 @@ export const catalogService = {
     return response.data;
   },
 
-  /** GET /products — same contract as web productService.getProducts. */
-  getProducts: async (filters: ProductFilters): Promise<ApiResponse<Product[]>> => {
-    const response = await apiClient.get<ApiResponse<Product[]>>('/products', {
+  /** GET /products — same contract as web productService.getProducts (includes pagination). */
+  getProducts: async (
+    filters: ProductFilters
+  ): Promise<ApiResponse<Product[]> & { pagination?: Record<string, unknown>; meta?: unknown }> => {
+    const response = await apiClient.get<
+      ApiResponse<Product[]> & { pagination?: Record<string, unknown>; meta?: unknown }
+    >('/products', {
       params: { surface: 'mobile', ...filters },
     });
     return response.data;

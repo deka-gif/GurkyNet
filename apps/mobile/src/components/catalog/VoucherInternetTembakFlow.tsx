@@ -16,6 +16,7 @@ import {
 } from '../ui';
 import { PhoneOperatorInput } from './PhoneOperatorInput';
 import { VoucherInternetProductList } from './VoucherInternetProductList';
+import { CatalogLoadMoreButton } from './CatalogLoadMoreButton';
 import { colors, radius, spacing, typography } from '../../theme';
 import { detectOperatorFromPhone, providerApiName } from '../../utils/detectOperator';
 import { operatorsMatch } from '../../utils/operatorMatch';
@@ -29,6 +30,8 @@ import {
   telkomselNationalProducts,
   telkomselNeedsZoneGate,
 } from '../../utils/telkomselVoucherZone';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
+import { parseApiError } from '../../api/client';
 
 /**
  * Voucher Internet — Tembak Langsung.
@@ -66,10 +69,21 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
 
   const [step, setStep] = useState<Step>('phone');
   const [brandProviders, setBrandProviders] = useState<{ name: string; providerId: number }[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const {
+    products: allProducts,
+    visibleProducts,
+    setProducts,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    error,
+    setError,
+    canLoadMore: productsCanLoadMore,
+    loadInitial: loadProductsInitial,
+    loadMore: loadProductsMore,
+    loadAllRemainingPages,
+    reset: resetProducts,
+  } = useProviderProductPager();
   const [providersLoading, setProvidersLoading] = useState(false);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [phoneNo, setPhoneNo] = useState('');
   const [nationalSelected, setNationalSelected] = useState(false);
   const [zoneLabel, setZoneLabel] = useState<string | null>(null);
@@ -101,54 +115,54 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     } finally {
       setProvidersLoading(false);
     }
-  }, []);
+  }, [setError]);
 
   const loadOperatorProducts = useCallback(
     async (op: NonNullable<typeof operator>): Promise<Product[]> => {
       const seq = ++loadSeq.current;
-      setProductsLoading(true);
       setError(null);
       try {
         const match = brandProviders.find((b) => operatorsMatch(b.name, op));
         const providerName = providerApiName(op);
-        const res = match
-          ? await catalogService.getProducts({
-              category: 'voucher-internet',
-              vi_mode: 'tembak',
-              provider_id: match.providerId,
-              per_page: 500,
-            })
-          : await catalogService.getProducts({
-              category: 'voucher-internet',
-              vi_mode: 'tembak',
-              provider: providerName,
-              per_page: 500,
-            });
+        const result = await loadProductsInitial(
+          match
+            ? {
+                category: 'voucher-internet',
+                vi_mode: 'tembak',
+                provider_id: match.providerId,
+              }
+            : {
+                category: 'voucher-internet',
+                vi_mode: 'tembak',
+                provider: providerName,
+              }
+        );
         if (seq !== loadSeq.current) return [];
-        if (res.success && Array.isArray(res.data)) {
-          const listed = res.data.filter((p) => isCatalogListed(p));
-          const forOp = listed.filter((p) =>
-            operatorsMatch(p.operatorName || p.providerDetails?.name, op)
-          );
-          setAllProducts(forOp);
+        if (!result) {
           setLoadedForOperator(op);
-          return forOp;
+          return [];
         }
-        setAllProducts([]);
+        let rows = result.products;
+        if (result.paginated) {
+          rows = await loadAllRemainingPages();
+          if (seq !== loadSeq.current) return [];
+        }
+        const listed = rows.filter((p) => isCatalogListed(p));
+        const forOp = listed.filter((p) =>
+          operatorsMatch(p.operatorName || p.providerDetails?.name, op)
+        );
+        setProducts(forOp);
         setLoadedForOperator(op);
-        setError(res.message || 'Gagal memuat katalog voucher internet.');
-        return [];
-      } catch (err: any) {
+        return forOp;
+      } catch (err: unknown) {
         if (seq !== loadSeq.current) return [];
-        setAllProducts([]);
+        setProducts([]);
         setLoadedForOperator(op);
-        setError(err?.message || 'Gagal memuat katalog voucher internet.');
+        setError(parseApiError(err).message || 'Gagal memuat katalog voucher internet.');
         return [];
-      } finally {
-        if (seq === loadSeq.current) setProductsLoading(false);
       }
     },
-    [brandProviders]
+    [brandProviders, loadAllRemainingPages, loadProductsInitial, setError, setProducts]
   );
 
   useEffect(() => {
@@ -160,17 +174,22 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
   useEffect(() => {
     if (!operator) {
       loadSeq.current += 1;
-      setAllProducts([]);
+      resetProducts();
       setLoadedForOperator(null);
-      setProductsLoading(false);
-      setError(null);
       return;
     }
     // Wait for providers map when available (warm TTL); still fetch via provider= if empty.
     if (providersLoading) return;
     if (loadedForOperator === operator) return;
     void loadOperatorProducts(operator);
-  }, [operator, providersLoading, brandProviders, loadOperatorProducts, loadedForOperator]);
+  }, [
+    operator,
+    providersLoading,
+    brandProviders,
+    loadOperatorProducts,
+    loadedForOperator,
+    resetProducts,
+  ]);
 
   const operatorProducts = useMemo(() => {
     if (!operator) return [];
@@ -178,6 +197,13 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
       .filter((p) => operatorsMatch(p.operatorName || p.providerDetails?.name, operator))
       .sort((a, b) => a.price - b.price);
   }, [allProducts, operator]);
+
+  const visibleOperatorProducts = useMemo(() => {
+    if (!operator) return [];
+    return visibleProducts
+      .filter((p) => operatorsMatch(p.operatorName || p.providerDetails?.name, operator))
+      .sort((a, b) => a.price - b.price);
+  }, [visibleProducts, operator]);
 
   const telkomselActive = !!operator && isTelkomselOperator(operator) && operatorProducts.length > 0;
   const zoneGate = telkomselActive && telkomselNeedsZoneGate(operatorProducts);
@@ -197,11 +223,11 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
 
   const catalogProducts = useMemo(() => {
     if (!operator) return [];
-    if (!zoneGate) return operatorProducts;
-    if (nationalSelected) return nationalProducts;
-    if (zoneLabel) return filterProductsByZoneLabel(operatorProducts, zoneLabel);
+    if (!zoneGate) return visibleOperatorProducts;
+    if (nationalSelected) return telkomselNationalProducts(visibleOperatorProducts);
+    if (zoneLabel) return filterProductsByZoneLabel(visibleOperatorProducts, zoneLabel);
     return [];
-  }, [operator, zoneGate, operatorProducts, nationalSelected, nationalProducts, zoneLabel]);
+  }, [operator, zoneGate, visibleOperatorProducts, nationalSelected, zoneLabel]);
 
   const displayZone = zoneLabel || (nationalSelected ? 'Nasional' : null);
 
@@ -319,7 +345,8 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
     router.push({ pathname: '/checkout/[sku]', params: { sku: product.code } });
   };
 
-  const catalogBusy = productsLoading && allProducts.length === 0;
+  const catalogBusy =
+    (productsLoading || productsLoadingMore) && allProducts.length === 0;
 
   return (
     <View style={styles.wrap}>
@@ -484,14 +511,21 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
               message="Belum ada paket tersedia untuk wilayah ini."
             />
           ) : (
-            <VoucherInternetProductList
-              products={catalogProducts}
-              onSelect={selectProduct}
-              isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled}
-              getMetaLabel={(p) =>
-                p.zoneLabel ? p.zoneLabel : displayZone === 'Nasional' ? 'Nasional' : null
-              }
-            />
+            <>
+              <VoucherInternetProductList
+                products={catalogProducts}
+                onSelect={selectProduct}
+                isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled}
+                getMetaLabel={(p) =>
+                  p.zoneLabel ? p.zoneLabel : displayZone === 'Nasional' ? 'Nasional' : null
+                }
+              />
+              <CatalogLoadMoreButton
+                visible={productsCanLoadMore}
+                loading={productsLoadingMore}
+                onPress={() => void loadProductsMore()}
+              />
+            </>
           )}
         </>
       )}

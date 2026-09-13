@@ -35,11 +35,13 @@ import {
   PurchaseFlowNotice,
 } from '../ui';
 import { ProductCatalogGrid } from './ProductCatalogGrid';
+import { CatalogLoadMoreButton } from './CatalogLoadMoreButton';
 import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
 import { stripGameProductDisplayName } from '../../utils/stripGameProductDisplayName';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 
 /**
  * Mobile Game catalog + DigiFlazz purchase (FR catalog game).
@@ -116,9 +118,17 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   const [providerQuery, setProviderQuery] = useState('');
   const [selectedGame, setSelectedGame] = useState<CategoryProviderSummary | null>(null);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [productsError, setProductsError] = useState<string | null>(null);
+  const {
+    products,
+    visibleProducts: pagedProducts,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    error: productsError,
+    canLoadMore: productsCanLoadMore,
+    loadInitial: loadProductsInitial,
+    loadMore: loadProductsMore,
+    reset: resetProducts,
+  } = useProviderProductPager();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const [schemaFields, setSchemaFields] = useState<GameAccountField[]>([]);
@@ -176,10 +186,10 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   // DigiFlazz-only top-up listing (VIP + Cek Username utility SKUs hidden).
   const listedProducts = useMemo(
     () =>
-      products.filter(
+      pagedProducts.filter(
         (p) => isCatalogListed(p) && !isVipSku(p.code) && !isGameNonPurchaseSku(p.code)
       ),
-    [products]
+    [pagedProducts]
   );
 
   const accountReady = isAccountReady(schemaFields, account);
@@ -216,8 +226,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     }
     if (step === 'buy') {
       setSelectedGame(null);
-      setProducts([]);
-      setProductsError(null);
+      resetProducts();
       setSelectedProduct(null);
       setSchemaFields([]);
       setSchemaDelivery(null);
@@ -226,7 +235,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
       invalidateInquiry();
       setStep('games');
     }
-  }, [step, invalidateInquiry]);
+  }, [step, invalidateInquiry, resetProducts]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
@@ -360,8 +369,7 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
   const selectGame = async (game: CategoryProviderSummary) => {
     setSelectedGame(game);
     setStep('buy');
-    setProducts([]);
-    setProductsError(null);
+    resetProducts();
     setSelectedProduct(null);
     setSchemaFields([]);
     setSchemaDelivery(null);
@@ -369,28 +377,21 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
     setAccount({});
     invalidateInquiry();
     setFormError(null);
-    setProductsLoading(true);
     setSchemaLoading(true);
     try {
-      const res = await catalogService.getProducts({
+      const result = await loadProductsInitial({
         category: 'game',
         provider_id: game.providerId,
-        per_page: 5000,
       });
-      if (res.success && Array.isArray(res.data)) {
-        setProducts(res.data);
-        await loadBrandDigiSchema(game.name, res.data);
+      const loaded = result?.products ?? [];
+      if (loaded.length > 0) {
+        await loadBrandDigiSchema(game.name, loaded);
       } else {
-        setProducts([]);
-        setProductsError(res.message || 'Gagal memuat produk game.');
         setSchemaLoading(false);
       }
     } catch (err: unknown) {
-      setProducts([]);
-      setProductsError(parseApiError(err).message || 'Gagal memuat produk game.');
       setSchemaLoading(false);
-    } finally {
-      setProductsLoading(false);
+      setFormError(parseApiError(err).message || 'Gagal memuat produk game.');
     }
   };
 
@@ -717,28 +718,35 @@ export function GameCatalogFlow({ purchaseBanner }: Props) {
         ) : listedProducts.length === 0 ? (
           <EmptyState title="Belum Ada Produk" message="Produk DigiFlazz untuk game ini belum tersedia." />
         ) : (
-          <ProductCatalogGrid
-            products={listedProducts}
-            columns={3}
-            selectedCode={selectedProduct?.code ?? null}
-            onPress={onSelectProduct}
-            isDisabled={(p) =>
-              !isProductPurchasable(p) ||
-              !purchaseEnabled ||
-              isVipSku(p.code) ||
-              isGameNonPurchaseSku(p.code)
-            }
-            getDisplayName={(p) =>
-              stripGameProductDisplayName(p.name, selectedGame.name || p.operatorName)
-            }
-            renderMeta={(p) =>
-              !isProductPurchasable(p) ? (
-                <Text style={styles.productStatus}>
-                  {p.status === 'maintenance' ? 'Maintenance' : 'Tidak tersedia'}
-                </Text>
-              ) : null
-            }
-          />
+          <>
+            <ProductCatalogGrid
+              products={listedProducts}
+              columns={3}
+              selectedCode={selectedProduct?.code ?? null}
+              onPress={onSelectProduct}
+              isDisabled={(p) =>
+                !isProductPurchasable(p) ||
+                !purchaseEnabled ||
+                isVipSku(p.code) ||
+                isGameNonPurchaseSku(p.code)
+              }
+              getDisplayName={(p) =>
+                stripGameProductDisplayName(p.name, selectedGame.name || p.operatorName)
+              }
+              renderMeta={(p) =>
+                !isProductPurchasable(p) ? (
+                  <Text style={styles.productStatus}>
+                    {p.status === 'maintenance' ? 'Maintenance' : 'Tidak tersedia'}
+                  </Text>
+                ) : null
+              }
+            />
+            <CatalogLoadMoreButton
+              visible={productsCanLoadMore}
+              loading={productsLoadingMore}
+              onPress={() => void loadProductsMore()}
+            />
+          </>
         )}
 
         {inquiryError ? <Text style={styles.error}>{inquiryError}</Text> : null}

@@ -90,11 +90,16 @@ class ProductModuleTest extends TestCase
                 'message',
                 'data' => [
                     '*' => [
-                        'id', 'code', 'name', 'basePrice', 'margin', 'adminFee', 'price', 'status', 'availabilityStatus'
-                    ]
+                        'id', 'code', 'name', 'adminFee', 'price', 'status', 'isPurchasable',
+                    ],
                 ],
-                'meta'
+                'meta',
             ]);
+
+        $row = $response->json('data.0');
+        $this->assertArrayNotHasKey('basePrice', $row);
+        $this->assertArrayNotHasKey('providerCost', $row);
+        $this->assertArrayNotHasKey('margin', $row);
     }
 
     /**

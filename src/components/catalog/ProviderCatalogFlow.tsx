@@ -18,7 +18,13 @@ import { formatIDR } from '../../utils/currency';
 import { parseApiError } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import { ewalletService, EwalletInquiryResult } from '../../services/ewallet/ewallet.service';
-import { CategoryProviderSummary } from '../../services/product/product.service';
+import { CategoryProviderSummary, productService } from '../../services/product/product.service';
+import {
+  CATALOG_PRODUCT_PAGE_SIZE,
+  mergeCatalogProductPages,
+  shouldPaginateCatalogProducts,
+  unwrapCatalogPagination,
+} from '../../utils/catalogProductPaging';
 import {
   gameService,
   GameAccountField,
@@ -108,14 +114,20 @@ export function ProviderCatalogFlow({
   const isSummaryCheckoutMode = isVoucherMode;
   const { wallet, fetchWallet, syncAuthoritativeBalance } = useWalletStore();
   const {
-    products,
-    loading: productsLoading,
     fetchProducts,
     categoryProviders,
     categoryProvidersLoading,
     fetchCategoryProviders,
   } = useProductStore();
   const toast = useToast();
+
+  /** Providers-first paged list (threshold 30 / page 20) — not the global store dump. */
+  const [pagedProducts, setPagedProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsLoadingMore, setProductsLoadingMore] = useState(false);
+  const [productPage, setProductPage] = useState(1);
+  const [productLastPage, setProductLastPage] = useState(1);
+  const [productTotal, setProductTotal] = useState(0);
 
   const showFlowError = useCallback(
     (description: string) => {
@@ -256,7 +268,7 @@ export function ProviderCatalogFlow({
 
   const providerProducts = useMemo(() => {
     if (!selectedProvider) return [];
-    return products
+    return pagedProducts
       .filter(
         (p) =>
           isCatalogListed(p) &&
@@ -269,7 +281,10 @@ export function ProviderCatalogFlow({
             /bebas\s*nominal/i.test(String(p.name ?? '')))
       )
       .sort((a, b) => a.price - b.price);
-  }, [products, selectedProvider, isGameInquiry, isEwalletInquiry]);
+  }, [pagedProducts, selectedProvider, isGameInquiry, isEwalletInquiry]);
+
+  const productsCanLoadMore =
+    shouldPaginateCatalogProducts(productTotal) && productPage < productLastPage;
 
   const phoneReady = !isEwalletInquiry || targetNo.replace(/\D/g, '').length >= 10;
   const gameAccountReady =
@@ -309,7 +324,7 @@ export function ProviderCatalogFlow({
         ? 'Masukkan ID Game'
         : 'Masukkan nomor tujuan');
 
-  const selectProvider = (cp: CategoryProviderSummary) => {
+  const selectProvider = async (cp: CategoryProviderSummary) => {
     setSelectedProvider(cp.name);
     setSelectedProviderMeta(cp);
     setSelectedProduct(null);
@@ -323,7 +338,74 @@ export function ProviderCatalogFlow({
     setLanggananAccount({});
     setLanggananDelivery('unknown');
     setStep('products');
-    void fetchProducts({ category, provider_id: cp.providerId });
+    setPagedProducts([]);
+    setProductPage(1);
+    setProductLastPage(1);
+    setProductTotal(0);
+    setProductsLoading(true);
+    try {
+      const res = await productService.getProducts({
+        category,
+        provider_id: cp.providerId,
+        page: 1,
+        per_page: CATALOG_PRODUCT_PAGE_SIZE,
+      });
+      const rows = res.success && Array.isArray(res.data) ? res.data : [];
+      const pag = unwrapCatalogPagination(res);
+      const total = pag?.total ?? rows.length;
+      const lastPage = pag?.lastPage ?? 1;
+      if (!shouldPaginateCatalogProducts(total)) {
+        if (total > rows.length) {
+          const full = await productService.getProducts({
+            category,
+            provider_id: cp.providerId,
+            page: 1,
+            per_page: Math.max(total, 30),
+          });
+          const all = full.success && Array.isArray(full.data) ? full.data : rows;
+          setPagedProducts(all);
+          setProductTotal(all.length);
+          setProductPage(1);
+          setProductLastPage(1);
+        } else {
+          setPagedProducts(rows);
+          setProductTotal(total);
+          setProductPage(1);
+          setProductLastPage(1);
+        }
+      } else {
+        setPagedProducts(rows);
+        setProductTotal(total);
+        setProductPage(pag?.currentPage ?? 1);
+        setProductLastPage(lastPage);
+      }
+      // Keep store warm for any legacy readers in this flow.
+      void fetchProducts({ category, provider_id: cp.providerId, per_page: CATALOG_PRODUCT_PAGE_SIZE, page: 1 });
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const loadMoreProducts = async () => {
+    if (!selectedProviderMeta || !productsCanLoadMore || productsLoadingMore) return;
+    setProductsLoadingMore(true);
+    try {
+      const nextPage = productPage + 1;
+      const res = await productService.getProducts({
+        category,
+        provider_id: selectedProviderMeta.providerId,
+        page: nextPage,
+        per_page: CATALOG_PRODUCT_PAGE_SIZE,
+      });
+      const rows = res.success && Array.isArray(res.data) ? res.data : [];
+      const pag = unwrapCatalogPagination(res);
+      setPagedProducts((prev) => mergeCatalogProductPages(prev, rows));
+      setProductPage(pag?.currentPage ?? nextPage);
+      setProductLastPage(pag?.lastPage ?? productLastPage);
+      setProductTotal(pag?.total ?? productTotal);
+    } finally {
+      setProductsLoadingMore(false);
+    }
   };
 
   const goBackToProviders = () => {
@@ -331,6 +413,10 @@ export function ProviderCatalogFlow({
     setSelectedProvider(null);
     setSelectedProviderMeta(null);
     setSelectedProduct(null);
+    setPagedProducts([]);
+    setProductPage(1);
+    setProductLastPage(1);
+    setProductTotal(0);
     setEwalletInquiry(null);
     setEwalletAmount('');
     setGameInquiry(null);
@@ -1253,6 +1339,16 @@ export function ProviderCatalogFlow({
                       })}
                     </div>
                   )}
+                  {productsCanLoadMore ? (
+                    <button
+                      type="button"
+                      disabled={productsLoadingMore}
+                      onClick={() => void loadMoreProducts()}
+                      className="w-full py-3 rounded-2xl border text-xs font-bold text-primary-700 disabled:opacity-50"
+                    >
+                      {productsLoadingMore ? 'Memuat…' : 'Muat lebih banyak'}
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl">

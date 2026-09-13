@@ -2,6 +2,14 @@
 
 Non-urgent items. Do not block APK / release gates unless Owner re-prioritizes.
 
+## TD-2026-09-13 — Catalog SQL server-side pagination (Fase 4)
+
+**Logged:** 2026-09-13 (after Fase 1–3 list pagination + sparse DTO)  
+**Priority:** backlog (not urgent for APK batch)  
+**Context:** Fase 1–3 cut customer list payload (page size 20, threshold 30, `ProductListResource`) but `ProductRepository::getPaginatedProducts()` still loads matching rows then slices. Free Fire page-1 response ~15 KB yet still ~8–13 s server time.
+
+**Work (when prioritized):** true SQL/offset pagination (or equivalent) for `provider_id` catalog path after visibility/merge/dedupe rules are safe; re-measure Free Fire / ML / PUBG / VI brands for ms, not only KB. Do not change threshold 30 / page 20 without Owner approval.
+
 ## TD-2026-09-12 — Stale PHPUnit expectations (full suite)
 
 **Logged:** 2026-09-12 (final APK verification)  

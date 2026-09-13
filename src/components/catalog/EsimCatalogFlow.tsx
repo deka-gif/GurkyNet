@@ -19,7 +19,8 @@ import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
-const PER_PAGE = 24;
+const PER_PAGE = 20;
+const PAGE_THRESHOLD = 30;
 const RETURN_PATH = '/dashboard/telekomunikasi/esim';
 
 export type EsimDeliveryMeta = {
@@ -154,14 +155,31 @@ export function EsimCatalogFlow() {
           return;
         }
         const rows = Array.isArray(res.data) ? res.data : [];
-        setProducts((prev) => (append ? [...prev, ...rows] : rows));
         const pag = res.pagination;
-        if (pag) {
-          setPage(pag.currentPage ?? pag.current_page ?? pageNum);
-          setLastPage(pag.lastPage ?? pag.last_page ?? 1);
-        } else {
-          setPage(pageNum);
+        const total = Number(pag?.total ?? rows.length);
+        const last = Number(pag?.lastPage ?? pag?.last_page ?? 1);
+        if (!append && total <= PAGE_THRESHOLD && total > rows.length) {
+          const full = await productService.getProducts({
+            category: 'esim',
+            provider_id: selectedProvider.providerId,
+            keyword: debouncedSearch || undefined,
+            page: 1,
+            per_page: Math.max(total, PAGE_THRESHOLD),
+            sort: 'price_asc',
+          });
+          const all = Array.isArray(full.data) ? full.data : rows;
+          setProducts(all);
+          setPage(1);
           setLastPage(1);
+        } else {
+          setProducts((prev) => (append ? [...prev, ...rows] : rows));
+          if (pag) {
+            setPage(pag.currentPage ?? pag.current_page ?? pageNum);
+            setLastPage(last);
+          } else {
+            setPage(pageNum);
+            setLastPage(1);
+          }
         }
       } finally {
         setLoading(false);
