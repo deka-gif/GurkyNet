@@ -47,6 +47,7 @@ import {
   groupLanggananPackages,
   type LanggananPackageGroup,
 } from '../../utils/langgananPackageGrouping';
+import { validateEwalletAmountMultipleOfThousand } from '../../utils/ewalletAmountValidation';
 import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
 export type CatalogTargetMode = 'phone' | 'game' | 'customer' | 'none';
@@ -522,6 +523,12 @@ export function ProviderCatalogFlow({
     }
     if (maxAmount != null && amount > maxAmount) {
       showFlowError(`Maksimal ${formatIDR(maxAmount)}`);
+      return;
+    }
+    // Digiflazz E-Money RC 87 — reject before inquiry (mirror mobile ewalletBrand).
+    const multipleErr = validateEwalletAmountMultipleOfThousand(amount);
+    if (multipleErr) {
+      showFlowError(multipleErr);
       return;
     }
 
