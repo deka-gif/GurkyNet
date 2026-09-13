@@ -188,11 +188,9 @@ export function PhysicalBatchCheckout({
       >
         <div className="flex items-center justify-between">
           <h3 className="font-extrabold text-gray-900">Aktivasi Voucher Fisik</h3>
-          {step !== 'LOADING' && (
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Tutup">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {step === 'SUMMARY' && (
@@ -253,6 +251,16 @@ export function PhysicalBatchCheckout({
           <div className="py-10 text-center space-y-3">
             <RefreshCw className="w-8 h-8 mx-auto animate-spin text-primary-500" />
             <p className="text-xs text-gray-500">Memproses pembayaran batch...</p>
+            <p className="text-[11px] text-amber-700 font-semibold px-2">
+              Menutup jendela tidak membatalkan proses di server. Cek status di Riwayat jika perlu.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 rounded-2xl border border-gray-200 text-sm font-bold text-gray-700 hover:bg-gray-50"
+            >
+              Keluar (proses lanjut di background)
+            </button>
           </div>
         )}
 
@@ -274,7 +282,7 @@ export function PhysicalBatchCheckout({
             </div>
             {!isTerminal && (
               <p className="text-[11px] text-amber-600 font-semibold text-center">
-                Memproses aktivasi... status akan diperbarui otomatis.
+                Memproses aktivasi di background... status diperbarui otomatis. Anda boleh keluar dan cek Riwayat.
               </p>
             )}
             <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -302,6 +310,15 @@ export function PhysicalBatchCheckout({
                 </div>
               ))}
             </div>
+            {!isTerminal && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3.5 border border-gray-200 hover:bg-gray-50 text-gray-800 rounded-2xl font-bold text-sm"
+              >
+                Keluar (proses lanjut di background)
+              </button>
+            )}
             {isTerminal && (
               <button
                 type="button"

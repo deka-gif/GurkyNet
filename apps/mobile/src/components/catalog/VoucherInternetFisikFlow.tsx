@@ -156,6 +156,20 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   const idempotencyKeyRef = useRef<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // PIN submit hang watchdog — never trap user forever if API never returns (Item 5).
+  useEffect(() => {
+    if (!pinLoading) return;
+    const t = setTimeout(() => {
+      submittingRef.current = false;
+      setPinLoading(false);
+      setPinVisible(false);
+      setSubmitError(
+        'Koneksi lambat / tidak ada respons. Jika saldo terpotong, cek status di Riwayat — jangan ulang transaksi.'
+      );
+    }, 45000);
+    return () => clearTimeout(t);
+  }, [pinLoading]);
+
   const loadBrands = useCallback(async () => {
     setLoading(true);
     setError(null);

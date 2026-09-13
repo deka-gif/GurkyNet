@@ -155,6 +155,12 @@ export default function CheckoutResultScreen() {
     router.replace('/(tabs)/transaksi');
   };
 
+  /** Pending leave — server poll/push continues; user must not be trapped (same UX as VI Fisik). */
+  const leaveWhilePending = (to: 'riwayat' | 'transaksi') => {
+    startNewPurchase();
+    router.replace(to === 'riwayat' ? '/(tabs)/riwayat' : '/(tabs)/transaksi');
+  };
+
   const voucherCode =
     typeof receipt?.transaction_details.voucher_internet_code === 'string'
       ? receipt.transaction_details.voucher_internet_code
@@ -218,7 +224,12 @@ export default function CheckoutResultScreen() {
   return (
     <ScreenContainer>
       <Stack.Screen
-        options={{ headerShown: true, title: 'Status Transaksi', headerBackVisible: false }}
+        options={{
+          headerShown: true,
+          title: 'Status Transaksi',
+          // Pending must stay leaveable — process continues server-side (Riwayat).
+          headerBackVisible: true,
+        }}
       />
 
       <Card style={styles.statusCard}>
@@ -236,9 +247,17 @@ export default function CheckoutResultScreen() {
           <LoadingState label="Menunggu konfirmasi dari sistem..." />
           <Text style={styles.processingHint}>
             Transaksi sedang diproses provider. Status bisa tetap Tertunda beberapa menit
-            meskipun saldo tujuan sudah masuk — halaman ini diperbarui otomatis (jangan ulang
-            transaksi).
+            meskipun saldo tujuan sudah masuk — proses lanjut di background. Anda bisa keluar
+            dan cek status di Riwayat (jangan ulang transaksi).
           </Text>
+          <View style={styles.pendingActions}>
+            <Button label="Cek di Riwayat" onPress={() => leaveWhilePending('riwayat')} />
+            <Button
+              label="Keluar (proses lanjut di background)"
+              variant="secondary"
+              onPress={() => leaveWhilePending('transaksi')}
+            />
+          </View>
         </View>
       )}
 
@@ -382,6 +401,7 @@ const styles = StyleSheet.create({
   invoice: { fontSize: typography.size.xs, color: colors.gray[400] },
   processingWrap: { alignItems: 'center', gap: spacing.sm },
   processingHint: { fontSize: typography.size.xs, color: colors.gray[500], textAlign: 'center' },
+  pendingActions: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
   receiptLoading: { fontSize: typography.size.sm, color: colors.gray[500], textAlign: 'center' },
   voucherCard: { gap: spacing.sm, alignItems: 'stretch' },
   voucherTitle: {
