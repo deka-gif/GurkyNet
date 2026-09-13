@@ -264,7 +264,11 @@ class SyncVipCatalogAction
 
                 $zoneResolver = app(VoucherInternetZoneLabelResolver::class);
                 $zoneLabel = $zoneResolver->appliesToCategorySlug($category->slug)
-                    ? $zoneResolver->fromVipProviderMeta(is_array($providerMeta) ? $providerMeta : null, $providerName)
+                    ? $zoneResolver->fromVipProviderMeta(
+                        is_array($providerMeta) ? $providerMeta : null,
+                        $providerName,
+                        $category->slug
+                    )
                     : null;
 
                 // Prefer attaching VIP offer onto an existing Digiflazz/master product (same brand+name).

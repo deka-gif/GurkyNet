@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CreditCard,
   RefreshCw,
@@ -20,6 +20,16 @@ import {
 } from '../../utils/detectOperator';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import {
+  collectTelkomselZoneLabels,
+  filterProductsByZoneLabel,
+  isTelkomselOperator,
+  orphanZoneLabels,
+  telkomselNationalProducts,
+  telkomselNeedsZoneGate,
+  zoneLabelBelongsToRegion,
+  TELKOMSEL_REGION_ORDER,
+} from '../../utils/telkomselVoucherZone';
 
 type Props = {
   category: string;
@@ -72,6 +82,10 @@ export function PhoneOperatorCatalogFlow({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [nationalSelected, setNationalSelected] = useState(false);
+  const [zoneLabel, setZoneLabel] = useState<string | null>(null);
+
+  const smsZoneEnabled = category === 'sms-telepon';
 
   useEffect(() => {
     if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
@@ -93,6 +107,8 @@ export function PhoneOperatorCatalogFlow({
   useEffect(() => {
     const op = detectOperatorFromPhone(phoneNo);
     setProvider(op);
+    setNationalSelected(false);
+    setZoneLabel(null);
     if (!op) {
       setProducts([]);
       setSelectedProduct(null);
@@ -147,12 +163,46 @@ export function PhoneOperatorCatalogFlow({
   useEffect(() => {
     if (!provider) return;
     setProducts([]);
+    setNationalSelected(false);
+    setZoneLabel(null);
     loadProducts(1, false);
   }, [provider, loadProducts]);
+
+  const telkomselActive = smsZoneEnabled && !!provider && isTelkomselOperator(provider) && products.length > 0;
+  const zoneGate = telkomselActive && telkomselNeedsZoneGate(products);
+  const allZoneLabels = useMemo(
+    () => (telkomselActive ? collectTelkomselZoneLabels(products) : []),
+    [telkomselActive, products]
+  );
+  const geoLabels = useMemo(
+    () =>
+      allZoneLabels.filter((label) =>
+        TELKOMSEL_REGION_ORDER.some((region) => zoneLabelBelongsToRegion(label, region))
+      ),
+    [allZoneLabels]
+  );
+  const orphans = useMemo(() => orphanZoneLabels(allZoneLabels), [allZoneLabels]);
+  const hasNational = useMemo(
+    () => (telkomselActive ? telkomselNationalProducts(products).length > 0 : false),
+    [telkomselActive, products]
+  );
+  const zonePicked = nationalSelected || !!zoneLabel;
+  const displayProducts = useMemo(() => {
+    if (!zoneGate) return products;
+    if (!zonePicked) return [];
+    if (nationalSelected) return telkomselNationalProducts(products);
+    if (zoneLabel) return filterProductsByZoneLabel(products, zoneLabel);
+    return [];
+  }, [zoneGate, products, zonePicked, nationalSelected, zoneLabel]);
+  const displayZone = zoneLabel || (nationalSelected ? 'Nasional' : null);
 
   const handleCheckout = () => {
     if (!provider || !selectedProduct) {
       setErrorMsg('Pilih paket terlebih dahulu.');
+      return;
+    }
+    if (zoneGate && !zonePicked) {
+      setErrorMsg('Pilih wilayah produk terlebih dahulu.');
       return;
     }
     if (!isProductPurchasable(selectedProduct)) {
@@ -176,6 +226,7 @@ export function PhoneOperatorCatalogFlow({
       skuCode: selectedProduct.code,
       customDetails: {
         Operator: provider,
+        ...(displayZone ? { Wilayah: displayZone } : {}),
       },
     });
   };
@@ -252,6 +303,82 @@ export function PhoneOperatorCatalogFlow({
                 </div>
               )}
 
+              {zoneGate ? (
+                <div className="space-y-2 rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                  <p className="text-xs font-extrabold text-gray-800">Pilih wilayah produk</p>
+                  <p className="text-[11px] text-gray-500 font-semibold">
+                    SMS/Telepon regional mengikuti zona Digi — pilih Nasional atau wilayah yang sesuai.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {hasNational ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNationalSelected(true);
+                          setZoneLabel(null);
+                          setSelectedProduct(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${
+                          nationalSelected
+                            ? 'border-primary-500 bg-primary-50 text-primary-800'
+                            : 'border-gray-200 bg-white text-gray-700'
+                        }`}
+                      >
+                        Nasional
+                      </button>
+                    ) : null}
+                    {geoLabels.map((label) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => {
+                          setNationalSelected(false);
+                          setZoneLabel(label);
+                          setSelectedProduct(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${
+                          zoneLabel === label
+                            ? 'border-primary-500 bg-primary-50 text-primary-800'
+                            : 'border-gray-200 bg-white text-gray-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {orphans.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-[11px] font-extrabold text-gray-700">Wilayah Lainnya</p>
+                      <div className="flex flex-wrap gap-2">
+                        {orphans.map((label) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => {
+                              setNationalSelected(false);
+                              setZoneLabel(label);
+                              setSelectedProduct(null);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${
+                              zoneLabel === label
+                                ? 'border-primary-500 bg-primary-50 text-primary-800'
+                                : 'border-gray-200 bg-white text-gray-700'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {!zonePicked ? (
+                    <p className="text-[11px] font-semibold text-amber-700">
+                      Pilih wilayah dulu sebelum memilih produk.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
               {loading && products.length === 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                   {Array.from({ length: 8 }).map((_, i) => (
@@ -262,9 +389,13 @@ export function PhoneOperatorCatalogFlow({
                 <div className="py-14 text-center border border-dashed border-gray-200 rounded-3xl text-sm font-bold text-gray-600">
                   Tidak ada produk untuk operator ini.
                 </div>
+              ) : zoneGate && !zonePicked ? null : displayProducts.length === 0 ? (
+                <div className="py-14 text-center border border-dashed border-gray-200 rounded-3xl text-sm font-bold text-gray-600">
+                  Tidak ada produk untuk wilayah ini.
+                </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-                  {products.map((p) => {
+                  {displayProducts.map((p) => {
                     const active = selectedProduct?.id === p.id || selectedProduct?.code === p.code;
                     return (
                       <article

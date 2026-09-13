@@ -143,7 +143,11 @@ class ProviderRepository implements ProviderRepositoryInterface
 
             $zoneResolver = app(VoucherInternetZoneLabelResolver::class);
             $zoneLabel = $zoneResolver->appliesToCategorySlug($mapped['slug'])
-                ? $zoneResolver->fromDigiflazzType($dp['type'] ?? null, (string) ($dp['product_name'] ?? ''))
+                ? $zoneResolver->fromDigiflazzType(
+                    $dp['type'] ?? null,
+                    (string) ($dp['product_name'] ?? ''),
+                    $mapped['slug']
+                )
                 : null;
 
             // 3. Map & Sync Provider (brand) — eSIM has no real brand from the

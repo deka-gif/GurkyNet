@@ -3,16 +3,27 @@
 namespace App\Services\Catalog;
 
 /**
- * Derives products.zone_label for voucher-internet only (Telkomsel regional SKUs).
- * null = national / no regional gate (includes legacy "Umum" and non-data specials).
+ * Derives products.zone_label for Telkomsel regional SKUs.
+ * Used by voucher-internet and sms-telepon (audit Item 9).
+ * null = national / no regional gate (Umum, marketing, non-geographic Digi types).
  */
 class VoucherInternetZoneLabelResolver
 {
     public const CATEGORY_SLUG = 'voucher-internet';
 
+    /** @var list<string> */
+    public const SMS_CATEGORY_SLUGS = ['sms-telepon', 'paket-sms-telpon'];
+
     public function appliesToCategorySlug(?string $slug): bool
     {
-        return (string) $slug === self::CATEGORY_SLUG;
+        $s = (string) $slug;
+
+        return $s === self::CATEGORY_SLUG || $this->isSmsCategorySlug($s);
+    }
+
+    public function isSmsCategorySlug(?string $slug): bool
+    {
+        return in_array((string) $slug, self::SMS_CATEGORY_SLUGS, true);
     }
 
     public function normalize(?string $raw, ?string $productName = null): ?string
@@ -33,17 +44,48 @@ class VoucherInternetZoneLabelResolver
         return $label;
     }
 
-    public function fromVipProviderMeta(?array $meta, ?string $productName = null): ?string
+    /**
+     * SMS Digi types include many non-geo labels (Telepon Pas, Spesial, …).
+     * Only keep labels that look geographic so they do not flood Wilayah Lainnya.
+     */
+    public function looksGeographic(string $label): bool
+    {
+        $hay = strtolower($label);
+        $hints = [
+            'sumatera', 'sumatra', 'jawa', 'jabodetabek', 'jabo', 'jabar', 'jateng', 'jatim',
+            'kalimantan', 'sulawesi', 'bali', 'nusa', 'lombok', 'papua', 'maluku', 'zona',
+            'sukabumi', 'bogor', 'banten', 'ntt', 'ntb', 'kalsul', 'wilayah',
+        ];
+        foreach ($hints as $hint) {
+            if (str_contains($hay, $hint)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function fromVipProviderMeta(?array $meta, ?string $productName = null, ?string $categorySlug = null): ?string
     {
         if (! is_array($meta)) {
             return null;
         }
 
-        return $this->normalize($meta['category'] ?? null, $productName);
+        return $this->fromDigiflazzType($meta['category'] ?? null, $productName, $categorySlug);
     }
 
-    public function fromDigiflazzType(?string $type, ?string $productName = null): ?string
+    public function fromDigiflazzType(?string $type, ?string $productName = null, ?string $categorySlug = null): ?string
     {
-        return $this->normalize($type, $productName);
+        $normalized = $this->normalize($type, $productName);
+        if ($normalized === null) {
+            return null;
+        }
+
+        // SMS: drop non-geographic Digi types (Telepon Pas, Umroh, …) → Nasional path.
+        if ($this->isSmsCategorySlug($categorySlug) && ! $this->looksGeographic($normalized)) {
+            return null;
+        }
+
+        return $normalized;
     }
 }

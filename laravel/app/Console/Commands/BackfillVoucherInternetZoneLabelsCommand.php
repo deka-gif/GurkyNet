@@ -8,23 +8,34 @@ use App\Models\ProductProvider;
 use App\Models\ProductProviderSku;
 use App\Services\Catalog\VoucherInternetZoneLabelResolver;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 class BackfillVoucherInternetZoneLabelsCommand extends Command
 {
     protected $signature = 'catalog:backfill-voucher-internet-zone-labels
-                            {--provider=Telkomsel : Operator brand name filter (providers.name)}';
+                            {--provider=Telkomsel : Operator brand name filter (providers.name)}
+                            {--category= : Limit to one category slug (voucher-internet|sms-telepon). Default: both VI + SMS}';
 
-    protected $description = 'One-time backfill of products.zone_label for voucher-internet from VIP meta / Digiflazz type.';
+    protected $description = 'Backfill products.zone_label for voucher-internet and sms-telepon from Digi type / VIP meta.';
 
     public function handle(VoucherInternetZoneLabelResolver $resolver): int
     {
         $providerFilter = (string) $this->option('provider');
+        $categoryOpt = trim((string) $this->option('category'));
         $vipId = ProductProvider::query()->where('code', 'vip')->value('id');
+
+        $slugs = [VoucherInternetZoneLabelResolver::CATEGORY_SLUG, ...VoucherInternetZoneLabelResolver::SMS_CATEGORY_SLUGS];
+        if ($categoryOpt !== '') {
+            if (! $resolver->appliesToCategorySlug($categoryOpt)) {
+                $this->error("Category '{$categoryOpt}' is not zone-gated.");
+
+                return self::FAILURE;
+            }
+            $slugs = [$categoryOpt];
+        }
 
         $query = Product::query()
             ->with('category')
-            ->whereHas('category', fn ($q) => $q->where('slug', VoucherInternetZoneLabelResolver::CATEGORY_SLUG))
+            ->whereHas('category', fn ($q) => $q->whereIn('slug', $slugs))
             ->whereHas('provider', function ($q) use ($providerFilter) {
                 $q->whereRaw('LOWER(name) LIKE ?', ['%'.strtolower($providerFilter).'%']);
             });
@@ -35,6 +46,7 @@ class BackfillVoucherInternetZoneLabelsCommand extends Command
 
         $query->orderBy('id')->chunkById(100, function ($products) use ($resolver, $vipId, &$filled, &$nulled) {
             foreach ($products as $product) {
+                $slug = $product->category?->slug;
                 $label = null;
 
                 if ($vipId) {
@@ -45,14 +57,18 @@ class BackfillVoucherInternetZoneLabelsCommand extends Command
                     if (is_string($meta)) {
                         $meta = json_decode($meta, true);
                     }
-                    $label = $resolver->fromVipProviderMeta(is_array($meta) ? $meta : null, $product->name);
+                    $label = $resolver->fromVipProviderMeta(
+                        is_array($meta) ? $meta : null,
+                        $product->name,
+                        $slug
+                    );
                 }
 
                 if ($label === null) {
                     $digiType = DigiflazzProduct::query()
                         ->where('buyer_sku_code', $product->sku_code)
                         ->value('type');
-                    $label = $resolver->fromDigiflazzType($digiType, $product->name);
+                    $label = $resolver->fromDigiflazzType($digiType, $product->name, $slug);
                 }
 
                 $product->forceFill(['zone_label' => $label])->save();
@@ -65,7 +81,7 @@ class BackfillVoucherInternetZoneLabelsCommand extends Command
             }
         });
 
-        $this->info("Backfill complete for {$total} products: zone_label set={$filled}, null(Umum/special)={$nulled}.");
+        $this->info('Backfill complete for '.$total.' products ('.implode(',', $slugs)."): zone_label set={$filled}, null={$nulled}.");
 
         return self::SUCCESS;
     }
