@@ -22,10 +22,25 @@ class SubscriptionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $rows = UserSubscription::query()
-            ->with('product:id,name,sku_code,sell_price,base_price')
+            ->with('product:id,name,sku_code,sell_price')
             ->where('user_id', $request->user()->id)
             ->orderByDesc('id')
             ->paginate(min(50, max(1, (int) $request->input('per_page', 20))));
+
+        // Never expose product cost fields (base_price / margin) to customer subscription API.
+        $rows->getCollection()->transform(function (UserSubscription $sub) {
+            if ($sub->relationLoaded('product') && $sub->product) {
+                $sub->setRelation('product', $sub->product->makeHidden([
+                    'base_price',
+                    'provider_cost',
+                    'margin',
+                    'basePrice',
+                    'providerCost',
+                ]));
+            }
+
+            return $sub;
+        });
 
         return $this->successResponse('Subscriptions', $rows);
     }
@@ -51,7 +66,7 @@ class SubscriptionController extends Controller
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
 
-        return $this->successResponse('Subscription dibuat', $sub, 201);
+        return $this->successResponse('Subscription dibuat', $this->customerSafeSubscription($sub), 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -69,7 +84,7 @@ class SubscriptionController extends Controller
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
 
-        return $this->successResponse('Subscription diperbarui', $sub);
+        return $this->successResponse('Subscription diperbarui', $this->customerSafeSubscription($sub));
     }
 
     public function pause(Request $request, int $id): JsonResponse
@@ -81,7 +96,7 @@ class SubscriptionController extends Controller
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
 
-        return $this->successResponse('Subscription dijeda', $sub);
+        return $this->successResponse('Subscription dijeda', $this->customerSafeSubscription($sub));
     }
 
     public function resume(Request $request, int $id): JsonResponse
@@ -94,7 +109,7 @@ class SubscriptionController extends Controller
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
 
-        return $this->successResponse('Subscription dilanjutkan', $sub);
+        return $this->successResponse('Subscription dilanjutkan', $this->customerSafeSubscription($sub));
     }
 
     public function cancel(Request $request, int $id): JsonResponse
@@ -106,6 +121,24 @@ class SubscriptionController extends Controller
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
 
-        return $this->successResponse('Subscription dibatalkan', $sub);
+        return $this->successResponse('Subscription dibatalkan', $this->customerSafeSubscription($sub));
+    }
+
+    /**
+     * Strip product cost fields from customer subscription payloads (keep sell_price only).
+     */
+    protected function customerSafeSubscription(UserSubscription $sub): UserSubscription
+    {
+        if ($sub->relationLoaded('product') && $sub->product) {
+            $sub->setRelation('product', $sub->product->makeHidden([
+                'base_price',
+                'provider_cost',
+                'margin',
+                'basePrice',
+                'providerCost',
+            ]));
+        }
+
+        return $sub;
     }
 }

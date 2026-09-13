@@ -227,7 +227,7 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        // Retries exhausted. Ambiguous post-fulfill outcomes stay PROCESSING for manual review.
+        // Retries exhausted. Ambiguous / unknown outcomes stay PROCESSING for manual review.
         // Pre-fulfill gate failures (never called Digi) must refund — see PRE_FULFILL_FAILURE_REASONS.
         if (in_array($item->failure_reason, self::PRE_FULFILL_FAILURE_REASONS, true)) {
             $this->markItemFailedAndRefund($this->itemId, $item->failure_reason);
@@ -244,7 +244,27 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        $this->markItemFailedAndRefund($this->itemId, $item->failure_reason ?? 'job_exhausted');
+        // Worker kill / unset reason — never guess-refund as job_exhausted.
+        $reason = is_string($item->failure_reason) ? trim($item->failure_reason) : '';
+        if ($reason === '' || $reason === 'job_exhausted') {
+            $batch = $item->batch()->with('transaction')->first();
+            $tx = $batch?->transaction;
+            app(\App\Services\Transactions\PpobManualReviewEscalationService::class)->escalateBatchItem(
+                (int) $item->id,
+                (int) ($tx?->id ?? 0),
+                (string) ($tx?->invoice_number ?? ''),
+                (string) $item->serial_number,
+                $reason === '' ? 'batch_item_failure_reason_empty' : 'batch_item_job_exhausted'
+            );
+            Log::warning('ProcessVoucherPhysicalBatchItem: exhausted without confirmed failure reason, leaving PROCESSING', [
+                'item_id' => $this->itemId,
+                'reason' => $reason === '' ? null : $reason,
+            ]);
+
+            return;
+        }
+
+        $this->markItemFailedAndRefund($this->itemId, $reason);
     }
 
     protected function markItemFailedAndRefund(int $itemId, string $reason): void

@@ -5,12 +5,8 @@ namespace App\Jobs;
 use App\Models\Transaction;
 use App\Models\DigiflazzTransaction;
 use App\Models\PaymentHistory;
-use App\Models\User;
 use App\Services\DigiflazzService;
-use App\Services\NotificationService;
-use App\Services\WalletRefundService;
 use App\Enums\TransactionStatus;
-use App\Enums\UserRole;
 use App\Support\Transactions\TransactionStatusMapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -301,79 +297,34 @@ class ProcessDigiflazzTransaction implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Permanent failure after all retries — mark failed, refund once, notify.
+     * Exhausted retries without explicit Digi Gagal — escalate to manual review (no auto-refund).
+     * Legacy job: no longer dispatched from CreateTransactionAction (ProcessProductProviderTransaction
+     * is the live path); keep this safe if the job is ever re-queued from old payloads.
      */
     public function failed(?\Throwable $exception): void
     {
-        $refundService = app(WalletRefundService::class);
-        $notificationService = app(NotificationService::class);
-
         $transaction = Transaction::with('user')->find($this->transactionId);
-        if (!$transaction) {
+        if (! $transaction) {
             return;
         }
 
-        // Only refund if still in-flight (not already success/canceled/failed+refunded).
-        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
+        if (! TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             Log::info('ProcessDigiflazzTransaction::failed skipped — transaction not in-flight', [
                 'transaction_id' => $this->transactionId,
                 'status' => $transaction->status,
             ]);
+
             return;
         }
 
-        $result = $refundService->refundOnce(
+        app(\App\Services\Transactions\PpobManualReviewEscalationService::class)->escalate(
             $transaction,
-            'Refund Gagal Transaksi (Job Exhausted): ' . $transaction->invoice_number,
-            'digiflazz_job_failed',
-            'Transaksi gagal permanen setelah retry Digiflazz: ' . ($exception?->getMessage() ?? 'unknown'),
-            TransactionStatus::FAILED->value
+            'digiflazz_job_exhausted',
+            $exception?->getMessage() ?? 'unknown'
         );
 
-        $refundService->writeAudit(null, 'DIGIFLAZZ_JOB_EXHAUSTED_REFUND', [
-            'transaction_id' => $transaction->id,
-            'invoice_number' => $transaction->invoice_number,
-            'error' => $exception?->getMessage(),
-            'credited' => $result['credited'],
-            'already_refunded' => $result['already_refunded'],
-        ]);
-
-        DigiflazzTransaction::where('transaction_id', $transaction->id)->update([
-            'digiflazz_status' => 'failed',
-        ]);
-
-        $fresh = $result['transaction'];
-        event(new \App\Events\TransactionFailed($fresh));
-
-        if ($fresh->user) {
-            $notificationService->send(
-                $fresh->user,
-                'Transaksi Gagal',
-                'Transaksi ' . $fresh->invoice_number . ' gagal diproses oleh provider. Saldo telah dikembalikan ke dompet Anda.',
-                'transaction_failed',
-                ['database']
-            );
-        }
-
-        User::query()
-            ->whereIn('role', [UserRole::FINANCE->value, UserRole::OWNER->value])
-            ->orderBy('id')
-            ->chunkById(50, function ($users) use ($notificationService, $fresh, $exception) {
-                foreach ($users as $user) {
-                    $notificationService->send(
-                        $user,
-                        'Digiflazz Job Failed',
-                        'Transaksi ' . $fresh->invoice_number . ' gagal permanen setelah retry. '
-                            . ($exception?->getMessage() ?? ''),
-                        'provider_failure',
-                        ['database']
-                    );
-                }
-            });
-
-        Log::error('ProcessDigiflazzTransaction permanently failed', [
+        Log::error('ProcessDigiflazzTransaction permanently failed — escalated to manual review (no auto-refund)', [
             'transaction_id' => $this->transactionId,
-            'credited' => $result['credited'],
             'error' => $exception?->getMessage(),
         ]);
     }

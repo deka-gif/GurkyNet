@@ -325,12 +325,26 @@ class ProductProviderFulfillmentService
                 continue;
             }
 
-            // Hard reject — stop chain (customer / non-failover error)
+            // Hard reject — only auto-refund on explicit Digi/VIP Gagal (not infra/unknown).
             Log::info('PRODUCT ROUTING — hard stop (no failover)', [
                 'transaction_id' => $transaction->id,
                 'provider_code' => $provider->code,
                 'reason' => $result->reason ?? 'provider_rejected',
             ]);
+            if (! $this->isExplicitConfirmedProviderFailure($result)) {
+                $this->rememberFulfillmentContext($transaction, $provider, $offer, $result);
+                $this->transitionToPendingSupplier(
+                    $transaction,
+                    'SET PENDING_SUPPLIER (hard-stop without explicit provider Gagal)'
+                );
+                app(\App\Services\Transactions\PpobManualReviewEscalationService::class)->escalate(
+                    $transaction->fresh() ?? $transaction,
+                    'fulfillment_hard_stop_inconclusive',
+                    (string) ($result->reason ?? $result->status)
+                );
+
+                return;
+            }
             if ($provider->code === ProductProvider::CODE_DIGIFLAZZ && is_array($result->raw) && $result->raw !== []) {
                 DigiflazzTransaction::where('transaction_id', $transaction->id)->update(
                     DigiflazzService::digiflazzTransactionAttributesFromResponse('failed', $result->raw, $result->sn)
@@ -345,10 +359,25 @@ class ProductProviderFulfillmentService
             return;
         }
 
-        $this->failAndRefund(
+        // Chain exhausted without a remaining candidate — refund only if last result was explicit Gagal.
+        if ($lastResult && $this->isExplicitConfirmedProviderFailure($lastResult)) {
+            $this->failAndRefund(
+                $transaction,
+                'Layanan sedang mengalami gangguan. Silakan coba beberapa saat lagi.',
+                $lastResult->reason ?? 'all_providers_exhausted'
+            );
+
+            return;
+        }
+
+        $this->transitionToPendingSupplier(
             $transaction,
-            'Layanan sedang mengalami gangguan. Silakan coba beberapa saat lagi.',
-            $lastResult?->reason ?? 'all_providers_exhausted'
+            'SET PENDING_SUPPLIER (all providers exhausted without explicit Gagal)'
+        );
+        app(\App\Services\Transactions\PpobManualReviewEscalationService::class)->escalate(
+            $transaction->fresh() ?? $transaction,
+            'all_providers_exhausted_inconclusive',
+            (string) ($lastResult?->reason ?? 'all_providers_exhausted')
         );
     }
 
@@ -564,20 +593,79 @@ class ProductProviderFulfillmentService
     }
 
     /**
-     * Sprint 10 / SRS 15.3 — timeout / connection after a dispatch attempt is ambiguous:
+     * Sprint 10 / SRS 15.3 — timeout / connection / infra after a dispatch attempt is ambiguous:
      * the provider may already have the order. Never dual-dispatch; checkStatus only.
      */
     protected function isAmbiguousPostDispatchFailure(ProviderFulfillmentResult $result): bool
     {
         $reason = strtolower((string) ($result->reason ?? ''));
-        if (in_array($reason, ['timeout', 'connection_error'], true)) {
+        if (in_array($reason, ['timeout', 'connection_error', 'http_5xx', 'provider_unavailable'], true)) {
+            return true;
+        }
+
+        // Generic adapter "error" without Digi Status=Gagal payload is ambiguous.
+        if ($result->status === 'error' && ! $this->isExplicitConfirmedProviderFailure($result)) {
             return true;
         }
 
         $message = strtolower((string) ($result->message ?? ''));
 
         return $reason === 'provider_exception'
-            && (str_contains($message, 'timeout') || str_contains($message, 'timed out') || str_contains($message, 'cURL error 28'));
+            && (
+                str_contains($message, 'timeout')
+                || str_contains($message, 'timed out')
+                || str_contains($message, 'cURL error 28')
+                || ! $this->isExplicitConfirmedProviderFailure($result)
+            );
+    }
+
+    /**
+     * Auto-refund only when Digi/VIP reported a confirmed final failure (Status=Gagal / RC gagal).
+     * Infra / empty / pending-shaped outcomes must NOT refund.
+     */
+    protected function isExplicitConfirmedProviderFailure(ProviderFulfillmentResult $result): bool
+    {
+        if ($result->ok) {
+            return false;
+        }
+
+        if (! in_array($result->status, ['failed', 'error'], true)) {
+            return false;
+        }
+
+        $data = is_array($result->raw['data'] ?? null)
+            ? $result->raw['data']
+            : (is_array($result->raw) ? $result->raw : null);
+
+        if (is_array($data) && array_key_exists('rc', $data)) {
+            $classified = DigiflazzResponseCodeClassifier::fromResponseData($data);
+            if ($classified->isPending() || $classified->isSuccess()) {
+                return false;
+            }
+
+            return strcasecmp($classified->officialStatus(), 'Gagal') === 0
+                || $classified->isRefundable()
+                || $classified->permanentFailure;
+        }
+
+        $statusText = strtolower((string) ($data['status'] ?? ''));
+        if (in_array($statusText, ['gagal', 'failed'], true)) {
+            return true;
+        }
+
+        // Confirmed business rejects without Digi RC envelope (VIP / mapped reasons).
+        $reason = strtolower((string) ($result->reason ?? ''));
+        $confirmedReasons = [
+            'provider_rejected',
+            'customer_rejected',
+            'invalid_customer',
+            'product_unavailable',
+            'sku_not_found',
+            'insufficient_deposit',
+            'digi_gagal',
+        ];
+
+        return $result->status === 'failed' && in_array($reason, $confirmedReasons, true);
     }
 
     /**
@@ -794,54 +882,25 @@ class ProductProviderFulfillmentService
     }
 
     /**
-     * Exhausted job retries — same UX as Digiflazz permanent failure.
+     * Exhausted job retries without an explicit Digi/VIP Gagal — escalate to manual review.
+     * Same principle as soft-timeout backstop: never auto-refund on "we gave up trying".
      */
     public function onJobExhausted(Transaction $transaction, ?\Throwable $exception): void
     {
-        if (!TransactionStatusMapper::isFulfillOpen($transaction->status)) {
+        if (! TransactionStatusMapper::isFulfillOpen($transaction->status)) {
             return;
         }
 
-        $result = $this->refundService->refundOnce(
-            $transaction,
-            'Refund Gagal Transaksi (Job Exhausted): ' . $transaction->invoice_number,
-            'product_provider_job_failed',
-            'Transaksi gagal permanen setelah retry: ' . ($exception?->getMessage() ?? 'unknown'),
-            TransactionStatus::FAILED->value
+        app(\App\Services\Transactions\PpobManualReviewEscalationService::class)->escalate(
+            $transaction->fresh() ?? $transaction,
+            'product_provider_job_exhausted',
+            $exception?->getMessage() ?? 'unknown'
         );
 
-        DigiflazzTransaction::where('transaction_id', $transaction->id)->update([
-            'digiflazz_status' => 'failed',
+        Log::error('ProcessProductProviderTransaction permanently failed — escalated to manual review (no auto-refund)', [
+            'transaction_id' => $transaction->id,
+            'error' => $exception?->getMessage(),
         ]);
-
-        $fresh = $result['transaction'];
-        event(new \App\Events\TransactionFailed($fresh));
-
-        if ($fresh->user) {
-            $this->notificationService->send(
-                $fresh->user,
-                'Transaksi Gagal',
-                'Transaksi ' . $fresh->invoice_number . ' gagal diproses. Saldo telah dikembalikan ke dompet Anda.',
-                'transaction_failed',
-                ['database']
-            );
-        }
-
-        User::query()
-            ->whereIn('role', [UserRole::FINANCE->value, UserRole::OWNER->value])
-            ->orderBy('id')
-            ->chunkById(50, function ($users) use ($fresh, $exception) {
-                foreach ($users as $user) {
-                    $this->notificationService->send(
-                        $user,
-                        'Product Provider Job Failed',
-                        'Transaksi ' . $fresh->invoice_number . ' gagal permanen setelah retry. '
-                            . ($exception?->getMessage() ?? ''),
-                        'provider_failure',
-                        ['database']
-                    );
-                }
-            });
     }
 
     /**
