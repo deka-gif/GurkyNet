@@ -109,7 +109,12 @@ class TransactionSuccessTransitionService
                     'current_status' => $locked->status,
                     'refunded_at' => $locked->refunded_at?->toIso8601String(),
                     'attempted_action' => 'SET SUCCESS',
+                    'sn' => $sn,
                 ]);
+
+                // Owner 2026-09-13 — never silent: late Digi/VIP SUCCESS after timeout refund
+                // must surface to Finance/Ops/Owner for manual recon (tx 168 incident).
+                $this->alertLateSuccessAfterRefund($locked, $source, $providerCode, $sn);
 
                 return [
                     'outcome' => self::OUTCOME_REJECTED_REFUNDED,
@@ -188,6 +193,80 @@ class TransactionSuccessTransitionService
                 'events_dispatched' => true,
             ];
         });
+    }
+
+    /**
+     * Late provider SUCCESS after local FAILED+refund — Finance/Ops/Owner must reconcile.
+     */
+    protected function alertLateSuccessAfterRefund(
+        Transaction $locked,
+        string $source,
+        string $providerCode,
+        ?string $sn
+    ): void {
+        Log::critical('TX LATE SUCCESS AFTER REFUND — recon required', [
+            'transaction_id' => $locked->id,
+            'invoice' => $locked->invoice_number,
+            'source' => $source,
+            'provider_code' => $providerCode !== '' ? $providerCode : $locked->fulfillment_provider_code,
+            'sn' => $sn,
+            'refunded_at' => $locked->refunded_at?->toIso8601String(),
+            'refund_reference' => $locked->refund_reference,
+            'total_payment' => $locked->total_payment,
+        ]);
+
+        try {
+            $exists = \App\Models\FinanceAlert::query()
+                ->where('type', 'ppob_late_success_after_refund')
+                ->where('related_type', 'transaction')
+                ->where('related_id', (int) $locked->id)
+                ->where('status', 'open')
+                ->exists();
+            $payload = [
+                'transaction_id' => $locked->id,
+                'invoice' => $locked->invoice_number,
+                'source' => $source,
+                'provider_code' => $providerCode !== '' ? $providerCode : $locked->fulfillment_provider_code,
+                'sn' => $sn,
+                'refunded_at' => optional($locked->refunded_at)->toDateTimeString(),
+                'refund_reference' => $locked->refund_reference,
+                'total_payment' => $locked->total_payment,
+                'user_id' => $locked->user_id,
+            ];
+            $title = 'Late SUCCESS setelah refund: '.$locked->invoice_number;
+            $body = 'Provider melaporkan SUKSES (SN: '.($sn ?? '-').') setelah transaksi sudah failed+refunded. '
+                .'Periksa digiflazz_transactions vs wallet — kemungkinan perlu clawback rekonsiliasi.';
+
+            if (! $exists) {
+                \App\Models\FinanceAlert::query()->create([
+                    'alert_code' => sprintf('ALT-LS-%s-%d', now()->format('YmdHis'), (int) $locked->id),
+                    'type' => 'ppob_late_success_after_refund',
+                    'severity' => 'critical',
+                    'title' => $title,
+                    'body' => $body,
+                    'payload' => $payload,
+                    'status' => 'open',
+                    'related_type' => 'transaction',
+                    'related_id' => (int) $locked->id,
+                ]);
+            }
+
+            // Mirror to Ops Alert Center (Owner/Operations monitor path).
+            app(\App\Services\Operations\OpsAlertService::class)->raiseOpen(
+                'ppob_late_success_after_refund',
+                'critical',
+                $title,
+                $body,
+                $payload,
+                'transaction',
+                (int) $locked->id
+            );
+        } catch (\Throwable $e) {
+            Log::error('TX LATE SUCCESS AFTER REFUND — alert raise failed', [
+                'transaction_id' => $locked->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function isEligibleForFulfillmentSuccess(Transaction $locked): bool

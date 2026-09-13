@@ -43,6 +43,8 @@ class TransactionTimeoutEngineTest extends TestCase
             'ppob.timeout.max_seconds' => 180,
             'ppob.timeout.min_check_interval_seconds' => 60,
             'ppob.timeout.check_at_seconds' => [60, 120, 180],
+            'ppob.timeout.extended_check_interval_seconds' => 900,
+            'ppob.timeout.manual_review_after_seconds' => 21600,
         ]);
 
         $this->user = User::create([
@@ -91,6 +93,10 @@ class TransactionTimeoutEngineTest extends TestCase
 
     protected function makeInFlightTransaction(array $overrides = []): Transaction
     {
+        $createdAt = $overrides['created_at'] ?? now()->subSeconds(60);
+        $updatedAt = $overrides['updated_at'] ?? $createdAt;
+        unset($overrides['created_at'], $overrides['updated_at']);
+
         $tx = Transaction::create(array_merge([
             'user_id' => $this->user->id,
             'invoice_number' => 'GRK-TO-' . uniqid(),
@@ -106,9 +112,12 @@ class TransactionTimeoutEngineTest extends TestCase
             'fulfillment_provider_code' => ProductProvider::CODE_VIP,
             'provider_sku_used' => 'SP10',
             'provider_ref' => 'VIP-TRX-1',
-            'created_at' => now()->subSeconds(60),
-            'updated_at' => now()->subSeconds(60),
         ], $overrides));
+
+        $tx->forceFill([
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
+        ])->save(['timestamps' => false]);
 
         TransactionItem::create([
             'transaction_id' => $tx->id,
@@ -191,10 +200,12 @@ class TransactionTimeoutEngineTest extends TestCase
         $this->assertEquals($balanceBefore + 11000, (float) $this->wallet->fresh()->balance);
     }
 
-    public function test_pending_forever_times_out_and_refunds(): void
+    public function test_pending_past_soft_ladder_does_not_refund_stays_in_flight(): void
     {
+        Queue::fake();
+
         $tx = $this->makeInFlightTransaction([
-            'created_at' => now()->subSeconds(61),
+            'created_at' => now()->subSeconds(200),
             'timeout_at' => now()->subSecond(),
         ]);
         $balanceBefore = (float) $this->wallet->fresh()->balance;
@@ -204,16 +215,55 @@ class TransactionTimeoutEngineTest extends TestCase
         app(TransactionTimeoutService::class)->handleCheck($tx->id, 3);
 
         $fresh = $tx->fresh();
-        $this->assertSame(TransactionStatus::FAILED->value, $fresh->status);
-        $this->assertNotNull($fresh->refunded_at);
-        $this->assertEquals($balanceBefore + 11000, (float) $this->wallet->fresh()->balance);
-        $this->assertStringContainsString('batas waktu', (string) $fresh->notes);
+        $this->assertSame(TransactionStatus::PROCESSING->value, $fresh->status);
+        $this->assertNull($fresh->refunded_at);
+        $this->assertEquals($balanceBefore, (float) $this->wallet->fresh()->balance);
+        Queue::assertPushed(WatchPendingTransactionJob::class, function (WatchPendingTransactionJob $job) use ($tx) {
+            return $job->transactionId === $tx->id
+                && $job->checkIndex === TransactionTimeoutService::EXTENDED_CHECK_INDEX;
+        });
     }
 
-    public function test_duplicate_timeout_execution_refunds_only_once(): void
+    public function test_pending_past_manual_review_backstop_flags_without_refund(): void
     {
+        Queue::fake();
+
         $tx = $this->makeInFlightTransaction([
-            'created_at' => now()->subSeconds(61),
+            'created_at' => now()->subSeconds(22000),
+            'timeout_at' => now()->subHours(5),
+        ]);
+        $balanceBefore = (float) $this->wallet->fresh()->balance;
+
+        $this->bindVipAdapter(fn () => ProviderFulfillmentResult::pending(15, [], 'still pending'));
+
+        app(TransactionTimeoutService::class)->handleCheck($tx->id, TransactionTimeoutService::EXTENDED_CHECK_INDEX);
+
+        $fresh = $tx->fresh();
+        $this->assertSame(TransactionStatus::PROCESSING->value, $fresh->status);
+        $this->assertNull($fresh->refunded_at);
+        $this->assertSame('manual_review', $fresh->provider_last_status);
+        $this->assertEquals($balanceBefore, (float) $this->wallet->fresh()->balance);
+        $this->assertStringContainsString('Operations', (string) $fresh->notes);
+        $this->assertDatabaseHas('finance_alerts', [
+            'type' => 'ppob_manual_review',
+            'related_type' => 'transaction',
+            'related_id' => $tx->id,
+            'status' => 'open',
+        ]);
+        $this->assertDatabaseHas('ops_alerts', [
+            'type' => 'ppob_manual_review',
+            'related_type' => 'transaction',
+            'related_id' => $tx->id,
+            'status' => 'open',
+        ]);
+    }
+
+    public function test_duplicate_extended_check_does_not_refund(): void
+    {
+        Queue::fake();
+
+        $tx = $this->makeInFlightTransaction([
+            'created_at' => now()->subSeconds(200),
             'timeout_at' => now()->subSecond(),
         ]);
         $balanceBefore = (float) $this->wallet->fresh()->balance;
@@ -222,16 +272,10 @@ class TransactionTimeoutEngineTest extends TestCase
 
         $service = app(TransactionTimeoutService::class);
         $service->handleCheck($tx->id, 3);
-        $service->handleCheck($tx->id, 3);
+        $service->handleCheck($tx->id, TransactionTimeoutService::EXTENDED_CHECK_INDEX);
 
-        $this->assertEquals($balanceBefore + 11000, (float) $this->wallet->fresh()->balance);
-        $this->assertSame(
-            1,
-            WalletHistory::where('reference_id', $tx->id)
-                ->where('type', WalletHistoryType::CREDIT->value)
-                ->where('description', 'like', 'Refund%')
-                ->count()
-        );
+        $this->assertEquals($balanceBefore, (float) $this->wallet->fresh()->balance);
+        $this->assertNull($tx->fresh()->refunded_at);
     }
 
     public function test_success_transaction_never_refunded(): void
@@ -273,7 +317,7 @@ class TransactionTimeoutEngineTest extends TestCase
         $this->assertNotNull($tx->fresh()->timeout_at);
     }
 
-    public function test_reconcile_overdue_redispatches_final_check(): void
+    public function test_reconcile_overdue_redispatches_extended_check(): void
     {
         Queue::fake();
 
@@ -286,7 +330,8 @@ class TransactionTimeoutEngineTest extends TestCase
 
         $this->assertSame(1, $count);
         Queue::assertPushed(WatchPendingTransactionJob::class, function (WatchPendingTransactionJob $job) use ($tx) {
-            return $job->transactionId === $tx->id && $job->checkIndex === 2;
+            return $job->transactionId === $tx->id
+                && $job->checkIndex === TransactionTimeoutService::EXTENDED_CHECK_INDEX;
         });
     }
 

@@ -30,7 +30,7 @@ export const FinanceAlertsPage: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-10">
-      <CmsPageHeader title="Finance Alert Center" subtitle="Refund spike, low deposit, gateway offline, settlement delay — dari data nyata." icon={Bell} />
+      <CmsPageHeader title="Finance Alert Center" subtitle="Termasuk ppob_manual_review & ppob_late_success_after_refund, plus refund spike / low deposit / gateway / settlement — data nyata." icon={Bell} />
       {error && <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 flex gap-2"><AlertTriangle className="w-4 h-4" />{error}</div>}
       {!isOwnerReadOnly && (
         <div className="flex gap-2">

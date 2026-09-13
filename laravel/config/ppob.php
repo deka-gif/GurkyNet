@@ -37,6 +37,13 @@ return [
         ],
     ],
 
+    /*
+    | Soft poll ladder (default 180s) still checks Digi/VIP often at first.
+    | Owner 2026-09-13: NEVER auto-refund merely because soft ladder elapsed while
+    | provider is still Pending / silent. Refund only on explicit provider failure.
+    | After soft ladder: extended polls until manual_review_after_seconds, then
+    | Ops/Finance alert for human review (no auto-refund).
+    */
     'timeout' => [
         'max_seconds' => (int) env('PPOB_TRANSACTION_TIMEOUT_SECONDS', 180),
         'min_check_interval_seconds' => (int) env('PPOB_TRANSACTION_MIN_CHECK_INTERVAL_SECONDS', 60),
@@ -44,6 +51,10 @@ return [
             'intval',
             explode(',', (string) env('PPOB_TRANSACTION_TIMEOUT_CHECKS', '60,120,180'))
         ))),
+        // Extended monitoring after soft ladder (default 15 minutes between probes).
+        'extended_check_interval_seconds' => (int) env('PPOB_TRANSACTION_EXTENDED_CHECK_INTERVAL_SECONDS', 900),
+        // Backstop: escalate to manual review (no auto-refund). Default 6 hours.
+        'manual_review_after_seconds' => (int) env('PPOB_TRANSACTION_MANUAL_REVIEW_AFTER_SECONDS', 21600),
     ],
 
     /*

@@ -19,15 +19,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Ensures every pending/processing PPOB transaction becomes SUCCESS or FAILED.
- * Always checks provider status before refunding; refunds are idempotent.
+ * Soft poll ladder + extended monitoring for in-flight PPOB purchases (all categories).
  *
- * Digiflazz Cek Status: do not re-query the same transaction with an interval under 60s.
- * Polling offsets and early polls are clamped to that minimum. HTTP transport retries
- * inside DigiflazzService remain separate from status/topup retries.
+ * Owner 2026-09-13 (post ShopeePay late-success incident):
+ * - NEVER auto-refund solely because soft ladder / wall-clock elapsed while Digi is Pending.
+ * - Refund ONLY on explicit provider failure (Digi official Status=Gagal / refundable RC,
+ *   or non-Digi adapter status failed/error).
+ * - After soft ladder: keep Pending, poll less often until manual_review_after_seconds,
+ *   then escalate to Finance/Ops alert — still no auto-refund.
+ *
+ * Digiflazz Cek Status: ≥60s between probes for the same transaction.
  */
 class TransactionTimeoutService
 {
+    /** Ladder index used for post-soft extended monitoring jobs. */
+    public const EXTENDED_CHECK_INDEX = 1000;
+
     public function __construct(
         protected ProductProviderRegistry $registry,
         protected WalletRefundService $refundService,
@@ -38,6 +45,16 @@ class TransactionTimeoutService
     public function maxSeconds(): int
     {
         return max(1, (int) config('ppob.timeout.max_seconds', 180));
+    }
+
+    public function extendedCheckIntervalSeconds(): int
+    {
+        return max($this->minCheckIntervalSeconds(), (int) config('ppob.timeout.extended_check_interval_seconds', 900));
+    }
+
+    public function manualReviewAfterSeconds(): int
+    {
+        return max($this->maxSeconds() + 60, (int) config('ppob.timeout.manual_review_after_seconds', 21600));
     }
 
     /**
@@ -149,7 +166,9 @@ class TransactionTimeoutService
     }
 
     /**
-     * Run one timeout ladder step (status check → settle / reschedule / refund).
+     * Run one timeout ladder / extended monitoring step.
+     * Soft ladder end while still Pending → extended polls (no refund).
+     * Explicit provider Gagal → refund. Hard backstop → manual review (no refund).
      */
     public function handleCheck(int $transactionId, int $checkIndex): void
     {
@@ -169,28 +188,40 @@ class TransactionTimeoutService
             return;
         }
 
+        if (($transaction->provider_last_status ?? '') === 'manual_review') {
+            Log::info('TX TIMEOUT — already flagged manual_review', [
+                'transaction_id' => $transactionId,
+            ]);
+
+            return;
+        }
+
         $offsets = $this->checkOffsets();
         $elapsed = max(0, now()->getTimestamp() - ($transaction->created_at?->getTimestamp() ?? now()->getTimestamp()));
-        $isFinal = $checkIndex >= count($offsets) - 1 || $elapsed >= $this->maxSeconds();
+        $inExtended = $checkIndex >= self::EXTENDED_CHECK_INDEX;
+        $softLadderDone = $inExtended
+            || $checkIndex >= count($offsets) - 1
+            || $elapsed >= $this->maxSeconds();
 
         Log::info('TX TIMEOUT — status check starting', [
             'transaction_id' => $transaction->id,
             'check_index' => $checkIndex,
             'elapsed_seconds' => $elapsed,
-            'is_final' => $isFinal,
+            'soft_ladder_done' => $softLadderDone,
+            'extended' => $inExtended,
             'provider_code' => $transaction->fulfillment_provider_code,
             'provider_last_status' => $transaction->provider_last_status,
         ]);
 
         $probe = $this->probeProvider($transaction);
 
-        // Skipped Digiflazz probe (min 60s interval) must not advance timeout settlement.
+        // Skipped Digiflazz probe (min 60s interval) must not advance settlement.
         if ($probe && $probe->reason === 'min_interval_skip') {
             $transaction->forceFill([
                 'provider_last_status' => 'pending',
             ])->save();
 
-            $delay = $this->minCheckIntervalSeconds();
+            $delay = $inExtended ? $this->extendedCheckIntervalSeconds() : $this->minCheckIntervalSeconds();
             if ($transaction->provider_checked_at) {
                 $elapsedSinceCheck = max(0, now()->getTimestamp() - $transaction->provider_checked_at->getTimestamp());
                 $delay = max(1, $delay - $elapsedSinceCheck);
@@ -219,7 +250,7 @@ class TransactionTimeoutService
             return;
         }
 
-        if ($probe && !$probe->ok && in_array($probe->status, ['failed', 'error'], true)) {
+        if ($this->isExplicitProviderFailure($transaction, $probe)) {
             $this->applyFailure(
                 $transaction,
                 'Transaksi gagal. Saldo telah dikembalikan.',
@@ -230,36 +261,28 @@ class TransactionTimeoutService
             return;
         }
 
-        if (!$isFinal) {
+        // Still Pending / silent / non-final — never auto-refund here.
+        if ($elapsed >= $this->manualReviewAfterSeconds()) {
+            $this->markManualReview($transaction, $elapsed, $probe);
+
+            return;
+        }
+
+        if (! $softLadderDone) {
             $this->scheduleNextCheck($transaction, $checkIndex + 1);
 
             return;
         }
 
-        // Final attempt: one more probe is already done above. Still unresolved → timeout refund.
-        Log::warning('TX TIMEOUT — deadline reached, auto refund', [
-            'transaction_id' => $transaction->id,
-            'elapsed_seconds' => $elapsed,
-            'provider_last_status' => $transaction->provider_last_status,
-        ]);
-
-        $this->applyFailure(
-            $transaction,
-            'Provider tidak memberikan respon dalam batas waktu. Saldo Anda telah dikembalikan.',
-            'provider_timeout',
-            'transaction_timeout'
-        );
+        $this->scheduleExtendedCheck($transaction, $elapsed);
     }
 
     /**
      * Catch-all for queue restarts / missed delayed jobs.
+     * Re-queues extended monitoring — never forces timeout refund.
      */
     public function reconcileOverdue(int $limit = 100): int
     {
-        // FR-TOPUP-FIX-01 — fetch headroom (2x limit) because Top Up rows are filtered
-        // out below via the canonical isWalletTopUp() helper (single source of truth,
-        // shared with isInFlight() above), so the final id list can be shorter than
-        // the raw query match count.
         $candidates = Transaction::query()
             ->whereIn('status', TransactionStatusMapper::reconcileOpenStatuses())
             ->where(function ($q) {
@@ -268,6 +291,10 @@ class TransactionTimeoutService
                         $q2->whereNull('timeout_at')
                             ->where('created_at', '<=', now()->subSeconds($this->maxSeconds()));
                     });
+            })
+            ->where(function ($q) {
+                $q->whereNull('provider_last_status')
+                    ->orWhere('provider_last_status', '!=', 'manual_review');
             })
             ->orderBy('id')
             ->limit($limit * 2)
@@ -279,10 +306,154 @@ class TransactionTimeoutService
             ->pluck('id');
 
         foreach ($ids as $id) {
-            WatchPendingTransactionJob::dispatch((int) $id, max(0, count($this->checkOffsets()) - 1));
+            WatchPendingTransactionJob::dispatch((int) $id, self::EXTENDED_CHECK_INDEX);
         }
 
         return $ids->count();
+    }
+
+    /**
+     * Continue monitoring after soft ladder while Digi/VIP still Pending / silent.
+     */
+    protected function scheduleExtendedCheck(Transaction $transaction, int $elapsed): void
+    {
+        $delay = $this->extendedCheckIntervalSeconds();
+        $remaining = max(1, $this->manualReviewAfterSeconds() - $elapsed);
+        $delay = min($delay, $remaining);
+
+        // Keep timeout_at as soft deadline for reconcile catch-up; do not push customer to Failed.
+        WatchPendingTransactionJob::dispatch($transaction->id, self::EXTENDED_CHECK_INDEX)
+            ->delay(now()->addSeconds($delay));
+
+        Log::warning('TX TIMEOUT — soft ladder exhausted; extended monitor (no auto-refund)', [
+            'transaction_id' => $transaction->id,
+            'elapsed_seconds' => $elapsed,
+            'next_delay_seconds' => $delay,
+            'manual_review_after_seconds' => $this->manualReviewAfterSeconds(),
+            'provider_last_status' => $transaction->provider_last_status,
+        ]);
+    }
+
+    /**
+     * Hard backstop: no final Digi/VIP answer after long wait → human review, no refund.
+     */
+    protected function markManualReview(Transaction $transaction, int $elapsed, ?ProviderFulfillmentResult $probe): void
+    {
+        $note = 'Menunggu konfirmasi operator lebih lama dari biasanya. Tim Operations akan meninjau — saldo belum dikembalikan otomatis.';
+        $existing = trim((string) $transaction->notes);
+        $transaction->forceFill([
+            'provider_last_status' => 'manual_review',
+            'notes' => mb_substr($existing === '' ? $note : ($existing.' | '.$note), 0, 2000),
+        ])->save();
+
+        Log::critical('TX TIMEOUT — manual review required (no auto-refund)', [
+            'transaction_id' => $transaction->id,
+            'invoice' => $transaction->invoice_number,
+            'elapsed_seconds' => $elapsed,
+            'provider_code' => $transaction->fulfillment_provider_code,
+            'provider_ref' => $transaction->provider_ref,
+            'probe_status' => $probe?->status,
+            'probe_reason' => $probe?->reason,
+        ]);
+
+        $this->persistFinanceAlertSafely([
+            'alert_code' => sprintf('ALT-MR-%s-%d', now()->format('YmdHis'), (int) $transaction->id),
+            'type' => 'ppob_manual_review',
+            'severity' => 'critical',
+            'title' => 'PPOB butuh review manual: '.$transaction->invoice_number,
+            'body' => 'Transaksi masih Pending tanpa jawaban final Digi/VIP setelah '
+                .$elapsed.' detik. Jangan auto-refund — cek Digi dashboard / SN lalu settle manual.',
+            'payload' => [
+                'transaction_id' => $transaction->id,
+                'invoice' => $transaction->invoice_number,
+                'elapsed_seconds' => $elapsed,
+                'provider_code' => $transaction->fulfillment_provider_code,
+                'provider_ref' => $transaction->provider_ref,
+                'provider_last_status' => $transaction->provider_last_status,
+                'service_name' => $transaction->service_name,
+            ],
+            'status' => 'open',
+            'related_type' => 'transaction',
+            'related_id' => (int) $transaction->id,
+        ], (int) $transaction->id, 'manual_review');
+    }
+
+    /**
+     * @param  array<string, mixed>  $attrs
+     */
+    protected function persistFinanceAlertSafely(array $attrs, int $transactionId, string $kind): void
+    {
+        try {
+            $exists = \App\Models\FinanceAlert::query()
+                ->where('type', $attrs['type'])
+                ->where('related_type', 'transaction')
+                ->where('related_id', $transactionId)
+                ->where('status', 'open')
+                ->exists();
+            if (! $exists) {
+                \App\Models\FinanceAlert::query()->create($attrs);
+            }
+        } catch (\Throwable $e) {
+            Log::error('TX TIMEOUT — failed to persist '.$kind.' finance alert', [
+                'transaction_id' => $transactionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // Mirror to Ops Alert Center so Owner/Operations can monitor without Finance role.
+        try {
+            app(\App\Services\Operations\OpsAlertService::class)->raiseOpen(
+                (string) $attrs['type'],
+                (string) ($attrs['severity'] ?? 'critical'),
+                (string) $attrs['title'],
+                (string) $attrs['body'],
+                is_array($attrs['payload'] ?? null) ? $attrs['payload'] : [],
+                'transaction',
+                $transactionId
+            );
+        } catch (\Throwable $e) {
+            Log::error('TX TIMEOUT — failed to persist '.$kind.' ops alert', [
+                'transaction_id' => $transactionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Explicit permanent/final provider failure eligible for auto-refund.
+     * Digi: official Status=Gagal (RC catalog) — not Pending/03/99.
+     * Other providers: adapter status failed/error.
+     */
+    protected function isExplicitProviderFailure(Transaction $transaction, ?ProviderFulfillmentResult $probe): bool
+    {
+        if (! $probe || $probe->ok) {
+            return false;
+        }
+
+        if (! in_array($probe->status, ['failed', 'error'], true)) {
+            return false;
+        }
+
+        $code = (string) ($transaction->fulfillment_provider_code ?? '');
+        if ($code !== ProductProvider::CODE_DIGIFLAZZ) {
+            return true;
+        }
+
+        $data = is_array($probe->raw['data'] ?? null) ? $probe->raw['data'] : null;
+        if (! is_array($data) || ! array_key_exists('rc', $data)) {
+            // Explicit adapter failure without RC — treat as provider-reported fail.
+            return true;
+        }
+
+        $classified = DigiflazzResponseCodeClassifier::fromResponseData($data);
+        if ($classified->isPending() || $classified->isSuccess()) {
+            return false;
+        }
+
+        // Official Digi Status = Gagal (or refund RC) → refundable explicit failure.
+        return strcasecmp($classified->officialStatus(), 'Gagal') === 0
+            || $classified->isRefundable()
+            || $classified->permanentFailure;
     }
 
     protected function isInFlight(Transaction $transaction): bool
@@ -446,9 +617,14 @@ class TransactionTimeoutService
             TransactionStatus::FAILED->value
         );
 
-        DigiflazzTransaction::where('transaction_id', $transaction->id)->update([
-            'digiflazz_status' => 'failed',
-        ]);
+        DigiflazzTransaction::where('transaction_id', $transaction->id)
+            ->where(function ($q) {
+                $q->whereNull('digiflazz_status')
+                    ->orWhereNotIn('digiflazz_status', ['success', 'Sukses', 'sukses']);
+            })
+            ->update([
+                'digiflazz_status' => 'failed',
+            ]);
 
         $this->refundService->writeAudit(null, 'TRANSACTION_TIMEOUT_ENGINE', [
             'transaction_id' => $transaction->id,

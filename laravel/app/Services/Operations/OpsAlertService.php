@@ -129,6 +129,24 @@ class OpsAlertService
     }
 
     /**
+     * Public raise for cross-module incidents (e.g. PPOB manual_review / late SUCCESS).
+     * Dedupes open/ack/investigating rows for the same type+related.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function raiseOpen(
+        string $type,
+        string $severity,
+        string $title,
+        string $body,
+        array $payload = [],
+        ?string $relatedType = null,
+        ?int $relatedId = null
+    ): ?OpsAlert {
+        return $this->upsertOpen($type, $severity, $title, $body, $payload, $relatedType, $relatedId);
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     protected function upsertOpen(

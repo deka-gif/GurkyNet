@@ -277,6 +277,8 @@ export const DashboardLayout = () => {
           { path: '/dashboard/owner/audit', label: 'Audit Center', icon: FileText },
           { path: '/dashboard/finance', label: 'Finance', icon: DollarSign },
           { path: '/dashboard/operations', label: 'Operations', icon: Server },
+          { path: '/dashboard/operations/alerts', label: 'Ops Alerts', icon: Bell },
+          { path: '/dashboard/finance/alerts', label: 'Finance Alerts', icon: Bell },
           { path: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
           { path: '/dashboard/customer-support', label: 'Customer Support', icon: Headset },
           { path: '/dashboard/owner/system-settings', label: 'System Settings', icon: Settings },
@@ -375,7 +377,9 @@ export const DashboardLayout = () => {
           { path: '/dashboard/owner/alerts', label: 'Alerts', icon: Bell },
           { path: '/dashboard/owner/approvals', label: 'Approvals', icon: ShieldCheck },
           { path: '/dashboard/finance', label: 'Finance', icon: DollarSign },
+          { path: '/dashboard/finance/alerts', label: 'Fin Alerts', icon: Bell },
           { path: '/dashboard/operations', label: 'Operations', icon: Server },
+          { path: '/dashboard/operations/alerts', label: 'Ops Alerts', icon: Bell },
           { path: '/dashboard/notifikasi', label: 'Notifikasi', icon: Bell, badge: unreadCount },
           { path: '/dashboard/account', label: 'Akun', icon: User },
         ];

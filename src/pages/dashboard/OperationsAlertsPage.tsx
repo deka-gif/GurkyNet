@@ -40,7 +40,7 @@ export const OperationsAlertsPage: React.FC = () => {
     <div className="space-y-4 pb-10">
       <CmsPageHeader
         title="Ops Alert Center"
-        subtitle="Lifecycle open → acknowledged → investigating → resolved → closed. App-level monitors only."
+        subtitle="Termasuk PPOB manual review & late SUCCESS setelah refund (ppob_manual_review / ppob_late_success_after_refund). Lifecycle open → ack → investigating → resolved → closed."
         icon={Bell}
       />
       {error && (

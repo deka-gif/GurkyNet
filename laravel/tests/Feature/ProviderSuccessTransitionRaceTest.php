@@ -268,7 +268,20 @@ class ProviderSuccessTransitionRaceTest extends TestCase
         $this->assertFalse($outcome['events_dispatched']);
         $this->assertSame(TransactionStatus::FAILED->value, $tx->fresh()->status);
         $this->assertNotNull($tx->fresh()->refunded_at);
+        $this->assertDatabaseHas('finance_alerts', [
+            'type' => 'ppob_late_success_after_refund',
+            'related_type' => 'transaction',
+            'related_id' => $tx->id,
+            'status' => 'open',
+        ]);
+        $this->assertDatabaseHas('ops_alerts', [
+            'type' => 'ppob_late_success_after_refund',
+            'related_type' => 'transaction',
+            'related_id' => $tx->id,
+            'status' => 'open',
+        ]);
         Event::assertNotDispatched(TransactionSuccess::class);
+        Event::assertNotDispatched(PaymentSettled::class);
     }
 
     /**

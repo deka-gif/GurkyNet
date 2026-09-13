@@ -239,12 +239,20 @@ class FinanceAlertService
                 'related_id' => $alert->id,
             ]);
             if (in_array($role, ['finance', 'operations', 'customer_support', 'marketing'], true)) {
-                $this->realtime->publish('division.'.$role, 'FinanceAlertCreated', [
-                    'id' => $alert->id,
-                    'type' => $type,
-                    'severity' => $severity,
-                    'title' => $title,
-                ]);
+                try {
+                    $this->realtime->publish('division.'.$role, 'FinanceAlertCreated', [
+                        'id' => $alert->id,
+                        'type' => $type,
+                        'severity' => $severity,
+                        'title' => $title,
+                    ]);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('FinanceAlert realtime publish failed', [
+                        'alert_id' => $alert->id,
+                        'role' => $role,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
