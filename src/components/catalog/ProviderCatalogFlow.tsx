@@ -43,6 +43,10 @@ import {
   isCatalogListed,
   isProductPurchasable,
 } from '../../utils/catalogAvailability';
+import {
+  groupLanggananPackages,
+  type LanggananPackageGroup,
+} from '../../utils/langgananPackageGrouping';
 import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
 export type CatalogTargetMode = 'phone' | 'game' | 'customer' | 'none';
@@ -150,6 +154,7 @@ export function ProviderCatalogFlow({
     null
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [langgananPackage, setLanggananPackage] = useState<LanggananPackageGroup | null>(null);
   const [targetNo, setTargetNo] = useState('');
   const [ewalletAmount, setEwalletAmount] = useState('');
   const [secondaryValue, setSecondaryValue] = useState('');
@@ -283,6 +288,11 @@ export function ProviderCatalogFlow({
       .sort((a, b) => a.price - b.price);
   }, [pagedProducts, selectedProvider, isGameInquiry, isEwalletInquiry]);
 
+  const langgananPackages = useMemo(
+    () => (isLanggananMode ? groupLanggananPackages(providerProducts) : []),
+    [isLanggananMode, providerProducts]
+  );
+
   const productsCanLoadMore =
     shouldPaginateCatalogProducts(productTotal) && productPage < productLastPage;
 
@@ -328,6 +338,7 @@ export function ProviderCatalogFlow({
     setSelectedProvider(cp.name);
     setSelectedProviderMeta(cp);
     setSelectedProduct(null);
+    setLanggananPackage(null);
     setEwalletInquiry(null);
     setEwalletAmount('');
     setGameInquiry(null);
@@ -413,6 +424,7 @@ export function ProviderCatalogFlow({
     setSelectedProvider(null);
     setSelectedProviderMeta(null);
     setSelectedProduct(null);
+    setLanggananPackage(null);
     setPagedProducts([]);
     setProductPage(1);
     setProductLastPage(1);
@@ -1289,6 +1301,102 @@ export function ProviderCatalogFlow({
                   ) : providerProducts.length === 0 ? (
                     <div className="py-10 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
                       Tidak ada produk aktif untuk provider ini.
+                    </div>
+                  ) : isLanggananMode && langgananPackage?.hasDistinctProductNames ? (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLanggananPackage(null);
+                          setSelectedProduct(null);
+                          setLanggananAccount({});
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-primary-600"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Ganti paket
+                      </button>
+                      <p className="text-sm font-extrabold text-gray-900">{langgananPackage.label}</p>
+                      <p className="text-xs text-gray-500">Pilih varian (durasi / nominal)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[480px] overflow-y-auto pr-1">
+                        {langgananPackage.products.map((product) => {
+                          const active = selectedProduct?.id === product.id;
+                          const purchasable = isProductPurchasable(product);
+                          const statusLabel = catalogStatusLabel(product);
+                          return (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedProduct(product);
+                                setLanggananAccount({});
+                              }}
+                              className={`text-left p-4 rounded-2xl border transition-all duration-200 ${
+                                active
+                                  ? 'border-primary-500 bg-primary-50/50 shadow-md shadow-primary-900/5 ring-1 ring-primary-200'
+                                  : 'border-gray-100 bg-gray-50/80 hover:border-gray-300 hover:bg-white'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="font-extrabold text-gray-900 text-sm leading-snug min-w-0">
+                                  {product.name}
+                                </div>
+                                {!purchasable && statusLabel ? (
+                                  <span className="text-[10px] font-bold text-amber-600 shrink-0">
+                                    {statusLabel}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="mt-2 text-sm font-black text-primary-700">
+                                {formatIDR(product.price)}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : isLanggananMode ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[480px] overflow-y-auto pr-1">
+                      {langgananPackages.map((group) => {
+                        const preferred = group.products[0];
+                        const active =
+                          langgananPackage?.key === group.key ||
+                          (!!selectedProduct &&
+                            group.products.some((p) => p.id === selectedProduct.id));
+                        return (
+                          <button
+                            key={group.key}
+                            type="button"
+                            onClick={() => {
+                              setLanggananPackage(group);
+                              setLanggananAccount({});
+                              if (group.hasDistinctProductNames) {
+                                setSelectedProduct(null);
+                                return;
+                              }
+                              if (preferred) setSelectedProduct(preferred);
+                            }}
+                            className={`text-left p-4 rounded-2xl border transition-all duration-200 ${
+                              active
+                                ? 'border-primary-500 bg-primary-50/50 shadow-md shadow-primary-900/5 ring-1 ring-primary-200'
+                                : 'border-gray-100 bg-gray-50/80 hover:border-gray-300 hover:bg-white'
+                            }`}
+                          >
+                            <div className="font-extrabold text-gray-900 text-sm leading-snug">
+                              {group.label}
+                            </div>
+                            {group.hasDistinctProductNames ? (
+                              <div className="mt-2 text-xs font-bold text-gray-500">
+                                {group.products.length} varian
+                              </div>
+                            ) : preferred ? (
+                              <div className="mt-2 text-sm font-black text-primary-700">
+                                {formatIDR(preferred.price)}
+                              </div>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[480px] overflow-y-auto pr-1">

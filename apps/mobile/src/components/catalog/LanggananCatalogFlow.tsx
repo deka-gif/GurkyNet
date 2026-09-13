@@ -41,18 +41,23 @@ import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { sortProvidersByNameAsc } from '../../utils/sortProvidersByName';
 import { useProviderProductPager } from '../../hooks/useProviderProductPager';
+import {
+  groupLanggananPackages,
+  type LanggananPackageGroup,
+} from '../../utils/langgananPackageGrouping';
 
 /**
  * Streaming / Langganan Digital (DigiFlazz schema SoT).
  * Category API: langganan-digital. No inquiry — schema → customer_no → PIN → POST /transactions.
  * Target inputs ABOVE product grid. VIP SKUs excluded from active UI.
+ * Package tiles strip Digi duration/nominal suffixes (audit Item 7 — TV Pascabayar pattern).
  */
 
 type Props = {
   purchaseBanner?: string | null;
 };
 
-type Step = 'brands' | 'buy' | 'confirm';
+type Step = 'brands' | 'buy' | 'variants' | 'confirm';
 
 function isBackAction(action: { type: string }): boolean {
   return action.type === 'GO_BACK' || action.type === 'POP' || action.type === 'POP_TO_TOP';
@@ -119,6 +124,7 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     reset: resetProducts,
   } = useProviderProductPager();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<LanggananPackageGroup | null>(null);
 
   const [schema, setSchema] = useState<LanggananAccountSchema | null>(null);
   const [schemaFields, setSchemaFields] = useState<LanggananAccountField[]>([]);
@@ -183,6 +189,8 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     [pagedProducts]
   );
 
+  const packageGroups = useMemo(() => groupLanggananPackages(listedProducts), [listedProducts]);
+
   const canLanjut =
     purchaseEnabled &&
     !!selectedProduct &&
@@ -195,6 +203,7 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
 
   const clearSchemaState = useCallback(() => {
     setSelectedProduct(null);
+    setSelectedPackage(null);
     setSchema(null);
     setSchemaFields([]);
     setSchemaError(null);
@@ -207,6 +216,12 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     setPinOpen(false);
     setPinError(null);
     if (step === 'confirm') {
+      setStep(selectedPackage?.hasDistinctProductNames ? 'variants' : 'buy');
+      return;
+    }
+    if (step === 'variants') {
+      setSelectedProduct(null);
+      setSelectedPackage(null);
       setStep('buy');
       return;
     }
@@ -216,7 +231,7 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
       clearSchemaState();
       setStep('brands');
     }
-  }, [step, clearSchemaState, resetProducts]);
+  }, [step, selectedPackage, clearSchemaState, resetProducts]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
@@ -390,6 +405,21 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
     setSelectedProduct(product);
     setFormError(null);
     void loadSchemaForSku(selectedBrand.name, product.code, true);
+  };
+
+  const onSelectPackage = (group: LanggananPackageGroup) => {
+    if (!purchaseEnabled || !selectedBrand) return;
+    setSelectedPackage(group);
+    setFormError(null);
+    if (group.hasDistinctProductNames) {
+      setSelectedProduct(null);
+      setStep('variants');
+      return;
+    }
+    const preferred =
+      group.products.find((p) => p.code === group.boundSkuCode) ?? group.products[0];
+    if (!preferred) return;
+    onSelectProduct(preferred);
   };
 
   const onAccountChange = (key: string, value: string, input: string) => {
@@ -608,7 +638,7 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
           </Text>
         )}
 
-        <Text style={styles.sectionTitle}>Jenis Voucher</Text>
+        <Text style={styles.sectionTitle}>Jenis Paket</Text>
 
         {productsLoading ? (
           <LoadingState label="Memuat paket..." />
@@ -617,27 +647,43 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
             message={productsError}
             onRetry={() => selectedBrand && void selectBrand(selectedBrand)}
           />
-        ) : listedProducts.length === 0 ? (
+        ) : packageGroups.length === 0 ? (
           <EmptyState
             title="Belum Ada Paket"
             message="Paket DigiFlazz untuk layanan ini belum tersedia."
           />
         ) : (
           <>
-            <ProductCatalogGrid
-              products={listedProducts}
-              columns={3}
-              selectedCode={selectedProduct?.code ?? null}
-              onPress={onSelectProduct}
-              isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
-              renderMeta={(p) =>
-                !isProductPurchasable(p) ? (
-                  <Text style={styles.productStatus}>
-                    {p.status === 'maintenance' ? 'Maintenance' : 'Tidak tersedia'}
-                  </Text>
-                ) : null
-              }
-            />
+            <View style={styles.packageGrid}>
+              {packageGroups.map((g) => {
+                const preferred =
+                  g.products.find((p) => p.code === g.boundSkuCode) ?? g.products[0];
+                const selected =
+                  selectedPackage?.key === g.key ||
+                  (!!selectedProduct && g.products.some((p) => p.code === selectedProduct.code));
+                const disabled =
+                  !purchaseEnabled ||
+                  g.products.every((p) => !isProductPurchasable(p) || isVipSku(p.code));
+                return (
+                  <TouchableOpacity
+                    key={g.key}
+                    style={[styles.packageTile, selected ? styles.packageTileSelected : null]}
+                    activeOpacity={0.7}
+                    disabled={disabled}
+                    onPress={() => onSelectPackage(g)}
+                  >
+                    <Text style={styles.packageName} numberOfLines={3}>
+                      {g.label}
+                    </Text>
+                    {g.hasDistinctProductNames ? (
+                      <Text style={styles.packageMeta}>{g.products.length} varian</Text>
+                    ) : preferred ? (
+                      <Text style={styles.packagePrice}>{formatIDR(preferred.price)}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <CatalogLoadMoreButton
               visible={productsCanLoadMore}
               loading={productsLoadingMore}
@@ -648,6 +694,35 @@ export function LanggananCatalogFlow({ purchaseBanner }: Props) {
 
         {formError ? <Text style={styles.error}>{formError}</Text> : null}
 
+        <Button label="Lanjut" onPress={goToConfirm} disabled={!canLanjut} />
+      </View>
+    );
+  }
+
+  // ——— Variants within a package family (duration / nominal) ———
+  if (step === 'variants' && selectedBrand && selectedPackage) {
+    const variantProducts = selectedPackage.products.filter(
+      (p) => isCatalogListed(p) && !isVipSku(p.code)
+    );
+    return (
+      <View style={styles.wrap}>
+        <Text style={styles.title}>{selectedPackage.label}</Text>
+        <Text style={styles.sectionTitle}>Pilih varian</Text>
+        <ProductCatalogGrid
+          products={variantProducts}
+          columns={2}
+          selectedCode={selectedProduct?.code ?? null}
+          onPress={onSelectProduct}
+          isDisabled={(p) => !isProductPurchasable(p) || !purchaseEnabled || isVipSku(p.code)}
+          renderMeta={(p) =>
+            !isProductPurchasable(p) ? (
+              <Text style={styles.productStatus}>
+                {p.status === 'maintenance' ? 'Maintenance' : 'Tidak tersedia'}
+              </Text>
+            ) : null
+          }
+        />
+        {formError ? <Text style={styles.error}>{formError}</Text> : null}
         <Button label="Lanjut" onPress={goToConfirm} disabled={!canLanjut} />
       </View>
     );
@@ -782,6 +857,37 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   brandMeta: { fontSize: typography.size.xs, color: colors.gray[500] },
+  packageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  packageTile: {
+    width: '31%',
+    minHeight: 88,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    backgroundColor: colors.white,
+    gap: 4,
+  },
+  packageTileSelected: {
+    borderColor: colors.primary[500],
+    backgroundColor: colors.gray[50],
+  },
+  packageName: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.gray[900],
+    lineHeight: 16,
+  },
+  packageMeta: { fontSize: 10, color: colors.gray[500] },
+  packagePrice: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.primary[600],
+  },
   title: {
     fontSize: typography.size.xl,
     fontWeight: typography.weight.bold,
