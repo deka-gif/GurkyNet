@@ -25,8 +25,11 @@ Non-urgent items. Do not block APK / release gates unless Owner re-prioritizes.
 ## TD-2026-09-13-VI-TEMBAK — Backend mismatch operator MSISDN↔brand (P1)
 
 **Logged:** 2026-09-13  
-**Priority:** backlog (P1, bukan sekarang)  
-**Work:** Validasi mismatch operator di backend untuk Tembak Langsung (saat ini hanya soft-check client). Jangan kerjakan sampai Owner prioritaskan.
+**Status:** implemented 2026-09-13 — `VoucherInternetTembakOperatorGuard` on `POST /transactions` for VI Tembak only (7 operator). Client check tetap.  
+**Residual (masih terbuka):**
+- **TD-2026-09-13-H2H-OP** — Partner H2H (`PartnerExecuteService`) punya celah mismatch operator yang sama; **belum ditangani** (sengaja di luar scope).
+- **TD-2026-09-13-PREFIX** — Daftar prefix 08xx di-sync manual dengan `detectOperator.ts`. Operator/prefix baru dari Digiflazz harus di-update di client **dan** `VoucherInternetTembakOperatorGuard` (kalau tidak, Tembak prefix baru ditolak sebagai tidak dikenali).
+- Pulsa / Paket Data tetap hanya dicek di client.
 
 ## TD-2026-09-13-VI-FISIK-ZONE — Soft-validation zona kartu fisik (UX)
 

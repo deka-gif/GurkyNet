@@ -179,6 +179,11 @@ class CreateTransactionAction
             app(\App\Services\Catalog\VoucherInternetElektronikCustomerNoGuard::class)
                 ->assertAllowed($product, $targetNumber, $voucherInternetMode);
 
+            // Tembak Langsung: MSISDN prefix must match SKU brand (client already gates UX).
+            // TD-2026-09-13-VI-TEMBAK — does not cover Partner H2H / Pulsa / Paket Data.
+            app(\App\Services\Catalog\VoucherInternetTembakOperatorGuard::class)
+                ->assertAllowed($product, $targetNumber, $voucherInternetMode);
+
             $inquirySession = null;
             $isPasca = is_string($inquiryRefId) && trim($inquiryRefId) !== '';
 
