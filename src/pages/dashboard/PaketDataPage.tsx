@@ -4,11 +4,9 @@ import {
   Smartphone,
   CreditCard,
   Wallet,
-  RefreshCw,
   X,
 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import {
   TelkomselPaketDataCatalog,
@@ -21,15 +19,21 @@ import {
   BYU_PAKET_CONFIG,
 } from '../../components/catalog/TelkomselPaketDataCatalog';
 import { Product } from '../../types';
-import { operatorsMatch } from '../../utils/operatorMatch';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
-import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
+import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import {
+  detectOperatorFromPhone,
+  providerBadgeLabel as operatorBadgeLabel,
+} from '../../utils/detectOperator';
 
+/**
+ * Paket Data — catalog via TelkomselPaketDataCatalog (scoped provider fetch).
+ * Removed redundant parallel fetchProducts({ category: 'data' }) dump (web audit Item 5).
+ */
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
-  const { products, loading: productsLoading, fetchProducts } = useProductStore();
 
   const [phoneNo, setPhoneNo] = useState<string>('');
   const [provider, setProvider] = useState<string | null>(null);
@@ -78,39 +82,17 @@ export const PaketDataPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category: 'data' });
     const pending = consumePendingCheckout('/dashboard/paket-data');
     if (pending?.data) {
       setCheckoutData(pending.data);
       setResumePin(!!pending.resumePin);
     }
-  }, [fetchWallet, fetchProducts]);
+  }, [fetchWallet]);
 
   useEffect(() => {
-    const cleanNo = phoneNo.replace(/\D/g, '');
-    if (cleanNo.length >= 4) {
-      const prefix = cleanNo.slice(0, 4);
-      if (['0851'].includes(prefix)) {
-        setProvider('by.U');
-      } else if (['0811', '0812', '0813', '0821', '0822', '0852', '0853', '0823'].includes(prefix)) {
-        setProvider('Telkomsel');
-      } else if (['0814', '0815', '0816', '0855', '0856', '0857', '0858'].includes(prefix)) {
-        setProvider('Indosat');
-      } else if (['0817', '0818', '0819', '0859', '0877', '0878'].includes(prefix)) {
-        setProvider('XL Axiata');
-      } else if (['0895', '0896', '0897', '0898', '0899'].includes(prefix)) {
-        setProvider('Tri (3)');
-      } else if (['0831', '0832', '0833', '0838'].includes(prefix)) {
-        setProvider('Axis');
-      } else if (['0881', '0882', '0883', '0884', '0885', '0886', '0887', '0888', '0889'].includes(prefix)) {
-        setProvider('Smartfren');
-      } else {
-        setProvider(null);
-        setRegionOptions([]);
-        setSelectedRegion('');
-      }
-    } else {
-      setProvider(null);
+    const op = detectOperatorFromPhone(phoneNo);
+    setProvider(op);
+    if (!op) {
       setSelectedProduct(null);
       setShowCheckoutPanel(false);
       setRegionOptions([]);
@@ -165,28 +147,8 @@ export const PaketDataPage = () => {
     }
   };
 
-  const otherOperatorProducts = provider && !usesMasterCatalog
-    ? products.filter((p) => operatorsMatch(p.operatorName, provider) && isCatalogListed(p))
-    : [];
-
   const showSidePanel = Boolean(selectedProduct && showCheckoutPanel);
-
-  const providerBadgeLabel =
-    provider === 'Telkomsel'
-      ? 'TELKOMSEL'
-      : provider === 'XL Axiata'
-        ? 'XL'
-        : provider === 'Indosat'
-          ? 'INDOSAT'
-          : provider === 'Tri (3)'
-            ? 'TRI'
-            : provider === 'Smartfren'
-              ? 'SMARTFREN'
-              : provider === 'Axis'
-                ? 'AXIS'
-                : provider === 'by.U'
-                  ? 'by.U'
-                  : provider;
+  const providerBadgeLabel = operatorBadgeLabel(provider);
 
   return (
     <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-7xl" id="paket-data-page-root">
@@ -255,47 +217,6 @@ export const PaketDataPage = () => {
             />
           )}
 
-          {provider && !usesMasterCatalog && (
-            <div className="space-y-3">
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-semibold">
-                UX marketplace kategori tersedia untuk seluruh operator utama (Telkomsel, XL,
-                Indosat, Tri, Smartfren, AXIS, by.U).
-              </p>
-              {productsLoading ? (
-                <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400">
-                  <RefreshCw className="w-8 h-8 mx-auto text-gray-300 animate-spin" />
-                </div>
-              ) : otherOperatorProducts.length === 0 ? (
-                <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-xs text-gray-400">
-                  Produk tidak tersedia untuk operator ini.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-                  {otherOperatorProducts.map((pkg) => (
-                    <button
-                      key={pkg.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedProduct(pkg);
-                        setShowCheckoutPanel(true);
-                      }}
-                      className={`text-left p-4 rounded-2xl border ${
-                        selectedProduct?.id === pkg.id
-                          ? 'border-primary-500 bg-primary-50/30'
-                          : 'border-gray-100 bg-white shadow-sm'
-                      }`}
-                    >
-                      <div className="font-extrabold text-sm text-gray-900 line-clamp-2">{pkg.name}</div>
-                      <div className="text-sm font-black text-red-600 mt-3">{formatIDR(pkg.price)}</div>
-                      <span className="mt-3 inline-flex w-full justify-center py-2 rounded-xl bg-primary-600 text-white text-xs font-black">
-                        Beli
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {showSidePanel && selectedProduct && (
