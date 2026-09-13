@@ -18,6 +18,7 @@ import { formatIDR } from '../../utils/currency';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from './MobileStickyActionBar';
 
 const PER_PAGE = 20;
 const PAGE_THRESHOLD = 30;
@@ -250,7 +251,7 @@ export function EsimCatalogFlow() {
   const showSidePanel = Boolean(selectedProduct && showCheckoutPanel);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-7xl">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-7xl ${showSidePanel ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">eSIM</h2>
@@ -503,7 +504,7 @@ export function EsimCatalogFlow() {
               type="button"
               disabled={!isProductPurchasable(selectedProduct)}
               onClick={handleCheckout}
-              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="max-lg:hidden w-full py-3.5 rounded-2xl bg-primary-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard className="w-4 h-4" /> Bayar Sekarang
             </button>
@@ -532,6 +533,15 @@ export function EsimCatalogFlow() {
           }}
         />
       )}
+
+      {showSidePanel && selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="Bayar Sekarang"
+          disabled={!isProductPurchasable(selectedProduct)}
+          onClick={handleCheckout}
+        />
+      ) : null}
     </div>
   );
 }

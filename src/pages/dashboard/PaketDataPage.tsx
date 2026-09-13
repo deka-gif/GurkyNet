@@ -27,6 +27,7 @@ import {
   detectOperatorFromPhone,
   providerBadgeLabel as operatorBadgeLabel,
 } from '../../utils/detectOperator';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 
 /**
  * Paket Data — catalog via TelkomselPaketDataCatalog (scoped provider fetch).
@@ -151,7 +152,7 @@ export const PaketDataPage = () => {
   const providerBadgeLabel = operatorBadgeLabel(provider);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-7xl" id="paket-data-page-root">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-7xl ${showSidePanel ? MOBILE_STICKY_ACTION_PAD : ''}`} id="paket-data-page-root">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
@@ -268,7 +269,7 @@ export const PaketDataPage = () => {
             <button
               disabled={loading || !selectedProduct}
               onClick={handleCheckout}
-              className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700"
+              className="max-lg:hidden w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700"
             >
               <CreditCard className="w-4 h-4" />
               Bayar Sekarang
@@ -333,6 +334,16 @@ export const PaketDataPage = () => {
           }}
         />
       )}
+
+      {showSidePanel && selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="Bayar Sekarang"
+          loading={loading}
+          disabled={loading}
+          onClick={() => void handleCheckout()}
+        />
+      ) : null}
     </div>
   );
 };

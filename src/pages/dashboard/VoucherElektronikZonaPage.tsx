@@ -21,6 +21,7 @@ import {
 import { productService } from '../../services/product/product.service';
 import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 import { findCategoryProviderByName } from '../../utils/findCategoryProvider';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 
 function sortByPrice(rows: Product[]): Product[] {
   return [...rows].sort((a, b) => a.price - b.price);
@@ -262,7 +263,7 @@ export const VoucherElektronikZonaPage = () => {
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-start gap-3">
           <button
@@ -308,7 +309,7 @@ export const VoucherElektronikZonaPage = () => {
             <button
               type="button"
               onClick={startCheckout}
-              className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm"
+              className="max-lg:hidden w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm"
             >
               Bayar & Generate Kode
             </button>
@@ -359,6 +360,15 @@ export const VoucherElektronikZonaPage = () => {
           }}
         />
       )}
+
+      {selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="Bayar & Generate Kode"
+          disabled={!isProductPurchasable(selectedProduct)}
+          onClick={startCheckout}
+        />
+      ) : null}
     </div>
   );
 };

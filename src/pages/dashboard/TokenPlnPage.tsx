@@ -15,6 +15,7 @@ import { formatIDR } from '../../utils/currency';
 import { plnService, PlnInquiryResult } from '../../services/pln/pln.service';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 
 export const TokenPlnPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -142,7 +143,7 @@ export const TokenPlnPage = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="token-pln-page-root">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${inquiry && selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`} id="token-pln-page-root">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Token Listrik PLN</h2>
@@ -310,7 +311,7 @@ export const TokenPlnPage = () => {
             type="button"
             disabled={!inquiryReady || !selectedProduct || !isProductPurchasable(selectedProduct)}
             onClick={handleBeli}
-            className={`w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
+            className={`max-lg:hidden w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
               inquiryReady && selectedProduct && isProductPurchasable(selectedProduct)
                 ? 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/10'
                 : 'bg-gray-200 cursor-not-allowed text-gray-400'
@@ -341,6 +342,15 @@ export const TokenPlnPage = () => {
           }}
         />
       )}
+
+      {inquiry && selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="BELI"
+          disabled={!inquiryReady || !isProductPurchasable(selectedProduct)}
+          onClick={handleBeli}
+        />
+      ) : null}
     </div>
   );
 };

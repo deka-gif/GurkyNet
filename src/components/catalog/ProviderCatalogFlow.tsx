@@ -48,6 +48,7 @@ import {
   type LanggananPackageGroup,
 } from '../../utils/langgananPackageGrouping';
 import { validateEwalletAmountMultipleOfThousand } from '../../utils/ewalletAmountValidation';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from './MobileStickyActionBar';
 import { BrandAvatar, providerLogoFromProduct } from './BrandAvatar';
 
 export type CatalogTargetMode = 'phone' | 'game' | 'customer' | 'none';
@@ -1068,7 +1069,7 @@ export function ProviderCatalogFlow({
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-6xl">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-6xl ${step === 'products' && selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">{title}</h2>
@@ -1566,6 +1567,74 @@ export function ProviderCatalogFlow({
           }}
         />
       )}
+
+      {step === 'products' && selectedProduct ? (
+        <MobileStickyActionBar
+          meta={
+            isEwalletInquiry && ewalletInquiry
+              ? `${ewalletInquiry.product_name || selectedProduct.name} · ${formatIDR(ewalletInquiry.selling_price)}`
+              : isGameInquiry && gameInquiry
+                ? `${gameInquiry.item || selectedProduct.name} · ${formatIDR(gameInquiry.price)}`
+                : `${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`
+          }
+          label={
+            isLanggananMode
+              ? 'Lanjut Konfirmasi'
+              : isSummaryCheckoutMode
+                ? 'Lanjutkan ke PIN'
+                : isEwalletInquiry && ewalletInquiry
+                  ? 'Lanjut Bayar (PIN)'
+                  : isGameInquiry && gameInquiry
+                    ? 'Lanjut Bayar (PIN)'
+                    : isEwalletInquiry || isGameInquiry
+                      ? inquiring
+                        ? 'Memproses...'
+                        : 'Lanjutkan'
+                      : 'Lanjut ke Konfirmasi'
+          }
+          loading={inquiring}
+          disabled={
+            isLanggananMode
+              ? !isProductPurchasable(selectedProduct) || !langgananReady
+              : isSummaryCheckoutMode
+                ? !isProductPurchasable(selectedProduct)
+                : isEwalletInquiry && ewalletInquiry
+                  ? false
+                  : isGameInquiry && gameInquiry
+                    ? !gameInquiry.customer_no
+                    : isEwalletInquiry || isGameInquiry
+                      ? inquiryNextDisabled
+                      : !isProductPurchasable(selectedProduct)
+          }
+          onClick={() => {
+            if (isLanggananMode) {
+              handleLanggananLanjutBayar();
+              return;
+            }
+            if (isSummaryCheckoutMode) {
+              handleSummaryProceedToPin();
+              return;
+            }
+            if (isEwalletInquiry && ewalletInquiry) {
+              handleEwalletLanjutBayar();
+              return;
+            }
+            if (isGameInquiry && gameInquiry) {
+              handleGameLanjutBayar();
+              return;
+            }
+            if (isEwalletInquiry) {
+              void handleEwalletNext();
+              return;
+            }
+            if (isGameInquiry) {
+              void handleGameNext();
+              return;
+            }
+            handleCheckout();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1585,7 +1654,7 @@ function SummaryPanelShell({ children }: { children: ReactNode }) {
 }
 
 function PanelActions({ children }: { children: ReactNode }) {
-  return <div className="mt-4 space-y-2">{children}</div>;
+  return <div className="mt-4 space-y-2 max-lg:hidden">{children}</div>;
 }
 
 function SummaryRow({

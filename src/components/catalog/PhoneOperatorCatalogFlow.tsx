@@ -20,6 +20,7 @@ import {
 } from '../../utils/detectOperator';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from './MobileStickyActionBar';
 import {
   collectTelkomselZoneLabels,
   filterProductsByZoneLabel,
@@ -235,7 +236,7 @@ export function PhoneOperatorCatalogFlow({
   const badge = providerBadgeLabel(provider);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-7xl">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-7xl ${showSidePanel ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">{title}</h2>
@@ -496,7 +497,7 @@ export function PhoneOperatorCatalogFlow({
             <button
               type="button"
               onClick={handleCheckout}
-              className="w-full py-3.5 rounded-2xl font-bold text-sm text-white bg-primary-600 hover:bg-primary-700 flex items-center justify-center gap-2"
+              className="max-lg:hidden w-full py-3.5 rounded-2xl font-bold text-sm text-white bg-primary-600 hover:bg-primary-700 flex items-center justify-center gap-2"
             >
               <CreditCard className="w-4 h-4" />
               Bayar Sekarang
@@ -523,6 +524,14 @@ export function PhoneOperatorCatalogFlow({
           }}
         />
       )}
+
+      {showSidePanel && selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="Bayar Sekarang"
+          onClick={handleCheckout}
+        />
+      ) : null}
     </div>
   );
 }

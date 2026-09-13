@@ -26,6 +26,7 @@ import {
 } from '../../services/product/product.service';
 import { useProviderProductPager } from '../../hooks/useProviderProductPager';
 import { findCategoryProviderByName } from '../../utils/findCategoryProvider';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 
 type Mode = 'tembak' | 'elektronik' | 'fisik';
 
@@ -328,7 +329,7 @@ export const VoucherInternetPage = () => {
   );
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${mode === 'tembak' && selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Voucher Internet</h2>
@@ -483,7 +484,7 @@ export const VoucherInternetPage = () => {
                       type="button"
                       onClick={() => startCheckout()}
                       disabled={!!providerMismatchError}
-                      className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm"
+                      className="max-lg:hidden w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm"
                     >
                       Lanjut Bayar (PIN)
                     </button>
@@ -510,6 +511,15 @@ export const VoucherInternetPage = () => {
           }}
         />
       )}
+
+      {mode === 'tembak' && selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="Lanjut Bayar (PIN)"
+          disabled={!!providerMismatchError || !isProductPurchasable(selectedProduct)}
+          onClick={() => startCheckout()}
+        />
+      ) : null}
     </div>
   );
 };

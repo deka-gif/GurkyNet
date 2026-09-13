@@ -14,6 +14,7 @@ import { buildCreatePinUrl, PENDING_TRANSFER_KEY } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
 import { getOrCreateIdempotencyKey } from '../../utils/idempotency';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 
 const QUICK_AMOUNTS = [25_000, 50_000, 100_000, 200_000, 500_000] as const;
 
@@ -119,7 +120,7 @@ export const TransferPage = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-2xl" id="transfer-page-root">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-2xl ${transferType === 'p2p' ? MOBILE_STICKY_ACTION_PAD : ''}`} id="transfer-page-root">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Kirim Uang</h2>
@@ -134,7 +135,7 @@ export const TransferPage = () => {
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form id="transfer-p2p-form" onSubmit={handleSubmit} className="space-y-6">
           <div className="flex bg-gray-50 p-1 rounded-2xl border border-gray-200/60">
             <button
               type="button"
@@ -260,7 +261,7 @@ export const TransferPage = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
+                className="max-lg:hidden w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-primary-500/10 transition-all flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -278,6 +279,23 @@ export const TransferPage = () => {
           )}
         </form>
       </div>
+
+      {transferType === 'p2p' ? (
+        <MobileStickyActionBar
+          meta={
+            amount && parseInt(amount, 10) > 0
+              ? `${accountNo.trim() || 'Tujuan'} · ${formatIDR(parseInt(amount, 10))}`
+              : 'Transfer P2P'
+          }
+          label="Kirim Transfer P2P"
+          loading={loading}
+          disabled={loading}
+          onClick={() => {
+            const form = document.getElementById('transfer-p2p-form') as HTMLFormElement | null;
+            form?.requestSubmit();
+          }}
+        />
+      ) : null}
     </div>
   );
 };

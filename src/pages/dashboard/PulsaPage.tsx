@@ -20,6 +20,7 @@ import {
   providerApiName,
   providerBadgeLabel,
 } from '../../utils/detectOperator';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 
 /**
  * Pulsa web — detect operator from phone, then scoped GET /products?provider=…
@@ -150,7 +151,7 @@ export const PulsaPage = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="pulsa-page-root">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`} id="pulsa-page-root">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Isi Pulsa Seluler</h2>
@@ -299,7 +300,7 @@ export const PulsaPage = () => {
             type="button"
             disabled={loading || !selectedProduct || !isProductPurchasable(selectedProduct)}
             onClick={() => void handleCheckout()}
-            className={`w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
+            className={`max-lg:hidden w-full mt-6 py-3.5 rounded-2xl font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 ${
               loading
                 ? 'bg-primary-400 cursor-not-allowed'
                 : selectedProduct && isProductPurchasable(selectedProduct)
@@ -337,6 +338,16 @@ export const PulsaPage = () => {
           }}
         />
       )}
+
+      {selectedProduct ? (
+        <MobileStickyActionBar
+          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          label="Beli Sekarang"
+          loading={loading}
+          disabled={loading || !isProductPurchasable(selectedProduct)}
+          onClick={() => void handleCheckout()}
+        />
+      ) : null}
     </div>
   );
 };

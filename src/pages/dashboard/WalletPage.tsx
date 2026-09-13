@@ -33,6 +33,7 @@ import { transactionService } from '../../services/transaction/transaction.servi
 import { useCallback } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useToastStore } from '../../store/toast.store';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
 import {
   MIN_TOPUP_AMOUNT,
   TOPUP_QUICK_AMOUNTS,
@@ -514,7 +515,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   const mutationCount = Number(summary?.transaction_count ?? 0);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl" id="wallet-page-root">
+    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${activeTab === 'topup' ? MOBILE_STICKY_ACTION_PAD : ''}`} id="wallet-page-root">
       
       {/* Page Title */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -783,7 +784,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                   </div>
                 )}
 
-                <form onSubmit={handleTopupSubmit} className="space-y-6">
+                <form id="wallet-topup-form" onSubmit={handleTopupSubmit} className="space-y-6">
                   {/* Select Preset Amount */}
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold text-gray-700">Pilih Nominal Cepat</label>
@@ -932,7 +933,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
                     type="submit"
                     variant="primary"
                     disabled={topupSubmitting || loading}
-                    className="w-full disabled:opacity-60"
+                    className="max-lg:hidden w-full disabled:opacity-60"
                   >
                     <Wallet className="w-4 h-4" />
                     <span>{topupSubmitting ? 'Memproses...' : 'Konfirmasi & Bayar Sekarang'}</span>
@@ -1174,6 +1175,23 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
         amount={paymentModalAmount}
         onClose={() => setPaymentModalOpen(false)}
       />
+
+      {activeTab === 'topup' ? (
+        <MobileStickyActionBar
+          meta={
+            topupAmount && Number(topupAmount) > 0
+              ? `Top Up · ${formatIDR(Number(topupAmount))}`
+              : 'Top Up Saldo'
+          }
+          label="Konfirmasi & Bayar Sekarang"
+          loading={topupSubmitting || loading}
+          disabled={topupSubmitting || loading}
+          onClick={() => {
+            const form = document.getElementById('wallet-topup-form') as HTMLFormElement | null;
+            form?.requestSubmit();
+          }}
+        />
+      ) : null}
 
     </div>
   );
