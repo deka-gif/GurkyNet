@@ -8,6 +8,7 @@ import { useCheckoutStore } from '../../store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
 import { useWalletStore } from '../../store/wallet.store';
 import { parseApiError } from '../../api/client';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import {
   Card,
   Button,
@@ -68,7 +69,7 @@ export function PlnTokenCatalogFlow({ purchaseBanner }: Props) {
     setProductsLoading(true);
     setProductsError(null);
     try {
-      const res = await catalogService.getProducts({ category: 'pln', per_page: 5000 });
+      const res = await catalogService.getProducts({ category: 'pln', per_page: CATALOG_FETCH.SMALL_CATEGORY });
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data);
       } else {

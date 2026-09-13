@@ -18,6 +18,7 @@ import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 
 /**
  * Mobile phone-operator catalog — mirrors Web PhoneOperatorCatalogFlow / PulsaPage.
@@ -68,7 +69,7 @@ export function PulsaCatalogFlow({
     setLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getProducts({ category, per_page: 5000 });
+      const res = await catalogService.getProducts({ category, per_page: CATALOG_FETCH.GENERAL });
       if (seq !== loadSeq.current) return;
       if (res.success && Array.isArray(res.data)) {
         setAllProducts(res.data);

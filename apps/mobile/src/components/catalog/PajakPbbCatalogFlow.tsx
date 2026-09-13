@@ -12,6 +12,7 @@ import { catalogService, Product } from '../../services/catalog.service';
 import { tagihanService, TagihanInquiryResult } from '../../services/tagihan.service';
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import {
   LoadingState,
   ErrorState,
@@ -119,7 +120,7 @@ export function PajakPbbCatalogFlow({ purchaseBanner }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getProducts({ category: 'pbb', per_page: 5000 });
+      const res = await catalogService.getProducts({ category: 'pbb', per_page: CATALOG_FETCH.SMALL_CATEGORY });
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data);
       } else {

@@ -17,6 +17,7 @@ import {
   CategoryProviderSummary,
   Product,
 } from '../../services/catalog.service';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import {
   BrandLogo,
   Button,
@@ -204,7 +205,7 @@ export function CekHargaCatalogFlow() {
       const res = await catalogService.getProducts({
         category: slug,
         ...(pid != null ? { provider_id: pid } : {}),
-        per_page: 5000,
+        per_page: CATALOG_FETCH.GENERAL,
       });
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data.filter((p) => isCatalogListed(p) && isProductPurchasable(p)));

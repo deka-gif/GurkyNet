@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { catalogService, Category, CategoryIconMap, Product } from '../services/catalog.service';
+import { CATALOG_FETCH } from '../config/catalogFetchLimits';
 
 interface CatalogState {
   categories: Category[];
@@ -70,8 +71,12 @@ export const useCatalogStore = create<CatalogState>((set) => ({
   fetchProducts: async (category, keyword) => {
     set({ productsLoading: true, productsError: null, products: [] });
     try {
-      // Align with web productService default (≈5000) for catalog parity.
-      const response = await catalogService.getProducts({ category, keyword, per_page: 5000 });
+      // Soft cap — avoid unbounded dumps (audit Item 6). Large catalogs use provider pager flows.
+      const response = await catalogService.getProducts({
+        category,
+        keyword,
+        per_page: CATALOG_FETCH.GENERAL,
+      });
       if (response.success) {
         set({ products: response.data, productsLoading: false });
       } else {

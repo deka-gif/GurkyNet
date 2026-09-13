@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { DashboardServiceCategory, CatalogHubChild } from '../../config/catalogCategories';
+import { WEB_CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import { routeForProductCategory } from '../../utils/catalogRoutes';
 import { productService } from '../../services/product/product.service';
 import type { Product, Transaction } from '../../types';
@@ -135,7 +136,7 @@ export function ProductPickerSheet({
         fetcher: async () => {
           const res = await productService.getProducts({
             category: productCategory,
-            per_page: 5000,
+            per_page: WEB_CATALOG_FETCH.PICKER,
             page: 1,
           });
           if (controller.signal.aborted) {

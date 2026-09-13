@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from '
 import { useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { catalogService, Product } from '../../services/catalog.service';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
 import { useWalletStore } from '../../store/wallet.store';
@@ -136,7 +137,7 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
         const full = await catalogService.getProducts({
           category: 'voucher-internet',
           vi_mode: 'elektronik',
-          per_page: 5000,
+          per_page: CATALOG_FETCH.FALLBACK_DUMP,
         });
         if (full.success && Array.isArray(full.data)) {
           const listed = full.data.filter((p) => isCatalogListed(p));

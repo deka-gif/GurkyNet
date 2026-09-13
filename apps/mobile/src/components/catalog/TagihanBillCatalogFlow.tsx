@@ -18,6 +18,7 @@ import { colors, radius, spacing, typography } from '../../theme';
 import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import {
   groupTagihanBrandsByProductName,
   resolvePlnBillDirectSku,
@@ -152,7 +153,7 @@ export function TagihanBillCatalogFlow({
     setLoading(true);
     setError(null);
     try {
-      const res = await catalogService.getProducts({ category, per_page: 5000 });
+      const res = await catalogService.getProducts({ category, per_page: CATALOG_FETCH.SMALL_CATEGORY });
       if (res.success && Array.isArray(res.data)) {
         setProducts(res.data);
       } else {

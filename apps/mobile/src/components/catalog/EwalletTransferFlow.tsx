@@ -16,6 +16,7 @@ import {
 import { useCheckoutStore } from '../../store/checkout.store';
 import { useWalletStore } from '../../store/wallet.store';
 import { useFeaturesStore, selectPurchaseEnabled } from '../../store/features.store';
+import { CATALOG_FETCH } from '../../config/catalogFetchLimits';
 import {
   ScreenContainer,
   Button,
@@ -142,7 +143,7 @@ export function EwalletTransferFlow({ entry = 'transfer' }: Props = {}) {
           catalogService.getProducts({
             category: CATEGORY,
             provider_id: providerId,
-            per_page: 5000,
+            per_page: CATALOG_FETCH.PROVIDER_SCOPED,
           })
         )
       );

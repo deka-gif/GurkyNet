@@ -1,5 +1,6 @@
 import { apiClient } from '../api';
 import { Product, ApiResponse } from '../../types';
+import { WEB_CATALOG_FETCH } from '../../config/catalogFetchLimits';
 
 export interface ProductFilters {
   category?: string;
@@ -36,7 +37,7 @@ export interface CategoryProviderSummary {
 export const productService = {
   getAll: async (): Promise<ApiResponse<Product[]>> => {
     const response = await apiClient.get<ApiResponse<Product[]>>('/products', {
-      params: { surface: 'web', per_page: 5000 },
+      params: { surface: 'web', per_page: WEB_CATALOG_FETCH.GENERAL },
     });
     return response.data;
   },
@@ -58,11 +59,11 @@ export const productService = {
       if (filters.surface) params.append('surface', filters.surface);
       else params.append('surface', 'web');
       if (filters.page) params.append('page', String(filters.page));
-      // Default page size for lazy catalogs; Telkomsel UX passes smaller per_page.
-      params.append('per_page', (filters.per_page ?? 5000).toString());
+      // Soft cap — callers that need more pass per_page explicitly (audit Item 6).
+      params.append('per_page', (filters.per_page ?? WEB_CATALOG_FETCH.GENERAL).toString());
     } else {
       params.append('surface', 'web');
-      params.append('per_page', '5000');
+      params.append('per_page', String(WEB_CATALOG_FETCH.GENERAL));
     }
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await apiClient.get<ApiResponse<Product[]>>(`/products${queryString}`, {
