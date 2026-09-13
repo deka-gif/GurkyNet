@@ -466,10 +466,9 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Multifinance', 'slug' => 'multifinance', 'icon' => 'landmark'],
             ['name' => 'Tagihan Lainnya', 'slug' => 'tagihan', 'icon' => 'receipt'],
             ['name' => 'Top Up Digital', 'slug' => 'topup-digital', 'icon' => 'credit-card'],
-            ['name' => 'Top Up Digital', 'slug' => 'ewallet', 'icon' => 'credit-card'],
+            // Legacy alias slugs (ewallet / voucher) are soft-deleted zombies — do not recreate (audit Item 11).
             ['name' => 'Game', 'slug' => 'game', 'icon' => 'gamepad-2'],
             ['name' => 'Voucher Digital', 'slug' => 'voucher-digital', 'icon' => 'gift'],
-            ['name' => 'Voucher Digital', 'slug' => 'voucher', 'icon' => 'gift'],
             ['name' => 'Langganan Digital', 'slug' => 'langganan-digital', 'icon' => 'play'],
             ['name' => 'International Top Up', 'slug' => 'international', 'icon' => 'globe'],
             ['name' => 'Transfer Uang Bank', 'slug' => 'transfer', 'icon' => 'send'],
