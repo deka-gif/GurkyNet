@@ -10,8 +10,8 @@ use App\Actions\Product\SearchProductAction;
 use App\Actions\Product\GetProviderAction;
 use App\Http\Resources\CategoryResource;
 use App\Http\Resources\ProviderResource;
+use App\Http\Resources\ProductDetailResource;
 use App\Http\Resources\ProductListResource;
-use App\Http\Resources\ProductResource;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -108,7 +108,8 @@ class ProductController extends Controller
             return $this->errorResponse('Produk tidak ditemukan.', 404);
         }
 
-        return $this->successResponse('Detail produk berhasil didapatkan.', new ProductResource($product));
+        // Customer detail DTO — never ProductResource (ops cost fields).
+        return $this->successResponse('Detail produk berhasil didapatkan.', new ProductDetailResource($product));
     }
 
     /**

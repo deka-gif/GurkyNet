@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\v1;
 
 use App\Http\Controllers\Controller;
 use App\Actions\Product\SearchProductAction;
-use App\Http\Resources\ProductResource;
+use App\Http\Resources\ProductListResource;
 use App\Models\ProductCategory;
 use App\Models\Provider;
 use App\Services\Catalog\ProductMappingService;
@@ -92,7 +92,7 @@ class CatalogController extends Controller
             'hubs' => $matchedHubs,
             'services' => $matchedServices,
             'providers' => $brandHits,
-            'products' => ProductResource::collection($products)->resolve(),
+            'products' => ProductListResource::collection($products)->resolve(),
             'meta' => [
                 'product_total' => method_exists($products, 'total') ? $products->total() : count($products),
             ],

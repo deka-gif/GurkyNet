@@ -17,7 +17,7 @@ use App\Http\Resources\PromotionResource;
 use App\Http\Resources\VoucherResource;
 use App\Http\Resources\AnnouncementResource;
 use App\Http\Resources\CategoryResource;
-use App\Http\Resources\ProductResource;
+use App\Http\Resources\ProductListResource;
 use App\Models\BannerPromotion;
 use App\Models\Faq;
 use App\Models\HomepageFeaturedProduct;
@@ -284,7 +284,7 @@ class PublicWebsiteController extends Controller
                 'banners' => BannerResource::collection($banners)->resolve(),
                 'hero' => $heroSection ? (new HomepageSectionResource($heroSection))->resolve() : null,
                 'homepageCategories' => $homepageCategories,
-                'featuredProducts' => ProductResource::collection($featuredProducts)->resolve(),
+                'featuredProducts' => ProductListResource::collection($featuredProducts)->resolve(),
                 'faqs' => $faqs->all(),
                 'menus' => WebsiteMenuResource::collection($menus)->resolve(),
                 'pages' => StaticPageResource::collection($pages)->resolve(),
@@ -570,8 +570,8 @@ class PublicWebsiteController extends Controller
                 'slug' => $category?->slug ?? $family,
                 'icon' => $icon,
                 'productCount' => $productPaginator->total(),
-                'products' => ProductResource::collection($items)->resolve(),
-                'previewProduct' => $representative ? (new ProductResource($representative))->resolve() : null,
+                'products' => ProductListResource::collection($items)->resolve(),
+                'previewProduct' => $representative ? (new ProductListResource($representative))->resolve() : null,
             ];
         })->values()->all();
     }

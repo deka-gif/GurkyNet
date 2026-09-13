@@ -9,10 +9,12 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Sparse customer LIST DTO for GET /api/v1/products.
+ * Sparse customer LIST DTO for GET /api/v1/products, catalog search hits,
+ * and public homepage featured/preview product cards.
  *
  * Omits sensitive cost fields (basePrice, providerCost, margin) and heavy nested
- * admin/sync metadata. Detail remains ProductResource via GET /products/{sku}.
+ * admin/sync metadata. Single-SKU customer detail uses ProductDetailResource.
+ * Ops/Finance keep ProductResource (full cost fields).
  *
  * KEEP for list UI: id, code, name, price, adminFee, status, isPurchasable,
  * zoneLabel, description, quota, validity, badge, operatorName, provider,

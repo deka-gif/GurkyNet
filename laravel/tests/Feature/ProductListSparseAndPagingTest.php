@@ -96,16 +96,24 @@ class ProductListSparseAndPagingTest extends TestCase
         $this->assertArrayNotHasKey('productProviderDetails', $row);
     }
 
-    public function test_detail_endpoint_still_returns_full_product_resource(): void
+    public function test_detail_endpoint_omits_sensitive_cost_fields(): void
     {
         $this->seedSkus(1);
 
         $response = $this->getJson('/api/v1/products/FFTEST0001');
         $response->assertOk();
         $row = $response->json('data');
-        // Detail may still include cost fields for now; list must not.
-        $this->assertArrayHasKey('price', $row);
         $this->assertSame('FFTEST0001', $row['code']);
+        $this->assertArrayHasKey('price', $row);
+        $this->assertArrayHasKey('adminFee', $row);
+        $this->assertArrayHasKey('isPurchasable', $row);
+        $this->assertArrayHasKey('transactionCapability', $row);
+        $this->assertArrayHasKey('notPurchasableReason', $row);
+        $this->assertArrayNotHasKey('basePrice', $row);
+        $this->assertArrayNotHasKey('providerCost', $row);
+        $this->assertArrayNotHasKey('margin', $row);
+        $this->assertArrayNotHasKey('productProviderDetails', $row);
+        $this->assertArrayNotHasKey('categoryMappingSource', $row);
     }
 
     public function test_paging_policy_boundary_29_30_31(): void
