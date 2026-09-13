@@ -412,8 +412,13 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', (e) => {
       if (!isBackAction(e.data.action)) return;
-      if (step === 'result' || pinVisible || pinLoading) {
+      // PIN sheet: block accidental dismiss only while submitting.
+      if (pinVisible || pinLoading) {
         e.preventDefault();
+        return;
+      }
+      // Result screen must remain leaveable — batch continues server-side (Riwayat).
+      if (step === 'result') {
         return;
       }
       e.preventDefault();
@@ -1163,6 +1168,13 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
             </View>
           ) : null}
 
+          {!terminal ? (
+            <Text style={styles.hint}>
+              Proses berjalan di server. Anda boleh meninggalkan halaman ini dan cek status nanti di
+              Riwayat.
+            </Text>
+          ) : null}
+
           {batch.invoiceNumber ? (
             <Text style={styles.hint}>Invoice: {batch.invoiceNumber}</Text>
           ) : null}
@@ -1234,7 +1246,23 @@ export function VoucherInternetFisikFlow({ purchaseBanner, onBack }: Props) {
               ) : null}
               <Button label="Selesai" onPress={finishResult} />
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.resultActions}>
+              {batch.transactionId ? (
+                <Button
+                  label="Cek di Riwayat"
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/riwayat/[id]',
+                      params: { id: String(batch.transactionId) },
+                    })
+                  }
+                />
+              ) : null}
+              <Button label="Keluar (proses lanjut di background)" onPress={finishResult} />
+            </View>
+          )}
         </>
       ) : null}
 
