@@ -9,6 +9,13 @@ Non-urgent items. Do not block APK / release gates unless Owner re-prioritizes.
 **Evidence (VPS):** `pre33639057` Starhub 10 — `products.status=1` `ops_status=active`, tapi Digi `buyer_product_status=0` + `seller_product_status=0` + `provider_sku.is_active=0` → lifecycle `PROVIDER_INACTIVE` → SearchProduct `total=0`, provider tiles=0. Thailand VIP rows `ops_status=inactive`; TrueMove Digi juga inactive.  
 **Work:** Tunggu Digi reaktifasi seller/buyer untuk Starhub (atau ganti SKU aktif). Jangan force-show SKU Digi mati. FE sudah kosong tanpa chip negara kosong.
 
+## TD-2026-09-13-GAME-ZERO — Mobile Legends B / PSN visible=0 (E.5)
+
+**Logged:** 2026-09-13 (audit temuan tambahan E.5)  
+**Priority:** backlog — **bukan whitelist schema sederhana** (Item 12 tetap hardcode)  
+**Evidence:** Provider `Mobile Legends B` punya 2208 rows / 146 `status=1`, sample lifecycle semua `PROVIDER_INACTIVE` → tidak masuk provider summary (hanya `MOBILE LEGENDS` count=222 yang visible). `PlayStation Network` / `Voucher PSN` providers ada di DB tapi **0 products**.  
+**Work:** Ops/Digi-VIP — reaktifasi SKU provider atau merge brand ke MOBILE LEGENDS kanonik. Jangan buka visibility tanpa SKU Digi aktif. Keputusan bisnis jika brand dual ML A/B perlu digabung.
+
 ## TD-2026-09-13-VI-ELEK — Voucher Elektronik verifikasi transaksi nyata (SN)
 
 **Logged:** 2026-09-13 (keputusan final VI hari ini)  
