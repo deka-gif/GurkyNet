@@ -2,6 +2,13 @@
 
 Non-urgent items. Do not block APK / release gates unless Owner re-prioritizes.
 
+## TD-2026-09-13-INTL — International Top Up Digi seller/buyer inactive (Starhub)
+
+**Logged:** 2026-09-13 (audit Item 10)  
+**Priority:** backlog / Digi ops — **bukan bug whitelist FE**  
+**Evidence (VPS):** `pre33639057` Starhub 10 — `products.status=1` `ops_status=active`, tapi Digi `buyer_product_status=0` + `seller_product_status=0` + `provider_sku.is_active=0` → lifecycle `PROVIDER_INACTIVE` → SearchProduct `total=0`, provider tiles=0. Thailand VIP rows `ops_status=inactive`; TrueMove Digi juga inactive.  
+**Work:** Tunggu Digi reaktifasi seller/buyer untuk Starhub (atau ganti SKU aktif). Jangan force-show SKU Digi mati. FE sudah kosong tanpa chip negara kosong.
+
 ## TD-2026-09-13-VI-ELEK — Voucher Elektronik verifikasi transaksi nyata (SN)
 
 **Logged:** 2026-09-13 (keputusan final VI hari ini)  

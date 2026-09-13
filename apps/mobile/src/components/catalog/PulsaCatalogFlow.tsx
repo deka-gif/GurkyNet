@@ -244,7 +244,14 @@ export function PulsaCatalogFlow({
       ) : error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : listed.length === 0 ? (
-        <EmptyState title="Belum Ada Produk" message="Produk untuk kategori ini belum tersedia." />
+        <EmptyState
+          title="Belum Ada Produk"
+          message={
+            category === 'international'
+              ? 'Belum ada produk international aktif dari DigiFlazz/VIP. Negara tanpa SKU aktif tidak ditampilkan.'
+              : 'Produk untuk kategori ini belum tersedia.'
+          }
+        />
       ) : !purchaseEnabled ? (
         <PurchaseFlowNotice
           icon="time-outline"
