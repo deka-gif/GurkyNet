@@ -2,6 +2,24 @@
 
 Non-urgent items. Do not block APK / release gates unless Owner re-prioritizes.
 
+## TD-2026-09-13-VI-ELEK — Voucher Elektronik verifikasi transaksi nyata (SN)
+
+**Logged:** 2026-09-13 (keputusan final VI hari ini)  
+**Priority:** backlog — **DITUNDA**, jangan di-hide / jangan dikerjakan sekarang  
+**Status:** Voucher Elektronik — Nasional dan Per Wilayah — BELUM ADA bukti transaksi sukses dengan SN keluar dalam 60 hari terakhir. WAJIB diverifikasi dengan transaksi nyata nominal kecil sebelum dianggap aman untuk volume tinggi. Verifikasi mode testing Digiflazz sudah dicoba dan TIDAK BISA dipakai (API key Production, bukan Development).
+
+## TD-2026-09-13-VI-TEMBAK — Backend mismatch operator MSISDN↔brand (P1)
+
+**Logged:** 2026-09-13  
+**Priority:** backlog (P1, bukan sekarang)  
+**Work:** Validasi mismatch operator di backend untuk Tembak Langsung (saat ini hanya soft-check client). Jangan kerjakan sampai Owner prioritaskan.
+
+## TD-2026-09-13-VI-FISIK-ZONE — Soft-validation zona kartu fisik (UX)
+
+**Logged:** 2026-09-13  
+**Priority:** backlog (iterasi berikutnya)  
+**Work:** Soft-validation / peringatan zona untuk Voucher Fisik Per Wilayah. Fokus hari ini hanya bug struktural batch (pre-fulfill fail+refund).
+
 ## TD-2026-09-13 — Catalog SQL server-side pagination (Fase 4)
 
 **Logged:** 2026-09-13 (after Fase 1–3 list pagination + sparse DTO)  

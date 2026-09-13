@@ -2,17 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ProcessVoucherPhysicalBatchItem;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductProvider;
 use App\Models\Provider;
 use App\Models\User;
 use App\Models\VoucherPhysicalBatch;
+use App\Models\VoucherPhysicalBatchItem;
 use App\Models\Wallet;
+use App\Services\ProductProviders\ProviderCircuitBreaker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -278,5 +282,58 @@ class VoucherPhysicalBatchFlowTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_provider_unavailable_pre_fulfill_fails_and_refunds_not_stuck_processing(): void
+    {
+        Sanctum::actingAs($this->user);
+        Queue::fake([ProcessVoucherPhysicalBatchItem::class]);
+
+        $before = (float) $this->wallet->fresh()->balance;
+
+        $response = $this->postJson('/api/v1/voucher-internet/physical-batches', [
+            'sku_code' => 'XLVIFISIK5GB',
+            'serials' => [
+                ['serial_number' => 'SNUNAVAIL01'],
+            ],
+            'pin' => '123456',
+            'idempotency_key' => 'batch-test-key-provider-unavailable',
+        ]);
+
+        $response->assertStatus(201);
+        $batchId = (int) $response->json('data.id');
+        $batch = VoucherPhysicalBatch::with('items')->findOrFail($batchId);
+        $item = $batch->items->first();
+        $this->assertNotNull($item);
+        $this->assertSame(VoucherPhysicalBatchItem::STATUS_QUEUED, $item->status);
+
+        // Digiflazz circuit OPEN → item job pre-fulfill gate fires provider_unavailable
+        // (Digi never called). Must fail+refund immediately — never stuck PROCESSING.
+        app(ProviderCircuitBreaker::class)->forceOpen('digiflazz', 'test_digi_unavailable');
+
+        $unitPrice = (float) $batch->unit_price;
+        $this->assertEquals($before - $unitPrice, (float) $this->wallet->fresh()->balance);
+
+        $job = new ProcessVoucherPhysicalBatchItem(
+            $item->id,
+            'digiflazz',
+            'XLVIFISIK5GB',
+            60
+        );
+        app()->call([$job, 'handle']);
+
+        $item->refresh();
+        $this->assertSame(VoucherPhysicalBatchItem::STATUS_FAILED, $item->status);
+        $this->assertSame('provider_unavailable', $item->failure_reason);
+        $this->assertNotNull($item->refunded_at);
+        $this->assertEquals($unitPrice, (float) $item->refund_amount);
+        $this->assertNull($item->provider_ref);
+
+        $this->assertEquals($before, (float) $this->wallet->fresh()->balance);
+
+        $batch->refresh();
+        $this->assertSame(VoucherPhysicalBatch::STATUS_COMPLETED_WITH_FAILURES, $batch->status);
+        $this->assertSame(1, $batch->failed_count);
+        $this->assertSame(0, $batch->success_count);
     }
 }

@@ -33,7 +33,13 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /** Outcomes that must never trigger an automatic refund — the order may still land. */
-    protected const AMBIGUOUS_REASONS = ['pending', 'timeout', 'provider_unavailable', 'provider_not_configured', 'ambiguous'];
+    protected const AMBIGUOUS_REASONS = ['pending', 'timeout', 'ambiguous', 'provider_exception'];
+
+    /**
+     * Pre-fulfill gate failures: Digiflazz was never called, so refund is safe.
+     * (Do NOT lump these with post-fulfill ambiguous outcomes.)
+     */
+    protected const PRE_FULFILL_FAILURE_REASONS = ['provider_unavailable', 'provider_not_configured'];
 
     public int $itemId;
 
@@ -97,14 +103,17 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
         $transaction = $item->batch->transaction;
 
         if (! $registry->has($this->providerCode) || ! $breaker->allowsFulfillment($this->providerCode)) {
-            $item->update(['failure_reason' => 'provider_unavailable']);
-            throw new \RuntimeException("Provider {$this->providerCode} unavailable for item {$this->itemId}");
+            // Gate blocked before fulfill() — no provider order exists; fail+refund immediately.
+            $this->markItemFailedAndRefund($item->id, 'provider_unavailable');
+
+            return;
         }
 
         $adapter = $registry->get($this->providerCode);
         if (! $adapter->isConfigured()) {
-            $item->update(['failure_reason' => 'provider_not_configured']);
-            throw new \RuntimeException("Provider {$this->providerCode} not configured");
+            $this->markItemFailedAndRefund($item->id, 'provider_not_configured');
+
+            return;
         }
 
         $refId = $transaction->invoice_number . '-' . $item->id . '-' . $item->retry_count;
@@ -215,6 +224,14 @@ class ProcessVoucherPhysicalBatchItem implements ShouldQueue, ShouldBeUnique
     {
         $item = VoucherPhysicalBatchItem::find($this->itemId);
         if (! $item || in_array($item->status, [VoucherPhysicalBatchItem::STATUS_SUCCESS, VoucherPhysicalBatchItem::STATUS_FAILED], true)) {
+            return;
+        }
+
+        // Retries exhausted. Ambiguous post-fulfill outcomes stay PROCESSING for manual review.
+        // Pre-fulfill gate failures (never called Digi) must refund — see PRE_FULFILL_FAILURE_REASONS.
+        if (in_array($item->failure_reason, self::PRE_FULFILL_FAILURE_REASONS, true)) {
+            $this->markItemFailedAndRefund($this->itemId, $item->failure_reason);
+
             return;
         }
 
