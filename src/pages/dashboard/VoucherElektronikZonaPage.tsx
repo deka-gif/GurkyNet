@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Copy, Printer, RefreshCw } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { ProductPicker } from '../../components/catalog/ProductPicker';
 import { TelkomselZonePicker } from '../../components/catalog/TelkomselZonePicker';
+import { CatalogLoadMoreButton } from '../../components/catalog/CatalogLoadMoreButton';
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
-import { operatorsMatch } from '../../utils/operatorMatch';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import { filterVoucherInternetProducts } from '../../utils/voucherInternetGuard';
@@ -20,14 +19,21 @@ import {
   telkomselNeedsZoneGate,
 } from '../../utils/telkomselVoucherZone';
 import { productService } from '../../services/product/product.service';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
+import { findCategoryProviderByName } from '../../utils/findCategoryProvider';
 
+function sortByPrice(rows: Product[]): Product[] {
+  return [...rows].sort((a, b) => a.price - b.price);
+}
+
+/** Voucher Elektronik zona page — providers-first + page-20 (web audit P1). */
 export const VoucherElektronikZonaPage = () => {
   const navigate = useNavigate();
   const { zona: zonaParam } = useParams<{ zona: string }>();
   const zona = zonaParam ? decodeURIComponent(zonaParam) : '';
 
   const { wallet, fetchWallet } = useWalletStore();
-  const { products, loading: productsLoading, fetchProducts } = useProductStore();
+  const pager = useProviderProductPager();
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
@@ -50,13 +56,14 @@ export const VoucherElektronikZonaPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category: 'voucher-internet', vi_mode: 'elektronik' });
-    const pending = consumePendingCheckout(`/dashboard/voucher-internet/elektronik/${encodeURIComponent(zona)}`);
+    const pending = consumePendingCheckout(
+      `/dashboard/voucher-internet/elektronik/${encodeURIComponent(zona)}`
+    );
     if (pending?.data) {
       setCheckoutData(pending.data);
       setResumePin(!!pending.resumePin);
     }
-  }, [fetchWallet, fetchProducts, zona]);
+  }, [fetchWallet, zona]);
 
   useEffect(() => {
     void productService.getTelkomselVoucherZoneReference().then((res) => {
@@ -66,17 +73,49 @@ export const VoucherElektronikZonaPage = () => {
     });
   }, []);
 
-  const voucherInternetProducts = useMemo(() => filterVoucherInternetProducts(products), [products]);
+  useEffect(() => {
+    if (!zona) return;
+    let cancelled = false;
+    (async () => {
+      const res = await productService.getCategoryProviders('voucher-internet', {
+        vi_mode: 'elektronik',
+      });
+      if (cancelled) return;
+      const providers = res.success && Array.isArray(res.data) ? res.data : [];
+      const match = findCategoryProviderByName(providers, zona);
+      if (!match?.providerId) {
+        pager.reset();
+        setErrorMsg('Provider tidak ditemukan di katalog voucher elektronik.');
+        return;
+      }
+      const result = await pager.loadInitial({
+        category: 'voucher-internet',
+        vi_mode: 'elektronik',
+        provider_id: match.providerId,
+      });
+      if (cancelled || !result) return;
+      const listed = filterVoucherInternetProducts(result.products).filter(isCatalogListed);
+      if (isTelkomselOperator(zona) && telkomselNeedsZoneGate(listed)) {
+        await pager.loadAllRemainingPages();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zona]);
 
-  const zonaProducts = useMemo(() => {
-    if (!zona) return [];
-    return voucherInternetProducts
-      .filter((p) => isCatalogListed(p) && operatorsMatch(p.operatorName, zona))
-      .sort((a, b) => a.price - b.price);
-  }, [voucherInternetProducts, zona]);
+  const zonaProducts = useMemo(
+    () => sortByPrice(filterVoucherInternetProducts(pager.products).filter(isCatalogListed)),
+    [pager.products]
+  );
 
-  const telkomselCatalogActive =
-    !!zona && isTelkomselOperator(zona) && zonaProducts.length > 0;
+  const visibleZonaProducts = useMemo(
+    () => sortByPrice(filterVoucherInternetProducts(pager.visibleProducts).filter(isCatalogListed)),
+    [pager.visibleProducts]
+  );
+
+  const telkomselCatalogActive = !!zona && isTelkomselOperator(zona) && zonaProducts.length > 0;
   const telkomselZoneGateNeeded =
     telkomselCatalogActive && telkomselNeedsZoneGate(zonaProducts);
   const telkomselNationalCatalogProducts = useMemo(
@@ -87,14 +126,20 @@ export const VoucherElektronikZonaPage = () => {
     if (!telkomselCatalogActive || !telkomselZoneLabel) return [];
     return filterProductsByZoneLabel(zonaProducts, telkomselZoneLabel);
   }, [telkomselCatalogActive, telkomselZoneLabel, zonaProducts]);
+
   const catalogProductsToShow = useMemo(() => {
-    if (!telkomselZoneGateNeeded) return zonaProducts;
-    if (telkomselNationalSelected) return telkomselNationalCatalogProducts;
+    if (!telkomselZoneGateNeeded) return visibleZonaProducts;
+    if (telkomselNationalSelected) {
+      return telkomselNationalCatalogProducts.slice(
+        0,
+        Math.min(visibleZonaProducts.length || 20, telkomselNationalCatalogProducts.length)
+      );
+    }
     if (telkomselZoneLabel) return telkomselRegionalCatalogProducts;
     return [];
   }, [
     telkomselZoneGateNeeded,
-    zonaProducts,
+    visibleZonaProducts,
     telkomselNationalSelected,
     telkomselNationalCatalogProducts,
     telkomselZoneLabel,
@@ -183,11 +228,18 @@ export const VoucherElektronikZonaPage = () => {
       )}
 
       {showProductPicker && catalogProductsToShow.length > 0 && (
-        <ProductPicker
-          products={catalogProductsToShow}
-          selected={selectedProduct}
-          onSelect={setSelectedProduct}
-        />
+        <>
+          <ProductPicker
+            products={catalogProductsToShow}
+            selected={selectedProduct}
+            onSelect={setSelectedProduct}
+          />
+          <CatalogLoadMoreButton
+            visible={pager.canLoadMore && !telkomselZoneLabel}
+            loading={pager.loadingMore}
+            onClick={() => void pager.loadMore()}
+          />
+        </>
       )}
 
       {checkoutAction}
@@ -198,7 +250,11 @@ export const VoucherElektronikZonaPage = () => {
     return (
       <div className="p-8 text-center text-sm text-gray-500">
         Provider tidak valid.{' '}
-        <button type="button" onClick={() => navigate('/dashboard/voucher-internet')} className="text-primary-600 font-bold">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/voucher-internet')}
+          className="text-primary-600 font-bold"
+        >
           Kembali
         </button>
       </div>
@@ -219,12 +275,16 @@ export const VoucherElektronikZonaPage = () => {
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Voucher Elektronik</h2>
+              <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
+                Voucher Elektronik
+              </h2>
               <span className="text-[10px] font-black bg-primary-50 text-primary-700 px-2.5 py-1 rounded-lg border border-primary-100 uppercase">
                 {zona}
               </span>
             </div>
-            <p className="text-sm text-gray-500 mt-1">Bayar & generate kode voucher — copy atau print setelah sukses.</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Bayar & generate kode voucher — copy atau print setelah sukses.
+            </p>
           </div>
         </div>
         <div className="bg-primary-50 px-4 py-2 rounded-2xl border border-primary-100 flex items-center gap-2">
@@ -235,13 +295,13 @@ export const VoucherElektronikZonaPage = () => {
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5">
-        {productsLoading ? (
+        {pager.loading && zonaProducts.length === 0 ? (
           <div className="py-8 text-center">
             <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
           </div>
         ) : zonaProducts.length === 0 ? (
           <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
-            Tidak ada produk untuk provider ini.
+            {pager.error || 'Tidak ada produk untuk provider ini.'}
           </div>
         ) : (
           renderCatalogSection(
@@ -290,7 +350,8 @@ export const VoucherElektronikZonaPage = () => {
           onSuccess={(trx: any) => {
             setResumePin(false);
             fetchWallet();
-            const code = trx?.notes || trx?.note || trx?.sn || trx?.serial_number || trx?.transactionCode || null;
+            const code =
+              trx?.notes || trx?.note || trx?.sn || trx?.serial_number || trx?.transactionCode || null;
             if (code) {
               setVoucherCode(String(code));
             }

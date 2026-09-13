@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useProductStore } from '../../store/product.store';
 import { ProductPicker } from '../../components/catalog/ProductPicker';
 import { PhysicalBatchCheckout } from '../../components/catalog/PhysicalBatchCheckout';
 import { VoucherCameraScan } from '../../components/catalog/VoucherCameraScan';
+import { CatalogLoadMoreButton } from '../../components/catalog/CatalogLoadMoreButton';
 import { Product } from '../../types';
 import { formatIDR } from '../../utils/currency';
 import { operatorsMatch } from '../../utils/operatorMatch';
@@ -22,10 +22,17 @@ import {
   savePendingScan,
   type ScannedSerial,
 } from '../../utils/voucherPhysicalScan';
+import { productService } from '../../services/product/product.service';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
+import { findCategoryProviderByName } from '../../utils/findCategoryProvider';
 
 type FisikStage = 'scan' | 'pilih-produk';
 
 const MAX_BATCH_ITEMS = 200;
+
+function sortByPrice(rows: Product[]): Product[] {
+  return [...rows].sort((a, b) => a.price - b.price);
+}
 
 export const VoucherFisikZonaPage = () => {
   const navigate = useNavigate();
@@ -33,7 +40,7 @@ export const VoucherFisikZonaPage = () => {
   const zona = zonaParam ? decodeURIComponent(zonaParam) : '';
 
   const { wallet, fetchWallet } = useWalletStore();
-  const { products, fetchProducts } = useProductStore();
+  const pager = useProviderProductPager();
 
   const [stage, setStage] = useState<FisikStage>('scan');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -64,7 +71,6 @@ export const VoucherFisikZonaPage = () => {
 
   useEffect(() => {
     fetchWallet();
-    fetchProducts({ category: 'voucher-internet', vi_mode: 'fisik' });
 
     if (!restoredScanOnce.current) {
       restoredScanOnce.current = true;
@@ -74,7 +80,32 @@ export const VoucherFisikZonaPage = () => {
         setStage('scan');
       }
     }
-  }, [fetchWallet, fetchProducts, zona]);
+  }, [fetchWallet, zona]);
+
+  useEffect(() => {
+    if (!zona) return;
+    let cancelled = false;
+    (async () => {
+      const res = await productService.getCategoryProviders('voucher-internet', { vi_mode: 'fisik' });
+      if (cancelled) return;
+      const providers = res.success && Array.isArray(res.data) ? res.data : [];
+      const match = findCategoryProviderByName(providers, zona);
+      if (!match?.providerId) {
+        pager.reset();
+        setErrorMsg('Provider tidak ditemukan di katalog voucher fisik.');
+        return;
+      }
+      await pager.loadInitial({
+        category: 'voucher-internet',
+        vi_mode: 'fisik',
+        provider_id: match.providerId,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zona]);
 
   useEffect(() => {
     if (scannedList.length === 0) {
@@ -84,22 +115,23 @@ export const VoucherFisikZonaPage = () => {
     savePendingScan({ zona, skuCode: selectedProduct?.code ?? null, list: scannedList });
   }, [zona, selectedProduct, scannedList]);
 
-  const voucherInternetProducts = useMemo(() => filterVoucherInternetProducts(products), [products]);
-
-  const zonaProducts = useMemo(() => {
-    if (!zona) return [];
-    return voucherInternetProducts
-      .filter((p) => isCatalogListed(p) && operatorsMatch(p.operatorName, zona))
-      .sort((a, b) => a.price - b.price);
-  }, [voucherInternetProducts, zona]);
-
-  // Voucher Fisik is national-only — Telkomsel regional-zone products are always excluded here,
-  // regardless of whether the shared zone-gate would normally require picking a region.
-  const telkomselCatalogActive = !!zona && isTelkomselOperator(zona) && zonaProducts.length > 0;
-  const catalogProductsToShow = useMemo(
-    () => (telkomselCatalogActive ? telkomselNationalProducts(zonaProducts) : zonaProducts),
-    [telkomselCatalogActive, zonaProducts]
+  const zonaProducts = useMemo(
+    () => sortByPrice(filterVoucherInternetProducts(pager.products).filter(isCatalogListed)),
+    [pager.products]
   );
+
+  const visibleZonaProducts = useMemo(
+    () => sortByPrice(filterVoucherInternetProducts(pager.visibleProducts).filter(isCatalogListed)),
+    [pager.visibleProducts]
+  );
+
+  // Item 2: providers-first. Per Wilayah flow is Item 3 — keep national-only filter until then.
+  const telkomselCatalogActive = !!zona && isTelkomselOperator(zona) && zonaProducts.length > 0;
+  const catalogProductsToShow = useMemo(() => {
+    const base = telkomselCatalogActive ? telkomselNationalProducts(zonaProducts) : zonaProducts;
+    if (!telkomselCatalogActive) return visibleZonaProducts;
+    return base.slice(0, Math.min(visibleZonaProducts.length || 20, base.length));
+  }, [telkomselCatalogActive, zonaProducts, visibleZonaProducts]);
 
   const physicalTotal = selectedProduct ? selectedProduct.price * scannedList.length : 0;
 
@@ -337,11 +369,24 @@ export const VoucherFisikZonaPage = () => {
             </button>
           </div>
 
-          <ProductPicker
-            products={catalogProductsToShow}
-            selected={selectedProduct}
-            onSelect={setSelectedProduct}
-          />
+          {pager.loading && catalogProductsToShow.length === 0 ? (
+            <div className="py-8 text-center">
+              <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
+            </div>
+          ) : (
+            <>
+              <ProductPicker
+                products={catalogProductsToShow}
+                selected={selectedProduct}
+                onSelect={setSelectedProduct}
+              />
+              <CatalogLoadMoreButton
+                visible={pager.canLoadMore}
+                loading={pager.loadingMore}
+                onClick={() => void pager.loadMore()}
+              />
+            </>
+          )}
 
           <button
             type="button"

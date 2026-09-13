@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, RefreshCw, Smartphone, Store, Wifi, Zap } from 'lucide-react';
 import { useWalletStore } from '../../store/wallet.store';
-import { useProductStore } from '../../store/product.store';
 import { CheckoutSummary, CheckoutData } from '../../components/CheckoutSummary';
 import { ProductPicker } from '../../components/catalog/ProductPicker';
 import { TelkomselZonePicker } from '../../components/catalog/TelkomselZonePicker';
+import { CatalogLoadMoreButton } from '../../components/catalog/CatalogLoadMoreButton';
 import { Product } from '../../types';
 import { consumePendingCheckout } from '../../utils/pinGate';
 import { formatIDR } from '../../utils/currency';
@@ -20,16 +20,31 @@ import {
   telkomselNationalProducts,
   telkomselNeedsZoneGate,
 } from '../../utils/telkomselVoucherZone';
-import { productService } from '../../services/product/product.service';
+import {
+  productService,
+  type CategoryProviderSummary,
+} from '../../services/product/product.service';
+import { useProviderProductPager } from '../../hooks/useProviderProductPager';
+import { findCategoryProviderByName } from '../../utils/findCategoryProvider';
 
 type Mode = 'tembak' | 'elektronik' | 'fisik';
 
+function sortByPrice(rows: Product[]): Product[] {
+  return [...rows].sort((a, b) => a.price - b.price);
+}
+
+/**
+ * Voucher Internet hub — providers-first + page-20 load-more (web audit P1).
+ * Modes elektronik/fisik navigate to zona pages; tembak loads products on-demand by operator.
+ */
 export const VoucherInternetPage = () => {
   const navigate = useNavigate();
   const { wallet, fetchWallet } = useWalletStore();
-  const { products, loading: productsLoading, fetchProducts } = useProductStore();
+  const pager = useProviderProductPager();
 
   const [mode, setMode] = useState<Mode>('tembak');
+  const [brandProviders, setBrandProviders] = useState<CategoryProviderSummary[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
   const [zona, setZona] = useState<string | null>(null);
   const [phoneNo, setPhoneNo] = useState('');
   const [autoProvider, setAutoProvider] = useState<string | null>(null);
@@ -42,6 +57,8 @@ export const VoucherInternetPage = () => {
   const [telkomselNationalSelected, setTelkomselNationalSelected] = useState(false);
   const [telkomselZoneLabel, setTelkomselZoneLabel] = useState<string | null>(null);
   const [telkomselZoneReference, setTelkomselZoneReference] = useState<Record<string, string[]>>({});
+
+  const viMode = mode === 'fisik' ? 'fisik' : mode === 'elektronik' ? 'elektronik' : 'tembak';
 
   useEffect(() => {
     if (errorMsg) toastError('Terjadi Kesalahan', errorMsg);
@@ -61,11 +78,6 @@ export const VoucherInternetPage = () => {
   }, [fetchWallet]);
 
   useEffect(() => {
-    const viMode = mode === 'fisik' ? 'fisik' : mode === 'elektronik' ? 'elektronik' : 'tembak';
-    void fetchProducts({ category: 'voucher-internet', vi_mode: viMode });
-  }, [fetchProducts, mode]);
-
-  useEffect(() => {
     void productService.getTelkomselVoucherZoneReference().then((res) => {
       if (res.success && res.data?.zones) {
         setTelkomselZoneReference(res.data.zones);
@@ -74,46 +86,82 @@ export const VoucherInternetPage = () => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setProvidersLoading(true);
+    setBrandProviders([]);
+    pager.reset();
+    void productService
+      .getCategoryProviders('voucher-internet', { vi_mode: viMode })
+      .then((res) => {
+        if (cancelled) return;
+        const rows =
+          res.success && Array.isArray(res.data)
+            ? [...res.data].sort((a, b) => a.name.localeCompare(b.name, 'id'))
+            : [];
+        setBrandProviders(rows);
+      })
+      .finally(() => {
+        if (!cancelled) setProvidersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset/load on mode only
+  }, [viMode]);
+
+  useEffect(() => {
     if (mode === 'tembak') {
       setAutoProvider(detectOperatorFromPhone(phoneNo));
     }
   }, [phoneNo, mode]);
 
-  const voucherInternetProducts = useMemo(() => filterVoucherInternetProducts(products), [products]);
-
-  const zonas = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of voucherInternetProducts) {
-      if (!isCatalogListed(p)) continue;
-      const name = (p.operatorName || 'Umum').trim();
-      map.set(name, (map.get(name) || 0) + 1);
-    }
-    return Array.from(map.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [voucherInternetProducts]);
-
-  const zonaProducts = useMemo(() => {
-    if (!zona) return [];
-    return voucherInternetProducts
-      .filter((p) => isCatalogListed(p) && operatorsMatch(p.operatorName, zona))
-      .sort((a, b) => a.price - b.price);
-  }, [voucherInternetProducts, zona]);
-
-  const tembakProducts = useMemo(() => {
-    const provider = autoProvider || zona;
-    if (!provider) return [];
-    return voucherInternetProducts
-      .filter((p) => isCatalogListed(p) && operatorsMatch(p.operatorName, provider))
-      .sort((a, b) => a.price - b.price);
-  }, [voucherInternetProducts, autoProvider, zona]);
-
-  const phoneDigits = phoneNo.replace(/\D/g, '');
-  const phoneReady = phoneDigits.length >= 10;
-  const tembakShowProducts = phoneReady && !!(autoProvider || zona);
-
   const activeCatalogProvider = mode === 'tembak' ? autoProvider || zona : zona;
-  const catalogBaseProducts = mode === 'tembak' ? tembakProducts : zonaProducts;
+
+  const loadOperatorCatalog = useCallback(
+    async (providerLabel: string) => {
+      const match = findCategoryProviderByName(brandProviders, providerLabel);
+      if (!match?.providerId) {
+        pager.reset();
+        setErrorMsg('Provider tidak ditemukan di katalog voucher internet.');
+        return;
+      }
+      setErrorMsg(null);
+      const result = await pager.loadInitial({
+        category: 'voucher-internet',
+        vi_mode: 'tembak',
+        provider_id: match.providerId,
+      });
+      if (!result) return;
+      const listed = filterVoucherInternetProducts(result.products).filter(isCatalogListed);
+      // Zone gate needs full set for Telkomsel labels.
+      if (isTelkomselOperator(providerLabel) && telkomselNeedsZoneGate(listed)) {
+        await pager.loadAllRemainingPages();
+      }
+    },
+    [brandProviders, pager]
+  );
+
+  useEffect(() => {
+    if (mode !== 'tembak') return;
+    if (!activeCatalogProvider) {
+      pager.reset();
+      return;
+    }
+    if (providersLoading || brandProviders.length === 0) return;
+    void loadOperatorCatalog(activeCatalogProvider);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, activeCatalogProvider, brandProviders, providersLoading]);
+
+  const catalogBaseProducts = useMemo(
+    () => sortByPrice(filterVoucherInternetProducts(pager.products).filter(isCatalogListed)),
+    [pager.products]
+  );
+
+  const visibleBaseProducts = useMemo(() => {
+    const listed = filterVoucherInternetProducts(pager.visibleProducts).filter(isCatalogListed);
+    return sortByPrice(listed);
+  }, [pager.visibleProducts]);
+
   const telkomselCatalogActive =
     !!activeCatalogProvider && isTelkomselOperator(activeCatalogProvider) && catalogBaseProducts.length > 0;
   const telkomselZoneGateNeeded =
@@ -126,14 +174,19 @@ export const VoucherInternetPage = () => {
     if (!telkomselCatalogActive || !telkomselZoneLabel) return [];
     return filterProductsByZoneLabel(catalogBaseProducts, telkomselZoneLabel);
   }, [telkomselCatalogActive, telkomselZoneLabel, catalogBaseProducts]);
+
   const telkomselCatalogProductsToShow = useMemo(() => {
-    if (!telkomselZoneGateNeeded) return catalogBaseProducts;
-    if (telkomselNationalSelected) return telkomselNationalCatalogProducts;
+    if (!telkomselZoneGateNeeded) return visibleBaseProducts;
+    if (telkomselNationalSelected) {
+      const national = telkomselNationalCatalogProducts;
+      const limit = visibleBaseProducts.length || national.length;
+      return national.slice(0, Math.min(limit, national.length));
+    }
     if (telkomselZoneLabel) return telkomselRegionalCatalogProducts;
     return [];
   }, [
     telkomselZoneGateNeeded,
-    catalogBaseProducts,
+    visibleBaseProducts,
     telkomselNationalSelected,
     telkomselNationalCatalogProducts,
     telkomselZoneLabel,
@@ -171,6 +224,7 @@ export const VoucherInternetPage = () => {
     setAutoProvider(null);
     resetTelkomselZone();
     resetSelection();
+    pager.reset();
   };
 
   const startCheckout = () => {
@@ -206,11 +260,32 @@ export const VoucherInternetPage = () => {
         Mode: mode,
         Zona: zona || autoProvider || '-',
       },
+      voucherInternetMode: 'tembak',
     });
   };
 
+  const phoneDigits = phoneNo.replace(/\D/g, '');
+  const phoneReady = phoneDigits.length >= 10;
+  const tembakShowProducts = phoneReady && !!(autoProvider || zona);
+
+  const productsForPicker = telkomselZoneGateNeeded
+    ? telkomselCatalogProductsToShow
+    : visibleBaseProducts;
+
   const renderCatalogProductSection = (checkoutAction?: ReactNode) => (
     <>
+      {(pager.loading || providersLoading) && catalogBaseProducts.length === 0 ? (
+        <div className="py-8 text-center">
+          <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
+        </div>
+      ) : null}
+
+      {pager.error ? (
+        <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+          {pager.error}
+        </p>
+      ) : null}
+
       {telkomselZoneGateNeeded && (
         <TelkomselZonePicker
           products={catalogBaseProducts}
@@ -231,12 +306,21 @@ export const VoucherInternetPage = () => {
         />
       )}
 
-      {showTelkomselProductPicker && telkomselCatalogProductsToShow.length > 0 && (
-        <ProductPicker
-          products={telkomselCatalogProductsToShow}
-          selected={selectedProduct}
-          onSelect={setSelectedProduct}
-        />
+      {showTelkomselProductPicker && productsForPicker.length > 0 && (
+        <>
+          <ProductPicker
+            products={productsForPicker}
+            selected={selectedProduct}
+            onSelect={setSelectedProduct}
+          />
+          <CatalogLoadMoreButton
+            visible={pager.canLoadMore && !telkomselZoneLabel}
+            loading={pager.loadingMore}
+            onClick={() => void pager.loadMore()}
+          />
+          {/* Regional zone lists are usually small; still allow load-more on national/full list. */}
+          {telkomselZoneLabel ? null : null}
+        </>
       )}
 
       {checkoutAction}
@@ -290,19 +374,19 @@ export const VoucherInternetPage = () => {
         {mode !== 'tembak' && (
           <div className="space-y-2.5">
             <h4 className="font-extrabold text-gray-900 text-sm">1. Pilih Zona / Provider</h4>
-            {productsLoading ? (
+            {providersLoading ? (
               <div className="py-8 text-center">
                 <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
               </div>
-            ) : zonas.length === 0 ? (
+            ) : brandProviders.length === 0 ? (
               <div className="py-8 text-center border border-dashed border-gray-200 rounded-2xl text-xs text-gray-400">
                 Katalog voucher internet kosong. Sinkronkan produk provider (kategori voucher-internet) di Operations.
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {zonas.map((z) => (
+                {brandProviders.map((z) => (
                   <button
-                    key={z.name}
+                    key={z.providerId}
                     type="button"
                     onClick={() => {
                       if (mode === 'elektronik') {
@@ -357,15 +441,15 @@ export const VoucherInternetPage = () => {
                 <p className="text-xs text-amber-700 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
                   Operator tidak terdeteksi otomatis, pilih manual:
                 </p>
-                {productsLoading ? (
+                {providersLoading ? (
                   <div className="py-6 text-center">
                     <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {zonas.map((z) => (
+                    {brandProviders.map((z) => (
                       <button
-                        key={z.name}
+                        key={z.providerId}
                         type="button"
                         onClick={() => {
                           setZona(z.name);
