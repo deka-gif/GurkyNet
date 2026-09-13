@@ -664,7 +664,9 @@ export function ProviderCatalogFlow({
       customDetails: {
         'E-Wallet': selectedProvider,
         'Nomor HP': ewalletInquiry.customer_no,
-        'Nama Akun': ewalletInquiry.customer_name,
+        'Nama Akun': ewalletInquiry.customer_name?.trim()
+          ? ewalletInquiry.customer_name.trim()
+          : 'Nama pelanggan tidak tersedia dari provider, pastikan nomor tujuan sudah benar',
         Nominal: formatIDR(nominal),
         Harga: formatIDR(ewalletInquiry.selling_price),
       },
@@ -920,7 +922,15 @@ export function ProviderCatalogFlow({
           </p>
           <SummaryRow label="E-Wallet" value={selectedProvider || ewalletInquiry.provider_name || '-'} />
           <SummaryRow label="Nomor HP" value={ewalletInquiry.customer_no} />
-          <SummaryRow label="Nama Akun" value={ewalletInquiry.customer_name} emphasize />
+          <SummaryRow
+            label="Nama Akun"
+            value={
+              ewalletInquiry.customer_name?.trim()
+                ? ewalletInquiry.customer_name.trim()
+                : 'Nama pelanggan tidak tersedia dari provider, pastikan nomor tujuan sudah benar'
+            }
+            emphasize={Boolean(ewalletInquiry.customer_name?.trim())}
+          />
           <SummaryRow label="Nominal" value={formatIDR(nominal)} />
           {adminFee > 0 && <SummaryRow label="Biaya Admin" value={formatIDR(adminFee)} />}
           <SummaryRow label="Total" value={formatIDR(ewalletInquiry.selling_price)} large />
