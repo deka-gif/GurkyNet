@@ -289,6 +289,16 @@ export function ProviderCatalogFlow({
       .sort((a, b) => a.price - b.price);
   }, [pagedProducts, selectedProvider, isGameInquiry, isEwalletInquiry]);
 
+  /** E-Wallet open-amount hides the product grid — auto-pick Bebas Nominal so Lanjutkan appears. */
+  useEffect(() => {
+    if (!isEwalletInquiry || !selectedProvider) return;
+    if (selectedProduct) return;
+    const open = providerProducts.find(
+      (p) => p.is_open_amount === true || /bebas\s*nominal/i.test(String(p.name ?? ''))
+    );
+    if (open) setSelectedProduct(open);
+  }, [isEwalletInquiry, selectedProvider, providerProducts, selectedProduct]);
+
   const langgananPackages = useMemo(
     () => (isLanggananMode ? groupLanggananPackages(providerProducts) : []),
     [isLanggananMode, providerProducts]
