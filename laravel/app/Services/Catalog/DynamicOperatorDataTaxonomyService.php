@@ -42,8 +42,127 @@ class DynamicOperatorDataTaxonomyService
         return [
             'chips' => $this->chipsForOperator($legacy),
             'operator' => $legacy->displayName(),
-            'regionOptions' => $legacy->regionOptions(),
+            // Inventory-backed like TYPE chips — hide curated regions with zero eligible SKUs (audit Item 8).
+            'regionOptions' => $this->distinctEligibleRegions($legacy),
         ];
+    }
+
+    /**
+     * Region chips present in ≥1 catalog-eligible SKU (name / Digi desc / zone_label).
+     * Curated config labels keep display order; new zone_label values not in config are appended
+     * when they look regional (product mentionsRegion) so Digi sync can surface them without code edits.
+     *
+     * @return list<string>
+     */
+    public function distinctEligibleRegions(OperatorDataTaxonomyService $operator): array
+    {
+        $curated = $operator->regionOptions();
+        $products = $this->eligibleDataProductsForOperator($operator);
+        if ($products->isEmpty()) {
+            return [];
+        }
+
+        // Longest label first so "East Kalsul" wins over "East" for a single product.
+        $longestFirst = $curated;
+        usort($longestFirst, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        $hit = [];
+        $extras = [];
+
+        foreach ($products as $product) {
+            $desc = $operator->descriptionFor($product);
+            $zone = trim((string) ($product->zone_label ?? ''));
+            $hay = Str::lower(trim($product->name.' '.($desc ?? '').' '.$zone));
+
+            $matchedCurated = false;
+            foreach ($longestFirst as $region) {
+                if ($this->textMentionsRegionLabel($hay, $region)
+                    || ($zone !== '' && Str::lower($zone) === Str::lower($region))
+                ) {
+                    $hit[$region] = true;
+                    $matchedCurated = true;
+                    break;
+                }
+            }
+
+            if ($zone !== '' && ! $matchedCurated) {
+                $already = false;
+                foreach ($curated as $region) {
+                    if (Str::lower($region) === Str::lower($zone)) {
+                        $already = true;
+                        break;
+                    }
+                }
+                // Only append free-form zones when the product is region-gated (not Digi type reuse).
+                if (! $already && $operator->mentionsRegion((string) $product->name, $desc)) {
+                    $extras[$zone] = true;
+                }
+            }
+
+            // Digi often embeds "Area 4" etc. before config is updated — surface them automatically.
+            if (preg_match_all('/\barea\s*(\d+)\b/iu', $hay, $areaMatches)) {
+                foreach ($areaMatches[1] as $n) {
+                    $label = 'Area '.(int) $n;
+                    $foundCurated = false;
+                    foreach ($curated as $region) {
+                        if (Str::lower($region) === Str::lower($label)) {
+                            $hit[$region] = true;
+                            $foundCurated = true;
+                            break;
+                        }
+                    }
+                    if (! $foundCurated) {
+                        $extras[$label] = true;
+                    }
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($curated as $region) {
+            if (isset($hit[$region])) {
+                $out[] = $region;
+            }
+        }
+
+        $extraLabels = array_keys($extras);
+        natcasesort($extraLabels);
+        foreach ($extraLabels as $label) {
+            $exists = false;
+            foreach ($out as $o) {
+                if (Str::lower($o) === Str::lower($label)) {
+                    $exists = true;
+                    break;
+                }
+            }
+            if (! $exists) {
+                $out[] = $label;
+            }
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * Match a region display label inside product haystack (case-insensitive).
+     * Short tokens use word boundaries; longer labels use substring (align OperatorDataTaxonomyService).
+     */
+    protected function textMentionsRegionLabel(string $hayLower, string $regionLabel): bool
+    {
+        $kw = Str::lower(trim($regionLabel));
+        if ($kw === '' || $hayLower === '') {
+            return false;
+        }
+
+        $compact = preg_replace('/[^a-z0-9]+/', '', $kw) ?? '';
+        if (strlen($compact) <= 3) {
+            return (bool) preg_match(
+                '/(?<![a-z0-9])'.preg_quote($kw, '/').'(?![a-z0-9])/iu',
+                $hayLower
+            );
+        }
+
+        return str_contains($hayLower, $kw);
     }
 
     /**

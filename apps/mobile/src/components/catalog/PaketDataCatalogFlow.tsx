@@ -26,7 +26,7 @@ import {
   DetectedOperator,
   detectOperatorFromPhone,
 } from '../../utils/detectOperator';
-import { DATA_PAKET_CONFIGS, DataChip, regionOptionsForOperator } from '../../utils/dataPaketConfig';
+import { DATA_PAKET_CONFIGS, DataChip } from '../../utils/dataPaketConfig';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
 import { isValidPhoneTarget, sanitizePhoneDigits } from '../../utils/targetValidation';
 import { sortProductsByPriceAsc } from '../../utils/sortProductsByPrice';
@@ -57,6 +57,7 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
   const [keyword, setKeyword] = useState('');
   const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [chips, setChips] = useState<DataChip[]>([]);
+  const [regionOptions, setRegionOptions] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -67,7 +68,6 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
 
   const operator = useMemo(() => detectOperatorFromPhone(phoneNo), [phoneNo]);
   const config = operator ? DATA_PAKET_CONFIGS[operator as DetectedOperator] : null;
-  const regionOptions = useMemo(() => regionOptionsForOperator(operator), [operator]);
   const phoneReady = isValidPhoneTarget(phoneNo);
 
   // Mirror web TelkomselPaketDataCatalog — debounce search before product refetch.
@@ -79,12 +79,14 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
   useEffect(() => {
     if (!config) {
       setChips([]);
+      setRegionOptions([]);
       setActiveGroup(null);
       setKeyword('');
       setDebouncedKeyword('');
       return;
     }
     setChips(config.defaultChips);
+    setRegionOptions([]);
     setActiveGroup(null);
     setKeyword('');
     setDebouncedKeyword('');
@@ -96,9 +98,16 @@ export function PaketDataCatalogFlow({ purchaseBanner }: Props) {
         if (res.success && Array.isArray(res.data?.chips) && res.data.chips.length > 0) {
           setChips(res.data.chips as DataChip[]);
         }
-        // API fail / empty → keep Semua skeleton only (never restore hardcode taxonomy).
+        // Inventory-backed regions from taxonomy (audit Item 8) — never FE hardcode.
+        if (res.success && Array.isArray(res.data?.regionOptions)) {
+          setRegionOptions(res.data.regionOptions.filter((r): r is string => typeof r === 'string' && r.trim() !== ''));
+        } else {
+          setRegionOptions([]);
+        }
+        // API fail / empty chips → keep Semua skeleton only (never restore hardcode taxonomy).
       } catch {
-        // Keep Semua skeleton.
+        // Keep Semua skeleton; clear regions on failure.
+        setRegionOptions([]);
       }
     })();
     return () => {

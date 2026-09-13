@@ -27,33 +27,6 @@ import { formatIDR } from '../../utils/currency';
 import { isCatalogListed, isProductPurchasable } from '../../utils/catalogAvailability';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 
-const XL_REGIONS = ['Sumatera', 'West', 'Central', 'East', 'East Kalsul'];
-const TELKOMSEL_REGIONS = ['Area 1', 'Area 2', 'Area 3'];
-const INDOSAT_REGIONS = [
-  'Jabodetabek',
-  'Jawa Barat',
-  'Jawa Tengah',
-  'EJBN',
-  'Sumatera',
-  'Kalisumapa',
-];
-const TRI_REGIONS = ['Jakarta Raya', 'Jawa Barat', 'Jawa Tengah', 'EJBN', 'Lokal'];
-const AXIS_REGIONS = [
-  'Jawa Timur',
-  'Jawa Bali Nusra',
-  'Non Jawa Bali Nusra',
-  'Sukabumi',
-  'Semarang-Salatiga',
-  'Salatiga',
-  'Kendal',
-  'Banyuwangi Probolinggo',
-  'Madura Sidoarjo Malang Sumbawa',
-  'Salatiga Jatim Sulawesi',
-  'Sulawesi Ewako',
-  'Sulutra',
-  'NTT',
-];
-
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
   const { products, loading: productsLoading, fetchProducts } = useProductStore();
@@ -65,8 +38,8 @@ export const PaketDataPage = () => {
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [resumePin, setResumePin] = useState(false);
   const [regionDialog, setRegionDialog] = useState<Product | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<string>('Area 1');
-  const [regionOptions, setRegionOptions] = useState<string[]>(TELKOMSEL_REGIONS);
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const [regionOptions, setRegionOptions] = useState<string[]>([]);
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -119,39 +92,39 @@ export const PaketDataPage = () => {
       const prefix = cleanNo.slice(0, 4);
       if (['0851'].includes(prefix)) {
         setProvider('by.U');
-        setRegionOptions([]);
       } else if (['0811', '0812', '0813', '0821', '0822', '0852', '0853', '0823'].includes(prefix)) {
         setProvider('Telkomsel');
-        setRegionOptions(TELKOMSEL_REGIONS);
-        setSelectedRegion(TELKOMSEL_REGIONS[0]);
       } else if (['0814', '0815', '0816', '0855', '0856', '0857', '0858'].includes(prefix)) {
         setProvider('Indosat');
-        setRegionOptions(INDOSAT_REGIONS);
-        setSelectedRegion(INDOSAT_REGIONS[0]);
       } else if (['0817', '0818', '0819', '0859', '0877', '0878'].includes(prefix)) {
         setProvider('XL Axiata');
-        setRegionOptions(XL_REGIONS);
-        setSelectedRegion(XL_REGIONS[0]);
       } else if (['0895', '0896', '0897', '0898', '0899'].includes(prefix)) {
         setProvider('Tri (3)');
-        setRegionOptions(TRI_REGIONS);
-        setSelectedRegion(TRI_REGIONS[0]);
       } else if (['0831', '0832', '0833', '0838'].includes(prefix)) {
         setProvider('Axis');
-        setRegionOptions(AXIS_REGIONS);
-        setSelectedRegion(AXIS_REGIONS[0]);
       } else if (['0881', '0882', '0883', '0884', '0885', '0886', '0887', '0888', '0889'].includes(prefix)) {
         setProvider('Smartfren');
-        setRegionOptions([]);
       } else {
         setProvider(null);
+        setRegionOptions([]);
+        setSelectedRegion('');
       }
     } else {
       setProvider(null);
       setSelectedProduct(null);
       setShowCheckoutPanel(false);
+      setRegionOptions([]);
+      setSelectedRegion('');
     }
   }, [phoneNo]);
+
+  useEffect(() => {
+    if (regionOptions.length > 0) {
+      setSelectedRegion((prev) => (regionOptions.includes(prev) ? prev : regionOptions[0]));
+    } else {
+      setSelectedRegion('');
+    }
+  }, [regionOptions]);
 
   const handleCheckout = async () => {
     if (!provider) {
@@ -278,6 +251,7 @@ export const PaketDataPage = () => {
               onSelectProduct={setSelectedProduct}
               onBuy={() => setShowCheckoutPanel(true)}
               onRegionNeeded={(p) => setRegionDialog(p)}
+              onRegionOptionsChange={setRegionOptions}
             />
           )}
 

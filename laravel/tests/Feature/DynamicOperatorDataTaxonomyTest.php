@@ -192,6 +192,27 @@ class DynamicOperatorDataTaxonomyTest extends TestCase
         }
     }
 
+    public function test_region_options_inventory_backed_hides_empty_and_keeps_hits(): void
+    {
+        // No region in names → empty regionOptions (not full Telkomsel Area 1–3 hardcode).
+        $this->makeDataProduct('tsel-plain', 'Internet Sakti 10GB', 'Internet Sakti');
+        $svc = app(DynamicOperatorDataTaxonomyService::class);
+        $this->assertSame([], $svc->taxonomyFor('telkomsel')['regionOptions']);
+
+        // Area 2 product → only Area 2 chip.
+        $this->makeDataProduct('tsel-a2', 'Internet Sakti Area 2 5GB', 'Internet Sakti');
+        $regions = $svc->taxonomyFor('telkomsel')['regionOptions'];
+        $this->assertSame(['Area 2'], $regions);
+
+        // New Digi Area 4 (not in config) appears automatically.
+        $this->makeDataProduct('tsel-a4', 'Internet Sakti Area 4 3GB', 'Internet Sakti');
+        $regions2 = $svc->taxonomyFor('telkomsel')['regionOptions'];
+        $this->assertContains('Area 2', $regions2);
+        $this->assertContains('Area 4', $regions2);
+        $this->assertNotContains('Area 1', $regions2);
+        $this->assertNotContains('Area 3', $regions2);
+    }
+
     public function test_legacy_keyword_chips_not_returned_by_dynamic_service(): void
     {
         $this->makeDataProduct('tsel-is', 'Internet Sakti 10GB', 'Internet Sakti');

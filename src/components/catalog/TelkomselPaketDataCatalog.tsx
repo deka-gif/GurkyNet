@@ -29,6 +29,8 @@ type Props = {
   onSelectProduct: (p: Product) => void;
   onBuy: (p: Product) => void;
   onRegionNeeded?: (product: Product) => void;
+  /** Inventory-backed region chips from taxonomy API (audit Item 8). */
+  onRegionOptionsChange?: (regions: string[]) => void;
   /** Master template config — defaults to Telkomsel */
   config?: OperatorPaketCatalogConfig;
 };
@@ -135,6 +137,7 @@ export function TelkomselPaketDataCatalog({
   onSelectProduct,
   onBuy,
   onRegionNeeded,
+  onRegionOptionsChange,
   config = TELKOMSEL_PAKET_CONFIG,
 }: Props) {
   const [chips, setChips] = useState<Chip[]>(config.defaultChips);
@@ -172,12 +175,19 @@ export function TelkomselPaketDataCatalog({
             }))
           );
         }
+        const regions = Array.isArray(res.data?.regionOptions)
+          ? res.data.regionOptions.filter(
+              (r: unknown): r is string => typeof r === 'string' && r.trim() !== ''
+            )
+          : [];
+        onRegionOptionsChange?.(regions);
         // API fail / empty → keep Semua skeleton (never restore hardcode taxonomy).
       })
       .catch(() => {
+        onRegionOptionsChange?.([]);
         /* keep Semua skeleton */
       });
-  }, [config.taxonomyKey]);
+  }, [config.taxonomyKey, onRegionOptionsChange]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);

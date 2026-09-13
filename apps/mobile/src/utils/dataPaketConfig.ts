@@ -82,36 +82,7 @@ export const DATA_PAKET_CONFIGS: Record<DetectedOperator, OperatorPaketCatalogCo
   },
 };
 
-/** Same hardcoded lists as Web PaketDataPage (taxonomy regionOptions unused on FE). */
-export function regionOptionsForOperator(operator: DetectedOperator | null): string[] {
-  switch (operator) {
-    case 'Telkomsel':
-      return ['Area 1', 'Area 2', 'Area 3'];
-    case 'XL Axiata':
-      return ['Sumatera', 'West', 'Central', 'East', 'East Kalsul'];
-    case 'Indosat':
-      return ['Jabodetabek', 'Jawa Barat', 'Jawa Tengah', 'EJBN', 'Sumatera', 'Kalisumapa'];
-    case 'Tri (3)':
-      return ['Jakarta Raya', 'Jawa Barat', 'Jawa Tengah', 'EJBN', 'Lokal'];
-    case 'Axis':
-      return [
-        'Jawa Timur',
-        'Jawa Bali Nusra',
-        'Non Jawa Bali Nusra',
-        'Sukabumi',
-        'Semarang-Salatiga',
-        'Salatiga',
-        'Kendal',
-        'Banyuwangi Probolinggo',
-        'Madura Sidoarjo Malang Sumbawa',
-        'Salatiga Jatim Sulawesi',
-        'Sulawesi Ewako',
-        'Sulutra',
-        'NTT',
-      ];
-    case 'Smartfren':
-    case 'by.U':
-    default:
-      return [];
-  }
+/** @deprecated Prefer taxonomy API regionOptions (inventory-backed). Kept empty for safety. */
+export function regionOptionsForOperator(_operator: DetectedOperator | null): string[] {
+  return [];
 }
