@@ -61,6 +61,7 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
   const router = useRouter();
   const navigation = useNavigation();
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const startNewPurchase = useCheckoutStore((s) => s.startNewPurchase);
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
@@ -334,7 +335,9 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
       return;
     }
 
-    // Idempotency key created/rotated only in startCheckout — not on step navigation.
+    // Always bind a fresh logical attempt when leaving the catalog (mode/target may differ
+    // from a prior Elektronik/Tembak attempt on the same SKU).
+    startNewPurchase();
     startCheckout(product);
     setTarget(sanitizePhoneDigits(phoneNo));
     setPurchaseContext({

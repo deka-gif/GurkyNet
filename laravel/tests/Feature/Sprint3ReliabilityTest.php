@@ -137,22 +137,30 @@ class Sprint3ReliabilityTest extends TestCase
         $this->assertEquals(78000.00, (float) $this->wallet->balance);
     }
 
-    public function test_same_key_different_payload_rejected(): void
+    public function test_same_key_different_payload_after_completed_starts_new_attempt(): void
     {
+        // After the first attempt completes, reusing the client key with a different body
+        // (e.g. same SKU, new target/mode) must NOT 422-block — rotate and create a new tx.
+        // In-flight PROCESSING + mismatched body still rejects (covered implicitly by TTL window).
         $key = (string) Str::uuid();
-        $this->actingAs($this->user)->postJson('/api/v1/transactions', [
+        $first = $this->actingAs($this->user)->postJson('/api/v1/transactions', [
             'sku_code' => 'S3-TSEL10K',
             'target_number' => '081234567890',
             'pin' => '123456',
             'idempotency_key' => $key,
-        ])->assertStatus(201);
+        ]);
+        $first->assertStatus(201);
+        $firstId = $first->json('data.id');
 
-        $this->actingAs($this->user)->postJson('/api/v1/transactions', [
+        $second = $this->actingAs($this->user)->postJson('/api/v1/transactions', [
             'sku_code' => 'S3-TSEL10K',
             'target_number' => '081999999999',
             'pin' => '123456',
             'idempotency_key' => $key,
-        ])->assertStatus(422);
+        ]);
+        $second->assertStatus(201);
+        $this->assertNotSame($firstId, $second->json('data.id'));
+        $this->assertEquals(2, Transaction::where('user_id', $this->user->id)->where('service_name', '!=', 'Top Up Saldo')->count());
     }
 
     public function test_concurrent_withdraw_no_overdraw(): void

@@ -143,7 +143,15 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
 
   startCheckout: (product) => {
     const state = get();
-    if (state.skuCode === product.code && state.idempotencyKey) {
+    // Reuse key ONLY for true retry of the same in-flight attempt (wrong PIN / network
+    // before POST succeeded). Once a transaction row exists in store — or SKU changes —
+    // mint a new key. Reusing across Elektronik→Tembak (same SKU, new target/mode) caused
+    // server 422 "data permintaan berubah" and blocked Digi entirely (2026-09-14).
+    if (
+      state.skuCode === product.code &&
+      state.idempotencyKey &&
+      !state.transaction
+    ) {
       return;
     }
     set({

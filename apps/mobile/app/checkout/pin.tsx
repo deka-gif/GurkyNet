@@ -109,6 +109,13 @@ export default function CheckoutPinScreen() {
       }
       if (
         typeof parsed.message === 'string' &&
+        (parsed.message.toLowerCase().includes('data permintaan berubah') ||
+          parsed.message.toLowerCase().includes('masih diproses'))
+      ) {
+        useCheckoutStore.getState().rotateIdempotencyKey();
+      }
+      if (
+        typeof parsed.message === 'string' &&
         (parsed.message.toLowerCase().includes('cek meteran') ||
           parsed.message.toLowerCase().includes('kedaluwarsa') ||
           parsed.message.toLowerCase().includes('inquiry'))

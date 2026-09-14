@@ -78,6 +78,7 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
   const router = useRouter();
   const navigation = useNavigation();
   const startCheckout = useCheckoutStore((s) => s.startCheckout);
+  const startNewPurchase = useCheckoutStore((s) => s.startNewPurchase);
   const setTarget = useCheckoutStore((s) => s.setTarget);
   const setPurchaseContext = useCheckoutStore((s) => s.setPurchaseContext);
   const purchaseEnabled = useFeaturesStore(selectPurchaseEnabled);
@@ -274,7 +275,9 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
       }
 
       const target = resolveElektronikTarget(phoneForTarget, overview?.wallet);
-      // Idempotency key only via startCheckout — not on step navigation.
+      // Always bind a fresh logical attempt when leaving the catalog (mode/target may differ
+      // from a prior Elektronik/Tembak attempt on the same SKU).
+      startNewPurchase();
       startCheckout(product);
       setTarget(target);
       setPurchaseContext({
@@ -289,6 +292,7 @@ export function VoucherInternetElektronikFlow({ purchaseBanner, onBack }: Props)
       overview?.wallet,
       brand,
       displayZone,
+      startNewPurchase,
       startCheckout,
       setTarget,
       setPurchaseContext,

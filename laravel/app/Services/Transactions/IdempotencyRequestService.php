@@ -106,39 +106,47 @@ class IdempotencyRequestService
                 }
 
                 if (!hash_equals((string) $existing->request_hash, $hash)) {
-                    // Customer-facing copy — never leak English/debug idempotency internals (Bagian 24).
-                    throw ValidationException::withMessages([
-                        'idempotency_key' => [
-                            'Transaksi sebelumnya masih diproses atau data permintaan berubah. Mohon tunggu sebentar sebelum mencoba lagi.',
-                        ],
-                    ]);
-                }
+                    // Same client key + different body.
+                    // - PROCESSING (fresh): still in-flight — reject (do not swap payload mid-flight).
+                    // - COMPLETED/FAILED/ARCHIVED/stale PROCESSING: prior attempt finished or abandoned;
+                    //   client reused the key for a NEW purchase (e.g. same SKU, new target/mode).
+                    //   Rotate the slot and allow the new attempt — never block unrelated products.
+                    // Evidence 2026-09-14: Elektronik→Tembak same SKU reused key → false 422 block.
+                    if ($existing->status === IdempotencyRequest::STATUS_PROCESSING
+                        && $existing->created_at
+                        && $existing->created_at->gte(now()->subMinutes(self::STALE_PROCESSING_MINUTES))) {
+                        throw ValidationException::withMessages([
+                            'idempotency_key' => [
+                                'Transaksi sebelumnya masih diproses atau data permintaan berubah. Mohon tunggu sebentar sebelum mencoba lagi.',
+                            ],
+                        ]);
+                    }
 
-                if ($existing->status === IdempotencyRequest::STATUS_COMPLETED) {
+                    $this->rotateKey($existing, 'payload_mismatch');
+                    $existing = null;
+                } elseif ($existing->status === IdempotencyRequest::STATUS_COMPLETED) {
                     return [
                         'replay' => true,
                         'snapshot' => is_array($existing->response_snapshot)
                             ? $existing->response_snapshot
                             : [],
                     ];
-                }
-
-                if ($existing->status === IdempotencyRequest::STATUS_PROCESSING) {
+                } elseif ($existing->status === IdempotencyRequest::STATUS_PROCESSING) {
                     if ($existing->created_at && $existing->created_at->lt(now()->subMinutes(self::STALE_PROCESSING_MINUTES))) {
                         // Stale claim after crash — free the unique slot via key rotation, then reclaim.
                         $this->rotateKey($existing, 'stale');
+                        $existing = null;
                     } else {
                         throw new ConflictHttpException(
                             'Transaksi sebelumnya masih diproses, mohon tunggu sebentar sebelum mencoba lagi.'
                         );
                     }
-                }
-
-                if (in_array($existing->status, [
+                } elseif ($existing && in_array($existing->status, [
                     IdempotencyRequest::STATUS_FAILED,
                     IdempotencyRequest::STATUS_ARCHIVED,
                 ], true)) {
                     $this->rotateKey($existing, $existing->status);
+                    $existing = null;
                 }
             }
 

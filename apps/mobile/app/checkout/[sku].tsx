@@ -270,6 +270,15 @@ export default function CheckoutScreen() {
       ) {
         useCheckoutStore.getState().rotateIdempotencyKey();
       }
+      // Client reused key after payload/mode change — rotate so the next PIN submit is a
+      // fresh logical attempt (pairs with server payload_mismatch rotate).
+      if (
+        typeof parsed.message === 'string' &&
+        (parsed.message.toLowerCase().includes('data permintaan berubah') ||
+          parsed.message.toLowerCase().includes('masih diproses'))
+      ) {
+        useCheckoutStore.getState().rotateIdempotencyKey();
+      }
       if (
         typeof parsed.message === 'string' &&
         (parsed.message.toLowerCase().includes('cek meteran') ||
