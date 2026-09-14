@@ -201,7 +201,7 @@ class VoucherInternetTembakOperatorGuardTest extends TestCase
         $this->assertEqualsWithDelta($before - 11000.0, (float) $this->wallet->fresh()->balance, 0.01);
     }
 
-    public function test_elektronik_wallet_target_is_not_blocked(): void
+    public function test_elektronik_wallet_target_is_temporarily_disabled(): void
     {
         $this->makeViSku('XL Axiata', 'XLVI-ELEC');
         $before = (float) $this->wallet->fresh()->balance;
@@ -211,12 +211,15 @@ class VoucherInternetTembakOperatorGuardTest extends TestCase
             'sku_code' => 'XLVI-ELEC',
             'target_number' => '104200000088',
             'pin' => '123456',
-            'idempotency_key' => 'idem-tembak-elec-ok',
+            'idempotency_key' => 'idem-tembak-elec-disabled',
             'voucher_internet_mode' => 'elektronik',
         ]);
 
-        $res->assertStatus(201);
-        $this->assertEqualsWithDelta($before - 11000.0, (float) $this->wallet->fresh()->balance, 0.01);
+        $res->assertStatus(422);
+        $res->assertJsonFragment([
+            'message' => \App\Services\Catalog\VoucherInternetElektronikCustomerNoGuard::TEMPORARILY_DISABLED_MESSAGE,
+        ]);
+        $this->assertSame($before, (float) $this->wallet->fresh()->balance);
     }
 
     public function test_pulsa_mismatch_is_not_in_scope(): void

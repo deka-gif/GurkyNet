@@ -219,6 +219,8 @@ export const VoucherInternetPage = () => {
   };
 
   const switchMode = (next: Mode) => {
+    // Elektronik temporarily disabled (all providers) — keep mode card visible as "Sedang Dikerjakan".
+    if (next === 'elektronik') return;
     setMode(next);
     setZona(null);
     setPhoneNo('');
@@ -258,7 +260,7 @@ export const VoucherInternetPage = () => {
       adminFee: 0,
       skuCode: selectedProduct.code,
       customDetails: {
-        Mode: mode,
+        Mode: isTelkomselOperator(activeCatalogProvider || '') ? 'Beli Kode Voucher' : 'tembak',
         Zona: zona || autoProvider || '-',
       },
       voucherInternetMode: 'tembak',
@@ -334,7 +336,7 @@ export const VoucherInternetPage = () => {
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Voucher Internet</h2>
           <p className="text-sm text-gray-500">
-            Tembak langsung, voucher elektronik, atau aktivasi voucher fisik kosongan — alur terpisah sesuai bisnis PPOB.
+            Tembak langsung atau aktivasi voucher fisik kosongan — alur terpisah sesuai bisnis PPOB.
           </p>
         </div>
         <div className="bg-primary-50 px-4 py-2 rounded-2xl border border-primary-100 flex items-center gap-2">
@@ -347,9 +349,30 @@ export const VoucherInternetPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {(
           [
-            { key: 'tembak' as const, label: 'Tembak Langsung', icon: Zap, desc: 'Kuota aktif ke nomor HP' },
-            { key: 'elektronik' as const, label: 'Voucher Elektronik', icon: Wifi, desc: 'Kode voucher bisa copy/print' },
-            { key: 'fisik' as const, label: 'Voucher Fisik', icon: Store, desc: 'Scan/SN bulk activation' },
+            {
+              key: 'tembak' as const,
+              label: 'Tembak Langsung',
+              icon: Zap,
+              desc: 'Beli kode voucher via nomor HP',
+              disabled: false,
+              badge: null as string | null,
+            },
+            {
+              key: 'elektronik' as const,
+              label: 'Voucher Elektronik',
+              icon: Wifi,
+              desc: 'Sementara tidak tersedia',
+              disabled: true,
+              badge: 'Sedang Dikerjakan',
+            },
+            {
+              key: 'fisik' as const,
+              label: 'Voucher Fisik',
+              icon: Store,
+              desc: 'Scan/SN bulk activation',
+              disabled: false,
+              badge: null as string | null,
+            },
           ] as const
         ).map((item) => {
           const Icon = item.icon;
@@ -358,12 +381,24 @@ export const VoucherInternetPage = () => {
             <button
               key={item.key}
               type="button"
+              disabled={item.disabled}
               onClick={() => switchMode(item.key)}
-              className={`text-left p-4 rounded-2xl border transition-all ${
-                active ? 'border-primary-500 bg-primary-50/40' : 'border-gray-100 bg-white hover:border-gray-300'
+              aria-disabled={item.disabled}
+              title={item.disabled ? 'Sedang Dikerjakan' : undefined}
+              className={`text-left p-4 rounded-2xl border transition-all relative ${
+                item.disabled
+                  ? 'border-gray-100 bg-gray-50 opacity-70 cursor-not-allowed'
+                  : active
+                    ? 'border-primary-500 bg-primary-50/40'
+                    : 'border-gray-100 bg-white hover:border-gray-300'
               }`}
             >
-              <Icon className={`w-5 h-5 ${active ? 'text-primary-600' : 'text-gray-400'}`} />
+              {item.badge ? (
+                <span className="absolute top-3 right-3 text-[9px] font-black uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-lg">
+                  {item.badge}
+                </span>
+              ) : null}
+              <Icon className={`w-5 h-5 ${active && !item.disabled ? 'text-primary-600' : 'text-gray-400'}`} />
               <div className="font-extrabold text-gray-900 text-sm mt-2">{item.label}</div>
               <div className="text-[10px] text-gray-500 mt-0.5">{item.desc}</div>
             </button>
@@ -467,6 +502,16 @@ export const VoucherInternetPage = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {tembakShowProducts && isTelkomselOperator(activeCatalogProvider || '') && (
+              <div className="p-3.5 bg-amber-50 border border-amber-100 rounded-2xl space-y-1">
+                <p className="text-xs font-extrabold text-amber-900">Beli Kode Voucher Telkomsel</p>
+                <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
+                  Hasil pembelian berupa kode redeem (bukan isi kuota otomatis). Setelah sukses, tukar kode via{' '}
+                  <span className="font-black">*133#</span> atau aplikasi MyTelkomsel.
+                </p>
               </div>
             )}
 

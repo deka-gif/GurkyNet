@@ -27,8 +27,56 @@ function sortByPrice(rows: Product[]): Product[] {
   return [...rows].sort((a, b) => a.price - b.price);
 }
 
-/** Voucher Elektronik zona page — providers-first + page-20 (web audit P1). */
+/** Temporary kill-switch — all providers. Flip false to restore purchase UI below. */
+const ELEKTRONIK_TEMPORARILY_DISABLED = true;
+
+function VoucherElektronikComingSoon({ zona }: { zona: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="p-4 md:p-8 container mx-auto max-w-lg space-y-4">
+      <button
+        type="button"
+        onClick={() => navigate('/dashboard/voucher-internet')}
+        className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-primary-600"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Kembali ke Voucher Internet
+      </button>
+      <div className="bg-white rounded-3xl border border-amber-100 shadow-xl shadow-gray-200/40 p-6 space-y-3">
+        <span className="inline-flex text-[10px] font-black uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-lg">
+          Sedang Dikerjakan
+        </span>
+        <h2 className="text-xl font-extrabold text-gray-900">Voucher Elektronik</h2>
+        {zona ? <p className="text-xs text-gray-500 font-semibold">Provider: {zona}</p> : null}
+        <p className="text-sm text-gray-600 leading-relaxed">
+          Voucher Elektronik sedang dalam perbaikan untuk semua provider. Silakan gunakan{' '}
+          <span className="font-extrabold text-gray-900">Tembak Langsung</span> atau{' '}
+          <span className="font-extrabold text-gray-900">Voucher Fisik</span>, atau coba lagi nanti.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/voucher-internet')}
+          className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-sm"
+        >
+          Kembali ke pilihan mode
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Public route entry — temporarily shows Coming Soon; purchase UI kept below. */
 export const VoucherElektronikZonaPage = () => {
+  const { zona: zonaParam } = useParams<{ zona: string }>();
+  const zona = zonaParam ? decodeURIComponent(zonaParam) : '';
+  if (ELEKTRONIK_TEMPORARILY_DISABLED) {
+    return <VoucherElektronikComingSoon zona={zona} />;
+  }
+  return <VoucherElektronikZonaPageActive />;
+};
+
+/** Voucher Elektronik zona page — providers-first + page-20 (web audit P1). Kept for re-enable. */
+function VoucherElektronikZonaPageActive() {
   const navigate = useNavigate();
   const { zona: zonaParam } = useParams<{ zona: string }>();
   const zona = zonaParam ? decodeURIComponent(zonaParam) : '';

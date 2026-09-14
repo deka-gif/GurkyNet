@@ -157,43 +157,32 @@ class VoucherInternetFlowTest extends TestCase
             ->assertJsonPath('data.transaction_details.target_number', '081812345678');
     }
 
-    public function test_voucher_elektronik_purchase_exposes_redeemable_code_on_receipt(): void
+    public function test_voucher_elektronik_purchase_is_temporarily_disabled_without_mode_flag(): void
     {
-        Http::fake([
-            'https://api.digiflazz.com/v1/transaction' => Http::response([
-                'data' => [
-                    'ref_id' => 'GNGVI002',
-                    'customer_no' => '104200000077',
-                    'buyer_sku_code' => 'XLVI5GB',
-                    'message' => 'Transaksi Sukses',
-                    'status' => 'Sukses',
-                    'rc' => '00',
-                    'sn' => 'XL-VI-8842-1193-7765',
-                    'price' => 24000,
-                ],
-            ], 200),
-        ]);
-
         Sanctum::actingAs($this->user);
-        Queue::fake();
+        $before = (float) $this->wallet->fresh()->balance;
 
         $create = resolve(CreateTransactionAction::class);
-        // Voucher Elektronik has no real target number — the wallet number stands in,
-        // matching how VoucherInternetPage.tsx submits this mode.
-        $transaction = $create->execute(
-            $this->user,
-            'XLVI5GB',
-            '104200000077',
-            '123456'
-        );
 
-        $job = new ProcessProductProviderTransaction($transaction->id);
-        app()->call([$job, 'handle']);
+        // Wallet/dummy target on Digi Voucher without explicit mode is treated as Elektronik
+        // and must also be blocked while TEMPORARILY_DISABLED is on.
+        try {
+            $create->execute(
+                $this->user,
+                'XLVI5GB',
+                '104200000077',
+                '123456',
+                null,
+                'idem-vi-elektronik-implicit-disabled'
+            );
+            $this->fail('Expected ValidationException while Elektronik is temporarily disabled');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $messages = $e->errors()['voucher_internet_mode'] ?? [];
+            $this->assertNotEmpty($messages);
+            $this->assertStringContainsString('sedang dalam perbaikan', $messages[0]);
+        }
 
-        $this->getJson('/api/v1/transactions/' . $transaction->invoice_number . '/receipt')
-            ->assertOk()
-            ->assertJsonPath('data.transaction_details.is_voucher_internet', true)
-            ->assertJsonPath('data.transaction_details.voucher_internet_code', 'XL-VI-8842-1193-7765');
+        $this->assertSame($before, (float) $this->wallet->fresh()->balance);
     }
 
     public function test_wrong_pin_does_not_debit_for_voucher_internet(): void
@@ -211,7 +200,7 @@ class VoucherInternetFlowTest extends TestCase
         }
     }
 
-    public function test_elektronik_mode_rejects_real_mobile_customer_no(): void
+    public function test_elektronik_mode_temporarily_disabled_for_all_providers(): void
     {
         Sanctum::actingAs($this->user);
         $before = (float) $this->wallet->fresh()->balance;
@@ -222,82 +211,37 @@ class VoucherInternetFlowTest extends TestCase
             $create->execute(
                 $this->user,
                 'XLVI5GB',
-                '081812345678',
+                '104200000077',
                 '123456',
                 null,
-                'idem-vi-elektronik-phone-reject',
+                'idem-vi-elektronik-temp-disabled',
                 ['voucher_internet_mode' => 'elektronik']
             );
-            $this->fail('Expected ValidationException for MSISDN on Elektronik mode');
+            $this->fail('Expected ValidationException while Elektronik is temporarily disabled');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            $messages = $e->errors()['target_number'] ?? [];
+            $messages = $e->errors()['voucher_internet_mode'] ?? [];
             $this->assertNotEmpty($messages);
-            $this->assertStringContainsString('tidak menerima nomor HP', $messages[0]);
+            $this->assertStringContainsString('sedang dalam perbaikan', $messages[0]);
         }
 
         $this->assertSame($before, (float) $this->wallet->fresh()->balance);
     }
 
-    public function test_elektronik_mode_accepts_wallet_and_evoucher_customer_no(): void
-    {
-        Http::fake([
-            'https://api.digiflazz.com/v1/transaction' => Http::response([
-                'data' => [
-                    'ref_id' => 'GNGVI003',
-                    'customer_no' => 'EVOUCHER',
-                    'buyer_sku_code' => 'XLVI5GB',
-                    'message' => 'Transaksi Sukses',
-                    'status' => 'Sukses',
-                    'rc' => '00',
-                    'sn' => 'XL-VI-CODE-001',
-                    'price' => 24000,
-                ],
-            ], 200),
-        ]);
-
-        Sanctum::actingAs($this->user);
-        Queue::fake();
-
-        $create = resolve(CreateTransactionAction::class);
-
-        $walletTx = $create->execute(
-            $this->user,
-            'XLVI5GB',
-            '104200000077',
-            '123456',
-            null,
-            'idem-vi-elektronik-wallet-ok',
-            ['voucher_internet_mode' => 'elektronik']
-        );
-        $this->assertSame('104200000077', $walletTx->target_number);
-
-        $evoucherTx = $create->execute(
-            $this->user,
-            'XLVI5GB',
-            'EVOUCHER',
-            '123456',
-            null,
-            'idem-vi-elektronik-evoucher-ok',
-            ['voucher_internet_mode' => 'elektronik']
-        );
-        $this->assertSame('EVOUCHER', $evoucherTx->target_number);
-    }
-
-    public function test_api_elektronik_rejects_phone_customer_no_with_clear_message(): void
+    public function test_api_elektronik_temporarily_disabled_with_clear_message(): void
     {
         Sanctum::actingAs($this->user);
 
         $response = $this->postJson('/api/v1/transactions', [
             'sku_code' => 'XLVI5GB',
-            'target_number' => '081298765432',
+            'target_number' => '104200000088',
             'pin' => '123456',
-            'idempotency_key' => 'idem-api-vi-elektronik-phone',
+            'idempotency_key' => 'idem-api-vi-elektronik-disabled',
             'voucher_internet_mode' => 'elektronik',
         ]);
 
         $response->assertStatus(422);
         $response->assertJsonFragment([
-            'message' => 'Mode Voucher Elektronik tidak menerima nomor HP asli sebagai tujuan. Gunakan nomor wallet GurkyPay, dummy, atau EVOUCHER untuk generate kode.',
+            'message' => \App\Services\Catalog\VoucherInternetElektronikCustomerNoGuard::TEMPORARILY_DISABLED_MESSAGE,
         ]);
     }
 }

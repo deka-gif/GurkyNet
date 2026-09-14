@@ -8,7 +8,7 @@ import { useAuthStore } from '../../src/store/auth.store';
 import { transactionService, ReceiptData } from '../../src/services/transaction.service';
 import { ScreenContainer, Card, Button, LoadingState, StatusBadge } from '../../src/components/ui';
 import { ReceiptSharePrintBar } from '../../src/components/receipt/ReceiptSharePrintBar';
-import { colors, spacing, typography } from '../../src/theme';
+import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import { appEvents, TRANSACTION_STATUS_PUSH_EVENT } from '../../src/utils/eventEmitter';
 import {
@@ -38,6 +38,8 @@ export default function CheckoutResultScreen() {
   const setStatus = useCheckoutStore((s) => s.setStatus);
   const startNewPurchase = useCheckoutStore((s) => s.startNewPurchase);
   const fetchWallet = useWalletStore((s) => s.fetchWallet);
+  const operatorLabel = useCheckoutStore((s) => s.operatorLabel);
+  const voucherInternetMode = useCheckoutStore((s) => s.voucherInternetMode);
 
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
@@ -183,6 +185,22 @@ export default function CheckoutResultScreen() {
       ? receipt.transaction_details.serial_number
       : null;
 
+  const showTelkomselRedeemHint =
+    voucherInternetMode === 'tembak' &&
+    (String(operatorLabel ?? '').toLowerCase().includes('telkomsel') ||
+      String(receipt?.transaction_details?.service_name ?? transaction?.serviceName ?? '')
+        .toLowerCase()
+        .includes('telkomsel') ||
+      String(receipt?.items?.[0]?.name ?? transaction?.productName ?? '')
+        .toLowerCase()
+        .includes('telkomsel'));
+
+  const telkomselRedeemBlock = showTelkomselRedeemHint ? (
+    <Text style={styles.redeemHint}>
+      Redeem via *133# atau MyTelkomsel. Ini kode voucher, bukan isi kuota otomatis.
+    </Text>
+  ) : null;
+
   /** PLACEHOLDER targets (eSIM → ESIM) must not appear as customer "Nomor Tujuan". */
   const displayTargetNo = (() => {
     const raw = String(transaction?.targetNo ?? '').trim();
@@ -271,6 +289,7 @@ export default function CheckoutResultScreen() {
           </Text>
           <Button label="Salin Kode" onPress={() => void copyVoucherCode()} />
           {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
+          {telkomselRedeemBlock}
           <Text style={styles.voucherHint}>Kode tersimpan di Riwayat</Text>
         </Card>
       ) : null}
@@ -319,6 +338,7 @@ export default function CheckoutResultScreen() {
               <Text style={styles.voucherCode} selectable>
                 {serialNumber}
               </Text>
+              {telkomselRedeemBlock}
             </>
           ) : null}
           {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
@@ -418,6 +438,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   voucherHint: { fontSize: typography.size.xs, color: colors.gray[500] },
+  redeemHint: {
+    fontSize: typography.size.xs,
+    color: '#92400E',
+    backgroundColor: '#FFFBEB',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    lineHeight: 18,
+    overflow: 'hidden',
+  },
   copyMsg: { fontSize: typography.size.xs, color: colors.status.success, fontWeight: typography.weight.medium },
   receiptCard: { gap: spacing.sm },
   receiptTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },

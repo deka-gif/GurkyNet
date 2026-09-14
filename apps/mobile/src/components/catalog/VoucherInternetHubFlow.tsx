@@ -9,12 +9,19 @@ import { VoucherInternetFisikFlow } from './VoucherInternetFisikFlow';
 
 /**
  * Voucher Internet hub — Web mode model (tembak | elektronik | fisik).
- * Mode is local UI state only. Fisik uses physical-batches API, not POST /transactions.
+ * Mode is local UI state only (hardcoded — not backend-driven).
+ * Fisik uses physical-batches API, not POST /transactions.
  * Child flows own hardware-back step navigation; hub does not intercept beforeRemove
  * while a mode is active (avoids fighting Tembak/Elektronik/Fisik step back).
+ *
+ * Elektronik temporarily disabled for all providers (Owner 2026-09-14).
+ * Flow component kept; card shows "Sedang Dikerjakan" and cannot open.
  */
 
 type HubMode = 'tembak' | 'elektronik' | 'fisik';
+
+/** Flip false after per-provider verification to restore Elektronik entry. */
+const ELEKTRONIK_TEMPORARILY_DISABLED = true;
 
 type Props = {
   purchaseBanner?: string | null;
@@ -28,7 +35,8 @@ export function VoucherInternetHubFlow({ purchaseBanner }: Props) {
   if (mode === 'tembak') {
     return <VoucherInternetTembakFlow purchaseBanner={purchaseBanner} onBack={backToHub} />;
   }
-  if (mode === 'elektronik') {
+  // Kept reachable for re-enable; currently blocked from hub card.
+  if (mode === 'elektronik' && !ELEKTRONIK_TEMPORARILY_DISABLED) {
     return <VoucherInternetElektronikFlow purchaseBanner={purchaseBanner} onBack={backToHub} />;
   }
   if (mode === 'fisik') {
@@ -52,24 +60,30 @@ export function VoucherInternetHubFlow({ purchaseBanner }: Props) {
           </View>
           <View style={styles.modeBody}>
             <Text style={styles.modeTitle}>Tembak Langsung</Text>
-            <Text style={styles.modeDesc}>Isi voucher langsung ke nomor HP</Text>
+            <Text style={styles.modeDesc}>Beli kode voucher via nomor HP</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.gray[400]} />
         </Card>
       </TouchableOpacity>
 
-      <TouchableOpacity activeOpacity={0.7} onPress={() => setMode('elektronik')}>
-        <Card style={styles.modeCard}>
-          <View style={styles.modeIcon}>
-            <Ionicons name="ticket-outline" size={22} color={colors.primary[600]} />
+      <View style={[styles.modeCardWrap, styles.modeCardDisabled]}>
+        <Card style={[styles.modeCard, styles.modeCardMuted]}>
+          <View style={[styles.modeIcon, styles.modeIconMuted]}>
+            <Ionicons name="ticket-outline" size={22} color={colors.gray[400]} />
           </View>
           <View style={styles.modeBody}>
-            <Text style={styles.modeTitle}>Voucher Elektronik</Text>
-            <Text style={styles.modeDesc}>Dapatkan kode voucher</Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.modeTitle, styles.modeTitleMuted]}>Voucher Elektronik</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>Sedang Dikerjakan</Text>
+              </View>
+            </View>
+            <Text style={styles.modeDesc}>
+              Sementara tidak tersedia. Gunakan Tembak Langsung atau Voucher Fisik.
+            </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.gray[400]} />
         </Card>
-      </TouchableOpacity>
+      </View>
 
       <TouchableOpacity activeOpacity={0.7} onPress={() => setMode('fisik')}>
         <Card style={styles.modeCard}>
@@ -102,11 +116,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   lead: { fontSize: typography.size.sm, color: colors.gray[600] },
+  modeCardWrap: { borderRadius: radius.lg },
+  modeCardDisabled: { opacity: 0.85 },
   modeCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.lg,
+  },
+  modeCardMuted: {
+    backgroundColor: colors.gray[50],
   },
   modeIcon: {
     width: 40,
@@ -116,11 +135,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  modeIconMuted: {
+    backgroundColor: colors.gray[100],
+  },
   modeBody: { flex: 1, gap: 2 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   modeTitle: {
     fontSize: typography.size.base,
     fontWeight: typography.weight.bold,
     color: colors.gray[900],
   },
+  modeTitleMuted: { color: colors.gray[600] },
   modeDesc: { fontSize: typography.size.xs, color: colors.gray[500] },
+  badge: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: typography.weight.bold,
+    color: '#92400E',
+    textTransform: 'uppercase',
+  },
 });

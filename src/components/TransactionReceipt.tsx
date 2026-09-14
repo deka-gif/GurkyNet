@@ -25,6 +25,7 @@ export interface ReceiptDeliverable {
   value: string;
   url?: string | null;
   copyValue: string;
+  hint?: string | null;
 }
 
 export interface TransactionReceiptProps {
@@ -363,6 +364,11 @@ export function TransactionReceipt({
                         {copied ? 'Tersalin' : 'Salin Kode'}
                       </button>
                     )}
+                    {deliverable.hint ? (
+                      <p className="text-[11px] font-medium leading-relaxed text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                        {deliverable.hint}
+                      </p>
+                    ) : null}
                   </div>
                 )}
 

@@ -10,9 +10,19 @@ use Illuminate\Validation\ValidationException;
  * as Digiflazz customer_no (generate e-code, not top-up phone).
  *
  * Applies to every client (mobile + web) that identifies the purchase as elektronik.
+ *
+ * TEMP: Elektronik purchases are rejected for ALL providers until seller/customer_no
+ * behavior is verified per brand (Owner 2026-09-14). Flip TEMPORARILY_DISABLED to
+ * re-enable; do not delete this class or the Elektronik client flows.
  */
 class VoucherInternetElektronikCustomerNoGuard
 {
+    /** Temporary kill-switch — all providers. Re-enable by setting false after verification. */
+    public const TEMPORARILY_DISABLED = true;
+
+    public const TEMPORARILY_DISABLED_MESSAGE =
+        'Voucher Elektronik sedang dalam perbaikan. Silakan gunakan Tembak Langsung atau Voucher Fisik, atau coba lagi nanti.';
+
     public function __construct(
         protected VoucherInternetDigiCategoryGate $digiGate
     ) {
@@ -40,6 +50,13 @@ class VoucherInternetElektronikCustomerNoGuard
 
         if (! $isElektronik) {
             return;
+        }
+
+        // Owner: temporary disable Elektronik for every provider (not Telkomsel-only).
+        if (self::TEMPORARILY_DISABLED) {
+            throw ValidationException::withMessages([
+                'voucher_internet_mode' => [self::TEMPORARILY_DISABLED_MESSAGE],
+            ]);
         }
 
         if ($this->looksLikeIndonesianMobile($targetNumber)) {

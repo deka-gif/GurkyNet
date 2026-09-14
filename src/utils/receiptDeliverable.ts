@@ -21,6 +21,8 @@ export interface ReceiptDeliverable {
   url?: string | null;
   /** Value copied to clipboard (may differ slightly from `value`, e.g. ungrouped token digits). */
   copyValue: string;
+  /** Optional customer instruction under the code (e.g. Telkomsel redeem). */
+  hint?: string | null;
 }
 
 export interface ReceiptExtraRow {
@@ -133,12 +135,23 @@ export function resolveReceiptFields(params: {
   } else if (isVoucherInternet) {
     const code = firstString(details?.voucher_internet_code, details?.serial_number);
     const url = firstString(details?.voucher_internet_url);
+    const productName = String(
+      receiptData?.items?.[0]?.name ?? details?.product_name ?? customDetails?.Produk ?? ''
+    ).toLowerCase();
+    const isTelkomsel =
+      service.includes('telkomsel') ||
+      productName.includes('telkomsel') ||
+      String(customDetails?.Zona ?? '').toLowerCase().includes('telkomsel') ||
+      String(customDetails?.Mode ?? '').toLowerCase().includes('beli kode');
+    const telkomselRedeemHint =
+      'Redeem kode via *133# atau aplikasi MyTelkomsel. Ini kode voucher, bukan isi kuota otomatis.';
     if (code || url) {
       deliverable = {
-        label: 'Kode Voucher',
+        label: isTelkomsel ? 'Kode Voucher (Beli Kode)' : 'Kode Voucher',
         value: code || url || '',
         url,
         copyValue: code || url || '',
+        hint: isTelkomsel ? telkomselRedeemHint : null,
       };
     } else if (isSuccess) {
       deliverablePendingLabel = 'Kode voucher internet';

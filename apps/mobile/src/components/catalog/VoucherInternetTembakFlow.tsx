@@ -359,7 +359,11 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
         </View>
       ) : null}
 
-      {step !== 'zone' ? <Text style={styles.modeTag}>Tembak Langsung</Text> : null}
+      {step !== 'zone' ? (
+        <Text style={styles.modeTag}>
+          {operator && isTelkomselOperator(operator) ? 'Beli Kode Voucher' : 'Tembak Langsung'}
+        </Text>
+      ) : null}
 
       {step === 'phone' ? (
         <>
@@ -371,6 +375,15 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
             operator={operator}
             helperWhenDetected="Operator terdeteksi otomatis dari nomor kamu"
           />
+          {operator && isTelkomselOperator(operator) ? (
+            <View style={styles.telkomselNote}>
+              <Text style={styles.telkomselNoteTitle}>Beli Kode Voucher Telkomsel</Text>
+              <Text style={styles.telkomselNoteBody}>
+                Hasil berupa kode redeem (bukan isi kuota otomatis). Tukar via *133# atau MyTelkomsel
+                setelah sukses.
+              </Text>
+            </View>
+          ) : null}
           {formError ? <Text style={styles.error}>{formError}</Text> : null}
           {operator && catalogBusy ? (
             <Text style={styles.hint}>Menyiapkan katalog voucher…</Text>
@@ -394,7 +407,9 @@ export function VoucherInternetTembakFlow({ purchaseBanner, onBack }: Props) {
       ) : step === 'zone' ? (
         <>
           <Text style={styles.kategoriLabel}>Kategori</Text>
-          <Text style={styles.kategoriValue}>Tembak Langsung</Text>
+          <Text style={styles.kategoriValue}>
+            {operator && isTelkomselOperator(operator) ? 'Beli Kode Voucher' : 'Tembak Langsung'}
+          </Text>
           <Text style={styles.phoneMeta}>
             {sanitizePhoneDigits(phoneNo)} · {operator}
           </Text>
@@ -556,6 +571,25 @@ const styles = StyleSheet.create({
     color: colors.primary[700],
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  telkomselNote: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: 4,
+  },
+  telkomselNoteTitle: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: '#92400E',
+  },
+  telkomselNoteBody: {
+    fontSize: typography.size.xs,
+    color: '#78350F',
+    lineHeight: 18,
   },
   kategoriLabel: {
     fontSize: typography.size.xs,
