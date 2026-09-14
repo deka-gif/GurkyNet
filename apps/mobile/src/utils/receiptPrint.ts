@@ -6,6 +6,7 @@ import {
   type PaperWidthMm,
 } from '../services/receiptSettings.service';
 import { formatIDR } from './currency';
+import { primaryDeliverableValue } from './receiptDeliverable';
 
 const APP_FALLBACK_NAME = 'GurkyNet';
 
@@ -86,18 +87,7 @@ function formatDate(iso: string): string {
 }
 
 function deliverableValue(details: ReceiptData['transaction_details']): string | null {
-  const candidates = [
-    details.token_code_grouped,
-    details.token_code,
-    details.voucher_internet_code,
-    details.voucher_code,
-    details.activation_code,
-    details.serial_number,
-  ];
-  for (const c of candidates) {
-    if (typeof c === 'string' && c.trim()) return c.trim();
-  }
-  return null;
+  return primaryDeliverableValue(details);
 }
 
 function productName(receipt: ReceiptData): string {
@@ -260,6 +250,24 @@ export function buildReceiptLines(ctx: ReceiptPrintContext): ReceiptLine[] {
         kind: 'row',
         label: rendered.label,
         value: rendered.value,
+      });
+      continue;
+    }
+
+    // Redeem / token / SN — larger + bold so it stands out from invoice/date rows.
+    if (field.id === 'deliverable') {
+      lines.push({
+        text: rendered.label,
+        align: 'center',
+        bold: true,
+        kind: 'text',
+      });
+      lines.push({
+        text: rendered.value,
+        align: 'center',
+        bold: true,
+        size: 2,
+        kind: 'text',
       });
       continue;
     }

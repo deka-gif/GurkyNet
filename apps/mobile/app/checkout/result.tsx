@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import * as Clipboard from 'expo-clipboard';
 import { useCheckoutStore } from '../../src/store/checkout.store';
 import { useWalletStore } from '../../src/store/wallet.store';
 import { useAuthStore } from '../../src/store/auth.store';
 import { transactionService, ReceiptData } from '../../src/services/transaction.service';
 import { ScreenContainer, Card, Button, LoadingState, StatusBadge } from '../../src/components/ui';
 import { ReceiptSharePrintBar } from '../../src/components/receipt/ReceiptSharePrintBar';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { ReceiptCodeBlock } from '../../src/components/receipt/ReceiptCodeBlock';
+import { colors, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
+import { resolveReceiptDeliverables } from '../../src/utils/receiptDeliverable';
 import { appEvents, TRANSACTION_STATUS_PUSH_EVENT } from '../../src/utils/eventEmitter';
 import {
   pushHintMatchesCheckoutTransaction,
@@ -43,7 +44,6 @@ export default function CheckoutResultScreen() {
 
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
-  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const walletRefreshedRef = useRef(false);
   const userName = useAuthStore((s) => s.user?.name);
 
@@ -163,28 +163,6 @@ export default function CheckoutResultScreen() {
     router.replace(to === 'riwayat' ? '/(tabs)/riwayat' : '/(tabs)/transaksi');
   };
 
-  const voucherCode =
-    typeof receipt?.transaction_details.voucher_internet_code === 'string'
-      ? receipt.transaction_details.voucher_internet_code
-      : null;
-
-  const receiptVoucherCode =
-    typeof receipt?.transaction_details.voucher_code === 'string'
-      ? receipt.transaction_details.voucher_code
-      : null;
-  const activationCode =
-    typeof receipt?.transaction_details.activation_code === 'string'
-      ? receipt.transaction_details.activation_code
-      : null;
-  const activationUrl =
-    typeof receipt?.transaction_details.activation_url === 'string'
-      ? receipt.transaction_details.activation_url
-      : null;
-  const serialNumber =
-    typeof receipt?.transaction_details.serial_number === 'string'
-      ? receipt.transaction_details.serial_number
-      : null;
-
   const showTelkomselRedeemHint =
     voucherInternetMode === 'tembak' &&
     (String(operatorLabel ?? '').toLowerCase().includes('telkomsel') ||
@@ -195,11 +173,9 @@ export default function CheckoutResultScreen() {
         .toLowerCase()
         .includes('telkomsel'));
 
-  const telkomselRedeemBlock = showTelkomselRedeemHint ? (
-    <Text style={styles.redeemHint}>
-      Redeem via *133# atau MyTelkomsel. Ini kode voucher, bukan isi kuota otomatis.
-    </Text>
-  ) : null;
+  const deliverables = resolveReceiptDeliverables(receipt, {
+    telkomselRedeemHint: showTelkomselRedeemHint,
+  });
 
   /** PLACEHOLDER targets (eSIM → ESIM) must not appear as customer "Nomor Tujuan". */
   const displayTargetNo = (() => {
@@ -208,25 +184,6 @@ export default function CheckoutResultScreen() {
     if (raw.toUpperCase() === 'ESIM') return null;
     return raw;
   })();
-
-  const copyVoucherCode = async () => {
-    if (!voucherCode) return;
-    try {
-      await Clipboard.setStringAsync(voucherCode);
-      setCopyMsg('Kode disalin.');
-    } catch {
-      setCopyMsg('Gagal menyalin kode.');
-    }
-  };
-
-  const copyText = async (value: string, okMsg: string) => {
-    try {
-      await Clipboard.setStringAsync(value);
-      setCopyMsg(okMsg);
-    } catch {
-      setCopyMsg('Gagal menyalin.');
-    }
-  };
 
   if (!transaction) {
     return (
@@ -281,93 +238,16 @@ export default function CheckoutResultScreen() {
 
       {terminal && receiptLoading && !receipt && <Text style={styles.receiptLoading}>Memuat struk...</Text>}
 
-      {terminal && voucherCode ? (
-        <Card style={styles.voucherCard}>
-          <Text style={styles.voucherTitle}>Kode Voucher</Text>
-          <Text style={styles.voucherCode} selectable>
-            {voucherCode}
-          </Text>
-          <Button label="Salin Kode" onPress={() => void copyVoucherCode()} />
-          {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
-          {telkomselRedeemBlock}
-          <Text style={styles.voucherHint}>Kode tersimpan di Riwayat</Text>
-        </Card>
-      ) : null}
-
-      {/* Delivery fields only when receipt API actually returns them (no invented QR/ICCID). */}
-      {terminal &&
-      !voucherCode &&
-      (receiptVoucherCode || activationCode || activationUrl || (serialNumber && !voucherCode)) ? (
-        <Card style={styles.voucherCard}>
-          <Text style={styles.voucherTitle}>Detail Pengiriman</Text>
-          {receiptVoucherCode ? (
-            <>
-              <Text style={styles.receiptLabel}>Kode</Text>
-              <Text style={styles.voucherCode} selectable>
-                {receiptVoucherCode}
-              </Text>
-              <Button
-                label="Salin Kode"
-                onPress={() => void copyText(receiptVoucherCode, 'Kode disalin.')}
-              />
-            </>
-          ) : null}
-          {activationCode ? (
-            <>
-              <Text style={styles.receiptLabel}>Kode Aktivasi</Text>
-              <Text style={styles.voucherCode} selectable>
-                {activationCode}
-              </Text>
-              <Button
-                label="Salin Kode Aktivasi"
-                onPress={() => void copyText(activationCode, 'Kode aktivasi disalin.')}
-              />
-            </>
-          ) : null}
-          {activationUrl ? (
-            <>
-              <Text style={styles.receiptLabel}>URL Aktivasi</Text>
-              <Text style={styles.voucherCode} selectable>
-                {activationUrl}
-              </Text>
-            </>
-          ) : null}
-          {serialNumber && !receiptVoucherCode ? (
-            <>
-              <Text style={styles.receiptLabel}>Serial Number</Text>
-              <Text style={styles.voucherCode} selectable>
-                {serialNumber}
-              </Text>
-              {telkomselRedeemBlock}
-            </>
-          ) : null}
-          {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
-        </Card>
+      {terminal && deliverables.length > 0 ? (
+        <ReceiptCodeBlock
+          items={deliverables}
+          footerHint="Kode tersimpan di Riwayat"
+        />
       ) : null}
 
       {terminal && receipt && (
         <Card style={styles.receiptCard}>
           <Text style={styles.receiptTitle}>Struk Transaksi</Text>
-          {typeof receipt.transaction_details.token_code_grouped === 'string' &&
-          receipt.transaction_details.token_code_grouped ? (
-            <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Kode Token</Text>
-              <Text style={styles.receiptValue}>
-                {receipt.transaction_details.token_code_grouped}
-              </Text>
-            </View>
-          ) : typeof receipt.transaction_details.token_code === 'string' &&
-            receipt.transaction_details.token_code ? (
-            <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Kode Token</Text>
-              <Text style={styles.receiptValue}>{String(receipt.transaction_details.token_code)}</Text>
-            </View>
-          ) : serialNumber && !voucherCode && !receiptVoucherCode && !activationCode ? (
-            <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Serial Number</Text>
-              <Text style={styles.receiptValue}>{serialNumber}</Text>
-            </View>
-          ) : null}
           {typeof receipt.transaction_details.customer_name === 'string' &&
           receipt.transaction_details.customer_name ? (
             <View style={styles.receiptRow}>
@@ -423,32 +303,6 @@ const styles = StyleSheet.create({
   processingHint: { fontSize: typography.size.xs, color: colors.gray[500], textAlign: 'center' },
   pendingActions: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
   receiptLoading: { fontSize: typography.size.sm, color: colors.gray[500], textAlign: 'center' },
-  voucherCard: { gap: spacing.sm, alignItems: 'stretch' },
-  voucherTitle: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[700],
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  voucherCode: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.black,
-    color: colors.gray[900],
-    letterSpacing: 1,
-  },
-  voucherHint: { fontSize: typography.size.xs, color: colors.gray[500] },
-  redeemHint: {
-    fontSize: typography.size.xs,
-    color: '#92400E',
-    backgroundColor: '#FFFBEB',
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    lineHeight: 18,
-    overflow: 'hidden',
-  },
-  copyMsg: { fontSize: typography.size.xs, color: colors.status.success, fontWeight: typography.weight.medium },
   receiptCard: { gap: spacing.sm },
   receiptTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.gray[900] },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between' },

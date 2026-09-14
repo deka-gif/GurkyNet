@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import * as Clipboard from 'expo-clipboard';
 import { transactionService, ReceiptData } from '../../src/services/transaction.service';
 import { Transaction } from '../../src/api/types';
 import {
@@ -13,6 +12,7 @@ import {
   Button,
 } from '../../src/components/ui';
 import { ReceiptSharePrintBar } from '../../src/components/receipt/ReceiptSharePrintBar';
+import { ReceiptCodeBlock } from '../../src/components/receipt/ReceiptCodeBlock';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import { formatIDR } from '../../src/utils/currency';
 import {
@@ -26,6 +26,7 @@ import {
 import { openSnapCheckout } from '../../src/utils/topupSnap';
 import { useTopUpStore } from '../../src/store/topup.store';
 import { useAuthStore } from '../../src/store/auth.store';
+import { resolveReceiptDeliverables } from '../../src/utils/receiptDeliverable';
 
 /**
  * Transaction detail — GET /transactions/{id}.
@@ -43,7 +44,6 @@ export default function RiwayatDetailScreen() {
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
-  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const config = useTopUpStore((s) => s.config);
   const loadConfig = useTopUpStore((s) => s.loadConfig);
   const userName = useAuthStore((s) => s.user?.name);
@@ -144,20 +144,7 @@ export default function RiwayatDetailScreen() {
 
   const expired = String(tx?.status || '').toLowerCase() === 'expired';
   const success = String(tx?.status || '').toLowerCase() === 'success';
-  const voucherCode =
-    typeof receipt?.transaction_details.voucher_internet_code === 'string'
-      ? receipt.transaction_details.voucher_internet_code
-      : null;
-
-  const copyVoucherCode = async () => {
-    if (!voucherCode) return;
-    try {
-      await Clipboard.setStringAsync(voucherCode);
-      setCopyMsg('Kode disalin.');
-    } catch {
-      setCopyMsg('Gagal menyalin kode.');
-    }
-  };
+  const deliverables = resolveReceiptDeliverables(receipt);
 
   return (
     <ScreenContainer belowHeader onRefresh={() => void load()} refreshing={loading}>
@@ -207,16 +194,7 @@ export default function RiwayatDetailScreen() {
             {tx.notes ? <DetailRow label="Catatan" value={String(tx.notes)} /> : null}
           </Card>
 
-          {voucherCode ? (
-            <Card style={styles.card}>
-              <Text style={styles.voucherLabel}>Kode Voucher</Text>
-              <Text style={styles.voucherCode} selectable>
-                {voucherCode}
-              </Text>
-              <Button label="Salin Kode" onPress={() => void copyVoucherCode()} />
-              {copyMsg ? <Text style={styles.copyMsg}>{copyMsg}</Text> : null}
-            </Card>
-          ) : null}
+          {deliverables.length > 0 ? <ReceiptCodeBlock items={deliverables} /> : null}
 
           {isTopUp && isPendingStatus(tx.status) ? (
             <Text style={styles.pendingHint}>
@@ -332,17 +310,4 @@ const styles = StyleSheet.create({
   },
   expiredBody: { fontSize: typography.size.sm, color: colors.gray[700], lineHeight: 20 },
   actionMsg: { fontSize: typography.size.sm, color: colors.gray[600], lineHeight: 20 },
-  voucherLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.primary[700],
-    textTransform: 'uppercase',
-  },
-  voucherCode: {
-    fontSize: typography.size.base,
-    fontWeight: typography.weight.black,
-    color: colors.gray[900],
-    letterSpacing: 1,
-  },
-  copyMsg: { fontSize: typography.size.xs, color: colors.status.success },
 });
