@@ -248,4 +248,22 @@ class DigiflazzResponseCodeClassifierTest extends TestCase
         // RC 41 auth → failover allowed (secondary provider may work)
         $this->assertTrue($policy->shouldFailover('authentication_failure', 'signature', '41'));
     }
+
+    public function test_rc44_and_rc61_are_permanent_refundable_buyer_deposit_failures(): void
+    {
+        foreach (['44', '61'] as $rc) {
+            $c = DigiflazzResponseCodeClassifier::classify($rc);
+            $this->assertSame('Gagal', $c->officialStatus(), "RC {$rc}");
+            $this->assertFalse($c->transactionCreated(), "RC {$rc}");
+            $this->assertFalse($c->isRetryable(), "RC {$rc}");
+            $this->assertTrue($c->permanentFailure, "RC {$rc}");
+            $this->assertTrue($c->isRefundable(), "RC {$rc}");
+            $this->assertFalse($c->isPending(), "RC {$rc}");
+        }
+
+        // RC44: Digi buyer deposit empty — fulfill may still failover to VIP; status-check must not pending.
+        $this->assertTrue(DigiflazzResponseCodeClassifier::classify('44')->allowsFailover());
+        $this->assertFalse(DigiflazzResponseCodeClassifier::classify('61')->allowsFailover());
+        $this->assertSame('insufficient_balance', DigiflazzResponseCodeClassifier::classify('44')->fulfillmentReason());
+    }
 }

@@ -258,6 +258,71 @@ class TransactionTimeoutEngineTest extends TestCase
         ]);
     }
 
+    public function test_digiflazz_rc44_on_status_check_refunds_not_manual_review(): void
+    {
+        Queue::fake();
+
+        $tx = $this->makeInFlightTransaction([
+            'fulfillment_provider_code' => ProductProvider::CODE_DIGIFLAZZ,
+            'provider_sku_used' => 's5',
+            'provider_ref' => 'GRK-TO-RC44',
+            'provider_checked_at' => now()->subMinutes(5),
+            'provider_last_status' => 'pending',
+        ]);
+        $balanceBefore = (float) $this->wallet->fresh()->balance;
+
+        $digiFailed = ProviderFulfillmentResult::failed(
+            25,
+            'insufficient_balance',
+            false,
+            'Saldo tidak cukup',
+            [
+                'data' => [
+                    'status' => 'Gagal',
+                    'message' => 'Saldo tidak cukup',
+                    'rc' => '44',
+                    'sn' => '',
+                ],
+            ]
+        );
+
+        $digiAdapter = Mockery::mock(\App\Services\ProductProviders\DigiflazzProductProviderAdapter::class);
+        $digiAdapter->shouldReceive('code')->andReturn(ProductProvider::CODE_DIGIFLAZZ);
+        $digiAdapter->shouldReceive('isConfigured')->andReturn(true);
+        $digiAdapter->shouldReceive('checkStatus')->once()->andReturn($digiFailed);
+        $digiAdapter->shouldReceive('fulfill')->andReturn($digiFailed);
+        $digiAdapter->shouldReceive('healthCheck')->andReturn([
+            'reachable' => true,
+            'authenticated' => true,
+            'balance' => 0,
+            'latency_ms' => 1,
+            'message' => 'ok',
+        ]);
+
+        $vipAdapter = Mockery::mock(\App\Services\ProductProviders\VipPulsaProductProviderAdapter::class);
+        $vipAdapter->shouldReceive('code')->andReturn(ProductProvider::CODE_VIP);
+        $vipAdapter->shouldReceive('isConfigured')->andReturn(false);
+        $vipAdapter->shouldReceive('checkStatus')->andReturn(ProviderFulfillmentResult::pending(1));
+        $vipAdapter->shouldReceive('fulfill')->andReturn(ProviderFulfillmentResult::error(1, 'skip', false));
+        $vipAdapter->shouldReceive('healthCheck')->andReturn([
+            'reachable' => false,
+            'authenticated' => false,
+            'balance' => null,
+            'latency_ms' => 1,
+            'message' => 'off',
+        ]);
+
+        $this->app->instance(ProductProviderRegistry::class, new ProductProviderRegistry($digiAdapter, $vipAdapter));
+
+        app(TransactionTimeoutService::class)->handleCheck($tx->id, 1);
+
+        $fresh = $tx->fresh();
+        $this->assertSame(TransactionStatus::FAILED->value, $fresh->status);
+        $this->assertNotNull($fresh->refunded_at);
+        $this->assertNotSame('manual_review', $fresh->provider_last_status);
+        $this->assertEquals($balanceBefore + 11000, (float) $this->wallet->fresh()->balance);
+    }
+
     public function test_duplicate_extended_check_does_not_refund(): void
     {
         Queue::fake();

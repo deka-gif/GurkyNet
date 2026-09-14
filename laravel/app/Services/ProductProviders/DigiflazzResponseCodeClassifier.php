@@ -264,7 +264,8 @@ final class DigiflazzResponseCodeClassifier
         }
 
         if ($this->category === self::BUSINESS && $this->code === '44') {
-            // Digiflazz deposit empty — try secondary provider.
+            // Digiflazz buyer deposit empty — fulfill may try VIP. Status probes still map to
+            // failed (not pending/manual_review) via DigiflazzProductProviderAdapter.
             return true;
         }
 
@@ -413,7 +414,8 @@ final class DigiflazzResponseCodeClassifier
             '41' => self::row('Signature tidak valid', self::AUTHENTICATION, false, false, false, true, true, false, false, false, false, 'Perhatikan formula signature; pastikan apiKey sesuai mode API (Development / Production)'),
             '42' => self::row('Gagal memproses API Buyer', self::AUTHENTICATION, false, false, false, true, true, false, false, false, false, 'Username belum sesuai'),
             '43' => self::row('SKU tidak di temukan atau Non-Aktif', self::VALIDATION, false, false, false, true, false, true, false, false),
-            '44' => self::row('Saldo tidak cukup', self::BUSINESS, false, true, false, false, false, false, false, false),
+            // Buyer Digi deposit empty — permanent for this attempt; refund customer hold (not pending/manual_review).
+            '44' => self::row('Saldo tidak cukup', self::BUSINESS, false, false, true, true, false, false, false, false),
             '45' => self::row('IP Anda tidak kami kenali', self::AUTHENTICATION, false, false, false, true, true, false, false, false, false, 'Whitelist IP di pengaturan koneksi; sesuaikan mode API'),
             '47' => self::row('Transaksi sudah terjadi di buyer lain', self::VALIDATION, false, false, false, true, false, true, false, false),
             '49' => self::row('Ref ID tidak unik', self::VALIDATION, false, false, false, true, false, true, false, false),
@@ -431,7 +433,8 @@ final class DigiflazzResponseCodeClassifier
             '59' => self::row('Tujuan di Luar Wilayah/Cluster', self::VALIDATION, true, false, true, true, false, true, false, false),
 
             '60' => self::row('Tagihan belum tersedia', self::BUSINESS, true, false, true, true, false, false, false, false),
-            '61' => self::row('Belum pernah melakukan deposit', self::BUSINESS, false, true, false, false, false, false, false, false),
+            // Buyer Digi never deposited — same class as RC44 (explicit Gagal, refund hold, no Digi poll).
+            '61' => self::row('Belum pernah melakukan deposit', self::BUSINESS, false, false, true, true, false, false, false, false),
             '62' => self::row('Seller sedang mengalami gangguan', self::PROVIDER, false, true, false, false, false, false, true, false),
             '63' => self::row('Tidak support transaksi multi', self::VALIDATION, false, false, false, true, false, true, false, false),
             '64' => self::row('Tarik tiket gagal, coba nominal lain atau hubungi admin.', self::BUSINESS, false, false, false, true, false, false, false, false),

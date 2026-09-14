@@ -292,6 +292,119 @@ class DigiflazzResponseCodeAuditTest extends TestCase
         $this->assertFalse($result->shouldFailover);
     }
 
+    public function test_http_400_rc44_check_status_is_failed_not_pending(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GRK-RC44-ST',
+                    'customer_no' => '081234567890',
+                    'buyer_sku_code' => 's5',
+                    'message' => 'Saldo tidak cukup',
+                    'status' => 'Gagal',
+                    'rc' => '44',
+                    'sn' => '',
+                ],
+            ], 400),
+        ]);
+
+        $tx = $this->makeTx(['invoice_number' => 'GRK-RC44-ST', 'provider_ref' => 'GRK-RC44-ST']);
+        $result = app(DigiflazzProductProviderAdapter::class)->checkStatus(
+            $tx,
+            's5',
+            '081234567890',
+            'GRK-RC44-ST'
+        );
+
+        $this->assertSame('failed', $result->status);
+        $this->assertFalse($result->ok);
+        $this->assertSame('insufficient_balance', $result->reason);
+        $this->assertFalse($result->shouldFailover);
+        $this->assertSame('44', (string) ($result->raw['data']['rc'] ?? ''));
+        $this->assertStringNotContainsString('Status check error', (string) $result->message);
+    }
+
+    public function test_http_400_rc44_fulfill_is_failed_with_explicit_rc(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'ref_id' => 'GRK-RC44-FF',
+                    'message' => 'Saldo tidak cukup',
+                    'status' => 'Gagal',
+                    'rc' => '44',
+                    'sn' => '',
+                ],
+            ], 400),
+        ]);
+
+        $tx = $this->makeTx(['invoice_number' => 'GRK-RC44-FF', 'provider_ref' => 'GRK-RC44-FF']);
+        $result = app(DigiflazzProductProviderAdapter::class)->fulfill(
+            $tx,
+            's5',
+            '081234567890',
+            'GRK-RC44-FF'
+        );
+
+        $this->assertSame('failed', $result->status);
+        $this->assertFalse($result->ok);
+        $this->assertSame('insufficient_balance', $result->reason);
+        // Fulfill may failover to VIP when Digi buyer deposit is empty (RC44 allowsFailover).
+        $this->assertTrue($result->shouldFailover);
+        $this->assertTrue(DigiflazzResponseCodeClassifier::classify('44')->isRefundable());
+        $this->assertTrue(DigiflazzResponseCodeClassifier::classify('44')->permanentFailure);
+        $this->assertFalse(DigiflazzResponseCodeClassifier::classify('44')->isRetryable());
+    }
+
+    public function test_http_400_rc61_same_class_as_rc44(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => Http::response([
+                'data' => [
+                    'message' => 'Belum pernah melakukan deposit',
+                    'status' => 'Gagal',
+                    'rc' => '61',
+                ],
+            ], 400),
+        ]);
+
+        $tx = $this->makeTx(['invoice_number' => 'GRK-RC61-ST', 'provider_ref' => 'GRK-RC61-ST']);
+        $result = app(DigiflazzProductProviderAdapter::class)->checkStatus(
+            $tx,
+            's5',
+            '081234567890',
+            'GRK-RC61-ST'
+        );
+
+        $this->assertSame('failed', $result->status);
+        $c = DigiflazzResponseCodeClassifier::classify('61');
+        $this->assertTrue($c->permanentFailure);
+        $this->assertTrue($c->isRefundable());
+        $this->assertFalse($c->isRetryable());
+        $this->assertSame('Gagal', $c->officialStatus());
+    }
+
+    public function test_ambiguous_transport_error_check_status_still_pending(): void
+    {
+        Http::fake([
+            'https://api.digiflazz.com/v1/transaction' => function () {
+                throw new \Illuminate\Http\Client\ConnectionException('Connection timed out');
+            },
+        ]);
+
+        $tx = $this->makeTx(['invoice_number' => 'GRK-RC-TO', 'provider_ref' => 'GRK-RC-TO']);
+        $result = app(DigiflazzProductProviderAdapter::class)->checkStatus(
+            $tx,
+            's5',
+            '081234567890',
+            'GRK-RC-TO'
+        );
+
+        $this->assertSame('pending', $result->status);
+        $this->assertTrue($result->ok);
+        $this->assertStringContainsString('Status check error', (string) $result->message);
+    }
+
     public function test_transaction_created_false_auth_vs_true_failed(): void
     {
         $auth = DigiflazzResponseCodeClassifier::classify('42');

@@ -126,6 +126,11 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 'error' => $e->getMessage(),
             ]);
 
+            $fromBody = $this->resultFromDigiflazzHttpError($e, $ms, $transaction, favorFailover: true);
+            if ($fromBody !== null) {
+                return $fromBody;
+            }
+
             $isPasca = $this->isPascaTransaction($transaction);
 
             return ProviderFulfillmentResult::error(
@@ -251,8 +256,18 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
                 $rcClassifier->isPending() ? 'pending' : null
             );
         } catch (\Throwable $e) {
+            $ms = (int) ((microtime(true) - $started) * 1000);
+
+            // HTTP 4xx bodies often carry explicit Digi RC (e.g. RC44 Saldo tidak cukup).
+            // Those must NOT become "pending" → manual_review; they are explicit Gagal.
+            $fromBody = $this->resultFromDigiflazzHttpError($e, $ms, $transaction, favorFailover: false);
+            if ($fromBody !== null) {
+                return $fromBody;
+            }
+
+            // True transport / ambiguous errors stay pending for the timeout ladder.
             return ProviderFulfillmentResult::pending(
-                (int) ((microtime(true) - $started) * 1000),
+                $ms,
                 ['error' => $e->getMessage()],
                 'Status check error: ' . $e->getMessage()
             );
@@ -365,11 +380,102 @@ class DigiflazzProductProviderAdapter implements ProductProviderAdapterInterface
             'pending',
             'unknown_configuration',
             'provider_seller_balance',
+            'insufficient_balance',
         ], true)) {
             return $reason;
         }
 
         return 'provider_rejected';
+    }
+
+    /**
+     * DigiflazzService::postRequest throws on non-2xx while the JSON body often still
+     * carries data.rc + Status=Gagal (RC44, RC41, …). Parse that body so explicit Gagal
+     * is never swallowed as pending/manual_review.
+     *
+     * @return ProviderFulfillmentResult|null null when the exception has no Digi RC payload
+     */
+    protected function resultFromDigiflazzHttpError(
+        \Throwable $e,
+        int $ms,
+        Transaction $transaction,
+        bool $favorFailover
+    ): ?ProviderFulfillmentResult {
+        $payload = $this->parseDigiflazzErrorPayload($e->getMessage());
+        if ($payload === null) {
+            return null;
+        }
+
+        $data = $payload['data'] ?? null;
+        if (! is_array($data) || ! array_key_exists('rc', $data)) {
+            return null;
+        }
+
+        $rcClassifier = DigiflazzResponseCodeClassifier::fromResponseData($data);
+        $message = (string) ($data['message'] ?? $data['rc'] ?? $rcClassifier->description());
+        $status = strtolower((string) ($data['status'] ?? ''));
+        $isPasca = $this->isPascaTransaction($transaction);
+
+        Log::info('Digiflazz HTTP error body classified', array_merge(
+            [
+                'transaction_id' => $transaction->id,
+                'http_error' => true,
+                'status_text' => $status,
+            ],
+            $rcClassifier->toLogContext(),
+            DigiflazzFailureReasonPresenter::toLogContext($data)
+        ));
+
+        if ($rcClassifier->isPending() || $status === 'pending') {
+            return ProviderFulfillmentResult::pending(
+                $ms,
+                $payload,
+                $message ?: $rcClassifier->description(),
+                'pending'
+            );
+        }
+
+        if ($rcClassifier->isSuccess() || $status === 'sukses' || $status === 'success') {
+            $sn = isset($data['sn']) ? (string) $data['sn'] : null;
+
+            return ProviderFulfillmentResult::success($ms, $sn, $payload, $message ?: 'OK');
+        }
+
+        // Official Status=Gagal (and unknown RC treated as Gagal) → failed, never pending.
+        [$reason, $failover] = $this->classifyFailedOutcome($data, $message, $isPasca);
+        if (! $favorFailover) {
+            $failover = false;
+            $reason = $this->terminalReason($reason, false);
+        }
+
+        return ProviderFulfillmentResult::failed(
+            $ms,
+            $reason,
+            $failover,
+            $message ?: 'Digiflazz reported failed.',
+            $payload
+        );
+    }
+
+    /**
+     * Extract Digiflazz JSON body from "Digiflazz API error (400): {...}".
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function parseDigiflazzErrorPayload(string $message): ?array
+    {
+        if (! str_contains($message, 'Digiflazz API error')) {
+            return null;
+        }
+
+        $jsonStart = strpos($message, '{');
+        if ($jsonStart === false) {
+            return null;
+        }
+
+        $decoded = json_decode(substr($message, $jsonStart), true);
+
+        return is_array($decoded) ? $decoded : null;
     }
 
     protected function classifyException(\Throwable $e): string
