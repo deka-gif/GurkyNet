@@ -195,9 +195,19 @@ class RevenueAllocationService
                 ]);
             }
             $cat = RevenueAllocationCategory::query()->find($catId);
-            if (! $cat || ! $cat->is_active) {
+            if (! $cat) {
+                // FR-FIN-10 — name the exact failing category_id (avoid generic 422).
                 throw ValidationException::withMessages([
-                    "lines.$idx.category_id" => ['Kategori tidak aktif atau tidak ditemukan.'],
+                    "lines.$idx.category_id" => [
+                        "Kategori #{$catId} tidak ditemukan.",
+                    ],
+                ]);
+            }
+            if (! $cat->is_active) {
+                throw ValidationException::withMessages([
+                    "lines.$idx.category_id" => [
+                        "Kategori \"{$cat->name}\" ({$cat->code}, id={$cat->id}) tidak aktif — hapus dari rule set atau aktifkan kembali sebelum menyimpan.",
+                    ],
                 ]);
             }
             $normalized[$catId] = $pct;
@@ -563,6 +573,7 @@ class RevenueAllocationService
                 'categoryId' => $l->category_id,
                 'categoryCode' => $l->category?->code,
                 'categoryName' => $l->category?->name,
+                'categoryIsActive' => (bool) ($l->category?->is_active ?? false),
                 'percentage' => (float) $l->percentage,
             ])->values()->all(),
             'totalPercentage' => round((float) $set->lines->sum('percentage'), 4),

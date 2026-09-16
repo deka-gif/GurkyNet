@@ -314,4 +314,64 @@ class RevenueAllocationTest extends TestCase
         $this->getJson('/api/v1/admin/finance/revenue-allocation/accumulation')->assertOk();
         $this->getJson('/api/v1/admin/finance/revenue-allocation/history')->assertOk();
     }
+
+    /** Bug: inactive category still listed in current rule lines must fail with named message. */
+    public function test_save_rejects_inactive_category_with_named_error(): void
+    {
+        $this->seedDefaultRules();
+        $fin = $this->makeUser(UserRole::FINANCE, 'fin-inactive');
+        Sanctum::actingAs($fin);
+
+        $cats = RevenueAllocationCategory::query()->where('is_active', true)->orderBy('sort_order')->get();
+        $this->assertGreaterThanOrEqual(2, $cats->count());
+        $victim = $cats->first();
+        $victim->update(['is_active' => false]);
+
+        $active = RevenueAllocationCategory::query()->where('is_active', true)->orderBy('sort_order')->get();
+        $lines = $active->values()->map(function ($c, $i) use ($active) {
+            $n = $active->count();
+            $base = intdiv(10000, $n) / 100;
+
+            return [
+                'category_id' => $c->id,
+                'percentage' => $i === $n - 1
+                    ? round(100 - ($base * ($n - 1)), 4)
+                    : $base,
+            ];
+        })->all();
+        // Re-inject inactive category (simulates FE sending stale current rule lines).
+        $lines[] = ['category_id' => $victim->id, 'percentage' => 0];
+        $lines[0]['percentage'] = round((float) $lines[0]['percentage'], 4);
+
+        $res = $this->putJson('/api/v1/admin/finance/revenue-allocation/rules', [
+            'reason' => 'should fail on inactive',
+            'lines' => $lines,
+        ]);
+        $res->assertStatus(422);
+        $body = $res->json();
+        $flat = collect($body['errors'] ?? [])->flatten()->implode(' ');
+        $this->assertStringContainsString($victim->code, $flat);
+        $this->assertStringContainsString('tidak aktif', $flat);
+        $this->assertStringNotContainsString('Kategori tidak aktif atau tidak ditemukan.', $flat);
+    }
+
+    public function test_overview_marks_inactive_category_on_current_lines(): void
+    {
+        $this->seedDefaultRules();
+        $fin = $this->makeUser(UserRole::FINANCE, 'fin-overview-flag');
+        Sanctum::actingAs($fin);
+
+        $victim = RevenueAllocationCategory::query()->where('is_active', true)->orderBy('sort_order')->first();
+        $this->assertNotNull($victim);
+        $victim->update(['is_active' => false]);
+
+        $res = $this->getJson('/api/v1/admin/finance/revenue-allocation')->assertOk();
+        $lines = collect($res->json('data.current.lines') ?? []);
+        $hit = $lines->firstWhere('categoryId', $victim->id);
+        $this->assertNotNull($hit);
+        $this->assertFalse((bool) $hit['categoryIsActive']);
+        $this->assertFalse(
+            collect($res->json('data.categories') ?? [])->contains(fn ($c) => (int) $c['id'] === (int) $victim->id)
+        );
+    }
 }

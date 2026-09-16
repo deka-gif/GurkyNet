@@ -45,14 +45,27 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
   const loadOverview = useCallback(async () => {
     const data = await financeService.getRevenueAllocationOverview();
     setCategories(data?.categories || []);
-    const currentLines: AllocLine[] = (data?.current?.lines || []).map((l: any) => ({
-      categoryId: l.categoryId,
-      categoryCode: l.categoryCode,
-      categoryName: l.categoryName,
-      percentage: Number(l.percentage),
-    }));
-    if (currentLines.length > 0) {
-      setLines(currentLines);
+    const rawLines: any[] = data?.current?.lines || [];
+    const inactiveInCurrent = rawLines.filter((l) => l.categoryIsActive === false);
+    // FR-FIN-10 — never re-send inactive categories from a prior rule set (causes 422 on save).
+    const activeLines: AllocLine[] = rawLines
+      .filter((l) => l.categoryIsActive !== false)
+      .map((l: any) => ({
+        categoryId: l.categoryId,
+        categoryCode: l.categoryCode,
+        categoryName: l.categoryName,
+        percentage: Number(l.percentage),
+      }));
+    if (inactiveInCurrent.length > 0) {
+      const names = inactiveInCurrent
+        .map((l) => l.categoryName || l.categoryCode || `#${l.categoryId}`)
+        .join(', ');
+      setError(
+        `Kategori nonaktif masih ada di rule set lama (${names}). Sesuaikan % kategori aktif sampai total 100%, lalu simpan rule set baru.`
+      );
+    }
+    if (activeLines.length > 0) {
+      setLines(activeLines);
     } else {
       setLines(
         (data?.categories || []).map((c: Category) => ({
@@ -122,7 +135,12 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
       await loadHistory();
     } catch (e: any) {
       const errs = e?.response?.data?.errors;
+      const firstFromBag =
+        errs && typeof errs === 'object'
+          ? (Object.values(errs).flat().find((x) => typeof x === 'string') as string | undefined)
+          : undefined;
       const first =
+        firstFromBag ||
         errs?.percentage?.[0] ||
         errs?.role?.[0] ||
         e?.response?.data?.message ||
@@ -160,9 +178,11 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
     setError(null);
     try {
       await financeService.deactivateRevenueAllocationCategory(id);
-      setMessage('Kategori dinonaktifkan (histori tetap ada). Hapus dari % aktif lalu simpan total 100%.');
+      setMessage('Kategori dinonaktifkan (histori tetap ada). Sesuaikan % sisa sampai 100% lalu simpan rule set baru.');
+      // Keep editor state — do not reload current rule lines (would re-inject the inactive category).
       setLines((prev) => prev.filter((l) => l.categoryId !== id));
-      await loadOverview();
+      const data = await financeService.getRevenueAllocationOverview();
+      setCategories(data?.categories || []);
     } catch (e: any) {
       setError(e?.response?.data?.message || e?.message || 'Gagal menonaktifkan');
     }
