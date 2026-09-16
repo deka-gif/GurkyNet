@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Navbar } from '../components/layout/Navbar';
 import { Footer } from '../components/layout/Footer';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
+import { ScrollToTop } from '../components/routing/ScrollToTop';
 import { useWebsiteStore } from '../store/website.store';
 import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
 
@@ -37,6 +38,7 @@ export const PublicLayout = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-gray-900 selection:bg-primary-200 selection:text-primary-900">
+      <ScrollToTop />
       <NetworkStatusAndLoader />
       <Navbar />
 

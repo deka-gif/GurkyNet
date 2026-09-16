@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { LazyRoute } from '../components/ui/LazyRoute';
 import { LazyImage } from '../components/ui/LazyImage';
+import { ScrollToTop } from '../components/routing/ScrollToTop';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home, 
@@ -431,6 +432,7 @@ export const DashboardLayout = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row relative">
+      <ScrollToTop />
       <NetworkStatusAndLoader />
       
       {/* ========================================================= */}

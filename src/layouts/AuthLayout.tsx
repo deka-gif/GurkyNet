@@ -3,6 +3,7 @@ import { Outlet, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { CheckCircle, Shield, Smartphone, Zap, Wifi, Wallet } from 'lucide-react';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
+import { ScrollToTop } from '../components/routing/ScrollToTop';
 import { useWebsiteStore } from '../store/website.store';
 import { resolveMediaSrc } from '../utils/mediaUrl';
 import { useCmsLiveSync } from '../hooks/useCmsLiveSync';
@@ -33,6 +34,7 @@ export const AuthLayout = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50/40 flex flex-col selection:bg-primary-200 selection:text-primary-900 font-sans relative overflow-x-hidden">
+      <ScrollToTop />
       <NetworkStatusAndLoader />
 
       <div className="absolute inset-0 pointer-events-none overflow-hidden">

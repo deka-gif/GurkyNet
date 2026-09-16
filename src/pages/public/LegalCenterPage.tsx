@@ -162,11 +162,11 @@ export const LegalCenterPage = () => {
   const docs = nav.length ? nav : DEFAULT_NAV;
 
   return (
-    <div className="min-h-screen bg-white pt-32 pb-20">
+    <div className="min-h-screen bg-white pt-28 md:pt-32 pb-20">
       <div className="max-w-3xl mx-auto px-5 md:px-8">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-primary-700 transition-colors mb-8"
+          className="inline-flex items-center gap-2 text-sm font-bold text-primary-700 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 border border-primary-100 rounded-full px-4 py-2 transition-colors mb-8"
         >
           <ArrowLeft className="w-4 h-4" />
           Kembali ke Beranda
