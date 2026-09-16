@@ -25,24 +25,28 @@ export const Footer = () => {
       </div>
       <div className="h-1 bg-gradient-to-r from-transparent via-accent-500/70 to-transparent relative z-10" />
 
-      <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10 pt-16 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
+      <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10 pt-10 md:pt-16 pb-8">
+        {/*
+          Mobile: 2-col — brand + kontak full-width; Layanan | Informasi side-by-side.
+          lg+: unchanged 4 equal columns (desktop).
+        */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 md:gap-10 lg:gap-12 mb-8 md:mb-12">
 
-          <div className="col-span-1 md:col-span-2 lg:col-span-1 space-y-6">
+          <div className="col-span-2 lg:col-span-1 space-y-4 md:space-y-6">
             <Link to="/" className="flex items-center gap-2.5 group">
               {settings?.logo ? (
                 <img
                   src={resolveMediaSrc(settings.logo)}
                   alt={settings.websiteName || 'GurkyNet'}
-                  className="w-10 h-10 object-contain rounded-xl ring-2 ring-white/20 group-hover:ring-accent-400/50 transition-all"
+                  className="w-9 h-9 md:w-10 md:h-10 object-contain rounded-xl ring-2 ring-white/20 group-hover:ring-accent-400/50 transition-all"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white font-black text-lg ring-2 ring-white/20">
+                <div className="w-9 h-9 md:w-10 md:h-10 bg-white/10 rounded-xl flex items-center justify-center text-white font-black text-lg ring-2 ring-white/20">
                   {settings?.websiteName ? settings.websiteName.charAt(0).toUpperCase() : 'G'}
                 </div>
               )}
-              <span className="font-extrabold text-xl tracking-tight">
+              <span className="font-extrabold text-lg md:text-xl tracking-tight">
                 {settings?.websiteName || 'GurkyNet'}
               </span>
             </Link>
@@ -51,7 +55,7 @@ export const Footer = () => {
               <p className="text-primary-100/90 leading-relaxed text-sm max-w-xs">{settings.tagline}</p>
             ) : null}
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-row flex-wrap items-center gap-2.5">
               {settings?.facebook && (
                 <a
                   href={settings.facebook}
@@ -99,40 +103,40 @@ export const Footer = () => {
             </div>
           </div>
 
-          <div>
-            <h4 className="font-extrabold text-xs text-accent-400 uppercase tracking-widest mb-6">Layanan PPOB</h4>
-            <ul className="flex flex-col gap-3.5 text-sm">
-              <li><Link to="/dashboard/pulsa" className="text-primary-100/80 hover:text-white transition-colors">Beli Pulsa & Paket Data</Link></li>
-              <li><Link to="/dashboard/token-pln" className="text-primary-100/80 hover:text-white transition-colors">Token Listrik PLN</Link></li>
-              <li><Link to="/dashboard/voucher-digital" className="text-primary-100/80 hover:text-white transition-colors">Voucher Digital</Link></li>
-              <li><Link to="/dashboard/tagihan" className="text-primary-100/80 hover:text-white transition-colors">Bayar Tagihan Bulanan</Link></li>
+          <div className="min-w-0">
+            <h4 className="font-extrabold text-xs text-accent-400 uppercase tracking-widest mb-3 md:mb-6">Layanan PPOB</h4>
+            <ul className="flex flex-col gap-2.5 md:gap-3.5 text-sm">
+              <li><Link to="/dashboard/pulsa" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Beli Pulsa & Paket Data</Link></li>
+              <li><Link to="/dashboard/token-pln" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Token Listrik PLN</Link></li>
+              <li><Link to="/dashboard/voucher-digital" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Voucher Digital</Link></li>
+              <li><Link to="/dashboard/tagihan" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Bayar Tagihan Bulanan</Link></li>
             </ul>
           </div>
 
-          <div>
-            <h4 className="font-extrabold text-xs text-accent-400 uppercase tracking-widest mb-6">Informasi & Bantuan</h4>
-            <ul className="flex flex-col gap-3.5 text-sm">
+          <div className="min-w-0">
+            <h4 className="font-extrabold text-xs text-accent-400 uppercase tracking-widest mb-3 md:mb-6">Informasi & Bantuan</h4>
+            <ul className="flex flex-col gap-2.5 md:gap-3.5 text-sm">
               {mainPages.length > 0 ? (
                 mainPages.map((page) => (
                   <li key={page.id}>
-                    <Link to={pageHref(page.slug)} className="text-primary-100/80 hover:text-white transition-colors">
+                    <Link to={pageHref(page.slug)} className="text-primary-100/80 hover:text-white transition-colors leading-snug">
                       {page.title}
                     </Link>
                   </li>
                 ))
               ) : (
                 <>
-                  <li><Link to="/page/about-us" className="text-primary-100/80 hover:text-white transition-colors">Tentang Kami</Link></li>
-                  <li><Link to="/page/faq" className="text-primary-100/80 hover:text-white transition-colors">Pertanyaan Umum (FAQ)</Link></li>
-                  <li><Link to="/page/contact" className="text-primary-100/80 hover:text-white transition-colors">Hubungi Kontak</Link></li>
+                  <li><Link to="/page/about-us" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Tentang Kami</Link></li>
+                  <li><Link to="/page/faq" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Pertanyaan Umum (FAQ)</Link></li>
+                  <li><Link to="/page/contact" className="text-primary-100/80 hover:text-white transition-colors leading-snug">Hubungi Kontak</Link></li>
                 </>
               )}
             </ul>
           </div>
 
-          <div>
-            <h4 className="font-extrabold text-xs text-accent-400 uppercase tracking-widest mb-6">Hubungi CS</h4>
-            <ul className="flex flex-col gap-4 text-sm text-primary-100/80">
+          <div className="col-span-2 lg:col-span-1 min-w-0">
+            <h4 className="font-extrabold text-xs text-accent-400 uppercase tracking-widest mb-3 md:mb-6">Hubungi CS</h4>
+            <ul className="flex flex-col gap-3 md:gap-4 text-sm text-primary-100/80">
               {settings?.supportEmail && (
                 <li className="flex items-start gap-2.5">
                   <Mail className="w-4 h-4 text-accent-400 shrink-0 mt-0.5" />
