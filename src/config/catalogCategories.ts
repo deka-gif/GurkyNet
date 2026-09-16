@@ -225,3 +225,52 @@ export const PRODUCT_COUNT_CATEGORY_KEYS = [
   'international',
   'voucher-internet',
 ] as const;
+
+/**
+ * Mobile dashboard home shortcut grid (4×2) — mirrors native app IA.
+ * Primary 7 = high-frequency leaf services; 8th = "Lainnya" → /dashboard/semua-produk.
+ * Folded under Lainnya: Tagihan hub, Voucher Digital, International, Transfer, Telekomunikasi hub extras.
+ */
+export type MobileQuickService = {
+  id: string;
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  /** Key into CATEGORY_TONES / categoryTone() */
+  toneId: string;
+};
+
+export const MOBILE_QUICK_SERVICES: MobileQuickService[] = [
+  { id: 'pulsa', label: 'Pulsa', path: '/dashboard/pulsa', icon: Smartphone, toneId: 'telco' },
+  { id: 'data', label: 'Paket Data', path: '/dashboard/paket-data', icon: Wifi, toneId: 'telco' },
+  {
+    id: 'voucher-internet',
+    label: 'Voucher Internet',
+    path: '/dashboard/voucher-internet',
+    icon: Wifi,
+    toneId: 'telco',
+  },
+  { id: 'pln', label: 'PLN', path: '/dashboard/token-pln', icon: Zap, toneId: 'tagihan' },
+  {
+    id: 'topup-digital',
+    label: 'E-Wallet',
+    path: '/dashboard/topup-digital',
+    icon: CreditCard,
+    toneId: 'topup-digital',
+  },
+  { id: 'game', label: 'Game', path: '/dashboard/game', icon: Gamepad2, toneId: 'game' },
+  {
+    id: 'langganan',
+    label: 'Streaming',
+    path: '/dashboard/langganan-digital',
+    icon: PlayCircle,
+    toneId: 'langganan',
+  },
+  {
+    id: 'lainnya',
+    label: 'Lainnya',
+    path: '/dashboard/semua-produk',
+    icon: LayoutGrid,
+    toneId: 'all',
+  },
+];
