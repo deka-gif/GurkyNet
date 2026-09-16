@@ -7,17 +7,16 @@ use App\Actions\Admin\Website\StaticPageAction;
 use App\Actions\Admin\Website\WebsiteMenuAction;
 use App\Actions\Admin\Website\WebsiteSettingAction;
 use App\Actions\Product\GetCategoryAction;
-use App\Actions\Product\SearchProductAction;
 use App\Http\Resources\BannerResource;
 use App\Http\Resources\CategoryResource;
 use App\Http\Resources\HomepageSectionResource;
 use App\Http\Resources\ProductListResource;
-use App\Http\Resources\StaticPageResource;
 use App\Http\Resources\WebsiteMenuResource;
 use App\Http\Resources\WebsiteSettingResource;
 use App\Models\BannerPromotion;
 use App\Models\Faq;
 use App\Models\HomepageFeaturedProduct;
+use App\Models\Product;
 use App\Services\ProductProviders\LogicalProductKey;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -34,7 +33,6 @@ class PublicHomepagePayloadBuilder
         protected WebsiteMenuAction $menuAction,
         protected StaticPageAction $pageAction,
         protected GetCategoryAction $categoryAction,
-        protected SearchProductAction $searchProductAction,
     ) {}
 
     /**
@@ -73,6 +71,20 @@ class PublicHomepagePayloadBuilder
 
         $seoSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'seo');
 
+        // Landing bootstrap only needs page titles/slugs (footer + legal links).
+        // Full HTML body is loaded later via /page/:slug — including it here bloated cold JSON.
+        $pagesLite = $pages->map(fn ($page) => [
+            'id' => $page->id,
+            'title' => $page->title,
+            'slug' => $page->slug,
+            'status' => $page->status ?? 'published',
+            'seoTitle' => $page->seo_title,
+            'seoDescription' => $page->seo_description,
+            'publishedAt' => optional($page->published_at)?->toIso8601String(),
+            'createdAt' => optional($page->created_at)?->toIso8601String(),
+            'lastUpdated' => optional($page->updated_at)?->toIso8601String(),
+        ])->values()->all();
+
         return [
             'settings' => $settings ? (new WebsiteSettingResource($settings))->resolve() : null,
             'sections' => HomepageSectionResource::collection($sections)->resolve(),
@@ -82,7 +94,7 @@ class PublicHomepagePayloadBuilder
             'featuredProducts' => ProductListResource::collection($featuredProducts)->resolve(),
             'faqs' => $faqs->all(),
             'menus' => WebsiteMenuResource::collection($menus)->resolve(),
-            'pages' => StaticPageResource::collection($pages)->resolve(),
+            'pages' => $pagesLite,
             'seo' => [
                 'title' => $seoSection?->title
                     ?? $settings?->seo_title
@@ -104,8 +116,12 @@ class PublicHomepagePayloadBuilder
     public function warm(): array
     {
         $started = microtime(true);
+        // Rebuild fresh payload and publish both live + stale keys.
+        // Do NOT clear catalog cache here — SearchProductAction / CATALOG_KEY already warm.
         Cache::forget(PublicHomepageCache::KEY);
-        $payload = PublicHomepageCache::remember(fn () => $this->build());
+        $payload = $this->build();
+        Cache::put(PublicHomepageCache::KEY, $payload, PublicHomepageCache::TTL_SECONDS);
+        Cache::put(PublicHomepageCache::STALE_KEY, $payload, PublicHomepageCache::STALE_TTL_SECONDS);
         $durationMs = round((microtime(true) - $started) * 1000, 1);
 
         Log::info('Public homepage cache warmed', [
@@ -124,6 +140,19 @@ class PublicHomepagePayloadBuilder
      * @return list<array<string, mixed>>
      */
     protected function homepageCatalogBuckets(): array
+    {
+        // Survives CMS invalidation — Marketing edits must not re-run 9 catalog searches.
+        return PublicHomepageCache::rememberCatalog(fn () => $this->buildHomepageCatalogBuckets());
+    }
+
+    /**
+     * Lightweight landing catalog preview — MUST stay fast on cold miss.
+     * Avoids SearchProductAction + ProductListResource (pricing/taxonomy per SKU)
+     * which previously made cold homepage rebuild take tens of seconds.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function buildHomepageCatalogBuckets(): array
     {
         $familyLabels = [
             'pulsa' => 'Pulsa',
@@ -146,13 +175,56 @@ class PublicHomepagePayloadBuilder
                 return LogicalProductKey::normalizeCategoryFamily($slug) === $family;
             });
 
-            $productPaginator = $this->searchProductAction->execute([
-                'category' => $family,
-                'per_page' => 8,
-            ]);
+            $filterSlugs = LogicalProductKey::categoryFilterSlugs($family);
 
-            $items = collect($productPaginator->items())->values();
-            $representative = $items->first();
+            $baseQuery = Product::query()
+                ->whereHas('providerSkus', function ($q) {
+                    $q->where('is_active', true)
+                        ->whereHas('productProvider', fn ($pq) => $pq->where('is_active', true));
+                })
+                ->whereHas('category', function ($q) use ($filterSlugs, $family) {
+                    if ($filterSlugs !== []) {
+                        $q->whereIn('slug', $filterSlugs);
+                    } else {
+                        $q->where('slug', $family);
+                    }
+                });
+
+            $productCount = (clone $baseQuery)->count();
+
+            $items = (clone $baseQuery)
+                ->with(['provider:id,name,logo', 'category:id,name,slug'])
+                ->orderBy('id')
+                ->limit(8)
+                ->get(['id', 'sku_code', 'name', 'sell_price', 'base_price', 'provider_id', 'product_category_id', 'zone_label']);
+
+            $products = $items->map(function (Product $product) use ($family) {
+                $price = (float) ($product->sell_price ?? $product->base_price ?? 0);
+
+                return [
+                    'id' => $product->id,
+                    'code' => $product->sku_code,
+                    'name' => $product->name,
+                    'zoneLabel' => $product->zone_label,
+                    'price' => $price,
+                    'sellingPrice' => $price,
+                    'adminFee' => 0,
+                    'status' => 'tersedia',
+                    'isActive' => true,
+                    'isPurchasable' => true,
+                    'category' => $family,
+                    'operatorName' => $product->provider?->name,
+                    'provider' => $product->provider?->name,
+                    'providerDetails' => $product->provider ? [
+                        'id' => $product->provider->id,
+                        'name' => $product->provider->name,
+                        'logo' => $product->provider->logo,
+                        'isActive' => true,
+                    ] : null,
+                ];
+            })->values()->all();
+
+            $representative = $products[0] ?? null;
             $icon = $category?->icon
                 ?? match ($family) {
                     'pulsa' => 'smartphone',
@@ -173,9 +245,9 @@ class PublicHomepagePayloadBuilder
                 'category' => $category ? (new CategoryResource($category))->resolve() : null,
                 'slug' => $category?->slug ?? $family,
                 'icon' => $icon,
-                'productCount' => $productPaginator->total(),
-                'products' => ProductListResource::collection($items)->resolve(),
-                'previewProduct' => $representative ? (new ProductListResource($representative))->resolve() : null,
+                'productCount' => $productCount,
+                'products' => $products,
+                'previewProduct' => $representative,
             ];
         })->values()->all();
     }

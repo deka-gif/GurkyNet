@@ -98,8 +98,9 @@ Artisan::command('ops:heartbeat', function () {
 Schedule::command('ops:heartbeat')->everyFiveMinutes()->withoutOverlapping();
 
 // Paket Q (Masalah 1) — warm public homepage cache before TTL 300s expires.
+// Every 2 minutes keeps cold-miss window tiny for first-time visitors.
 Schedule::command('website:warm-public-homepage')
-    ->everyFourMinutes()
+    ->everyTwoMinutes()
     ->withoutOverlapping(10)
     ->runInBackground();
 

@@ -108,11 +108,18 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
       return;
     }
 
-    // Guest user -> Open preview modal and fetch products for this category
+    // Guest user -> Open preview modal; prefer products already in homepage payload.
     setSelectedCategory(category);
     setModalLoading(true);
     setModalError(null);
     setModalProducts([]);
+
+    const preloaded = Array.isArray(category?.products) ? category.products : [];
+    if (preloaded.length > 0) {
+      setModalProducts(preloaded.slice(0, 12) as Product[]);
+      setModalLoading(false);
+      return;
+    }
 
     try {
       const response = await productService.getProducts({ category: category.slug, per_page: 12 });
@@ -198,6 +205,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
               icon: bucket.icon,
               preview: bucket.previewProduct,
               productCount: bucket.productCount,
+              products: bucket.products,
             })) : categories).map((cat: any, index) => {
               const IconComp = getCategoryIcon(cat.icon, cat.slug);
 

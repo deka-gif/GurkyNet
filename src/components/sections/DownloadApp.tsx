@@ -3,27 +3,26 @@ import { DownloadCloud, Smartphone, HardDrive, Calendar, Clock } from 'lucide-re
 import { Button } from '../ui/Button';
 import { useWebsiteStore } from '../../store/website.store';
 
-// App metadata default structure
-const appInfo = {
+// Static metadata display only — download URL comes from Marketing settings.apkUrl.
+const appMeta = {
   version: '1.0.0-beta',
   size: '24.5 MB',
   minAndroid: 'Android 8.0 (Oreo)',
   lastUpdate: 'Februari 2026',
-  isAvailable: false,
-  downloadUrl: '#'
 };
 
 export const DownloadApp = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   const { settings, sections } = useWebsiteStore();
   const bannerSection = sections.find((s) => s.componentType === 'banner');
   const appName = settings?.websiteName || 'GurkyNet';
+  const downloadUrl = (settings?.apkUrl || '').trim();
+  const hasLink = downloadUrl.length > 0 && downloadUrl !== '#';
 
   return (
     <section id="download-app" className="py-12 md:py-32 bg-white relative overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 lg:gap-20 items-center">
 
-          {/* Content Area */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -58,7 +57,7 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] md:text-sm text-gray-500 font-medium">Versi Aplikasi</div>
-                  <div className="font-bold text-gray-900 text-sm md:text-base truncate">{appInfo.version}</div>
+                  <div className="font-bold text-gray-900 text-sm md:text-base truncate">{appMeta.version}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 md:gap-4 min-w-0">
@@ -67,7 +66,7 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] md:text-sm text-gray-500 font-medium">Ukuran</div>
-                  <div className="font-bold text-gray-900 text-sm md:text-base truncate">{appInfo.size}</div>
+                  <div className="font-bold text-gray-900 text-sm md:text-base truncate">{appMeta.size}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 md:gap-4 min-w-0">
@@ -76,7 +75,7 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] md:text-sm text-gray-500 font-medium">Min. OS</div>
-                  <div className="font-bold text-gray-900 text-sm md:text-base leading-snug">{appInfo.minAndroid}</div>
+                  <div className="font-bold text-gray-900 text-sm md:text-base leading-snug">{appMeta.minAndroid}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 md:gap-4 min-w-0">
@@ -85,27 +84,35 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] md:text-sm text-gray-500 font-medium">Update Terakhir</div>
-                  <div className="font-bold text-gray-900 text-sm md:text-base truncate">{appInfo.lastUpdate}</div>
+                  <div className="font-bold text-gray-900 text-sm md:text-base truncate">{appMeta.lastUpdate}</div>
                 </div>
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              className={`w-full sm:w-auto px-5 py-2.5 md:px-8 md:py-4 text-sm md:text-base ${!appInfo.isAvailable ? 'opacity-80 cursor-not-allowed hover:scale-100 hover:bg-primary-600' : ''}`}
-              disabled={!appInfo.isAvailable}
-            >
-              <DownloadCloud className="w-4 h-4 md:w-6 md:h-6" />
-              {appInfo.isAvailable ? 'Download APK Sekarang' : 'Segera Hadir'}
-            </Button>
-            {!appInfo.isAvailable && (
+            {hasLink ? (
+              <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex w-full sm:w-auto">
+                <Button variant="primary" className="w-full sm:w-auto px-5 py-2.5 md:px-8 md:py-4 text-sm md:text-base">
+                  <DownloadCloud className="w-4 h-4 md:w-6 md:h-6" />
+                  Download Aplikasi
+                </Button>
+              </a>
+            ) : (
+              <Button
+                variant="primary"
+                className="w-full sm:w-auto px-5 py-2.5 md:px-8 md:py-4 text-sm md:text-base opacity-80 cursor-not-allowed hover:scale-100 hover:bg-primary-600"
+                disabled
+              >
+                <DownloadCloud className="w-4 h-4 md:w-6 md:h-6" />
+                Download Aplikasi
+              </Button>
+            )}
+            {!hasLink && (
               <p className="text-xs md:text-sm text-gray-500 mt-2.5 md:mt-3 font-medium">
-                *Aplikasi sedang dalam tahap peninjauan akhir.
+                *Link unduhan akan aktif setelah Marketing mengisi URL APK di pengaturan website.
               </p>
             )}
           </motion.div>
 
-          {/* Download Visual / Decorations — desktop only */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -122,17 +129,6 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
                 <div className="text-center">
                   <h3 className="text-2xl font-bold text-gray-900 mb-2">{appName}.apk</h3>
                   <p className="text-gray-500">Official Android Application</p>
-                </div>
-
-                {/* Progress bar simulation */}
-                <div className="w-full space-y-2 mt-4">
-                  <div className="flex justify-between text-xs font-medium text-gray-500">
-                    <span>Downloading...</span>
-                    <span>0%</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary-200 rounded-full w-0"></div>
-                  </div>
                 </div>
               </div>
             </div>

@@ -45,6 +45,9 @@ class ProductCatalogCache
             } catch (\BadMethodCallException) {
                 // File/array drivers do not support tags.
             }
+
+            // Landing catalog preview buckets must refresh with product catalog.
+            \App\Services\Website\PublicHomepageCache::forgetCatalog();
         } catch (\Throwable $e) {
             // Cache driver permission issues must not fail catalog sync (post-upsert).
             Log::warning('Product catalog cache bump unavailable — continuing without invalidation', [

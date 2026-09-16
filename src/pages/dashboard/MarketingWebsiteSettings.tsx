@@ -551,6 +551,18 @@ export const MarketingWebsiteSettings: React.FC = () => {
               </div>
 
               <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700">URL Download APK</label>
+                <input
+                  type="text"
+                  value={formState.apkUrl || ''}
+                  onChange={(e) => handleChange('apkUrl', e.target.value)}
+                  placeholder="https://... (link unduhan APK resmi)"
+                  className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/10 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 outline-none transition-all placeholder-gray-400 font-medium"
+                />
+                <p className="text-[10px] text-gray-500 font-medium">Dipakai tombol &quot;Download Aplikasi&quot; di landing page.</p>
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-700">Hak Cipta / Copyright</label>
                 <input
                   type="text"

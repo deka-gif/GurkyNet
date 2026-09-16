@@ -118,12 +118,12 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
             </div>
           </motion.div>
 
-          {/* Mockup / CMS Illustration */}
+          {/* Mockup / CMS Illustration — hide empty placeholder tiles on mobile */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="relative mx-auto lg:ml-auto w-full max-w-[16rem] sm:max-w-sm lg:max-w-md"
+            className={`relative mx-auto lg:ml-auto w-full max-w-[16rem] sm:max-w-sm lg:max-w-md ${illustration ? '' : 'hidden lg:block'}`}
             style={{ perspective: "1000px" }}
           >
             {illustration ? (

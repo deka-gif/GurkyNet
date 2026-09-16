@@ -41,6 +41,8 @@ export interface WebsiteSetting {
   timezone?: string;
   currency?: string;
   language?: string;
+  /** Official APK / download link (Marketing → Website Settings). */
+  apkUrl?: string | null;
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;

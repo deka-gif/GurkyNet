@@ -40,6 +40,7 @@ function settingToBackend(s: Partial<WebsiteSetting>): any {
   if (s.youtube !== undefined) backend.youtube = s.youtube;
   if (s.twitter !== undefined) backend.twitter = s.twitter;
   if (s.copyright !== undefined) backend.copyright = s.copyright;
+  if (s.apkUrl !== undefined) backend.apk_url = s.apkUrl;
   if (s.maintenanceMode !== undefined) backend.maintenance_mode = s.maintenanceMode;
   if (s.timezone !== undefined) backend.timezone = s.timezone;
   if (s.currency !== undefined) backend.currency = s.currency;
@@ -76,6 +77,7 @@ export function buildWebsiteSettingPatch(
     'youtube',
     'twitter',
     'copyright',
+    'apkUrl',
     'maintenanceMode',
     'timezone',
     'currency',
