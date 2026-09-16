@@ -216,6 +216,28 @@ class WebsiteContentTest extends TestCase
         ]);
     }
 
+    public function test_marketing_can_persist_apk_url_on_website_setting(): void
+    {
+        Sanctum::actingAs($this->marketingUser);
+
+        $setting = WebsiteSetting::create([
+            'website_name' => 'APK Link Host',
+        ]);
+
+        $url = 'https://cdn.example.com/gurkynet-app.apk';
+        $response = $this->patchJson("/api/v1/admin/website/settings/{$setting->id}", [
+            'apk_url' => $url,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.apkUrl', $url);
+
+        $this->assertDatabaseHas('website_settings', [
+            'id' => $setting->id,
+            'apk_url' => $url,
+        ]);
+    }
+
     public function test_can_delete_website_setting(): void
     {
         Sanctum::actingAs($this->marketingUser);

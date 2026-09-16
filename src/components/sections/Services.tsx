@@ -9,11 +9,11 @@ import {
   CreditCard, 
   Briefcase, 
   Send, 
-  FileText, 
   PlayCircle,
   Grid,
   X,
   LogIn,
+  UserPlus,
   ChevronRight,
   Sparkles,
   Loader2,
@@ -25,6 +25,15 @@ import { useWebsiteStore } from '../../store/website.store';
 import { productService } from '../../services/product/product.service';
 import { Product } from '../../types';
 import { ServerErrorState, EmptyState } from '../ui/FeedbackStates';
+
+/** Soft inventory hint — avoid promising the guest preview shows the full count. */
+function catalogFootLabel(productCount?: number | null): string {
+  const n = Number(productCount) || 0;
+  if (n <= 0) return 'Lihat pratinjau';
+  if (n >= 100) return 'Ratusan pilihan';
+  if (n >= 20) return 'Puluhan pilihan';
+  return `${n} produk tersedia`;
+}
 
 function getCategoryIcon(iconName?: string, categorySlug?: string) {
   const name = (iconName || categorySlug || '').toLowerCase();
@@ -235,7 +244,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                   </div>
 
                   <div className="mt-3 md:mt-6 flex items-center justify-between text-xs font-extrabold text-primary-600 group-hover:translate-x-1 transition-transform">
-                    <span>{cat.productCount ? `${cat.productCount} Produk` : 'Lihat Produk'}</span>
+                    <span>{catalogFootLabel(cat.productCount)}</span>
                     <ChevronRight className="w-4 h-4" />
                   </div>
                 </motion.div>
@@ -263,7 +272,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                   </div>
                   <div>
                     <h3 className="text-lg font-extrabold">{selectedCategory.name}</h3>
-                    <p className="text-xs text-primary-200">Pratinjau Katalog Produk Publik</p>
+                    <p className="text-xs text-primary-200">Cuplikan katalog — belum daftar lengkap</p>
                   </div>
                 </div>
                 <button 
@@ -303,7 +312,13 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                 ) : (
                   <div className="space-y-3">
                     <div className="text-xs font-extrabold text-gray-400 uppercase tracking-wider mb-2">
-                      Daftar Produk ({modalProducts.length})
+                      {(() => {
+                        const total = Number(selectedCategory.productCount) || 0;
+                        const shown = modalProducts.length;
+                        return total > shown
+                          ? `Menampilkan ${shown} dari ${total} produk`
+                          : `Daftar produk (${shown})`;
+                      })()}
                     </div>
                     {modalProducts.map((product) => (
                       <div 
@@ -344,24 +359,33 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                 )}
               </div>
 
-              {/* Modal Footer */}
-              <div className="p-5 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Modal Footer — guest preview only; full catalog after login (FR-MKT01 public landing). */}
+              <div className="p-5 bg-gray-50 border-t border-gray-100 flex flex-col gap-3">
                 <div className="text-xs text-gray-500 text-center sm:text-left">
-                  <span className="font-bold text-gray-800">Siap bertransaksi?</span> Masuk ke akun Anda untuk memulai.
+                  <span className="font-bold text-gray-800">Ini hanya cuplikan.</span>{' '}
+                  Masuk atau daftar untuk melihat semua produk dan mulai transaksi.
                 </div>
-                <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 w-full">
                   <button
+                    type="button"
                     onClick={() => setSelectedCategory(null)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-100 transition w-1/2 sm:w-auto text-center cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-100 transition text-center cursor-pointer"
                   >
                     Tutup
                   </button>
                   <Link
+                    to="/register"
+                    className="px-4 py-2.5 rounded-xl border border-primary-200 bg-white text-primary-700 text-xs font-extrabold hover:bg-primary-50 transition flex items-center justify-center gap-2 text-center"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Daftar</span>
+                  </Link>
+                  <Link
                     to="/login"
-                    className="px-5 py-2.5 rounded-xl bg-primary-600 text-white text-xs font-extrabold hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-md shadow-primary-500/20 w-1/2 sm:w-auto text-center"
+                    className="px-5 py-2.5 rounded-xl bg-primary-600 text-white text-xs font-extrabold hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-md shadow-primary-500/20 text-center"
                   >
                     <LogIn className="w-4 h-4" />
-                    <span>Masuk</span>
+                    <span>Lihat semua</span>
                   </Link>
                 </div>
               </div>

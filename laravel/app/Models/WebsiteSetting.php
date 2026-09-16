@@ -29,6 +29,7 @@ class WebsiteSetting extends Model
         'tiktok',
         'youtube',
         'twitter',
+        'apk_url',
         'copyright',
         'maintenance_mode',
         'timezone',
