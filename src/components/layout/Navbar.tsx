@@ -7,6 +7,19 @@ import { WebsiteMenu } from '../../types';
 import { resolveMediaSrc } from '../../utils/mediaUrl';
 import { Button } from '../ui/Button';
 
+/**
+ * Fallback when CMS menus empty (homepage timeout / cache miss).
+ * Mirrors default marketing nav anchors — Masalah 2.
+ */
+const FALLBACK_PUBLIC_MENUS: WebsiteMenu[] = [
+  { id: -101, title: 'Beranda', url: '/', displayOrder: 1, visible: true, openInNewTab: false },
+  { id: -102, title: 'Layanan', url: '/#services', displayOrder: 2, visible: true, openInNewTab: false },
+  { id: -103, title: 'Fitur', url: '/#features', displayOrder: 3, visible: true, openInNewTab: false },
+  { id: -104, title: 'Tentang Kami', url: '/#about', displayOrder: 4, visible: true, openInNewTab: false },
+  { id: -105, title: 'FAQ', url: '/#faq', displayOrder: 5, visible: true, openInNewTab: false },
+  { id: -106, title: 'Kontak', url: '/#contact', displayOrder: 6, visible: true, openInNewTab: false },
+];
+
 function buildMenuTree(menuItems: WebsiteMenu[]): WebsiteMenu[] {
   const itemMap = new Map<number, WebsiteMenu & { children: WebsiteMenu[] }>();
 
@@ -61,7 +74,9 @@ export const Navbar = () => {
     setOpenMobileSubmenus((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const menuTree = buildMenuTree(menus.filter((m) => m.visible));
+  const cmsMenuTree = buildMenuTree(menus.filter((m) => m.visible));
+  // Prefer CMS; if empty (API fail), keep drawer usable with static anchors.
+  const menuTree = cmsMenuTree.length > 0 ? cmsMenuTree : buildMenuTree(FALLBACK_PUBLIC_MENUS);
 
   return (
     <>
@@ -207,7 +222,7 @@ export const Navbar = () => {
               className="fixed top-0 right-0 bottom-0 w-[min(100%,20rem)] bg-white shadow-2xl z-50 lg:hidden flex flex-col"
               id="nav-mobile"
             >
-              <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
                 <span className="font-extrabold text-gray-900">Menu</span>
                 <button
                   type="button"
@@ -219,83 +234,86 @@ export const Navbar = () => {
                 </button>
               </div>
 
-              <ul className="flex-1 overflow-y-auto p-5 flex flex-col gap-1">
-                {menuTree.map((menu) => {
-                  const hasChildren = menu.children && menu.children.length > 0;
-                  const isSubmenuOpen = !!openMobileSubmenus[menu.id];
+              {/* Scrollable body: menu height = content; auth sits directly under (no flex-1 gap). */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <ul className="p-5 pb-2 flex flex-col gap-1">
+                  {menuTree.map((menu) => {
+                    const hasChildren = menu.children && menu.children.length > 0;
+                    const isSubmenuOpen = !!openMobileSubmenus[menu.id];
 
-                  if (hasChildren) {
+                    if (hasChildren) {
+                      return (
+                        <li key={menu.id}>
+                          <button
+                            onClick={() => toggleMobileSubmenu(menu.id)}
+                            className="flex items-center justify-between w-full text-gray-800 hover:text-primary-700 font-bold py-3 px-2 rounded-xl hover:bg-primary-50/50"
+                          >
+                            <span>{menu.title}</span>
+                            <ChevronDown
+                              className={`w-5 h-5 transition-transform duration-200 ${
+                                isSubmenuOpen ? 'rotate-180 text-primary-600' : 'text-gray-400'
+                              }`}
+                            />
+                          </button>
+
+                          <AnimatePresence>
+                            {isSubmenuOpen && (
+                              <motion.ul
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="pl-3 ml-2 space-y-1 border-l-2 border-primary-100 overflow-hidden"
+                              >
+                                {menu.children?.map((child) => (
+                                  <li key={child.id}>
+                                    <a
+                                      href={child.url}
+                                      target={child.openInNewTab ? '_blank' : undefined}
+                                      rel="noopener noreferrer"
+                                      className="block py-2 px-2 text-gray-600 hover:text-primary-700 font-medium text-sm rounded-lg"
+                                      onClick={() => setIsMobileMenuOpen(false)}
+                                    >
+                                      {child.title}
+                                    </a>
+                                  </li>
+                                ))}
+                              </motion.ul>
+                            )}
+                          </AnimatePresence>
+                        </li>
+                      );
+                    }
+
                     return (
                       <li key={menu.id}>
-                        <button
-                          onClick={() => toggleMobileSubmenu(menu.id)}
-                          className="flex items-center justify-between w-full text-gray-800 hover:text-primary-700 font-bold py-3 px-2 rounded-xl hover:bg-primary-50/50"
+                        <a
+                          href={menu.url}
+                          target={menu.openInNewTab ? '_blank' : undefined}
+                          rel="noopener noreferrer"
+                          className="block text-gray-800 hover:text-primary-700 font-bold py-3 px-2 rounded-xl hover:bg-primary-50/50"
+                          onClick={() => setIsMobileMenuOpen(false)}
                         >
-                          <span>{menu.title}</span>
-                          <ChevronDown
-                            className={`w-5 h-5 transition-transform duration-200 ${
-                              isSubmenuOpen ? 'rotate-180 text-primary-600' : 'text-gray-400'
-                            }`}
-                          />
-                        </button>
-
-                        <AnimatePresence>
-                          {isSubmenuOpen && (
-                            <motion.ul
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="pl-3 ml-2 space-y-1 border-l-2 border-primary-100 overflow-hidden"
-                            >
-                              {menu.children?.map((child) => (
-                                <li key={child.id}>
-                                  <a
-                                    href={child.url}
-                                    target={child.openInNewTab ? '_blank' : undefined}
-                                    rel="noopener noreferrer"
-                                    className="block py-2 px-2 text-gray-600 hover:text-primary-700 font-medium text-sm rounded-lg"
-                                    onClick={() => setIsMobileMenuOpen(false)}
-                                  >
-                                    {child.title}
-                                  </a>
-                                </li>
-                              ))}
-                            </motion.ul>
-                          )}
-                        </AnimatePresence>
+                          {menu.title}
+                        </a>
                       </li>
                     );
-                  }
+                  })}
+                </ul>
 
-                  return (
-                    <li key={menu.id}>
-                      <a
-                        href={menu.url}
-                        target={menu.openInNewTab ? '_blank' : undefined}
-                        rel="noopener noreferrer"
-                        className="block text-gray-800 hover:text-primary-700 font-bold py-3 px-2 rounded-xl hover:bg-primary-50/50"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        {menu.title}
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <div className="p-5 border-t border-gray-100 flex flex-col gap-3">
-                <Link
-                  to="/login"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center justify-center font-bold py-3 rounded-full border-2 border-gray-200 text-gray-700 hover:border-primary-300 hover:text-primary-700 transition-colors"
-                >
-                  Masuk Akun
-                </Link>
-                <Link to="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="primary" className="w-full">
-                    Daftar Sekarang
-                  </Button>
-                </Link>
+                <div className="px-5 pb-5 pt-3 border-t border-gray-100 flex flex-col gap-3">
+                  <Link
+                    to="/login"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center justify-center font-bold py-3 rounded-full border-2 border-gray-200 text-gray-700 hover:border-primary-300 hover:text-primary-700 transition-colors"
+                  >
+                    Masuk Akun
+                  </Link>
+                  <Link to="/register" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button variant="primary" className="w-full">
+                      Daftar Sekarang
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </motion.div>
           </>

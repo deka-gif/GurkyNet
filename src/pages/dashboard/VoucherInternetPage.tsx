@@ -58,6 +58,8 @@ export const VoucherInternetPage = () => {
   const [telkomselNationalSelected, setTelkomselNationalSelected] = useState(false);
   const [telkomselZoneLabel, setTelkomselZoneLabel] = useState<string | null>(null);
   const [telkomselZoneReference, setTelkomselZoneReference] = useState<Record<string, string[]>>({});
+  /** Provider label we last tried to load — drives empty-state without flashing pre-fetch. */
+  const [catalogAttemptedFor, setCatalogAttemptedFor] = useState<string | null>(null);
 
   const viMode = mode === 'fisik' ? 'fisik' : mode === 'elektronik' ? 'elektronik' : 'tembak';
 
@@ -121,6 +123,7 @@ export const VoucherInternetPage = () => {
   const loadOperatorCatalog = useCallback(
     async (providerLabel: string) => {
       const match = findCategoryProviderByName(brandProviders, providerLabel);
+      setCatalogAttemptedFor(providerLabel);
       if (!match?.providerId) {
         pager.reset();
         setErrorMsg('Provider tidak ditemukan di katalog voucher internet.');
@@ -146,6 +149,7 @@ export const VoucherInternetPage = () => {
     if (mode !== 'tembak') return;
     if (!activeCatalogProvider) {
       pager.reset();
+      setCatalogAttemptedFor(null);
       return;
     }
     if (providersLoading || brandProviders.length === 0) return;
@@ -275,11 +279,25 @@ export const VoucherInternetPage = () => {
     ? telkomselCatalogProductsToShow
     : visibleBaseProducts;
 
+  const catalogBusy = pager.loading || providersLoading;
+  const catalogEmptySettled =
+    !catalogBusy &&
+    catalogBaseProducts.length === 0 &&
+    !pager.error &&
+    !!activeCatalogProvider &&
+    (catalogAttemptedFor === activeCatalogProvider ||
+      (!providersLoading && brandProviders.length === 0));
+  const payDisabled =
+    !selectedProduct ||
+    !!providerMismatchError ||
+    (selectedProduct ? !isProductPurchasable(selectedProduct) : false);
+
   const renderCatalogProductSection = (checkoutAction?: ReactNode) => (
     <>
-      {(pager.loading || providersLoading) && catalogBaseProducts.length === 0 ? (
+      {catalogBusy && catalogBaseProducts.length === 0 ? (
         <div className="py-8 text-center">
           <RefreshCw className="w-6 h-6 mx-auto animate-spin text-gray-300" />
+          <p className="text-xs font-medium text-gray-400 mt-2">Memuat daftar produk...</p>
         </div>
       ) : null}
 
@@ -287,6 +305,25 @@ export const VoucherInternetPage = () => {
         <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
           {pager.error}
         </p>
+      ) : null}
+
+      {/* Empty state — same idea as PulsaPage when operator products never arrive. */}
+      {catalogEmptySettled ? (
+        <div className="p-10 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
+          <AlertCircle className="w-8 h-8 mx-auto text-gray-300" />
+          <p className="text-xs font-medium">
+            Produk tidak tersedia untuk nomor ini. Coba muat ulang atau pilih operator manual.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeCatalogProvider) void loadOperatorCatalog(activeCatalogProvider);
+            }}
+            className="text-xs font-bold text-primary-600 hover:text-primary-700"
+          >
+            Coba lagi
+          </button>
+        </div>
       ) : null}
 
       {telkomselZoneGateNeeded && (
@@ -321,8 +358,6 @@ export const VoucherInternetPage = () => {
             loading={pager.loadingMore}
             onClick={() => void pager.loadMore()}
           />
-          {/* Regional zone lists are usually small; still allow load-more on national/full list. */}
-          {telkomselZoneLabel ? null : null}
         </>
       )}
 
@@ -331,7 +366,7 @@ export const VoucherInternetPage = () => {
   );
 
   return (
-    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${mode === 'tembak' && selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-5xl ${mode === 'tembak' && tembakShowProducts ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Voucher Internet</h2>
@@ -528,7 +563,7 @@ export const VoucherInternetPage = () => {
                     <button
                       type="button"
                       onClick={() => startCheckout()}
-                      disabled={!!providerMismatchError}
+                      disabled={payDisabled}
                       className="max-lg:hidden w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm"
                     >
                       Lanjut Bayar (PIN)
@@ -557,11 +592,15 @@ export const VoucherInternetPage = () => {
         />
       )}
 
-      {mode === 'tembak' && selectedProduct ? (
+      {mode === 'tembak' && tembakShowProducts ? (
         <MobileStickyActionBar
-          meta={`${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`}
+          meta={
+            selectedProduct
+              ? `${selectedProduct.name} · ${formatIDR(selectedProduct.price)}`
+              : 'Pilih produk terlebih dahulu'
+          }
           label="Lanjut Bayar (PIN)"
-          disabled={!!providerMismatchError || !isProductPurchasable(selectedProduct)}
+          disabled={payDisabled}
           onClick={() => startCheckout()}
         />
       ) : null}

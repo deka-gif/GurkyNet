@@ -30,10 +30,23 @@ class WebsiteBrandLogoResolver
         if ($settings->logoMedia) {
             $relative = $settings->logoMedia->diskPath();
             $disk = $settings->logoMedia->storage_disk ?: 'public';
-            $path = $this->firstReadablePath([
+            $candidates = [
                 Storage::disk($disk)->path($relative),
                 public_path('storage'.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $relative)),
-            ]);
+            ];
+            // DomPDF: prefer PNG/JPEG sibling when CMS serves WebP for the web UI.
+            foreach (array_values($candidates) as $candidate) {
+                if (! is_string($candidate) || $candidate === '') {
+                    continue;
+                }
+                $ext = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
+                if ($ext === 'webp') {
+                    $png = preg_replace('/\.webp$/i', '.png', $candidate);
+                    $jpg = preg_replace('/\.webp$/i', '.jpg', $candidate);
+                    array_unshift($candidates, $png, $jpg);
+                }
+            }
+            $path = $this->firstReadablePath($candidates);
             if ($path !== null) {
                 return $path;
             }

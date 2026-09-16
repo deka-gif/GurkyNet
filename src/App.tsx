@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { router } from './router';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { NotificationToast } from './components/notifications/NotificationToast';
-import { useEffect } from 'react';
 import { useAuthStore } from './store/auth.store';
 import { toastWarning } from './hooks/useToast';
+
+const ReactQueryDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import('@tanstack/react-query-devtools').then((m) => ({
+        default: m.ReactQueryDevtools,
+      }))
+    )
+  : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,12 +27,12 @@ const queryClient = new QueryClient({
 
 function AuthHydrator({ children }: { children: React.ReactNode }) {
   const { fetchUser, token, logout } = useAuthStore();
-  
+
   useEffect(() => {
     if (token) {
       fetchUser();
     }
-    
+
     const handleUnauthorized = () => {
       logout();
       toastWarning('Sesi berakhir', 'Sesi Anda telah berakhir karena tidak aktif. Silakan login kembali.');
@@ -49,9 +55,12 @@ export default function App() {
           <RouterProvider router={router} />
         </AuthHydrator>
         <NotificationToast />
-        <ReactQueryDevtools initialIsOpen={false} />
+        {ReactQueryDevtools ? (
+          <Suspense fallback={null}>
+            <ReactQueryDevtools initialIsOpen={false} />
+          </Suspense>
+        ) : null}
       </QueryClientProvider>
     </ErrorBoundary>
   );
 }
-

@@ -71,7 +71,7 @@ interface TransactionState {
   errorCode: number | string | null;
   validationErrors: Record<string, string[]> | null;
   lastFetchedAt: number | null;
-  fetchTransactions: () => Promise<void>;
+  fetchTransactions: (opts?: { force?: boolean }) => Promise<void>;
   upsertTransaction: (row: any) => void;
   createTransaction: (data: any) => Promise<Transaction | null>;
   updateTransactionStatus: (id: string, status: Transaction['status'], note?: string) => Promise<boolean>;
@@ -85,12 +85,13 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   validationErrors: null,
   lastFetchedAt: null,
 
-  fetchTransactions: async () => {
+  fetchTransactions: async (opts) => {
+    const force = Boolean(opts?.force);
     const stale = getCachedStale<Transaction[]>('transactions:list');
-    if (stale?.fresh && get().transactions.length > 0) {
+    if (!force && stale?.fresh && get().transactions.length > 0) {
       return;
     }
-    if (stale && get().transactions.length === 0) {
+    if (!force && stale && get().transactions.length === 0) {
       set({ transactions: stale.data, loading: false, lastFetchedAt: Date.now() });
       if (stale.fresh) return;
     }
@@ -105,6 +106,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       const rows = await cachedFetch({
         key: 'transactions:list',
         ttlMs: CacheTTL.RECENT_TX,
+        force,
         fetcher: async () => {
           const response = await transactionService.getTransactions();
           if (!response.success || response.data === undefined || response.data === null) {
@@ -116,6 +118,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       set({
         transactions: rows,
         loading: false,
+        error: null,
+        errorCode: null,
         lastFetchedAt: Date.now(),
       });
     } catch (err: any) {

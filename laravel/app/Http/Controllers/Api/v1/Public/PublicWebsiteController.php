@@ -16,18 +16,14 @@ use App\Http\Resources\BannerResource;
 use App\Http\Resources\PromotionResource;
 use App\Http\Resources\VoucherResource;
 use App\Http\Resources\AnnouncementResource;
-use App\Http\Resources\CategoryResource;
-use App\Http\Resources\ProductListResource;
 use App\Models\BannerPromotion;
 use App\Models\Faq;
-use App\Models\HomepageFeaturedProduct;
 use App\Models\Notification;
 use App\Models\Provider;
 use App\Models\WebsiteSetting;
-use App\Actions\Product\GetCategoryAction;
-use App\Actions\Product\SearchProductAction;
-use App\Services\ProductProviders\LogicalProductKey;
 use App\Services\DigiflazzService;
+use App\Services\Website\PublicHomepageCache;
+use App\Services\Website\PublicHomepagePayloadBuilder;
 use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,12 +37,11 @@ class PublicWebsiteController extends Controller
     use ApiResponseTrait;
 
     public function __construct(
-        protected WebsiteSettingAction  $settingAction,
+        protected WebsiteSettingAction $settingAction,
         protected HomepageSectionAction $sectionAction,
-        protected WebsiteMenuAction     $menuAction,
-        protected StaticPageAction      $pageAction,
-        protected GetCategoryAction     $categoryAction,
-        protected SearchProductAction   $searchProductAction,
+        protected WebsiteMenuAction $menuAction,
+        protected StaticPageAction $pageAction,
+        protected PublicHomepagePayloadBuilder $homepagePayloadBuilder,
     ) {}
 
     public function settings(): JsonResponse
@@ -243,63 +238,13 @@ class PublicWebsiteController extends Controller
     /**
      * Aggregated homepage payload for mobile/web bootstrap.
      * GET /api/v1/public/homepage — cached 5 minutes (Sprint 7.1).
+     * Payload built by PublicHomepagePayloadBuilder (warmed by website:warm-public-homepage).
      */
     public function homepage(): JsonResponse
     {
-        $payload = \App\Services\Website\PublicHomepageCache::remember(function () {
-            $settings = $this->settingAction->getLatest();
-            $sections = $this->sectionAction->listAll()
-                ->filter(fn ($section) => $section->visible === true && $section->status === 'active')
-                ->sortBy('display_order')
-                ->values();
-            $banners = BannerPromotion::with(['imageMedia', 'mobileImageMedia'])
-                ->visibleInCarousel()
-                ->orderedForDisplay()
-                ->take(10)
-                ->get();
-            $heroSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'hero');
-            $homepageCategories = $this->homepageCatalogBuckets();
-            $featuredProducts = $this->featuredProducts();
-            $faqs = Faq::orderBy('order')->get()->map(fn (Faq $faq) => [
-                'id' => $faq->id,
-                'question' => $faq->question,
-                'answer' => $faq->answer,
-                'order' => (int) $faq->order,
-            ])->values();
-
-            $menus = $this->menuAction->listAll()
-                ->filter(fn ($menu) => (bool) $menu->visible)
-                ->sortBy('display_order')
-                ->values();
-
-            $pages = $this->pageAction->listAll()
-                ->filter(fn ($page) => ($page->status ?? '') === 'published')
-                ->values();
-
-            $seoSection = $sections->first(fn ($section) => strtolower((string) $section->component_type) === 'seo');
-
-            return [
-                'settings' => $settings ? (new WebsiteSettingResource($settings))->resolve() : null,
-                'sections' => HomepageSectionResource::collection($sections)->resolve(),
-                'banners' => BannerResource::collection($banners)->resolve(),
-                'hero' => $heroSection ? (new HomepageSectionResource($heroSection))->resolve() : null,
-                'homepageCategories' => $homepageCategories,
-                'featuredProducts' => ProductListResource::collection($featuredProducts)->resolve(),
-                'faqs' => $faqs->all(),
-                'menus' => WebsiteMenuResource::collection($menus)->resolve(),
-                'pages' => StaticPageResource::collection($pages)->resolve(),
-                'seo' => [
-                    'title' => $seoSection?->title
-                        ?? $settings?->seo_title
-                        ?? $settings?->website_name,
-                    'description' => $seoSection?->description
-                        ?? $settings?->seo_description
-                        ?? $settings?->tagline,
-                    'keywords' => $settings?->seo_keywords,
-                ],
-                'cachedForSeconds' => \App\Services\Website\PublicHomepageCache::TTL_SECONDS,
-            ];
-        });
+        $payload = PublicHomepageCache::remember(
+            fn () => $this->homepagePayloadBuilder->build()
+        );
 
         return $this->successResponse('Homepage berhasil dimuat.', $payload);
     }
@@ -519,98 +464,4 @@ class PublicWebsiteController extends Controller
         ]);
     }
 
-    protected function homepageCatalogBuckets(): array
-    {
-        $familyLabels = [
-            'pulsa' => 'Pulsa',
-            'data' => 'Paket Data',
-            'topup-digital' => 'Top Up Digital',
-            'game' => 'Game',
-            'voucher-digital' => 'Voucher Digital',
-            'langganan-digital' => 'Langganan Digital',
-            'pln' => 'PLN',
-            'international' => 'International',
-            'tagihan' => 'Tagihan',
-        ];
-
-        $categories = collect($this->categoryAction->execute());
-
-        return collect($familyLabels)->map(function (string $label, string $family) use ($categories) {
-            $category = $categories->first(function ($item) use ($family) {
-                $slug = (string) ($item->slug ?? '');
-
-                return LogicalProductKey::normalizeCategoryFamily($slug) === $family;
-            });
-
-            $productPaginator = $this->searchProductAction->execute([
-                'category' => $family,
-                'per_page' => 8,
-            ]);
-
-            $items = collect($productPaginator->items())->values();
-            $representative = $items->first();
-            $icon = $category?->icon
-                ?? match ($family) {
-                    'pulsa' => 'smartphone',
-                    'data' => 'wifi',
-                    'topup-digital' => 'credit-card',
-                    'voucher-digital' => 'gift',
-                    'langganan-digital' => 'play-circle',
-                    'international' => 'globe',
-                    'pln' => 'zap',
-                    'game' => 'play-circle',
-                    'tagihan' => 'credit-card',
-                    default => 'grid',
-                };
-
-            return [
-                'key' => $family,
-                'label' => $label,
-                'category' => $category ? (new CategoryResource($category))->resolve() : null,
-                'slug' => $category?->slug ?? $family,
-                'icon' => $icon,
-                'productCount' => $productPaginator->total(),
-                'products' => ProductListResource::collection($items)->resolve(),
-                'previewProduct' => $representative ? (new ProductListResource($representative))->resolve() : null,
-            ];
-        })->values()->all();
-    }
-
-    protected function featuredProducts()
-    {
-        $availability = resolve(\App\Services\AvailabilityService::class);
-
-        return HomepageFeaturedProduct::query()
-            ->with([
-                'product.category',
-                'product.provider',
-                'product.productProvider',
-                'product.providerSkus.productProvider',
-            ])
-            ->where('is_active', true)
-            ->orderBy('display_order')
-            ->get()
-            ->pluck('product')
-            ->filter(function ($product) use ($availability) {
-                if (!$product) {
-                    return false;
-                }
-
-                // Mirror User Dashboard: hide ops inactive; keep Active + Maintenance.
-                if (! $availability->isCatalogVisible($product)) {
-                    return false;
-                }
-
-                // Control Center gate — at least one active SKU on an enabled Product Provider.
-                $product->loadMissing('providerSkus.productProvider');
-                foreach ($product->providerSkus as $sku) {
-                    if ($sku->is_active && $sku->productProvider && $sku->productProvider->is_active) {
-                        return true;
-                    }
-                }
-
-                return false;
-            })
-            ->values();
-    }
 }

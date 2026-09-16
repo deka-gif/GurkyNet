@@ -436,4 +436,35 @@ export function preloadDashboardCore() {
   void import('../pages/dashboard/PromoDetailPage');
   void import('../config/catalogCategories');
   void import('../pages/dashboard/CustomerChatPage');
+  void import('../layouts/DashboardLayout');
 }
+
+/* —— Layouts / auth (keep OFF the public `/` critical path) —— */
+export const DashboardLayout = lazyNamed(
+  () => import('../layouts/DashboardLayout'),
+  'DashboardLayout'
+);
+export const AuthLayout = lazyNamed(() => import('../layouts/AuthLayout'), 'AuthLayout');
+export const LoginPage = lazyNamed(() => import('../pages/auth/LoginPage'), 'LoginPage');
+export const RegisterPage = lazyNamed(() => import('../pages/auth/RegisterPage'), 'RegisterPage');
+export const ForgotPasswordPage = lazyNamed(
+  () => import('../pages/auth/ForgotPasswordPage'),
+  'ForgotPasswordPage'
+);
+export const GoogleLandingPage = lazyNamed(
+  () => import('../pages/auth/GoogleLandingPage'),
+  'GoogleLandingPage'
+);
+export const GoogleCompleteRegistrationPage = lazyNamed(
+  () => import('../pages/auth/GoogleCompleteRegistrationPage'),
+  'GoogleCompleteRegistrationPage'
+);
+export const DocsPage = lazyNamed(() => import('../pages/public/DocsPage'), 'DocsPage');
+export const LegalCenterPage = lazyNamed(
+  () => import('../pages/public/LegalCenterPage'),
+  'LegalCenterPage'
+);
+export const StaticPageView = lazyNamed(
+  () => import('../pages/public/StaticPageView'),
+  'StaticPageView'
+);

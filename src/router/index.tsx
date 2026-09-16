@@ -1,21 +1,22 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { PublicLayout } from '../layouts/PublicLayout';
-import { AuthLayout } from '../layouts/AuthLayout';
-import { DashboardLayout } from '../layouts/DashboardLayout';
 import { HomePage } from '../pages/public/HomePage';
-import { DocsPage } from '../pages/public/DocsPage';
-import { StaticPageView } from '../pages/public/StaticPageView';
-import { LegalCenterPage } from '../pages/public/LegalCenterPage';
-import { LoginPage } from '../pages/auth/LoginPage';
-import { RegisterPage } from '../pages/auth/RegisterPage';
-import { GoogleLandingPage } from '../pages/auth/GoogleLandingPage';
-import { GoogleCompleteRegistrationPage } from '../pages/auth/GoogleCompleteRegistrationPage';
-import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
 import { NotFoundPage } from '../pages/public/NotFoundPage';
 import { UnauthorizedPage } from '../pages/public/UnauthorizedPage';
 import { ProtectedRoute } from '../components/ui/ProtectedRoute';
 import { GuestRoute } from '../components/ui/GuestRoute';
+import { LazyRoute } from '../components/ui/LazyRoute';
 import {
+  DashboardLayout,
+  AuthLayout,
+  LoginPage,
+  RegisterPage,
+  ForgotPasswordPage,
+  GoogleLandingPage,
+  GoogleCompleteRegistrationPage,
+  DocsPage,
+  LegalCenterPage,
+  StaticPageView,
   DashboardHomePage,
   PromoDetailPage,
   TransactionDetailPage,
@@ -136,26 +137,44 @@ export const router = createBrowserRouter([
       },
       {
         path: 'docs',
-        element: <DocsPage />
+        element: (
+          <LazyRoute>
+            <DocsPage />
+          </LazyRoute>
+        )
       },
       {
         path: 'legal',
-        element: <LegalCenterPage />
+        element: (
+          <LazyRoute>
+            <LegalCenterPage />
+          </LazyRoute>
+        )
       },
       {
         path: 'legal/:slug',
-        element: <LegalCenterPage />
+        element: (
+          <LazyRoute>
+            <LegalCenterPage />
+          </LazyRoute>
+        )
       },
       {
         path: 'page/:slug',
-        element: <StaticPageView />
+        element: (
+          <LazyRoute>
+            <StaticPageView />
+          </LazyRoute>
+        )
       }
     ],
   },
   {
     element: (
       <GuestRoute>
-        <AuthLayout />
+        <LazyRoute>
+          <AuthLayout />
+        </LazyRoute>
       </GuestRoute>
     ),
     children: [
@@ -189,7 +208,9 @@ export const router = createBrowserRouter([
     path: '/dashboard',
     element: (
       <ProtectedRoute>
-        <DashboardLayout />
+        <LazyRoute>
+          <DashboardLayout />
+        </LazyRoute>
       </ProtectedRoute>
     ),
     children: [

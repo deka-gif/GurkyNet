@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -32,6 +32,18 @@ type RecentTransactionsCardProps = {
   onRetry: () => void;
   limit?: number;
 };
+
+function classifyLoadError(message: string | null): 'timeout' | 'abort' | 'network' | 'http' | 'unknown' {
+  const raw = String(message || '');
+  const lower = raw.toLowerCase();
+  if (/timeout|econnaborted|proses provider masih berjalan|jaringan lambat/.test(lower)) return 'timeout';
+  if (/cancel|abort|terputus/.test(lower)) return 'abort';
+  if (/offline|network|internet|failed to fetch|networkerror/.test(lower)) return 'network';
+  if (/\b(401|403|404|419|422|429|5\d\d)\b|server sedang bermasalah|akses ditolak|sesi/.test(lower)) {
+    return 'http';
+  }
+  return 'unknown';
+}
 
 function serviceTone(tx: Transaction) {
   const s = `${tx.serviceName || ''} ${tx.productName || ''}`.toLowerCase();
@@ -95,6 +107,12 @@ export const RecentTransactionsCard = memo(function RecentTransactionsCard({
     list.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
     return list.slice(0, limit);
   }, [transactions, limit]);
+
+  useEffect(() => {
+    if (!error || items.length > 0) return;
+    const kind = classifyLoadError(error);
+    console.warn('[dashboard:RecentTransactions] load failed', { kind, message: error });
+  }, [error, items.length]);
 
   return (
     <div className="flex flex-col justify-between rounded-3xl border border-gray-100 bg-white p-6 shadow-xl shadow-gray-200/50 lg:col-span-7">

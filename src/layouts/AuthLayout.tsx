@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet, Link } from 'react-router-dom';
+import { Suspense } from 'react';
 import { motion } from 'motion/react';
 import { CheckCircle, Shield, Smartphone, Zap, Wifi, Wallet } from 'lucide-react';
 import { NetworkStatusAndLoader } from '../components/ui/NetworkStatusAndLoader';
@@ -158,7 +159,9 @@ export const AuthLayout = () => {
               transition={{ duration: 0.4 }}
               className="w-full max-w-md mx-auto"
             >
-              <Outlet />
+              <Suspense fallback={null}>
+                <Outlet />
+              </Suspense>
             </motion.div>
           </div>
 

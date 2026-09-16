@@ -23,9 +23,10 @@ export default defineConfig(() => {
       chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
+          // Do NOT force lucide-react into one chunk — that disabled tree-shaking
+          // and modulepreloaded ~830KB of unused icons on /login (perf audit 2026-09-14).
           manualChunks: {
             vendor: ['react', 'react-dom', 'react-router-dom'],
-            lucide: ['lucide-react'],
             recharts: ['recharts'],
             motion: ['motion'],
           },

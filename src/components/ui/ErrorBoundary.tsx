@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { isChunkLoadError, reloadOnceForStaleChunk } from '../../utils/spaChunkRecovery';
 
 type Props = {
   children: ReactNode;
@@ -13,6 +14,7 @@ type State = {
 
 /**
  * Route-level boundary — one page crash should not kill the whole dashboard shell.
+ * Stale-chunk errors (post-deploy hash mismatch) trigger a one-time full reload.
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
@@ -23,9 +25,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error', error, errorInfo);
+    if (isChunkLoadError(error)) {
+      reloadOnceForStaleChunk();
+    }
   }
 
   private reset = () => {
+    if (isChunkLoadError(this.state.error)) {
+      // Soft reset cannot fix a missing hashed chunk — hard reload.
+      window.location.reload();
+      return;
+    }
     this.setState({ hasError: false, error: undefined });
   };
 
@@ -41,7 +51,9 @@ export class ErrorBoundary extends Component<Props, State> {
               {this.props.fallbackTitle || 'Halaman mengalami kesalahan'}
             </h1>
             <p className="mb-6 text-sm text-slate-500">
-              {this.state.error?.message || 'Komponen gagal dirender. Coba muat ulang bagian ini.'}
+              {isChunkLoadError(this.state.error)
+                ? 'Versi aplikasi sudah diperbarui. Muat ulang halaman untuk melanjutkan.'
+                : this.state.error?.message || 'Komponen gagal dirender. Coba muat ulang bagian ini.'}
             </p>
             <div className="flex gap-2">
               <button

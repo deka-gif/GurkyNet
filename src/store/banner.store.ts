@@ -51,7 +51,7 @@ export const useBannerStore = create<BannerState>((set, get) => ({
           return response.data || [];
         },
       });
-      set({ banners: data, loading: false, lastFetchedAt: Date.now() });
+      set({ banners: data, loading: false, error: null, lastFetchedAt: Date.now() });
     } catch (err: any) {
       if (get().banners.length === 0) {
         set({ error: err.message || 'Gagal memuat promo banner.', loading: false, banners: [] });
