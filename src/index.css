@@ -140,6 +140,14 @@
   .dashboard-notice-marquee-segment {
     @apply shrink-0 px-4;
   }
+  /**
+   * Single mobile inset source = DashboardLayout <main>.
+   * Pages use this instead of `p-4 md:p-8` so mobile is not double-padded;
+   * desktop `md:p-8` on the page is preserved (historical nesting unchanged).
+   */
+  .dashboard-page {
+    @apply max-md:p-0 md:p-8;
+  }
   .dashboard-segment-tabs {
     @apply flex flex-wrap gap-1 p-1 rounded-2xl bg-gray-100/80 border border-gray-200/80;
   }

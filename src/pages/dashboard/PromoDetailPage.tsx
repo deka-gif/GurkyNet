@@ -83,7 +83,7 @@ export function PromoDetailPage() {
 
   if (promoLoading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 pb-24 md:pb-8">
+      <div className="mx-auto max-w-3xl space-y-4 max-md:pb-0 md:pb-8">
         <div className="h-8 w-40 animate-pulse rounded-lg bg-slate-100" />
         <div className="aspect-[16/9] animate-pulse rounded-2xl bg-slate-100" />
         <div className="h-8 w-2/3 animate-pulse rounded-lg bg-slate-100" />
@@ -94,7 +94,7 @@ export function PromoDetailPage() {
 
   if (promoError || !currentPromo) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 pb-24 md:pb-8">
+      <div className="mx-auto max-w-3xl space-y-4 max-md:pb-0 md:pb-8">
         <Link
           to="/dashboard"
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-primary-700"
@@ -110,7 +110,7 @@ export function PromoDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pb-24 md:pb-10">
+    <div className="mx-auto max-w-3xl space-y-5 max-md:pb-0 md:pb-10">
       <Link
         to="/dashboard"
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-primary-700"

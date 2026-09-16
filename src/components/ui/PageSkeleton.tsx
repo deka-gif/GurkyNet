@@ -1,6 +1,6 @@
 export function PageSkeleton() {
   return (
-    <div className="mx-auto max-w-7xl animate-pulse space-y-4 pb-24 md:pb-8">
+    <div className="mx-auto max-w-7xl animate-pulse space-y-4 max-md:pb-0 md:pb-8">
       <div className="h-[180px] rounded-2xl bg-slate-100 md:h-[200px]" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="h-56 rounded-3xl bg-slate-100 lg:col-span-5" />

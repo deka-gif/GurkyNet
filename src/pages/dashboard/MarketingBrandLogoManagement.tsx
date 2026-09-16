@@ -259,7 +259,7 @@ export const MarketingBrandLogoManagement: React.FC = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-6xl">
+    <div className="dashboard-page space-y-6 container mx-auto max-w-6xl">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">

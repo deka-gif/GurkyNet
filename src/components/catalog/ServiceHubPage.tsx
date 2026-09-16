@@ -29,7 +29,7 @@ export function ServiceHubPage({ title, subtitle, children, tone }: ServiceHubPa
   const iconMap = useCategoryIconMap();
 
   return (
-    <div className="p-4 md:p-8 space-y-6 container mx-auto max-w-5xl">
+    <div className="dashboard-page space-y-6 container mx-auto max-w-5xl">
       <div>
         <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">{title}</h2>
         <p className="text-sm text-gray-500 mt-1 max-w-2xl">{subtitle}</p>

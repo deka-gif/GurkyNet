@@ -738,8 +738,8 @@ export const DashboardLayout = () => {
           </div>
         </header>
 
-        {/* CONTENT VIEW AREA */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* CONTENT VIEW AREA — owns mobile inset + bottom-nav clearance (S1). Desktop md:p-8 unchanged. */}
+        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:p-8">
           <LazyRoute>
             <Outlet />
           </LazyRoute>
@@ -749,28 +749,50 @@ export const DashboardLayout = () => {
       {/* ========================================================= */}
       {/* MOBILE BOTTOM NAVIGATION */}
       {/* ========================================================= */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 py-2.5 px-6 flex justify-between items-center md:hidden z-40 shadow-xl shadow-black/10">
-        {mobileNavItems.map((item) => {
-          const active = isActive(item.path);
-          const IconComponent = item.icon;
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={`flex flex-col items-center justify-center relative ${active ? 'text-primary-600' : 'text-gray-400'}`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all relative ${active ? 'bg-primary-50 text-primary-600 scale-105' : 'hover:bg-gray-50'}`}>
-                <IconComponent className="w-5 h-5 shrink-0" />
-                {Boolean(item.badge && item.badge > 0) && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center">
-                    {item.badge}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-bold mt-1 tracking-tight">{item.label}</span>
-            </NavLink>
-          );
-        })}
+      <nav
+        className={`fixed bottom-0 left-0 right-0 z-40 md:hidden border-t border-gray-100 bg-white shadow-xl shadow-black/10 pb-[env(safe-area-inset-bottom,0px)] ${
+          mobileNavItems.length > 5
+            ? 'overflow-x-auto overscroll-x-contain'
+            : ''
+        }`}
+        aria-label="Navigasi utama"
+      >
+        <div
+          className={`flex items-stretch gap-0.5 px-1.5 pt-1 min-h-[3.5rem] ${
+            mobileNavItems.length > 5 ? 'w-max min-w-full' : 'w-full justify-between'
+          }`}
+        >
+          {mobileNavItems.map((item) => {
+            const active = isActive(item.path);
+            const IconComponent = item.icon;
+            return (
+              <NavLink
+                key={`${item.path}-${item.label}`}
+                to={item.path}
+                end={item.path === '/dashboard' || item.path === '/dashboard/wallet'}
+                className={`flex flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-xl relative transition-colors ${
+                  mobileNavItems.length > 5 ? 'min-w-[4.5rem] shrink-0' : 'flex-1 min-w-0'
+                } min-h-11 ${active ? 'text-primary-600' : 'text-gray-400'}`}
+              >
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all relative ${
+                    active ? 'bg-primary-50 text-primary-600' : ''
+                  }`}
+                >
+                  <IconComponent className="w-5 h-5 shrink-0" />
+                  {Boolean(item.badge && item.badge > 0) && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-black min-w-[1.1rem] h-[1.1rem] px-0.5 rounded-full flex items-center justify-center">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] font-bold tracking-tight leading-tight text-center max-w-full truncate px-0.5">
+                  {item.label}
+                </span>
+              </NavLink>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );

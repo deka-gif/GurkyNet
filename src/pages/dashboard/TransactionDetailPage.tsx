@@ -261,7 +261,7 @@ export function TransactionDetailPage() {
 
   if (loading && !tx) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-8">
+      <div className="mx-auto max-w-lg space-y-4 max-md:pb-0 md:pb-8">
         <div className="h-8 w-40 animate-pulse rounded-lg bg-slate-100" />
         <div className="h-48 animate-pulse rounded-3xl bg-slate-100" />
       </div>
@@ -270,7 +270,7 @@ export function TransactionDetailPage() {
 
   if (error && !tx) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-8">
+      <div className="mx-auto max-w-lg space-y-4 max-md:pb-0 md:pb-8">
         <Link
           to="/dashboard/riwayat"
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-primary-700"
@@ -287,7 +287,7 @@ export function TransactionDetailPage() {
 
   if (!tx) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-8">
+      <div className="mx-auto max-w-lg space-y-4 max-md:pb-0 md:pb-8">
         <Link
           to="/dashboard/riwayat"
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-primary-700"
@@ -353,7 +353,7 @@ export function TransactionDetailPage() {
     : undefined;
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-24 md:pb-10">
+    <div className="mx-auto max-w-lg space-y-4 max-md:pb-0 md:pb-10">
       <button
         type="button"
         onClick={() => navigate(-1)}

@@ -305,7 +305,7 @@ export const VoucherFisikZonaPage = () => {
   }
 
   return (
-    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl pb-28 ${stage === 'pilih-produk' && selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-5xl pb-28 ${stage === 'pilih-produk' && selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-start gap-3">
           <button

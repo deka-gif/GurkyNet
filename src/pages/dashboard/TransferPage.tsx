@@ -120,7 +120,7 @@ export const TransferPage = () => {
   };
 
   return (
-    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-2xl ${transferType === 'p2p' ? MOBILE_STICKY_ACTION_PAD : ''}`} id="transfer-page-root">
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-2xl ${transferType === 'p2p' ? MOBILE_STICKY_ACTION_PAD : ''}`} id="transfer-page-root">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Kirim Uang</h2>

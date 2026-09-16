@@ -27,7 +27,7 @@ export function MobileStickyActionBar({
 }: Props) {
   return (
     <div
-      className={`fixed inset-x-0 z-30 lg:hidden border-t border-gray-100 bg-white/95 backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] bottom-16 md:bottom-0 pb-[env(safe-area-inset-bottom,0px)] ${className}`}
+      className={`fixed inset-x-0 z-30 lg:hidden border-t border-gray-100 bg-white/95 backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] md:bottom-0 ${className}`}
       role="region"
       aria-label="Aksi pembelian"
     >

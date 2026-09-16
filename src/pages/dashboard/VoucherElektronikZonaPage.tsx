@@ -33,7 +33,7 @@ const ELEKTRONIK_TEMPORARILY_DISABLED = true;
 function VoucherElektronikComingSoon({ zona }: { zona: string }) {
   const navigate = useNavigate();
   return (
-    <div className="p-4 md:p-8 container mx-auto max-w-lg space-y-4">
+    <div className="dashboard-page container mx-auto max-w-lg space-y-4">
       <button
         type="button"
         onClick={() => navigate('/dashboard/voucher-internet')}
@@ -311,7 +311,7 @@ function VoucherElektronikZonaPageActive() {
   }
 
   return (
-    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-5xl ${selectedProduct ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-start gap-3">
           <button

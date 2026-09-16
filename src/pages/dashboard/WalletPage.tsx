@@ -515,7 +515,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
   const mutationCount = Number(summary?.transaction_count ?? 0);
 
   return (
-    <div className={`p-4 md:p-8 space-y-6 container mx-auto max-w-5xl ${activeTab === 'topup' ? MOBILE_STICKY_ACTION_PAD : ''}`} id="wallet-page-root">
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-5xl ${activeTab === 'topup' ? MOBILE_STICKY_ACTION_PAD : ''}`} id="wallet-page-root">
       
       {/* Page Title */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
