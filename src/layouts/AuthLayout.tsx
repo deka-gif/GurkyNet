@@ -68,9 +68,10 @@ export const AuthLayout = () => {
         </Link>
         <Link
           to="/"
-          className="text-sm font-semibold text-gray-500 hover:text-primary-700 transition-colors hidden sm:inline-flex items-center gap-1"
+          className="text-sm font-semibold text-gray-500 hover:text-primary-700 transition-colors inline-flex items-center gap-1 min-h-11"
         >
-          ← Kembali ke Beranda
+          <span className="sm:hidden">Beranda</span>
+          <span className="hidden sm:inline">← Kembali ke Beranda</span>
         </Link>
       </header>
 

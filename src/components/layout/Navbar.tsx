@@ -176,7 +176,7 @@ export const Navbar = () => {
             </nav>
 
             <button
-              className="lg:hidden text-gray-900 p-2 rounded-xl hover:bg-gray-100 transition-colors focus:outline-none"
+              className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center text-gray-900 rounded-xl hover:bg-gray-100 transition-colors focus:outline-none"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               id="mobile-nav-toggle"
               aria-label={isMobileMenuOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
