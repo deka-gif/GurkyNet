@@ -2,92 +2,135 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   DASHBOARD_SERVICE_CATEGORIES,
+  MOBILE_QUICK_SERVICES,
   PRODUCT_COUNT_CATEGORY_KEYS,
   categoryTone,
   type DashboardServiceCategory,
+  type MobileQuickService,
 } from '../../config/catalogCategories';
 import { productService } from '../../services/product/product.service';
 import { CacheTTL, cachedFetch } from '../../utils/queryCache';
 import { useCategoryIconMap } from '../../hooks/useCategoryIconMap';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { mapPool } from '../../utils/perf';
 
 type ServiceCategoryGridProps = {
   onSelect: (category: DashboardServiceCategory) => void;
   activeId?: string | null;
+  /**
+   * When false, desktop product-count fetches stay paused so critical dashboard
+   * requests keep browser connection slots. Ignored on mobile (counts never fetched).
+   */
+  enableProductCounts?: boolean;
 };
 
-function CategorySkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
-      {Array.from({ length: 9 }).map((_, i) => (
-        <div key={i} className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4">
-          <div className="mx-auto mb-3 h-14 w-14 rounded-2xl bg-slate-100" />
-          <div className="mx-auto mb-2 h-3 w-20 rounded bg-slate-100" />
-          <div className="mx-auto h-2.5 w-14 rounded bg-slate-50" />
-        </div>
-      ))}
-    </div>
+/** Max parallel GET /products count calls — desktop only. */
+const PRODUCT_COUNT_CONCURRENCY = 3;
+
+const COUNT_KEY_SET = new Set<string>(PRODUCT_COUNT_CATEGORY_KEYS);
+
+const LG_MQ = '(min-width: 1024px)';
+
+function useIsDesktopLg(): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(LG_MQ).matches : false
   );
+
+  useEffect(() => {
+    const mq = window.matchMedia(LG_MQ);
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return isDesktop;
+}
+
+/** SKU count keys this card needs before showing a number (null = never waits on counts). */
+function countKeysFor(cat: DashboardServiceCategory): string[] | null {
+  if (cat.mode === 'navigate') return null;
+  if (cat.id === 'all') return [...PRODUCT_COUNT_CATEGORY_KEYS];
+  if (cat.productCategory) return [cat.productCategory];
+  if (cat.hubChildren?.length) {
+    return cat.hubChildren
+      .map((child) => child.productCategory)
+      .filter((key): key is string => Boolean(key) && COUNT_KEY_SET.has(key));
+  }
+  return null;
+}
+
+function mobileItemToCategory(item: MobileQuickService): DashboardServiceCategory {
+  return {
+    id: item.id,
+    label: item.label,
+    description: '',
+    icon: item.icon,
+    tone: '',
+    path: item.path,
+    mode: item.id === 'lainnya' ? 'hub' : 'navigate',
+  };
 }
 
 /**
- * Fintech-style service category grid for User Dashboard.
+ * Service category grid — mobile: app-style 4-col icon shortcuts;
+ * desktop (lg+): full cards with badges + product counts.
  */
 export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
   onSelect,
   activeId,
+  enableProductCounts = true,
 }: ServiceCategoryGridProps) {
+  const isDesktop = useIsDesktopLg();
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [loadingCounts, setLoadingCounts] = useState(true);
+  const [settled, setSettled] = useState<Record<string, boolean>>({});
   const iconMap = useCategoryIconMap();
 
+  // Product counts only matter on desktop cards — skip entirely on mobile to free connections.
+  const shouldFetchCounts = enableProductCounts && isDesktop;
+
   useEffect(() => {
+    if (!shouldFetchCounts) return;
+
     let cancelled = false;
 
-    const loadCounts = async () => {
-      setLoadingCounts(true);
+    void mapPool([...PRODUCT_COUNT_CATEGORY_KEYS], PRODUCT_COUNT_CONCURRENCY, async (key) => {
       try {
-        const entries = await Promise.all(
-          PRODUCT_COUNT_CATEGORY_KEYS.map(async (key) => {
-            try {
-              const total = await cachedFetch<number>({
-                key: `product-count:${key}`,
-                ttlMs: CacheTTL.PRODUCT_COUNT,
-                fetcher: async () => {
-                  const res = await productService.getProducts({
-                    category: key,
-                    per_page: 1,
-                    page: 1,
-                  });
-                  return (
-                    res.pagination?.total ??
-                    (Array.isArray(res.data) ? res.data.length : 0)
-                  );
-                },
-              });
-              return [key, Number(total) || 0] as const;
-            } catch {
-              return [key, 0] as const;
-            }
-          })
-        );
-        if (!cancelled) setCounts(Object.fromEntries(entries));
-      } finally {
-        if (!cancelled) setLoadingCounts(false);
+        const total = await cachedFetch<number>({
+          key: `product-count:${key}`,
+          ttlMs: CacheTTL.PRODUCT_COUNT,
+          fetcher: async () => {
+            const res = await productService.getProducts({
+              category: key,
+              per_page: 1,
+              page: 1,
+            });
+            return (
+              res.pagination?.total ??
+              (Array.isArray(res.data) ? res.data.length : 0)
+            );
+          },
+        });
+        if (cancelled) return;
+        setCounts((prev) => ({ ...prev, [key]: Number(total) || 0 }));
+        setSettled((prev) => ({ ...prev, [key]: true }));
+      } catch {
+        if (cancelled) return;
+        setSettled((prev) => ({ ...prev, [key]: true }));
       }
-    };
+    });
 
-    void loadCounts();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [shouldFetchCounts]);
 
   const categories = useMemo(() => DASHBOARD_SERVICE_CATEGORIES, []);
 
   const resolveCount = (cat: DashboardServiceCategory): number | null => {
     if (cat.id === 'all') {
-      return Object.values(counts).reduce((a, b) => a + b, 0) || null;
+      const sum = Object.values(counts).reduce((a, b) => a + b, 0);
+      return sum > 0 ? sum : null;
     }
     if (cat.mode === 'navigate') return null;
     if (cat.productCategory && counts[cat.productCategory] != null) {
@@ -103,34 +146,80 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
     return null;
   };
 
-  if (loadingCounts && Object.keys(counts).length === 0) {
-    return (
-      <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-lg shadow-slate-200/40 md:p-7">
-        <div className="mb-5">
-          <div className="h-5 w-48 animate-pulse rounded bg-slate-100" />
-          <div className="mt-2 h-3 w-64 animate-pulse rounded bg-slate-50" />
-        </div>
-        <CategorySkeleton />
-      </section>
-    );
-  }
+  const isCountPending = (cat: DashboardServiceCategory): boolean => {
+    if (!shouldFetchCounts) return false;
+    const keys = countKeysFor(cat);
+    if (!keys || keys.length === 0) return false;
+    return keys.some((key) => !settled[key]);
+  };
 
   return (
     <section className="dashboard-panel">
-      <div className="mb-5 flex items-end justify-between gap-3">
+      <div className="mb-4 flex items-end justify-between gap-3 md:mb-5">
         <div>
           <h2 className="text-lg font-bold tracking-tight text-gray-900 md:text-xl">
             Layanan PPOB & Pembayaran
           </h2>
-          <p className="mt-0.5 text-xs text-gray-400">Pilih kategori untuk mulai transaksi</p>
+          <p className="mt-0.5 hidden text-xs text-gray-400 lg:block">
+            Pilih kategori untuk mulai transaksi
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+      {/* —— Mobile: 4-col icon + label (app-style) —— */}
+      <div className="grid grid-cols-4 gap-x-2 gap-y-3 lg:hidden">
+        {MOBILE_QUICK_SERVICES.map((item) => {
+          const Icon = item.icon;
+          const tone = categoryTone(item.toneId);
+          const customIconUrl = resolveMediaUrl(
+            iconMap[`hub:${item.id}`] || iconMap[`sub:telco:${item.id}`] || ''
+          );
+          const isActive = activeId === item.id;
+
+          return (
+            <motion.button
+              key={item.id}
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={() => onSelect(mobileItemToCategory(item))}
+              className={`flex min-h-[88px] cursor-pointer flex-col items-center justify-start gap-1.5 rounded-xl px-1 py-2 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 ${
+                isActive ? 'bg-primary-50/80' : 'active:bg-slate-50'
+              }`}
+            >
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-2xl ${tone.bg}`}
+              >
+                <div
+                  className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${tone.gradient} ${tone.shadow}`}
+                >
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
+                  {customIconUrl ? (
+                    <img
+                      src={customIconUrl}
+                      alt=""
+                      className="relative h-7 w-7 object-contain"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <Icon className="relative h-[18px] w-[18px]" />
+                  )}
+                </div>
+              </div>
+              <span className="line-clamp-2 max-w-full text-xs font-semibold leading-tight text-slate-800">
+                {item.label}
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* —— Desktop (lg+): full cards with badge + product counts —— */}
+      <div className="hidden grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid lg:grid-cols-4 xl:grid-cols-5">
         {categories.map((cat) => {
           const Icon = cat.icon;
           const customIconUrl = resolveMediaUrl(iconMap[`hub:${cat.id}`] || '');
           const count = resolveCount(cat);
+          const pending = isCountPending(cat);
           const isActive = activeId === cat.id;
 
           return (
@@ -163,7 +252,12 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
                 >
                   <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
                   {customIconUrl ? (
-                    <img src={customIconUrl} alt={cat.label} className="relative h-9 w-9 object-contain" loading="lazy" />
+                    <img
+                      src={customIconUrl}
+                      alt={cat.label}
+                      className="relative h-9 w-9 object-contain"
+                      loading="lazy"
+                    />
                   ) : (
                     <Icon className="relative h-5 w-5" />
                   )}
@@ -173,8 +267,17 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
               <div className="text-sm font-bold text-slate-900 group-hover:text-primary-700">
                 {cat.label}
               </div>
-              <div className="mt-1 line-clamp-1 text-[11px] font-medium text-slate-400">
-                {count != null ? `${count.toLocaleString('id-ID')} produk` : cat.description}
+              <div className="mt-1 flex min-h-[14px] items-center justify-center text-[11px] font-medium text-slate-400">
+                {pending ? (
+                  <span
+                    className="inline-block h-2.5 w-14 animate-pulse rounded bg-slate-100"
+                    aria-hidden="true"
+                  />
+                ) : count != null ? (
+                  <span className="line-clamp-1">{`${count.toLocaleString('id-ID')} produk`}</span>
+                ) : (
+                  <span className="line-clamp-1">{cat.description || '—'}</span>
+                )}
               </div>
             </motion.button>
           );

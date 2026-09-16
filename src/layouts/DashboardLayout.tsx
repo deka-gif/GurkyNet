@@ -649,7 +649,7 @@ export const DashboardLayout = () => {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-50 text-gray-700 max-h-[420px] flex flex-col"
+                    className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] sm:w-96 bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-50 text-gray-700 max-h-[420px] flex flex-col"
                   >
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
                       <div className="flex items-center gap-2">

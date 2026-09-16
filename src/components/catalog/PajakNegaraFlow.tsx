@@ -21,6 +21,7 @@ import {
   taxYearOptions,
 } from '../../utils/pajakCustomerNo';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from './MobileStickyActionBar';
 
 export type PajakNegaraFlowProps = {
   category: 'pbb' | 'samsat';
@@ -206,7 +207,7 @@ export function PajakNegaraFlow({ category, title, subtitle, returnPath }: Pajak
     category === 'samsat' ? 'Informasi Pajak Kendaraan' : 'Informasi Pajak Bumi & Bangunan';
 
   return (
-    <div className="dashboard-page space-y-6 container mx-auto max-w-3xl">
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-3xl ${!regionsLoading && provinces.length > 0 ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">{title}</h2>
@@ -346,7 +347,7 @@ export function PajakNegaraFlow({ category, title, subtitle, returnPath }: Pajak
               type="button"
               disabled={!formReady || inquiring}
               onClick={() => void handleCekPajak()}
-              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white font-extrabold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors inline-flex items-center justify-center gap-2"
+              className="max-lg:hidden w-full py-3.5 rounded-2xl bg-primary-600 text-white font-extrabold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors inline-flex items-center justify-center gap-2"
             >
               {inquiring ? (
                 <>
@@ -360,6 +361,16 @@ export function PajakNegaraFlow({ category, title, subtitle, returnPath }: Pajak
           </>
         )}
       </div>
+
+      {!regionsLoading && provinces.length > 0 && (
+        <MobileStickyActionBar
+          meta={title}
+          label={inquiring ? 'Mengecek...' : 'Cek Pajak'}
+          onClick={() => void handleCekPajak()}
+          disabled={!formReady || inquiring}
+          loading={inquiring}
+        />
+      )}
 
       <AnimatePresence>
         {inquiry && (

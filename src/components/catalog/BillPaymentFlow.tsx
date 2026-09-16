@@ -17,6 +17,7 @@ import { tagihanService, TagihanInquiryResult } from '../../services/tagihan/tag
 import { isCatalogListed } from '../../utils/catalogAvailability';
 import { groupTvPascabayarVendors } from '../../utils/tagihanTvBrandGrouping';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from './MobileStickyActionBar';
 
 export type BillPaymentFlowProps = {
   category: string;
@@ -212,7 +213,7 @@ export function BillPaymentFlow({
   };
 
   return (
-    <div className="dashboard-page space-y-6 container mx-auto max-w-5xl">
+    <div className={`dashboard-page space-y-6 container mx-auto max-w-5xl ${step === 'input' ? MOBILE_STICKY_ACTION_PAD : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">{title}</h2>
@@ -338,7 +339,7 @@ export function BillPaymentFlow({
               type="button"
               disabled={inquiring || !selectedProduct || !customerNo.trim()}
               onClick={() => void handleCekTagihan()}
-              className="w-full py-3.5 rounded-2xl bg-primary-600 text-white font-extrabold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors inline-flex items-center justify-center gap-2"
+              className="max-lg:hidden w-full py-3.5 rounded-2xl bg-primary-600 text-white font-extrabold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors inline-flex items-center justify-center gap-2"
             >
               {inquiring ? (
                 <>
@@ -351,6 +352,21 @@ export function BillPaymentFlow({
             </button>
           </div>
         </div>
+      )}
+
+      {step === 'input' && (
+        <MobileStickyActionBar
+          meta={
+            <>
+              {selectedVendor || 'Tagihan'}
+              {customerNo.trim() ? ` · ${customerNo.trim()}` : ''}
+            </>
+          }
+          label={inquiring ? 'Mengecek...' : 'Cek Tagihan'}
+          onClick={() => void handleCekTagihan()}
+          disabled={inquiring || !selectedProduct || !customerNo.trim()}
+          loading={inquiring}
+        />
       )}
 
       {/* Inquiry validation overlay — live provider data only */}
@@ -381,10 +397,10 @@ export function BillPaymentFlow({
                 <button
                   type="button"
                   onClick={handleCancelInquiry}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full hover:bg-gray-100 text-gray-400"
                   aria-label="Tutup"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 

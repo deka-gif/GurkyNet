@@ -307,9 +307,10 @@ export const AccountHubPage: React.FC = () => {
             />
             <Link
               to="/dashboard/account/edit"
-              className="absolute -bottom-1 -right-1 p-1.5 rounded-lg bg-white/20 text-white shadow backdrop-blur-sm"
+              className="absolute -bottom-1 -right-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-white/25 text-white shadow backdrop-blur-sm"
+              aria-label="Ubah foto profil"
             >
-              <Camera className="w-3 h-3" />
+              <Camera className="w-4 h-4" />
             </Link>
           </div>
           <div className="min-w-0 flex-1">

@@ -12,10 +12,10 @@ export const AccountShell: React.FC<{
     <div className="flex items-start gap-3">
       <Link
         to={backTo}
-        className="mt-1 p-2 rounded-xl border border-gray-100 bg-white hover:bg-gray-50 text-gray-500"
+        className="mt-0.5 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-gray-100 bg-white hover:bg-gray-50 text-gray-500"
         aria-label="Kembali"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="w-5 h-5" />
       </Link>
       <div>
         <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{title}</h1>

@@ -13,6 +13,18 @@ type PromoBannerCarouselProps = {
   onRetry: () => void;
 };
 
+function classifyLoadError(message: string | null): 'timeout' | 'abort' | 'network' | 'http' | 'unknown' {
+  const raw = String(message || '');
+  const lower = raw.toLowerCase();
+  if (/timeout|econnaborted|proses provider masih berjalan|jaringan lambat/.test(lower)) return 'timeout';
+  if (/cancel|abort|terputus/.test(lower)) return 'abort';
+  if (/offline|network|internet|failed to fetch|networkerror/.test(lower)) return 'network';
+  if (/\b(401|403|404|419|422|429|5\d\d)\b|server sedang bermasalah|akses ditolak|sesi/.test(lower)) {
+    return 'http';
+  }
+  return 'unknown';
+}
+
 function bannerObjectPosition(banner: Banner): string {
   const anyBanner = banner as Banner & {
     focalPoint?: string | null;
@@ -68,7 +80,8 @@ function BannerSlideLayers({
 
 /**
  * Full-image marketing carousel (Tokopedia / GoPay style).
- * Matches saldo card height on desktop (≈280px); wider aspect on mobile.
+ * Mobile: aspect 12/5 (= CMS 1080×450) so object-cover shows full art without side crop.
+ * Desktop: fixed h-[280px] matching saldo card.
  */
 export const PromoBannerCarousel = memo(function PromoBannerCarousel({
   banners,
@@ -148,9 +161,15 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
   const current = banners[index];
   const objectPosition = current ? bannerObjectPosition(current) : 'center';
 
+  useEffect(() => {
+    if (!error || banners.length > 0) return;
+    const kind = classifyLoadError(error);
+    console.warn('[dashboard:PromoBannerCarousel] load failed', { kind, message: error });
+  }, [error, banners.length]);
+
   return (
     <div
-      className="relative w-full overflow-hidden bg-slate-100 aspect-[1080/1200] max-h-[480px] lg:aspect-auto lg:h-[280px] lg:max-h-none"
+      className="relative w-full overflow-hidden bg-slate-100 aspect-[12/5] max-h-[480px] lg:aspect-auto lg:h-[280px] lg:max-h-none"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={onTouchStart}
@@ -199,7 +218,7 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
           </AnimatePresence>
 
           {banners.length > 1 ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
+            <div className="pointer-events-none absolute inset-x-0 bottom-2.5 z-10 flex justify-center gap-2">
               {banners.map((b, idx) => (
                 <button
                   key={b.id}
@@ -209,10 +228,14 @@ export const PromoBannerCarousel = memo(function PromoBannerCarousel({
                     e.stopPropagation();
                     goTo(idx);
                   }}
-                  className={`pointer-events-auto h-1.5 rounded-full transition-all will-change-[width] ${
-                    idx === index ? 'w-5 bg-white shadow-sm' : 'w-1.5 bg-white/55 hover:bg-white/80'
-                  }`}
-                />
+                  className="pointer-events-auto min-h-11 min-w-11 inline-flex items-center justify-center rounded-full"
+                >
+                  <span
+                    className={`block h-2 rounded-full transition-all ${
+                      idx === index ? 'w-5 bg-white shadow-sm' : 'w-2 bg-white/55'
+                    }`}
+                  />
+                </button>
               ))}
             </div>
           ) : null}

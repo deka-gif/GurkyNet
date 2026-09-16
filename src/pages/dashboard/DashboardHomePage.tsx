@@ -1,5 +1,6 @@
 import { CatalogSearchBar } from '../../components/catalog/CatalogSearchBar';
 import { PromoBannerCarousel } from '../../components/dashboard/PromoBannerCarousel';
+import { MobileGurkyPaySummary } from '../../components/dashboard/MobileGurkyPaySummary';
 import { ServiceCategoryGrid } from '../../components/dashboard/ServiceCategoryGrid';
 import { RecentTransactionsCard } from '../../components/dashboard/RecentTransactionsCard';
 import { useFavoriteStore } from '../../store/favorite.store';
@@ -42,10 +43,23 @@ export const DashboardHomePage = () => {
 
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [popupAnnouncement, setPopupAnnouncement] = useState<any | null>(null);
+  /** Product counts wait until banner + transactions have been kicked off / settled. */
+  const [enableProductCounts, setEnableProductCounts] = useState(false);
 
   useEffect(() => {
-    fetchBanners();
-    fetchTransactions();
+    let cancelled = false;
+
+    const kickCritical = async () => {
+      await Promise.allSettled([fetchBanners(), fetchTransactions()]);
+      if (!cancelled) setEnableProductCounts(true);
+    };
+
+    void kickCritical();
+    // Fallback: never block category counts forever if critical fetches hang.
+    const fallback = window.setTimeout(() => {
+      if (!cancelled) setEnableProductCounts(true);
+    }, 4000);
+
     fetchNotifications();
     hydrateFavorites();
     websiteService
@@ -59,6 +73,11 @@ export const DashboardHomePage = () => {
         }
       })
       .catch(() => setAnnouncements([]));
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fallback);
+    };
   }, [fetchBanners, fetchTransactions, fetchNotifications, hydrateFavorites]);
 
   useEffect(() => {
@@ -95,21 +114,7 @@ export const DashboardHomePage = () => {
   }, [marqueeContent]);
 
   return (
-    <div className="space-y-4 pb-24 md:pb-8 max-w-7xl mx-auto">
-
-      {showNoticeMarquee && (
-        <div
-          className="dashboard-notice-marquee"
-          style={{ '--marquee-duration': marqueeDuration } as CSSProperties}
-        >
-          <div className="dashboard-notice-marquee-track">
-            <span className="dashboard-notice-marquee-segment">{marqueeContent}  •  </span>
-            <span className="dashboard-notice-marquee-segment" aria-hidden="true">
-              {marqueeContent}  •  
-            </span>
-          </div>
-        </div>
-      )}
+    <div className="flex max-w-7xl mx-auto flex-col gap-4 max-md:pb-0 md:pb-8">
 
       {popupAnnouncement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -121,13 +126,14 @@ export const DashboardHomePage = () => {
               </div>
               <button
                 type="button"
-                className="p-1 rounded-lg hover:bg-gray-100"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100"
                 onClick={() => {
                   sessionStorage.setItem('gurky_announcement_dismissed', '1');
                   setPopupAnnouncement(null);
                 }}
+                aria-label="Tutup pengumuman"
               >
-                <X className="w-4 h-4 text-gray-500" />
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <p className="text-sm text-gray-600 mt-3 whitespace-pre-wrap">{popupAnnouncement.message || popupAnnouncement.body}</p>
@@ -135,35 +141,58 @@ export const DashboardHomePage = () => {
         </div>
       )}
 
-      <div className="lg:hidden flex items-center gap-1.5 px-1 text-sm">
+      {/* Mobile order via CSS `order` — desktop (lg) keeps prior sequence. */}
+      <div className="order-1 flex items-center gap-1.5 px-1 text-sm lg:hidden">
         <span className="font-semibold text-primary-700">{getDynamicGreeting()}</span>
         <span aria-hidden="true">👋</span>
         <span className="text-gray-300">•</span>
         <span className="font-bold text-gray-800 truncate">{user?.name || 'Pelanggan GurkyNet'}</span>
       </div>
 
-      {/* Promo banner — full width hero */}
-      <PromoBannerCarousel
-        banners={banners}
-        loading={bannerLoading}
-        error={bannerError}
-        onRetry={() => fetchBanners()}
-      />
+      <div className="order-2 lg:hidden">
+        <MobileGurkyPaySummary />
+      </div>
 
-      <div className="px-1">
+      {showNoticeMarquee && (
+        <div
+          className="dashboard-notice-marquee order-3 lg:order-1"
+          style={{ '--marquee-duration': marqueeDuration } as CSSProperties}
+        >
+          <div className="dashboard-notice-marquee-track">
+            <span className="dashboard-notice-marquee-segment">{marqueeContent}  •  </span>
+            <span className="dashboard-notice-marquee-segment" aria-hidden="true">
+              {marqueeContent}  •  
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="order-4 lg:order-2">
+        <PromoBannerCarousel
+          banners={banners}
+          loading={bannerLoading}
+          error={bannerError}
+          onRetry={() => fetchBanners({ force: true })}
+        />
+      </div>
+
+      <div className="order-5 px-1 lg:order-3">
         <CatalogSearchBar />
       </div>
 
-      <ServiceCategoryGrid
-        onSelect={handleCategorySelect}
-      />
+      <div className="order-6 lg:order-4">
+        <ServiceCategoryGrid
+          onSelect={handleCategorySelect}
+          enableProductCounts={enableProductCounts}
+        />
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="order-7 grid grid-cols-1 gap-6 lg:order-5 lg:grid-cols-12">
         <RecentTransactionsCard
           transactions={Array.isArray(transactions) ? transactions : []}
           loading={trxLoading}
           error={trxError}
-          onRetry={() => fetchTransactions()}
+          onRetry={() => fetchTransactions({ force: true })}
           limit={5}
         />
 
@@ -203,11 +232,11 @@ export const DashboardHomePage = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-2">
                       <button
                         type="button"
                         onClick={() => removeFavorite(fav.id)}
-                        className="text-[10px] font-bold text-slate-400 hover:text-rose-600 px-2 py-1 rounded-lg hover:bg-rose-50 cursor-pointer"
+                        className="min-h-11 px-3 text-xs font-bold text-slate-500 hover:text-rose-600 rounded-xl hover:bg-rose-50 cursor-pointer"
                         title="Hapus favorit"
                       >
                         Hapus
@@ -215,7 +244,7 @@ export const DashboardHomePage = () => {
                       <button
                         type="button"
                         onClick={() => navigate(fav.route)}
-                        className="text-xs font-bold text-primary-600 hover:text-white bg-white hover:bg-primary-600 border border-primary-200 hover:border-primary-600 px-3.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                        className="min-h-11 text-xs font-bold text-primary-600 hover:text-white bg-white hover:bg-primary-600 border border-primary-200 hover:border-primary-600 px-3.5 rounded-xl transition-all shadow-sm cursor-pointer"
                       >
                         Buka
                       </button>
@@ -239,7 +268,7 @@ export const DashboardHomePage = () => {
             <button
               type="button"
               onClick={() => navigate('/dashboard/help?tab=chat')}
-              className="text-xs font-bold bg-white text-primary-700 hover:bg-primary-50 border border-primary-200 px-3 py-1.5 rounded-xl transition-all shadow-sm shrink-0 cursor-pointer"
+              className="min-h-11 text-xs font-bold bg-white text-primary-700 hover:bg-primary-50 border border-primary-200 px-4 rounded-xl transition-all shadow-sm shrink-0 cursor-pointer"
             >
               Chat CS
             </button>
