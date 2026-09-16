@@ -47,7 +47,7 @@ export const CmsContentSection: React.FC<Props> = ({ section }) => {
                 isPartners
                   ? 'flex flex-wrap items-center justify-center gap-4 md:gap-6'
                   : isStats
-                    ? 'grid grid-cols-2 lg:grid-cols-4 gap-6'
+                    ? 'grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6'
                     : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
               }
             >
@@ -61,7 +61,7 @@ export const CmsContentSection: React.FC<Props> = ({ section }) => {
                   }
                 >
                   {item.value && (
-                    <p className="text-3xl md:text-4xl font-extrabold text-primary-600 mb-2">{item.value}</p>
+                    <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-primary-600 mb-2">{item.value}</p>
                   )}
                   {item.image && (
                     <img src={item.image} alt={item.title || ''} className="h-12 w-auto mx-auto md:mx-0 mb-3 object-contain" />
