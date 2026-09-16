@@ -609,7 +609,7 @@ export const WalletPage = ({ defaultTab = 'index' }: { defaultTab?: 'index' | 't
 
       <div className="flex items-center gap-3 rounded-2xl border border-primary-100 bg-primary-50/40 px-4 py-3">
         <ShieldCheck className="w-7 h-7 text-primary-600 shrink-0" />
-        <p className="text-[11px] text-gray-600 leading-snug">
+        <p className="text-xs md:text-[11px] text-gray-600 leading-snug">
           <span className="font-extrabold text-gray-900">GurkyPay Secure Protection</span>
           {' — '}
           Seluruh lalu lintas transaksi dikawal enkripsi SSL 256-bit berstandar Bank Indonesia.

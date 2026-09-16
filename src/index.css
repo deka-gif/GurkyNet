@@ -149,11 +149,13 @@
     @apply max-md:p-0 md:p-8;
   }
   .dashboard-segment-tabs {
-    @apply flex flex-wrap gap-1 p-1 rounded-2xl bg-gray-100/80 border border-gray-200/80;
+    @apply flex flex-wrap gap-1 p-1 rounded-2xl bg-gray-100/80 border border-gray-200/80
+      max-md:flex-nowrap max-md:overflow-x-auto max-md:overscroll-x-contain;
   }
   .dashboard-segment-tab {
     @apply flex-1 min-w-[7rem] flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-gray-500
-      transition-all duration-200 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed;
+      transition-all duration-200 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed
+      max-md:flex-none max-md:min-h-11 max-md:shrink-0;
   }
   .dashboard-segment-tab-active {
     @apply bg-gradient-to-br from-primary-600 to-primary-900 text-white shadow-md shadow-primary-900/25;

@@ -339,9 +339,10 @@ export const AccountHubPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={copyWallet}
-                  className="p-1 rounded-lg hover:bg-white/10 border border-transparent hover:border-white/20"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-white/10 border border-transparent hover:border-white/20"
+                  aria-label="Salin nomor wallet"
                 >
-                  <Copy className="w-3.5 h-3.5 text-primary-100" />
+                  <Copy className="w-4 h-4 text-primary-100" />
                 </button>
                 {copied && <span className="text-[10px] font-bold text-emerald-200">Copied</span>}
               </div>

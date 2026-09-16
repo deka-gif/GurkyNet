@@ -229,11 +229,11 @@ export const RiwayatPage = () => {
               placeholder="Cari transaksi, no. HP, atau kode..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-2xl bg-gray-50 border border-transparent hover:border-gray-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
+              className="w-full pl-10 pr-4 py-3 rounded-2xl bg-gray-50 border border-transparent hover:border-gray-200 text-sm md:text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"
             />
           </div>
 
-          <div className="md:col-span-4 flex bg-gray-50 p-1 rounded-2xl border border-gray-100">
+          <div className="md:col-span-4 flex max-md:overflow-x-auto max-md:overscroll-x-contain gap-1 bg-gray-50 p-1 rounded-2xl border border-gray-100">
             {[
               { key: 'all', label: 'Semua' },
               { key: 'today', label: 'Hari Ini' },
@@ -242,9 +242,10 @@ export const RiwayatPage = () => {
             ].map((pd) => (
               <button
                 key={pd.key}
+                type="button"
                 disabled={!!customDate}
                 onClick={() => setSelectedPeriod(pd.key as any)}
-                className={`flex-1 py-2 rounded-xl text-[10px] md:text-xs font-black transition-all ${
+                className={`min-h-11 max-md:min-w-[4.75rem] max-md:shrink-0 md:flex-1 py-2 px-2 rounded-xl text-xs font-black transition-all ${
                   customDate
                     ? 'text-gray-300 cursor-not-allowed'
                     : selectedPeriod === pd.key
@@ -273,7 +274,7 @@ export const RiwayatPage = () => {
 
         <div className="pt-3 border-t border-gray-50 grid grid-cols-1 md:grid-cols-12 gap-4">
           <div className="md:col-span-4">
-            <label className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+            <label className="block text-xs md:text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
               Kategori Layanan
             </label>
             <select
@@ -294,7 +295,7 @@ export const RiwayatPage = () => {
           </div>
 
           <div className="md:col-span-4">
-            <label className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+            <label className="block text-xs md:text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
               Rentang Nominal
             </label>
             <select
@@ -311,13 +312,13 @@ export const RiwayatPage = () => {
 
           <div className="md:col-span-4">
             <div className="flex justify-between items-center mb-1.5 ml-1">
-              <label className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+              <label className="block text-xs md:text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
                 Cari Tanggal Spesifik
               </label>
               {customDate && (
                 <button
                   onClick={() => setCustomDate('')}
-                  className="text-[9px] font-black text-red-500 hover:text-red-600 uppercase tracking-wide"
+                  className="min-h-11 px-2 text-xs font-black text-red-500 hover:text-red-600 uppercase tracking-wide"
                 >
                   Clear
                 </button>
@@ -412,7 +413,7 @@ export const RiwayatPage = () => {
                   <span className="text-base font-black text-gray-900">{formatIDR(tx.amount)}</span>
 
                   <span
-                    className={`px-3 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 min-h-8 rounded-full text-[10px] md:text-[9px] font-black uppercase flex items-center gap-1.5 ${
                       success
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                         : pending
