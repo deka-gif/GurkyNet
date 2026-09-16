@@ -39,6 +39,30 @@ export function throttle<T extends (...args: any[]) => void>(fn: T, waitMs: numb
   };
 }
 
+/**
+ * Run async work over `items` with at most `concurrency` in flight at once.
+ * Used to avoid saturating the browser connection pool (dashboard product counts).
+ */
+export async function mapPool<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const limit = Math.max(1, Math.min(concurrency, items.length || 1));
+
+  const run = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index], index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => run()));
+  return results;
+}
+
 export function runWhenIdle(cb: () => void, timeout = 2000): () => void {
   if (typeof window === 'undefined') {
     cb();
