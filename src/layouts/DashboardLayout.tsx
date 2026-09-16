@@ -644,14 +644,17 @@ export const DashboardLayout = () => {
                 )}
               </button>
 
-              {/* Notification Dropdown */}
+              {/* Notification Dropdown
+                  Mobile: fixed inset so a near-full-width panel is not clipped left
+                  (absolute right-0 on the bell sits left of the avatar → overflow).
+                  Desktop (sm+): unchanged absolute right-0 under the bell. */}
               <AnimatePresence>
                 {isNotificationOpen && (
                   <motion.div 
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] sm:w-96 bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-50 text-gray-700 max-h-[420px] flex flex-col"
+                    className="absolute right-0 mt-3 origin-top-right w-96 max-w-[calc(100vw-2rem)] bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-[70] text-gray-700 max-h-[420px] flex flex-col max-md:fixed max-md:left-4 max-md:right-4 max-md:top-20 max-md:mt-0 max-md:w-auto max-md:max-w-none"
                   >
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
                       <div className="flex items-center gap-2">
