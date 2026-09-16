@@ -32,7 +32,9 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
   const [from, setFrom] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [newCatName, setNewCatName] = useState('');
+  /** Hard errors / action warnings — persist until dismissed or condition cleared. */
   const [error, setError] = useState<string | null>(null);
+  /** Success confirmations — auto-dismiss after a few seconds. */
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -41,6 +43,19 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
     [lines]
   );
   const totalOk = Math.abs(totalPct - 100) <= 0.01;
+
+  // FR-FIN-10 UX — success toasts auto-dismiss; action warnings stay until fixed/closed.
+  useEffect(() => {
+    if (!message) return;
+    const t = window.setTimeout(() => setMessage(null), 6500);
+    return () => window.clearTimeout(t);
+  }, [message]);
+
+  useEffect(() => {
+    if (totalOk && error && /total.*100|sampai total 100|harus 100/i.test(error)) {
+      setError(null);
+    }
+  }, [totalOk, error]);
 
   const loadOverview = useCallback(async () => {
     const data = await financeService.getRevenueAllocationOverview();
@@ -157,17 +172,24 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
     try {
       const cat = await financeService.createRevenueAllocationCategory({ name: newCatName });
       setNewCatName('');
-      setMessage(`Kategori "${cat?.name}" ditambahkan. Sesuaikan % lalu simpan (total harus 100%).`);
+      setMessage(`Kategori "${cat?.name}" ditambahkan.`);
       await loadOverview();
-      setLines((prev) => [
-        ...prev,
-        {
-          categoryId: cat.id,
-          categoryCode: cat.code,
-          categoryName: cat.name,
-          percentage: 0,
-        },
-      ]);
+      setLines((prev) => {
+        const next = [
+          ...prev,
+          {
+            categoryId: cat.id,
+            categoryCode: cat.code,
+            categoryName: cat.name,
+            percentage: 0,
+          },
+        ];
+        const sum = round4(next.reduce((s, l) => s + Number(l.percentage || 0), 0));
+        if (Math.abs(sum - 100) > 0.01) {
+          setError(`Sesuaikan % sampai total 100% (saat ini ${sum}%), lalu simpan rule set baru.`);
+        }
+        return next;
+      });
     } catch (e: any) {
       setError(e?.response?.data?.message || e?.message || 'Gagal menambah kategori');
     }
@@ -178,9 +200,16 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
     setError(null);
     try {
       await financeService.deactivateRevenueAllocationCategory(id);
-      setMessage('Kategori dinonaktifkan (histori tetap ada). Sesuaikan % sisa sampai 100% lalu simpan rule set baru.');
+      setMessage('Kategori dinonaktifkan (histori tetap ada).');
       // Keep editor state — do not reload current rule lines (would re-inject the inactive category).
-      setLines((prev) => prev.filter((l) => l.categoryId !== id));
+      setLines((prev) => {
+        const next = prev.filter((l) => l.categoryId !== id);
+        const sum = round4(next.reduce((s, l) => s + Number(l.percentage || 0), 0));
+        if (Math.abs(sum - 100) > 0.01) {
+          setError(`Sesuaikan % sisa sampai total 100% (saat ini ${sum}%), lalu simpan rule set baru.`);
+        }
+        return next;
+      });
       const data = await financeService.getRevenueAllocationOverview();
       setCategories(data?.categories || []);
     } catch (e: any) {
@@ -220,9 +249,37 @@ export const FinanceRevenueAllocationPage: React.FC = () => {
         ))}
       </div>
 
-      {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+      {error && (
+        <div
+          className={`flex items-start gap-2 text-sm rounded-lg px-3 py-2 border ${
+            /100%|nonaktif|Sesuaikan/i.test(error)
+              ? 'text-amber-900 bg-amber-50 border-amber-200'
+              : 'text-red-700 bg-red-50 border-red-100'
+          }`}
+        >
+          <p className="flex-1">{error}</p>
+          <button
+            type="button"
+            aria-label="Tutup peringatan"
+            className="shrink-0 opacity-70 hover:opacity-100 px-1 text-lg leading-none"
+            onClick={() => setError(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {message && (
-        <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{message}</p>
+        <div className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+          <p className="flex-1">{message}</p>
+          <button
+            type="button"
+            aria-label="Tutup notifikasi"
+            className="shrink-0 opacity-70 hover:opacity-100 px-1 text-lg leading-none"
+            onClick={() => setMessage(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
       {loading && <p className="text-sm text-slate-500">Memuat…</p>}
 
