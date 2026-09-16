@@ -28,9 +28,40 @@ class PublicHomepageCache
 
     public const PAGES_TTL_SECONDS = 1800;
 
+    /**
+     * Cache-aside with a short exclusive lock so concurrent cold misses do not
+     * stampede rebuilds (Paket Q / homepage timeout). Fast path avoids lock.
+     */
     public static function remember(callable $callback): mixed
     {
-        return Cache::remember(self::KEY, self::TTL_SECONDS, $callback);
+        $cached = Cache::get(self::KEY);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $lock = Cache::lock(self::KEY.':build', 120);
+
+        try {
+            return $lock->block(25, function () use ($callback) {
+                $cached = Cache::get(self::KEY);
+                if ($cached !== null) {
+                    return $cached;
+                }
+
+                $value = $callback();
+                Cache::put(self::KEY, $value, self::TTL_SECONDS);
+
+                return $value;
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+            $cached = Cache::get(self::KEY);
+            if ($cached !== null) {
+                return $cached;
+            }
+
+            // Last resort if lock holder is stuck — avoid failing the public homepage.
+            return Cache::remember(self::KEY, self::TTL_SECONDS, $callback);
+        }
     }
 
     public static function rememberSettings(callable $callback): mixed

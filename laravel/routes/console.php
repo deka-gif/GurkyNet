@@ -97,6 +97,12 @@ Artisan::command('ops:heartbeat', function () {
 
 Schedule::command('ops:heartbeat')->everyFiveMinutes()->withoutOverlapping();
 
+// Paket Q (Masalah 1) — warm public homepage cache before TTL 300s expires.
+Schedule::command('website:warm-public-homepage')
+    ->everyFourMinutes()
+    ->withoutOverlapping(10)
+    ->runInBackground();
+
 /*
 |--------------------------------------------------------------------------
 | Sprint 8.5 — Integration Service scheduler (no 1s cadence)

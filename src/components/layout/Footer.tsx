@@ -183,26 +183,30 @@ export const Footer = () => {
 
         </div>
 
-        <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-primary-200/70 text-xs text-center md:text-left">
+        {/* Legal bar — mobile: stacked+centered; md+: copyright left / links right (desktop unchanged). */}
+        <div className="border-t border-white/10 pt-6 md:pt-8 flex flex-col md:flex-row items-center md:items-center justify-between gap-3 md:gap-4">
+          <p className="text-primary-200/70 text-[11px] md:text-xs leading-relaxed text-center md:text-left max-w-prose md:max-w-none">
             {settings?.copyright || `© ${new Date().getFullYear()} PT GurkyNet Digital Nusantara. Hak Cipta Dilindungi.`}
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-primary-200/70">
+          <nav
+            aria-label="Tautan legal"
+            className="flex flex-wrap items-center justify-center md:justify-end gap-x-4 gap-y-2 text-[11px] md:text-xs text-primary-200/70"
+          >
             {bottomPages.length > 0 ? (
               bottomPages.map((page) => (
-                <Link key={page.id} to={pageHref(page.slug)} className="hover:text-accent-400 transition-colors">
+                <Link key={page.id} to={pageHref(page.slug)} className="hover:text-accent-400 transition-colors whitespace-nowrap">
                   {page.title}
                 </Link>
               ))
             ) : (
               <>
-                <Link to="/legal/privacy-policy" className="hover:text-accent-400 transition-colors">Kebijakan Privasi</Link>
-                <Link to="/legal/terms-conditions" className="hover:text-accent-400 transition-colors">Ketentuan Layanan</Link>
-                <Link to="/legal/refund-policy" className="hover:text-accent-400 transition-colors">Kebijakan Pengembalian</Link>
+                <Link to="/legal/privacy-policy" className="hover:text-accent-400 transition-colors whitespace-nowrap">Kebijakan Privasi</Link>
+                <Link to="/legal/terms-conditions" className="hover:text-accent-400 transition-colors whitespace-nowrap">Ketentuan Layanan</Link>
+                <Link to="/legal/refund-policy" className="hover:text-accent-400 transition-colors whitespace-nowrap">Kebijakan Pengembalian</Link>
               </>
             )}
-          </div>
+          </nav>
         </div>
       </div>
     </footer>

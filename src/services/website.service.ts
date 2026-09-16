@@ -233,7 +233,11 @@ export const websiteService = {
   },
 
   async getPublicHomepage(): Promise<ApiResponse<HomepagePayload>> {
-    const res = await apiClient.get<ApiResponse<HomepagePayload>>('/public/homepage');
+    // Paket Q — homepage-only timeout (do not change global apiClient 15s).
+    // Cold rebuild can exceed 15s; warmer keeps warm hits fast.
+    const res = await apiClient.get<ApiResponse<HomepagePayload>>('/public/homepage', {
+      timeout: 45000,
+    });
     return res.data;
   },
 

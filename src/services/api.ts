@@ -119,7 +119,15 @@ export function parseApiError(error: any): StandardApiError {
       } else if (status === 422) {
         errorMessage = 'Data yang dikirim tidak valid.';
       } else if (error.code === 'ECONNABORTED' || /timeout/i.test(String(error.message || ''))) {
-        errorMessage = 'Request timeout. Proses provider masih berjalan atau jaringan lambat — coba lagi tanpa reload.';
+        // Paket Q — homepage bootstrap is internal CMS/catalog, not Digiflazz.
+        // Keep Digi/transaction timeout copy mentioning "provider" for all other paths.
+        const requestUrl = String(error.config?.url || '');
+        const isPublicHomepage =
+          /(^|\/)public\/homepage(\?|$)/.test(requestUrl) &&
+          !/public\/homepage-/.test(requestUrl);
+        errorMessage = isPublicHomepage
+          ? 'Server sedang memuat data, coba lagi sebentar lagi.'
+          : 'Request timeout. Proses provider masih berjalan atau jaringan lambat — coba lagi tanpa reload.';
       } else if (error.code === 'ERR_CANCELED' || /canceled|cancelled/i.test(String(error.message || ''))) {
         errorMessage = 'Request terputus. Silakan coba kembali (bukan pembatalan manual).';
       } else if (typeof status === 'number' && status >= 500) {
