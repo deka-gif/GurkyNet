@@ -45,7 +45,7 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
   const resolvedFaqs = faqs.length > 0 ? faqs : initialFaqs;
 
   return (
-    <section id="faq" className="py-20 md:py-32 bg-gray-50">
+    <section id="faq" className="py-12 md:py-32 bg-gray-50">
       <div className="container mx-auto px-4 md:px-8 max-w-3xl">
         <div className="text-center mb-16">
           <div className="section-badge mb-4">FAQ</div>

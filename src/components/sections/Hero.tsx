@@ -22,7 +22,7 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
   const isHash = ctaTarget.startsWith('#');
 
   return (
-    <section className="relative pt-28 pb-20 md:pt-44 md:pb-32 overflow-hidden min-h-screen flex items-center bg-gradient-to-b from-primary-50/50 via-white to-gray-50">
+    <section className="relative pt-24 pb-12 md:pt-44 md:pb-32 overflow-hidden min-h-[85vh] md:min-h-screen flex items-center bg-gradient-to-b from-primary-50/50 via-white to-gray-50">
       {desktopBg && (
         <picture className="absolute inset-0 z-0">
           {mobileBg ? <source media="(max-width: 767px)" srcSet={mobileBg} /> : null}
@@ -36,7 +36,7 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
       </div>
 
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 lg:gap-8 items-center">
 
           {/* Text Content */}
           <motion.div
@@ -49,13 +49,13 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2, duration: 0.5 }}
-              className="section-badge-accent mb-6"
+              className="section-badge-accent mb-4 md:mb-6"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse" />
               {heroSection?.subtitle || heroSection?.description || 'Beta Version 1.0 Tersedia'}
             </motion.div>
 
-            <h1 className="text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold text-gray-900 leading-[1.1] mb-6 tracking-tight">
+            <h1 className="text-3xl md:text-5xl lg:text-[3.25rem] font-extrabold text-gray-900 leading-[1.15] mb-4 md:mb-6 tracking-tight">
               {heroSection?.title ? (
                 heroSection.title
               ) : (
@@ -63,7 +63,7 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
               )}
             </h1>
 
-            <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+            <p className="text-base md:text-xl text-gray-600 mb-6 md:mb-8 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
               {heroSection?.description || settings?.tagline || 'Top up saldo, beli pulsa, paket data, token PLN, voucher digital, hingga pembayaran tagihan dengan cepat, aman, dan nyaman.'}
             </p>
 
@@ -106,7 +106,7 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
               </a>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center justify-center lg:justify-start gap-4 sm:gap-6 text-gray-600 text-sm font-semibold">
+            <div className="mt-8 md:mt-10 flex flex-wrap items-center justify-center lg:justify-start gap-3 sm:gap-6 text-gray-600 text-xs md:text-sm font-semibold">
               {['Transaksi Cepat', 'Keamanan Terjamin'].map((label) => (
                 <div key={label} className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-primary-100 shadow-sm">
                   <div className="w-5 h-5 rounded-full bg-primary-100 flex items-center justify-center text-primary-700">
@@ -123,7 +123,7 @@ export const Hero = ({ section: sectionProp }: Props = {}) => {
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="relative mx-auto lg:ml-auto w-full max-w-sm lg:max-w-md"
+            className="relative mx-auto lg:ml-auto w-full max-w-[16rem] sm:max-w-sm lg:max-w-md"
             style={{ perspective: "1000px" }}
           >
             {illustration ? (

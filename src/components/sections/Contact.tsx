@@ -25,7 +25,7 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
   const operatingHours = settings?.operatingHours || '';
 
   return (
-    <section id="contact" className="py-20 md:py-32 bg-white">
+    <section id="contact" className="py-12 md:py-32 bg-white">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="text-center max-w-2xl mx-auto mb-16">
           <div className="section-badge mb-4">Hubungi Kami</div>

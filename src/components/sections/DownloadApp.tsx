@@ -19,7 +19,7 @@ export const DownloadApp = (_props: { section?: import('../../types').HomepageSe
   const appName = settings?.websiteName || 'GurkyNet';
 
   return (
-    <section id="download-app" className="py-20 md:py-32 bg-white relative overflow-hidden">
+    <section id="download-app" className="py-12 md:py-32 bg-white relative overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
 

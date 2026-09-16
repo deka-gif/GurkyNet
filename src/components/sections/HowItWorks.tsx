@@ -26,7 +26,7 @@ const steps = [
 
 export const HowItWorks = (_props: { section?: import('../../types').HomepageSection } = {}) => {
   return (
-    <section className="py-20 md:py-32 bg-primary-900 text-white relative overflow-hidden">
+    <section className="py-12 md:py-32 bg-primary-900 text-white relative overflow-hidden">
       {/* Background Decors */}
       <div className="absolute inset-0 z-0">
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary-600/20 rounded-full blur-3xl"></div>
@@ -34,8 +34,8 @@ export const HowItWorks = (_props: { section?: import('../../types').HomepageSec
       </div>
 
       <div className="container mx-auto px-4 md:px-8 max-w-7xl relative z-10">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 text-accent-400 text-xs font-bold uppercase tracking-widest mb-4">
+        <div className="text-center max-w-2xl mx-auto mb-8 md:mb-16">
+          <div className="inline-flex items-center gap-2 text-accent-400 text-xs font-bold uppercase tracking-widest mb-3 md:mb-4">
             <span className="w-8 h-px bg-accent-500/50" />
             Alur Pengguna
             <span className="w-8 h-px bg-accent-500/50" />
@@ -44,7 +44,7 @@ export const HowItWorks = (_props: { section?: import('../../types').HomepageSec
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="section-title text-white mb-4"
+            className="section-title text-white mb-3 md:mb-4"
           >
             Cara <span className="text-primary-300">Kerja</span>
           </motion.h2>
@@ -63,7 +63,7 @@ export const HowItWorks = (_props: { section?: import('../../types').HomepageSec
           {/* Connecting Line */}
           <div className="hidden lg:block absolute top-1/2 left-0 w-full h-0.5 bg-primary-700 -translate-y-1/2 z-0"></div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-4 relative z-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8 lg:gap-4 relative z-10">
             {steps.map((step, index) => (
               <motion.div
                 key={index}
@@ -73,14 +73,14 @@ export const HowItWorks = (_props: { section?: import('../../types').HomepageSec
                 transition={{ duration: 0.5, delay: index * 0.15 }}
                 className="flex flex-col items-center text-center group"
               >
-                <div className="w-20 h-20 bg-primary-800 rounded-full border-4 border-primary-900 flex items-center justify-center text-primary-400 mb-6 group-hover:bg-primary-600 group-hover:text-white group-hover:scale-110 transition-all duration-300 shadow-xl shadow-primary-900/50 relative">
-                  <step.icon className="w-8 h-8" />
-                  <div className="absolute -top-3 -right-3 w-8 h-8 bg-accent-500 rounded-full flex items-center justify-center text-white font-bold text-sm border-2 border-primary-900 shadow-sm">
+                <div className="w-14 h-14 md:w-20 md:h-20 bg-primary-800 rounded-full border-4 border-primary-900 flex items-center justify-center text-primary-400 mb-3 md:mb-6 group-hover:bg-primary-600 group-hover:text-white group-hover:scale-110 transition-all duration-300 shadow-xl shadow-primary-900/50 relative">
+                  <step.icon className="w-6 h-6 md:w-8 md:h-8" />
+                  <div className="absolute -top-2 -right-2 md:-top-3 md:-right-3 w-6 h-6 md:w-8 md:h-8 bg-accent-500 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm border-2 border-primary-900 shadow-sm">
                     {index + 1}
                   </div>
                 </div>
-                <h3 className="text-xl font-bold mb-2">{step.title}</h3>
-                <p className="text-primary-200">{step.description}</p>
+                <h3 className="text-sm md:text-xl font-bold mb-1 md:mb-2 leading-snug">{step.title}</h3>
+                <p className="text-xs md:text-base text-primary-200 leading-relaxed">{step.description}</p>
               </motion.div>
             ))}
           </div>

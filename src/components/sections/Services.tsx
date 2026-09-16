@@ -129,14 +129,14 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
   };
 
   return (
-    <section className="py-20 md:py-32 bg-white" id="services">
+    <section className="py-12 md:py-32 bg-white" id="services">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
-        <div className="text-center max-w-2xl mx-auto mb-16">
+        <div className="text-center max-w-2xl mx-auto mb-8 md:mb-16">
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="section-badge mb-4"
+            className="section-badge mb-3 md:mb-4"
           >
             <Sparkles className="w-3.5 h-3.5 text-primary-600" />
             Layanan Digital Realtime
@@ -145,7 +145,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="section-title mb-4"
+            className="section-title mb-3 md:mb-4"
           >
             Katalog Layanan <span className="text-primary-600">Terlengkap</span>
           </motion.h2>
@@ -162,10 +162,10 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
 
         {/* Categories Grid / Loading / Error / Empty States */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="bg-gray-50 rounded-2xl p-6 border border-gray-100 animate-pulse space-y-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-2xl" />
+              <div key={i} className="bg-gray-50 rounded-2xl p-4 md:p-6 border border-gray-100 animate-pulse space-y-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-gray-200 rounded-2xl" />
                 <div className="h-5 bg-gray-200 rounded w-2/3" />
                 <div className="h-4 bg-gray-100 rounded w-full" />
               </div>
@@ -190,7 +190,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
             {(homepageCategories.length > 0 ? homepageCategories.map((bucket) => ({
               id: bucket.category?.id || bucket.key,
               name: bucket.label,
@@ -210,13 +210,13 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                   transition={{ duration: 0.4, delay: index * 0.05 }}
                   whileHover={{ y: -4, scale: 1.02 }}
                   onClick={() => handleCategoryClick(cat)}
-                  className="public-card p-6 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between"
+                  className="public-card p-4 md:p-6 hover:-translate-y-1 group cursor-pointer flex flex-col justify-between"
                 >
                   <div>
-                    <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center text-gray-600 group-hover:text-primary-600 group-hover:bg-primary-50 transition-colors mb-4">
-                      <IconComp className="w-6 h-6" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center text-gray-600 group-hover:text-primary-600 group-hover:bg-primary-50 transition-colors mb-3 md:mb-4">
+                      <IconComp className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+                    <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1 md:mb-2 group-hover:text-primary-600 transition-colors leading-snug">
                       {cat.name}
                     </h3>
                     <p className="text-xs text-gray-500 leading-relaxed">
@@ -226,7 +226,7 @@ export const Services: React.FC<{ section?: import('../../types').HomepageSectio
                     </p>
                   </div>
 
-                  <div className="mt-6 flex items-center justify-between text-xs font-extrabold text-primary-600 group-hover:translate-x-1 transition-transform">
+                  <div className="mt-3 md:mt-6 flex items-center justify-between text-xs font-extrabold text-primary-600 group-hover:translate-x-1 transition-transform">
                     <span>{cat.productCount ? `${cat.productCount} Produk` : 'Lihat Produk'}</span>
                     <ChevronRight className="w-4 h-4" />
                   </div>
