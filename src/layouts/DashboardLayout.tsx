@@ -102,6 +102,12 @@ export const DashboardLayout = () => {
     fetchSettings();
   }, [fetchWallet, fetchNotifications, fetchSettings]);
 
+  // Close notification panel on route change so a leftover open panel cannot
+  // sit on top of the next page or receive accidental follow-up clicks.
+  useEffect(() => {
+    setIsNotificationOpen(false);
+  }, [location.pathname]);
+
   const getToken = useCallback(() => storageService.getToken(), []);
   const walletChannel = authUser?.id ? [`wallet.${authUser.id}`] : [];
 
@@ -680,6 +686,9 @@ export const DashboardLayout = () => {
                           <div 
                             key={item.id} 
                             onClick={() => {
+                              // Close immediately so the panel cannot stay open over the
+                              // next page or stack accidental multi-clicks into history.
+                              setIsNotificationOpen(false);
                               if (!item.isRead) void markAsRead(item.id);
                               const target = item.transactionId || item.invoiceNumber;
                               if (target) {
