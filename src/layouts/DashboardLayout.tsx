@@ -198,6 +198,7 @@ export const DashboardLayout = () => {
           { section: 'Program & Loyalty' },
           { path: '/dashboard/finance/loyalty', label: 'Program Poin', icon: Gift },
           { path: '/dashboard/finance/referral', label: 'Program Referral', icon: Users },
+          { path: '/dashboard/finance/revenue-allocation', label: 'Alokasi Pendapatan', icon: Layers },
           { section: 'Monitoring' },
           { path: '/dashboard/finance/alerts', label: 'Alerts', icon: Bell },
           { section: 'Global' },

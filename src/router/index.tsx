@@ -87,6 +87,7 @@ import {
   FinanceWalletMonitorPage,
   FinanceLoyaltyPage,
   FinanceReferralPage,
+  FinanceRevenueAllocationPage,
   FinanceDepositPage,
   FinanceWithdrawPage,
   OperationsDashboard,
@@ -345,6 +346,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
             <FinanceReferralPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'finance/revenue-allocation',
+        element: (
+          <ProtectedRoute allowedRoles={['Super Admin', 'Finance', 'Owner']}>
+            <FinanceRevenueAllocationPage />
           </ProtectedRoute>
         )
       },

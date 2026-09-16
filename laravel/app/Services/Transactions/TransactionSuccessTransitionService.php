@@ -72,7 +72,7 @@ class TransactionSuccessTransitionService
             ? $context['digiflazz_response']
             : (is_array($raw) ? $raw : []);
 
-        return DB::transaction(function () use (
+        $result = DB::transaction(function () use (
             $transactionId,
             $providerCode,
             $source,
@@ -193,6 +193,31 @@ class TransactionSuccessTransitionService
                 'events_dispatched' => true,
             ];
         });
+
+        // FR-FIN-10 — after SUCCESS commit (also idempotent on already_success).
+        if (
+            ($result['outcome'] ?? null) === self::OUTCOME_APPLIED
+            || ($result['outcome'] ?? null) === self::OUTCOME_ALREADY_SUCCESS
+        ) {
+            $this->allocateRevenueAfterSuccess($result['transaction']);
+        }
+
+        return $result;
+    }
+
+    /**
+     * FR-FIN-10 — after SUCCESS commit, allocate admin_fee+margin (never rolls back SUCCESS).
+     */
+    public function allocateRevenueAfterSuccess(Transaction $transaction): void
+    {
+        try {
+            app(\App\Services\Finance\RevenueAllocationService::class)->allocateOnSuccess($transaction);
+        } catch (\Throwable $e) {
+            Log::error('TX SUCCESS — revenue allocation hook failed', [
+                'transaction_id' => $transaction->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

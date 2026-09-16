@@ -440,6 +440,15 @@ Route::prefix('v1')->middleware([\App\Http\Middleware\StandardizeApiErrors::clas
             Route::post('/referral/ledger/{id}/finance-review', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'reviewFinanceCase'])->whereNumber('id');
             Route::get('/referral/users/{userId}/caps', [\App\Http\Controllers\Api\v1\Admin\FinanceReferralController::class, 'capUsage'])->whereNumber('userId');
 
+            // FR-FIN-10 — Revenue allocation (admin_fee + margin → kategori %)
+            Route::get('/revenue-allocation', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'overview']);
+            Route::get('/revenue-allocation/accumulation', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'accumulation']);
+            Route::get('/revenue-allocation/history', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'history']);
+            Route::put('/revenue-allocation/rules', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'saveRules']);
+            Route::post('/revenue-allocation/categories', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'storeCategory']);
+            Route::put('/revenue-allocation/categories/{id}', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'renameCategory'])->whereNumber('id');
+            Route::post('/revenue-allocation/categories/{id}/deactivate', [\App\Http\Controllers\Api\v1\Admin\FinanceRevenueAllocationController::class, 'deactivateCategory'])->whereNumber('id');
+
             // FR-KYC-05 — Finance KYC review queue
             Route::get('/kyc', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'index']);
             Route::get('/kyc/{id}', [\App\Http\Controllers\Api\v1\Admin\KycReviewController::class, 'show'])->whereNumber('id');

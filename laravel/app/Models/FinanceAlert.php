@@ -16,6 +16,8 @@ class FinanceAlert extends Model
         'chargeback',
         'large_refund',
         'abnormal_transaction',
+        'revenue_allocation_rules_missing',
+        'ppob_late_success_after_refund',
     ];
 
     public const SEVERITIES = ['info', 'warning', 'critical'];

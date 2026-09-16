@@ -183,6 +183,19 @@ class WalletRefundService
                         'error' => $e->getMessage(),
                     ]);
                 }
+
+                // FR-FIN-10 — reverse revenue allocation snapshot (posted → reversed).
+                try {
+                    app(\App\Services\Finance\RevenueAllocationService::class)->reverseOnRefund(
+                        $locked,
+                        'refund:'.$source
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('WalletRefundService — revenue allocation reverse failed', [
+                        'transaction_id' => $locked->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             Log::info('WalletRefundService — refund executed', [
@@ -192,6 +205,21 @@ class WalletRefundService
                 'refund_reference' => $refundRef,
                 'final_status' => $status,
             ]);
+
+            // FR-FIN-10 — ensure allocation reversed for any credited refund with a posted entry.
+            if (! $isSuccess) {
+                try {
+                    app(\App\Services\Finance\RevenueAllocationService::class)->reverseOnRefund(
+                        $locked,
+                        'refund:'.$source
+                    );
+                } catch (\Throwable $e) {
+                    Log::error('WalletRefundService — revenue allocation reverse failed', [
+                        'transaction_id' => $locked->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
 
             return [
                 'credited' => true,

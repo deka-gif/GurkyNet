@@ -351,6 +351,10 @@ export const FinanceReferralPage = lazyNamed(
   () => import('../pages/dashboard/FinanceReferralPage'),
   'FinanceReferralPage'
 );
+export const FinanceRevenueAllocationPage = lazyNamed(
+  () => import('../pages/dashboard/FinanceRevenueAllocationPage'),
+  'FinanceRevenueAllocationPage'
+);
 export const FinanceDepositPage = lazyNamed(
   () => import('../pages/dashboard/FinanceDepositPage'),
   'FinanceDepositPage'

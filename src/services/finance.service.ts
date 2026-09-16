@@ -306,6 +306,39 @@ export const financeService = {
     const res = await apiClient.post<ApiResponse<any>>('/admin/finance/reconciliation/run', { mode });
     return res.data?.data || res.data;
   },
+
+  // FR-FIN-10 — Revenue allocation
+  async getRevenueAllocationOverview() {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/revenue-allocation');
+    return res.data?.data || res.data;
+  },
+  async getRevenueAllocationAccumulation(params?: { from?: string; to?: string }) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/revenue-allocation/accumulation', { params });
+    return res.data?.data || res.data;
+  },
+  async getRevenueAllocationHistory(params?: { limit?: number }) {
+    const res = await apiClient.get<ApiResponse<any>>('/admin/finance/revenue-allocation/history', { params });
+    return res.data?.data || res.data;
+  },
+  async saveRevenueAllocationRules(payload: {
+    reason: string;
+    lines: Array<{ category_id: number; percentage: number }>;
+  }) {
+    const res = await apiClient.put<ApiResponse<any>>('/admin/finance/revenue-allocation/rules', payload);
+    return res.data?.data || res.data;
+  },
+  async createRevenueAllocationCategory(payload: { name: string; code?: string }) {
+    const res = await apiClient.post<ApiResponse<any>>('/admin/finance/revenue-allocation/categories', payload);
+    return res.data?.data || res.data;
+  },
+  async renameRevenueAllocationCategory(id: number, name: string) {
+    const res = await apiClient.put<ApiResponse<any>>(`/admin/finance/revenue-allocation/categories/${id}`, { name });
+    return res.data?.data || res.data;
+  },
+  async deactivateRevenueAllocationCategory(id: number) {
+    const res = await apiClient.post<ApiResponse<any>>(`/admin/finance/revenue-allocation/categories/${id}/deactivate`);
+    return res.data?.data || res.data;
+  },
 };
 
 const idr = (n: number | null | undefined) =>
