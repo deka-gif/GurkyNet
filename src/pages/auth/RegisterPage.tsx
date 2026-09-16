@@ -240,60 +240,60 @@ export const RegisterPage: React.FC = () => {
             <label htmlFor="reg-fullname" className="auth-label">Nama Lengkap</label>
             <div className="auth-input-icon-wrap">
               <div className="auth-input-icon"><User className="w-5 h-5" /></div>
-              <input id="reg-fullname" type="text" autoComplete="name" placeholder="Contoh: Budi Santoso" {...register('fullName')} disabled={busy} className={`auth-input pl-10 py-2.5 ${errors.fullName ? 'auth-input-error' : ''}`} />
+              <input id="reg-fullname" type="text" autoComplete="name" placeholder="Contoh: Budi Santoso" {...register('fullName')} disabled={busy} className={`auth-input pl-10 ${errors.fullName ? 'auth-input-error' : ''}`} />
             </div>
-            {errors.fullName && <p className="mt-1 text-xs font-semibold text-red-600">{errors.fullName.message}</p>}
+            {errors.fullName && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.fullName.message}</p>}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label htmlFor="reg-phone" className="auth-label">Nomor Handphone</label>
               <div className="auth-input-icon-wrap">
-                <div className="auth-input-icon"><Phone className="w-4 h-4" /></div>
-                <input id="reg-phone" type="tel" inputMode="numeric" placeholder="08xxxxxxxxxx" {...register('phone')} disabled={busy} className={`auth-input pl-9 py-2.5 ${errors.phone ? 'auth-input-error' : ''}`} />
+                <div className="auth-input-icon"><Phone className="w-5 h-5" /></div>
+                <input id="reg-phone" type="tel" inputMode="numeric" autoComplete="tel" placeholder="08xxxxxxxxxx" {...register('phone')} disabled={busy} className={`auth-input pl-10 ${errors.phone ? 'auth-input-error' : ''}`} />
               </div>
-              {errors.phone && <p className="mt-1 text-xs font-semibold text-red-600">{errors.phone.message}</p>}
+              {errors.phone && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.phone.message}</p>}
             </div>
             <div>
               <label htmlFor="reg-email" className="auth-label">Email Aktif</label>
               <div className="auth-input-icon-wrap">
-                <div className="auth-input-icon"><Mail className="w-4 h-4" /></div>
-                <input id="reg-email" type="email" autoComplete="email" placeholder="nama@email.com" {...register('email')} disabled={busy} className={`auth-input pl-9 py-2.5 ${errors.email ? 'auth-input-error' : ''}`} />
+                <div className="auth-input-icon"><Mail className="w-5 h-5" /></div>
+                <input id="reg-email" type="email" inputMode="email" autoComplete="email" placeholder="nama@email.com" {...register('email')} disabled={busy} className={`auth-input pl-10 ${errors.email ? 'auth-input-error' : ''}`} />
               </div>
-              {errors.email && <p className="mt-1 text-xs font-semibold text-red-600">{errors.email.message}</p>}
+              {errors.email && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.email.message}</p>}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label htmlFor="reg-password" className="auth-label">Password</label>
               <div className="auth-input-icon-wrap">
-                <div className="auth-input-icon"><Lock className="w-4 h-4" /></div>
-                <input id="reg-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="Min. 8 karakter" {...register('password')} disabled={busy} className={`auth-input pl-9 pr-10 py-2.5 ${errors.password ? 'auth-input-error' : ''}`} />
-                <button type="button" tabIndex={-1} onClick={() => setShowPassword((prev) => !prev)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400">{showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+                <div className="auth-input-icon"><Lock className="w-5 h-5" /></div>
+                <input id="reg-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="Min. 8 karakter" {...register('password')} disabled={busy} className={`auth-input pl-10 pr-12 ${errors.password ? 'auth-input-error' : ''}`} />
+                <button type="button" tabIndex={-1} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowPassword((prev) => !prev)} className="auth-toggle-password">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
               </div>
-              {errors.password && <p className="mt-1 text-xs font-semibold text-red-600">{errors.password.message}</p>}
+              {errors.password && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.password.message}</p>}
             </div>
             <div>
               <label htmlFor="reg-confirm-password" className="auth-label">Konfirmasi Password</label>
               <div className="auth-input-icon-wrap">
-                <div className="auth-input-icon"><Lock className="w-4 h-4" /></div>
-                <input id="reg-confirm-password" type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="Ulangi password" {...register('passwordConfirmation')} disabled={busy} className={`auth-input pl-9 pr-10 py-2.5 ${errors.passwordConfirmation ? 'auth-input-error' : ''}`} />
-                <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400">{showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+                <div className="auth-input-icon"><Lock className="w-5 h-5" /></div>
+                <input id="reg-confirm-password" type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="Ulangi password" {...register('passwordConfirmation')} disabled={busy} className={`auth-input pl-10 pr-12 ${errors.passwordConfirmation ? 'auth-input-error' : ''}`} />
+                <button type="button" tabIndex={-1} aria-label={showConfirmPassword ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'} onClick={() => setShowConfirmPassword((prev) => !prev)} className="auth-toggle-password">{showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
               </div>
-              {errors.passwordConfirmation && <p className="mt-1 text-xs font-semibold text-red-600">{errors.passwordConfirmation.message}</p>}
+              {errors.passwordConfirmation && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.passwordConfirmation.message}</p>}
             </div>
           </div>
           {!showReferralField ? (
             <button
               type="button"
               onClick={() => setShowReferralField(true)}
-              className="w-full border border-dashed border-gray-300 rounded-2xl px-4 py-3 text-xs font-bold text-gray-600 flex items-center justify-between cursor-pointer hover:border-primary-400 hover:text-primary-700"
+              className="w-full border border-dashed border-gray-300 rounded-2xl px-4 py-3 min-h-11 text-xs font-bold text-gray-600 flex items-center justify-between cursor-pointer hover:border-primary-400 hover:text-primary-700"
             >
               <span className="flex items-center gap-2">
                 <Ticket className="w-4 h-4" /> Punya kode referral?
               </span>
             </button>
           ) : (
-            <div className="flex gap-2 items-start">
+            <div className="flex gap-2 items-center">
               <div className="flex-1">
                 <input
                   id="reg-referral"
@@ -307,30 +307,32 @@ export const RegisterPage: React.FC = () => {
                   disabled={busy}
                   className={`auth-input uppercase ${errors.referralCode ? 'auth-input-error' : ''}`}
                 />
-                {errors.referralCode && <p className="mt-1 text-xs font-semibold text-red-600">{errors.referralCode.message}</p>}
+                {errors.referralCode && <p className="mt-1.5 text-xs font-semibold text-red-600">{errors.referralCode.message}</p>}
               </div>
               <button
                 type="button"
                 onClick={() => { setShowReferralField(false); setValue('referralCode', ''); }}
-                className="text-xs font-bold text-gray-500 hover:text-primary-600 shrink-0 mt-2.5"
+                className="text-xs font-bold text-gray-500 hover:text-primary-600 shrink-0 max-md:min-h-11 max-md:px-2"
               >
                 Lewati
               </button>
             </div>
           )}
-          <label className="flex items-start gap-3 rounded-2xl border border-primary-100 bg-primary-50/40 px-4 py-3 cursor-pointer hover:bg-primary-50/70 transition-colors">
-            <input type="checkbox" {...register('agreeTerms')} disabled={busy} className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-            <span className="text-xs text-gray-600 leading-relaxed">Saya menyetujui <Link to="/legal/terms-conditions" className="auth-link">Syarat & Ketentuan</Link> dan <Link to="/legal/privacy-policy" className="auth-link">Kebijakan Privasi</Link>.</span>
+          <label className="flex items-start gap-2 rounded-2xl border border-primary-100 bg-primary-50/40 px-3 py-3 max-md:min-h-11 cursor-pointer hover:bg-primary-50/70 transition-colors">
+            <span className="auth-check-hit mt-0.5">
+              <input type="checkbox" {...register('agreeTerms')} disabled={busy} className="auth-check" />
+            </span>
+            <span className="text-xs text-gray-600 leading-relaxed pt-0.5">Saya menyetujui <Link to="/legal/terms-conditions" className="auth-link-inline">Syarat & Ketentuan</Link> dan <Link to="/legal/privacy-policy" className="auth-link-inline">Kebijakan Privasi</Link>.</span>
           </label>
           {errors.agreeTerms && <p className="text-xs font-semibold text-red-600">{errors.agreeTerms.message}</p>}
-          <Button type="submit" variant="primary" disabled={busy} className="w-full">{busy ? 'Memproses...' : <>Lanjut Verifikasi <ArrowRight className="w-4 h-4" /></>}</Button>
+          <Button type="submit" variant="primary" disabled={busy} className="w-full min-h-11">{busy ? 'Memproses...' : <>Lanjut Verifikasi <ArrowRight className="w-4 h-4" /></>}</Button>
         </form>
         </>
       )}
 
       {step === 'verify' && (
         <div className="space-y-4">
-          <button type="button" onClick={() => { setStep('register'); setErrorMsg(null); setSuccessMsg(null); setOtpCode(''); setOtpError(null); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+          <button type="button" onClick={() => { setStep('register'); setErrorMsg(null); setSuccessMsg(null); setOtpCode(''); setOtpError(null); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline max-md:min-h-11">
             <ArrowLeft className="w-4 h-4" /> Ubah Data Akun
           </button>
           <div className="auth-info-box">Kode OTP dikirim ke <strong>{registeredEmail}</strong>. Masukkan 6 digit OTP untuk melanjutkan.</div>
@@ -340,18 +342,18 @@ export const RegisterPage: React.FC = () => {
             type="button"
             disabled={busyWhatsapp || !onboardingId}
             onClick={() => void resendWhatsappOtp()}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 text-primary-700 text-xs font-bold py-2.5 hover:bg-primary-100 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 text-primary-700 text-xs font-bold py-2.5 min-h-11 hover:bg-primary-100 disabled:opacity-50"
           >
             <MessageCircle className="w-4 h-4" />
             {busyWhatsapp ? 'Mengirim...' : 'Tidak menerima email? Kirim ke WhatsApp'}
           </button>
-          <Button type="button" variant="primary" disabled={busy || otpCode.length !== 6} onClick={submitOtp} className="w-full">Verifikasi OTP</Button>
+          <Button type="button" variant="primary" disabled={busy || otpCode.length !== 6} onClick={submitOtp} className="w-full min-h-11">Verifikasi OTP</Button>
         </div>
       )}
 
       {step === 'pin' && (
         <div className="space-y-4">
-          <button type="button" onClick={() => { setStep('verify'); setErrorMsg(null); setSuccessMsg(null); setPin(''); setPinConfirmation(''); setPinError(null); setPinConfirmationError(null); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+          <button type="button" onClick={() => { setStep('verify'); setErrorMsg(null); setSuccessMsg(null); setPin(''); setPinConfirmation(''); setPinError(null); setPinConfirmationError(null); }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline max-md:min-h-11">
             <ArrowLeft className="w-4 h-4" /> Kembali ke Verifikasi OTP
           </button>
           <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-700">Buat PIN transaksi 6 digit. Hindari PIN umum seperti <code className="text-primary-700 font-mono text-xs">123456</code>, <code className="text-primary-700 font-mono text-xs">111111</code>, atau pola berulang lain.</div>
@@ -365,16 +367,18 @@ export const RegisterPage: React.FC = () => {
             <PinInput value={pinConfirmation} onChange={setPinConfirmation} disabled={busy} error={!!pinConfirmationError} />
             {pinConfirmationError && <p className="mt-1.5 text-xs font-semibold text-red-600">{pinConfirmationError}</p>}
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none max-md:min-h-11">
+            <span className="auth-check-hit">
+              <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="auth-check" />
+            </span>
             Ingat perangkat ini
           </label>
-          <Button type="button" variant="primary" disabled={busy || pin.length !== 6 || pinConfirmation.length !== 6} onClick={submitPin} className="w-full">Aktifkan Akun & Masuk</Button>
+          <Button type="button" variant="primary" disabled={busy || pin.length !== 6 || pinConfirmation.length !== 6} onClick={submitPin} className="w-full min-h-11">Aktifkan Akun & Masuk</Button>
         </div>
       )}
 
-      <div className="pt-2 text-center border-t border-gray-100">
-        <p className="text-xs text-gray-500">Sudah punya akun? <Link to="/login" className="auth-link">Masuk di sini</Link></p>
+      <div className="pt-2 text-center border-t border-gray-100 max-md:min-h-11 max-md:flex max-md:items-center max-md:justify-center">
+        <p className="text-sm text-gray-500">Sudah punya akun? <Link to="/login" className="auth-link">Masuk di sini</Link></p>
       </div>
     </div>
   );

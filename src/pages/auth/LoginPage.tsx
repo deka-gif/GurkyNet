@@ -155,7 +155,7 @@ export const LoginPage: React.FC = () => {
           </Button>
           <button
             type="button"
-            className="w-full text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
+            className="w-full text-sm font-bold text-gray-500 hover:text-primary-600 transition-colors max-md:min-h-11"
             onClick={() => {
               clearTwoFactorChallenge();
               setOtpCode('');
@@ -196,7 +196,7 @@ export const LoginPage: React.FC = () => {
               placeholder="contoh: user@gurkynet.my.id atau 08123456789"
               {...register('identity')}
               disabled={isLoading}
-              className={`auth-input pl-10 pr-4 py-3 ${errors.identity ? 'auth-input-error' : ''}`}
+              className={`auth-input pl-10 pr-4 ${errors.identity ? 'auth-input-error' : ''}`}
             />
           </div>
           {errors.identity && (
@@ -220,13 +220,14 @@ export const LoginPage: React.FC = () => {
               placeholder="••••••••"
               {...register('password')}
               disabled={isLoading}
-              className={`auth-input pl-10 pr-12 py-3 ${errors.password ? 'auth-input-error' : ''}`}
+              className={`auth-input pl-10 pr-12 ${errors.password ? 'auth-input-error' : ''}`}
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600"
+              className="auth-toggle-password"
               onClick={() => setShowPassword((v) => !v)}
               tabIndex={-1}
+              aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
             >
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
@@ -239,14 +240,16 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center justify-between text-sm">
-          <label className="flex items-center gap-2 text-gray-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
+        <div className="auth-inline-row">
+          <label className="flex items-center gap-1.5 text-gray-600 cursor-pointer select-none max-md:min-h-11">
+            <span className="auth-check-hit">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="auth-check"
+              />
+            </span>
             Ingat saya
           </label>
           <Link to="/forgot-password" className="auth-link text-sm">
@@ -254,13 +257,13 @@ export const LoginPage: React.FC = () => {
           </Link>
         </div>
 
-        <Button type="submit" variant="primary" disabled={isLoading} className="w-full disabled:opacity-60">
+        <Button type="submit" variant="primary" disabled={isLoading} className="w-full min-h-11 disabled:opacity-60">
           {isLoading ? 'Memproses…' : 'Masuk'}
           <ArrowRight className="w-4 h-4" />
         </Button>
       </form>
 
-      <p className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100">
+      <p className="text-center text-sm text-gray-500 pt-2 border-t border-gray-100 max-md:min-h-11 max-md:flex max-md:items-center max-md:justify-center">
         Belum punya akun?{' '}
         <Link to="/register" className="auth-link">Daftar</Link>
       </p>

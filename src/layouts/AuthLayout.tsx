@@ -152,7 +152,7 @@ export const AuthLayout = () => {
             </div>
           </div>
 
-          <div className="lg:col-span-7 p-6 sm:p-10 md:p-12 flex flex-col justify-center">
+          <div className="lg:col-span-7 p-5 sm:p-10 md:p-12 flex flex-col justify-center">
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -168,14 +168,14 @@ export const AuthLayout = () => {
         </div>
       </main>
 
-      <footer className="relative z-10 p-6 text-center text-xs text-gray-500">
+      <footer className="relative z-10 p-6 text-center text-xs text-gray-500 flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
         {settings?.copyright || settings?.websiteName || ''}
         {' · '}
-        <Link to="/legal/terms-conditions" className="hover:text-primary-600 transition-colors">
+        <Link to="/legal/terms-conditions" className="auth-footer-link">
           Syarat & Ketentuan
         </Link>
         {' · '}
-        <Link to="/legal/privacy-policy" className="hover:text-primary-600 transition-colors">
+        <Link to="/legal/privacy-policy" className="auth-footer-link">
           Kebijakan Privasi
         </Link>
       </footer>

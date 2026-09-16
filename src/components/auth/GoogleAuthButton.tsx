@@ -32,7 +32,7 @@ export const AuthDivider: React.FC<{ label: string }> = ({ label }) => (
 export const GoogleAuthButton: React.FC<{ href: string; label: string }> = ({ href, label }) => (
   <a
     href={href}
-    className="w-full flex items-center justify-center gap-2.5 border border-gray-200 rounded-2xl py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+    className="w-full flex items-center justify-center gap-2.5 border border-gray-200 rounded-2xl py-3 min-h-11 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
   >
     <GoogleLogo />
     {label}
