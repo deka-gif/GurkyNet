@@ -22,7 +22,7 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
   const getImageUrl = (image: any): string => resolveMediaSrc(image);
 
   return (
-    <section className="py-20 md:py-32 public-section-alt overflow-hidden">
+    <section className="py-12 md:py-32 public-section-alt overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         <div className="text-center max-w-2xl mx-auto mb-16">
           <div className="section-badge mb-4">Pratinjau Aplikasi</div>
