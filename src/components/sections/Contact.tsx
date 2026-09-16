@@ -27,13 +27,13 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
   return (
     <section id="contact" className="py-12 md:py-32 bg-white">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="section-badge mb-4">Hubungi Kami</div>
+        <div className="text-center max-w-2xl mx-auto mb-8 md:mb-16">
+          <div className="section-badge mb-3 md:mb-4">Hubungi Kami</div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="section-title mb-4"
+            className="section-title mb-3 md:mb-4"
           >
             {contactSection?.title ? (
               contactSection.title
@@ -52,75 +52,75 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
           </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-12 items-stretch">
           
-          {/* Contact Cards Grid */}
+          {/* Contact Cards — 2-col from mobile (2 rows), same on sm+ */}
           <motion.div 
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-6"
+            className="grid grid-cols-2 gap-3 md:gap-6"
           >
-            <div className="public-card p-6 hover:-translate-y-0.5">
-              <div className="w-12 h-12 bg-primary-100 rounded-2xl flex items-center justify-center text-primary-700 mb-4 ring-1 ring-primary-100">
-                <MessageCircle className="w-6 h-6" />
+            <div className="public-card rounded-2xl md:rounded-3xl p-3.5 md:p-6 hover:-translate-y-0.5">
+              <div className="w-9 h-9 md:w-12 md:h-12 bg-primary-100 rounded-xl md:rounded-2xl flex items-center justify-center text-primary-700 mb-2.5 md:mb-4 ring-1 ring-primary-100">
+                <MessageCircle className="w-4 h-4 md:w-6 md:h-6" />
               </div>
-              <h4 className="font-bold text-gray-900 mb-1">WhatsApp</h4>
-              <p className="text-gray-600 mb-4">{whatsappNumber || 'Belum diatur di CMS'}</p>
+              <h4 className="font-bold text-gray-900 text-sm md:text-base mb-0.5 md:mb-1">WhatsApp</h4>
+              <p className="text-xs md:text-base text-gray-600 mb-2 md:mb-4 break-all leading-snug">{whatsappNumber || 'Belum diatur di CMS'}</p>
               {whatsappNumber ? (
                 <a
                   href={whatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary-600 font-semibold text-sm hover:underline"
+                  className="text-primary-600 font-semibold text-xs md:text-sm hover:underline"
                 >
                   Chat Sekarang →
                 </a>
               ) : null}
             </div>
 
-            <div className="public-card p-6 hover:-translate-y-0.5">
-              <div className="w-12 h-12 bg-primary-50 rounded-2xl flex items-center justify-center text-primary-600 mb-4 ring-1 ring-primary-100">
-                <Mail className="w-6 h-6" />
+            <div className="public-card rounded-2xl md:rounded-3xl p-3.5 md:p-6 hover:-translate-y-0.5">
+              <div className="w-9 h-9 md:w-12 md:h-12 bg-primary-50 rounded-xl md:rounded-2xl flex items-center justify-center text-primary-600 mb-2.5 md:mb-4 ring-1 ring-primary-100">
+                <Mail className="w-4 h-4 md:w-6 md:h-6" />
               </div>
-              <h4 className="font-bold text-gray-900 mb-1">Email</h4>
-              <p className="text-gray-600 mb-4">{supportEmail || 'Belum diatur di CMS'}</p>
+              <h4 className="font-bold text-gray-900 text-sm md:text-base mb-0.5 md:mb-1">Email</h4>
+              <p className="text-xs md:text-base text-gray-600 mb-2 md:mb-4 break-all leading-snug">{supportEmail || 'Belum diatur di CMS'}</p>
               {supportEmail ? (
                 <a
                   href={`mailto:${supportEmail}`}
-                  className="text-primary-600 font-semibold text-sm hover:underline"
+                  className="text-primary-600 font-semibold text-xs md:text-sm hover:underline"
                 >
                   Kirim Pesan →
                 </a>
               ) : null}
             </div>
             
-            <div className="public-card p-6 hover:-translate-y-0.5">
-              <div className="w-12 h-12 bg-accent-300/30 rounded-2xl flex items-center justify-center text-primary-800 mb-4 ring-1 ring-accent-400/30">
-                <Instagram className="w-6 h-6" />
+            <div className="public-card rounded-2xl md:rounded-3xl p-3.5 md:p-6 hover:-translate-y-0.5">
+              <div className="w-9 h-9 md:w-12 md:h-12 bg-accent-300/30 rounded-xl md:rounded-2xl flex items-center justify-center text-primary-800 mb-2.5 md:mb-4 ring-1 ring-accent-400/30">
+                <Instagram className="w-4 h-4 md:w-6 md:h-6" />
               </div>
-              <h4 className="font-bold text-gray-900 mb-1">Sosial Media</h4>
-              <p className="text-gray-600 mb-1">{instagramHandle || '—'}</p>
-              <p className="text-gray-600 mb-4">{tiktokHandle || '—'}</p>
+              <h4 className="font-bold text-gray-900 text-sm md:text-base mb-0.5 md:mb-1">Sosial Media</h4>
+              <p className="text-xs md:text-base text-gray-600 mb-0.5 md:mb-1 truncate">{instagramHandle || '—'}</p>
+              <p className="text-xs md:text-base text-gray-600 mb-2 md:mb-4 truncate">{tiktokHandle || '—'}</p>
               {settings?.instagram ? (
                 <a
                   href={settings.instagram}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary-600 font-semibold text-sm hover:underline"
+                  className="text-primary-600 font-semibold text-xs md:text-sm hover:underline"
                 >
                   Follow Kami →
                 </a>
               ) : null}
             </div>
 
-            <div className="public-card p-6 hover:-translate-y-0.5">
-              <div className="w-12 h-12 bg-primary-100 rounded-2xl flex items-center justify-center text-primary-800 mb-4 ring-1 ring-primary-200">
-                <Clock className="w-6 h-6" />
+            <div className="public-card rounded-2xl md:rounded-3xl p-3.5 md:p-6 hover:-translate-y-0.5">
+              <div className="w-9 h-9 md:w-12 md:h-12 bg-primary-100 rounded-xl md:rounded-2xl flex items-center justify-center text-primary-800 mb-2.5 md:mb-4 ring-1 ring-primary-200">
+                <Clock className="w-4 h-4 md:w-6 md:h-6" />
               </div>
-              <h4 className="font-bold text-gray-900 mb-1">Jam Operasional</h4>
-              <p className="text-gray-600">{operatingHours || 'Belum diatur di CMS'}</p>
+              <h4 className="font-bold text-gray-900 text-sm md:text-base mb-0.5 md:mb-1">Jam Operasional</h4>
+              <p className="text-xs md:text-base text-gray-600 leading-snug">{operatingHours || 'Belum diatur di CMS'}</p>
             </div>
           </motion.div>
 
@@ -130,24 +130,24 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden flex flex-col justify-center ring-1 ring-white/10"
+            className="bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950 rounded-2xl md:rounded-3xl p-5 md:p-8 lg:p-12 text-white relative overflow-hidden flex flex-col justify-center ring-1 ring-white/10"
           >
             <div className="brand-glow-primary top-0 right-0 w-64 h-64 opacity-40" />
             <div className="brand-glow-accent bottom-0 left-0 w-64 h-64 opacity-30" />
             
             <div className="relative z-10">
-              <h3 className="text-2xl md:text-3xl font-bold mb-4">Kantor Pusat</h3>
-              <p className="text-primary-100 mb-8 leading-relaxed">
+              <h3 className="text-lg md:text-2xl lg:text-3xl font-bold mb-2 md:mb-4">Kantor Pusat</h3>
+              <p className="text-sm md:text-base text-primary-100 mb-4 md:mb-8 leading-relaxed">
                 Kunjungi kantor pusat kami untuk keperluan bisnis, kerjasama, atau bantuan yang memerlukan tatap muka secara langsung.
               </p>
               
-              <div className="flex items-start gap-4 mb-8">
-                <div className="w-10 h-10 rounded-full bg-primary-800 flex items-center justify-center shrink-0">
-                  <MapPin className="w-5 h-5 text-primary-300" />
+              <div className="flex items-start gap-2.5 md:gap-4 mb-4 md:mb-8">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-primary-800 flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4 md:w-5 md:h-5 text-primary-300" />
                 </div>
-                <div>
-                  <h5 className="font-bold text-white mb-1">Alamat</h5>
-                  <p className="text-primary-200">{officeAddress}</p>
+                <div className="min-w-0">
+                  <h5 className="font-bold text-white text-sm md:text-base mb-0.5 md:mb-1">Alamat</h5>
+                  <p className="text-sm md:text-base text-primary-200 leading-snug">{officeAddress}</p>
                 </div>
               </div>
               
@@ -155,9 +155,9 @@ export const Contact = (_props: { section?: import('../../types').HomepageSectio
                 href={mapsUrl} 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="inline-block"
+                className="inline-block w-full sm:w-auto"
               >
-                <Button variant="secondary" className="w-full sm:w-auto">
+                <Button variant="secondary" className="w-full sm:w-auto px-4 py-2 md:px-6 md:py-3 text-sm md:text-base">
                   Lihat di Google Maps
                 </Button>
               </a>

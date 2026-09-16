@@ -47,13 +47,13 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
   return (
     <section id="faq" className="py-12 md:py-32 bg-gray-50">
       <div className="container mx-auto px-4 md:px-8 max-w-3xl">
-        <div className="text-center mb-16">
-          <div className="section-badge mb-4">FAQ</div>
+        <div className="text-center mb-8 md:mb-16">
+          <div className="section-badge mb-3 md:mb-4">FAQ</div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="section-title mb-4"
+            className="section-title mb-3 md:mb-4"
           >
             Pertanyaan yang Sering <span className="text-primary-600">Diajukan</span>
           </motion.h2>
@@ -68,7 +68,7 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
           </motion.p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2.5 md:space-y-4">
           {resolvedFaqs.map((faq, index) => {
             const isOpen = openIndex === index;
             
@@ -79,19 +79,19 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.4, delay: index * 0.05 }}
-                className={`public-card overflow-hidden ${isOpen ? 'ring-1 ring-primary-200 shadow-md shadow-primary-900/5' : ''}`}
+                className={`public-card overflow-hidden rounded-2xl md:rounded-3xl ${isOpen ? 'ring-1 ring-primary-200 shadow-md shadow-primary-900/5' : ''}`}
               >
                 <button
                   onClick={() => setOpenIndex(isOpen ? null : index)}
-                  className="w-full text-left px-6 py-5 flex items-center justify-between focus:outline-none"
+                  className="w-full text-left px-4 py-3.5 md:px-6 md:py-5 flex items-center justify-between gap-3 focus:outline-none"
                   aria-expanded={isOpen}
                   aria-controls={`faq-answer-${index}`}
                 >
-                  <h3 className={`text-lg font-semibold transition-colors ${isOpen ? 'text-primary-600' : 'text-gray-900'}`}>
+                  <h3 className={`text-sm md:text-lg font-semibold leading-snug transition-colors ${isOpen ? 'text-primary-600' : 'text-gray-900'}`}>
                     {faq.question}
                   </h3>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-300 ${isOpen ? 'bg-primary-50 text-primary-600 rotate-180' : 'bg-gray-50 text-gray-500'}`}>
-                    <ChevronDown className="w-5 h-5" />
+                  <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 transition-transform duration-300 ${isOpen ? 'bg-primary-50 text-primary-600 rotate-180' : 'bg-gray-50 text-gray-500'}`}>
+                    <ChevronDown className="w-4 h-4 md:w-5 md:h-5" />
                   </div>
                 </button>
                 <AnimatePresence>
@@ -103,7 +103,7 @@ export const Faq = (_props: { section?: import('../../types').HomepageSection } 
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <div className="px-6 pb-6 text-gray-600 leading-relaxed border-t border-gray-50 pt-4">
+                      <div className="px-4 pb-4 md:px-6 md:pb-6 text-sm md:text-base text-gray-600 leading-relaxed border-t border-gray-50 pt-3 md:pt-4">
                         {faq.answer}
                       </div>
                     </motion.div>

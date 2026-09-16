@@ -24,8 +24,8 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
   return (
     <section className="py-12 md:py-32 public-section-alt overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 max-w-7xl">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="section-badge mb-4">Pratinjau Aplikasi</div>
+        <div className="text-center max-w-2xl mx-auto mb-8 md:mb-16">
+          <div className="section-badge mb-3 md:mb-4">Pratinjau Aplikasi</div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -49,9 +49,9 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
           </motion.p>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-8 md:gap-12 relative">
+        <div className="flex flex-wrap justify-center gap-4 md:gap-12 relative px-2 md:px-0">
           {/* Decorative background element for the preview screens */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[60%] bg-primary-100/50 rounded-[3rem] -z-10"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[60%] bg-primary-100/50 rounded-[2rem] md:rounded-[3rem] -z-10"></div>
 
           {activeBanners.length > 0 ? (
             activeBanners.map((banner, index) => {
@@ -77,7 +77,7 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
                       }
                     }
                   }}
-                  className={`relative rounded-[2rem] border-[6px] border-gray-900 bg-gray-900 shadow-2xl overflow-hidden aspect-[9/19] w-[260px] md:w-[280px] flex flex-col group cursor-pointer ${
+                  className={`relative rounded-[1.25rem] md:rounded-[2rem] border-[4px] md:border-[6px] border-gray-900 bg-gray-900 shadow-xl md:shadow-2xl overflow-hidden aspect-[9/19] w-[148px] sm:w-[180px] md:w-[280px] flex flex-col group cursor-pointer ${
                     index % 2 !== 0 ? 'md:mt-12' : ''
                   }`}
                 >
@@ -175,7 +175,7 @@ export const AppPreview = (_props: { section?: import('../../types').HomepageSec
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.6, delay: index * 0.15 }}
-                className={`relative rounded-[2rem] border-[6px] border-gray-900 bg-gray-900 shadow-2xl overflow-hidden aspect-[9/19] w-[260px] md:w-[280px] flex flex-col group ${
+                className={`relative rounded-[1.25rem] md:rounded-[2rem] border-[4px] md:border-[6px] border-gray-900 bg-gray-900 shadow-xl md:shadow-2xl overflow-hidden aspect-[9/19] w-[148px] sm:w-[180px] md:w-[280px] flex flex-col group ${
                   index % 2 !== 0 ? 'md:mt-12' : ''
                 }`}
               >
