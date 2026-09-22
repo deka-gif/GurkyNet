@@ -90,8 +90,10 @@ export const DashboardHomePage = () => {
     navigate(category.path);
   }, [navigate]);
 
+  // Ticker must show AnnouncementResource.`message` (isi pesan CMS), not `title`.
+  // Popup modal below still uses title as heading + message as body.
   const announcementText = announcements
-    .map((a) => a.title || a.message || '')
+    .map((a) => String(a?.message || a?.body || '').trim())
     .filter(Boolean)
     .join('  •  ');
 
