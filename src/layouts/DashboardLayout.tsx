@@ -76,6 +76,9 @@ export const DashboardLayout = () => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  /** Web mobile purchase chrome — hide dashboard top bar + bottom nav (Pulsa / Paket Data). */
+  const isMobilePurchasePage =
+    location.pathname === '/dashboard/pulsa' || location.pathname === '/dashboard/paket-data';
 
   const { wallet, fetchWallet, applyRealtimeBalance, syncAuthoritativeBalance } = useWalletStore();
   const { settings, fetchSettings } = useWebsiteStore();
@@ -588,8 +591,12 @@ export const DashboardLayout = () => {
       {/* ========================================================= */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         
-        {/* HEADER AREA */}
-        <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-4 md:px-8 shrink-0 sticky top-0 z-30">
+        {/* HEADER AREA — hidden on mobile for Pulsa/Paket Data (in-page ← Title header). */}
+        <header
+          className={`h-20 bg-white border-b border-gray-100 items-center justify-between px-4 md:px-8 shrink-0 sticky top-0 z-30 ${
+            isMobilePurchasePage ? 'hidden md:flex' : 'flex'
+          }`}
+        >
           
           {/* Left Block: Brand on mobile */}
           <div className="flex items-center gap-4 flex-1">
@@ -753,7 +760,13 @@ export const DashboardLayout = () => {
         </header>
 
         {/* CONTENT VIEW AREA — owns mobile inset + bottom-nav clearance (S1). Desktop md:p-8 unchanged. */}
-        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:p-8">
+        <main
+          className={`flex-1 overflow-y-auto px-4 md:p-8 ${
+            isMobilePurchasePage
+              ? 'pt-2 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]'
+              : 'pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]'
+          }`}
+        >
           <LazyRoute>
             <Outlet />
           </LazyRoute>
@@ -764,7 +777,9 @@ export const DashboardLayout = () => {
       {/* MOBILE BOTTOM NAVIGATION */}
       {/* ========================================================= */}
       <nav
-        className={`fixed bottom-0 left-0 right-0 z-40 md:hidden border-t border-gray-100 bg-white shadow-xl shadow-black/10 pb-[env(safe-area-inset-bottom,0px)] ${
+        className={`fixed bottom-0 left-0 right-0 z-40 border-t border-gray-100 bg-white shadow-xl shadow-black/10 pb-[env(safe-area-inset-bottom,0px)] ${
+          isMobilePurchasePage ? 'hidden' : 'md:hidden'
+        } ${
           mobileNavItems.length > 5
             ? 'overflow-x-auto overscroll-x-contain'
             : ''

@@ -4,6 +4,7 @@ import { productService } from '../../services/product/product.service';
 import { Product } from '../../types';
 import { formatIDR } from '../../utils/currency';
 import { isProductPurchasable } from '../../utils/catalogAvailability';
+import { MobileCompactProductSkeleton } from './MobileCompactProductTile';
 
 type Chip = {
   key: string;
@@ -112,7 +113,7 @@ const BADGE_STYLES: Record<string, string> = {
 
 const PER_PAGE = 20;
 
-function ProductSkeleton() {
+function ProductSkeletonDesktop() {
   return (
     <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-4 space-y-3 h-[200px]">
       <div className="h-4 bg-gray-100 rounded w-1/3" />
@@ -131,6 +132,7 @@ function ProductSkeleton() {
 /**
  * Operator Paket Data marketplace master UX (Telkomsel template).
  * Products from Digiflazz/VIP via GET /products only — no dummy SKUs.
+ * WEB MOBILE UX: compact 2-col tiles; desktop keeps marketplace cards.
  */
 export function TelkomselPaketDataCatalog({
   selectedProduct,
@@ -274,16 +276,16 @@ export function TelkomselPaketDataCatalog({
   }, [page, lastPage]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3">
+    <div className="space-y-3 md:space-y-4">
+      <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={config.searchPlaceholder}
-            className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="w-full pl-9 pr-3 py-2.5 md:pl-10 md:pr-4 md:py-3 rounded-xl md:rounded-2xl bg-white border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
         <div className="sm:w-52 shrink-0">
@@ -291,7 +293,7 @@ export function TelkomselPaketDataCatalog({
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="w-full h-full min-h-[48px] text-sm font-semibold bg-white border border-gray-200 rounded-2xl px-3 focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-800"
+            className="w-full min-h-11 text-sm font-semibold bg-white border border-gray-200 rounded-xl md:rounded-2xl px-3 focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-800"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -302,7 +304,7 @@ export function TelkomselPaketDataCatalog({
         </div>
       </div>
 
-      <div className="flex gap-2.5 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
+      <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
         {chips.map((chip) => {
           const active = activeChip === chip.key;
           return (
@@ -310,7 +312,7 @@ export function TelkomselPaketDataCatalog({
               key={chip.key}
               type="button"
               onClick={() => setActiveChip(chip.key)}
-              className={`shrink-0 px-5 py-2.5 rounded-full text-sm font-bold border transition-colors ${
+              className={`shrink-0 px-3.5 py-2 md:px-5 md:py-2.5 rounded-full text-xs md:text-sm font-bold border transition-colors min-h-10 ${
                 active
                   ? 'bg-primary-600 border-primary-600 text-white shadow-sm shadow-primary-600/20'
                   : 'bg-white border-gray-200 text-gray-700 hover:border-primary-300 hover:text-primary-700'
@@ -322,8 +324,8 @@ export function TelkomselPaketDataCatalog({
         })}
       </div>
 
-      <p className="text-xs font-semibold text-gray-500">
-        {loading ? 'Memuat paket…' : `${total || products.length} paket ditemukan`}
+      <p className="text-[11px] md:text-xs font-semibold text-gray-500">
+        {loading ? 'Memuat…' : `${total || products.length} paket ditemukan`}
       </p>
 
       {error && (
@@ -334,79 +336,126 @@ export function TelkomselPaketDataCatalog({
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <ProductSkeleton key={i} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-2 md:hidden">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <MobileCompactProductSkeleton key={i} />
+            ))}
+          </div>
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <ProductSkeletonDesktop key={i} />
+            ))}
+          </div>
+        </>
       ) : products.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-gray-200 rounded-3xl bg-white">
-          <Wifi className="w-8 h-8 mx-auto text-gray-300" />
-          <p className="mt-3 text-sm font-extrabold text-gray-700">Tidak ada produk pada kategori ini.</p>
-          <p className="text-xs text-gray-400 mt-1">Coba filter lain atau ubah kata pencarian.</p>
+        <div className="py-10 md:py-16 text-center border border-dashed border-gray-200 rounded-2xl md:rounded-3xl bg-white">
+          <Wifi className="w-7 h-7 md:w-8 md:h-8 mx-auto text-gray-300" />
+          <p className="mt-2 md:mt-3 text-xs md:text-sm font-extrabold text-gray-700">
+            Produk untuk provider ini belum tersedia.
+          </p>
+          <p className="text-[11px] md:text-xs text-gray-400 mt-1">Coba filter lain atau ubah kata pencarian.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-          {products.map((p) => {
-            const active = selectedProduct?.id === p.id || selectedProduct?.code === p.code;
-            const badge = p.badge;
-            return (
-              <article
-                key={p.id || p.code}
-                className={`flex flex-col rounded-2xl border bg-white p-4 transition-all ${
-                  active
-                    ? 'border-primary-500 ring-2 ring-primary-500/20 shadow-md'
-                    : 'border-gray-100 shadow-sm hover:border-primary-200 hover:shadow-md'
-                }`}
-              >
-                {badge ? (
-                  <span
-                    className={`self-start text-[10px] font-black tracking-wide uppercase px-2 py-0.5 rounded-md mb-2 ${
-                      BADGE_STYLES[badge] || 'bg-gray-700 text-white'
-                    }`}
-                  >
-                    {badge}
-                  </span>
-                ) : (
-                  <span className="h-5 mb-2" aria-hidden />
-                )}
-
-                <h4 className="font-extrabold text-gray-900 text-sm leading-snug line-clamp-2 min-h-[2.5rem]">
-                  {p.name}
-                </h4>
-
-                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] font-bold text-gray-600">
-                  {p.quota && <span>{p.quota}</span>}
-                  {p.validity && <span>{p.validity}</span>}
-                </div>
-
-                {p.description ? (
-                  <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 leading-relaxed flex-1">
-                    {p.description}
-                  </p>
-                ) : (
-                  <div className="flex-1" />
-                )}
-
-                <div className="mt-3 flex items-end justify-between gap-2">
-                  <span className="text-base font-black text-red-600 leading-none">{formatIDR(p.price)}</span>
-                </div>
-
-                {!isProductPurchasable(p) && (
-                  <p className="text-[10px] font-bold text-amber-700 mt-2">Sedang maintenance</p>
-                )}
+        <>
+          <div className="grid grid-cols-2 gap-2 md:hidden">
+            {products.map((p) => {
+              const active = selectedProduct?.id === p.id || selectedProduct?.code === p.code;
+              const meta = [p.quota, p.validity].filter(Boolean).join(' · ') || null;
+              const purchasable = isProductPurchasable(p);
+              return (
                 <button
+                  key={p.id || p.code}
                   type="button"
-                  disabled={!isProductPurchasable(p)}
+                  disabled={!purchasable}
                   onClick={() => handleBuy(p)}
-                  className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`min-h-[4.5rem] w-full rounded-xl border px-2.5 py-2.5 text-left flex flex-col justify-between gap-1 transition-colors touch-manipulation ${
+                    active
+                      ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500/30'
+                      : 'border-gray-200 bg-white active:bg-gray-50'
+                  } ${!purchasable ? 'opacity-55' : ''}`}
                 >
-                  {isProductPurchasable(p) ? 'Beli' : 'Maintenance'}
+                  <span className="text-[11px] font-bold text-gray-900 leading-snug line-clamp-2">
+                    {p.name}
+                  </span>
+                  {meta ? (
+                    <span className="text-[10px] font-semibold text-gray-500 leading-tight line-clamp-1">
+                      {meta}
+                    </span>
+                  ) : null}
+                  <span className="text-sm font-extrabold text-primary-700 leading-none mt-auto">
+                    {formatIDR(p.price)}
+                  </span>
+                  {!purchasable ? (
+                    <span className="text-[9px] font-bold text-amber-700">Maintenance</span>
+                  ) : null}
                 </button>
-              </article>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+            {products.map((p) => {
+              const active = selectedProduct?.id === p.id || selectedProduct?.code === p.code;
+              const badge = p.badge;
+              return (
+                <article
+                  key={p.id || p.code}
+                  className={`flex flex-col rounded-2xl border bg-white p-4 transition-all ${
+                    active
+                      ? 'border-primary-500 ring-2 ring-primary-500/20 shadow-md'
+                      : 'border-gray-100 shadow-sm hover:border-primary-200 hover:shadow-md'
+                  }`}
+                >
+                  {badge ? (
+                    <span
+                      className={`self-start text-[10px] font-black tracking-wide uppercase px-2 py-0.5 rounded-md mb-2 ${
+                        BADGE_STYLES[badge] || 'bg-gray-700 text-white'
+                      }`}
+                    >
+                      {badge}
+                    </span>
+                  ) : (
+                    <span className="h-5 mb-2" aria-hidden />
+                  )}
+
+                  <h4 className="font-extrabold text-gray-900 text-sm leading-snug line-clamp-2 min-h-[2.5rem]">
+                    {p.name}
+                  </h4>
+
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] font-bold text-gray-600">
+                    {p.quota && <span>{p.quota}</span>}
+                    {p.validity && <span>{p.validity}</span>}
+                  </div>
+
+                  {p.description ? (
+                    <p className="text-[11px] text-gray-500 mt-2 line-clamp-2 leading-relaxed flex-1">
+                      {p.description}
+                    </p>
+                  ) : (
+                    <div className="flex-1" />
+                  )}
+
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <span className="text-base font-black text-red-600 leading-none">{formatIDR(p.price)}</span>
+                  </div>
+
+                  {!isProductPurchasable(p) && (
+                    <p className="text-[10px] font-bold text-amber-700 mt-2">Sedang maintenance</p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!isProductPurchasable(p)}
+                    onClick={() => handleBuy(p)}
+                    className="mt-3 w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-black tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isProductPurchasable(p) ? 'Beli' : 'Maintenance'}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {lastPage > 1 && !loading && (

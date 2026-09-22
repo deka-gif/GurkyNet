@@ -28,10 +28,12 @@ import {
   providerBadgeLabel as operatorBadgeLabel,
 } from '../../utils/detectOperator';
 import { MobileStickyActionBar, MOBILE_STICKY_ACTION_PAD } from '../../components/catalog/MobileStickyActionBar';
+import { MobilePurchaseHeader } from '../../components/catalog/MobilePurchaseHeader';
 
 /**
  * Paket Data — catalog via TelkomselPaketDataCatalog (scoped provider fetch).
  * Removed redundant parallel fetchProducts({ category: 'data' }) dump (web audit Item 5).
+ * WEB MOBILE UX: clean ← Paket Data flow + compact catalog cards (desktop preserved).
  */
 export const PaketDataPage = () => {
   const { wallet, fetchWallet } = useWalletStore();
@@ -80,6 +82,10 @@ export const PaketDataPage = () => {
             : isXl
               ? XL_PAKET_CONFIG
               : TELKOMSEL_PAKET_CONFIG;
+
+  const digits = phoneNo.replace(/\D/g, '');
+  const providerUnresolved = digits.length >= 4 && !provider;
+  const providerLabel = operatorBadgeLabel(provider);
 
   useEffect(() => {
     fetchWallet();
@@ -149,32 +155,81 @@ export const PaketDataPage = () => {
   };
 
   const showSidePanel = Boolean(selectedProduct && showCheckoutPanel);
-  const providerBadgeLabel = operatorBadgeLabel(provider);
+
+  const onPhoneChange = (value: string) => {
+    setPhoneNo(value.replace(/\D/g, ''));
+    setSelectedProduct(null);
+    setShowCheckoutPanel(false);
+  };
 
   return (
-    <div className={`dashboard-page space-y-6 container mx-auto max-w-7xl ${showSidePanel ? MOBILE_STICKY_ACTION_PAD : ''}`} id="paket-data-page-root">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
-            Paket Data Internet
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Pilih paket terbaik untuk nomor Anda. Operator terdeteksi otomatis dari prefix.
-          </p>
+    <div
+      className={`dashboard-page container mx-auto max-w-7xl ${showSidePanel ? MOBILE_STICKY_ACTION_PAD : ''}`}
+      id="paket-data-page-root"
+    >
+      {/* —— WEB MOBILE chrome —— */}
+      <div className="md:hidden space-y-4 max-w-lg mx-auto">
+        <MobilePurchaseHeader title="Paket Data" backTo="/dashboard" />
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-gray-700">No Handphone</label>
+          <input
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel"
+            placeholder="08xxxxxxxxxx"
+            value={phoneNo}
+            onChange={(e) => onPhoneChange(e.target.value)}
+            className="w-full px-3.5 py-3 rounded-xl bg-white border border-gray-200 text-sm font-bold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 tracking-wide"
+          />
         </div>
-        <div className="bg-primary-50 px-4 py-2 rounded-2xl border border-primary-100 flex items-center gap-2">
-          <Wallet className="w-4 h-4 text-primary-600" />
-          <span className="text-xs font-black text-primary-950">
-            Saldo: {wallet ? formatIDR(wallet.balance) : 'Loading...'}
-          </span>
+
+        {provider ? (
+          <p className="text-sm font-extrabold text-gray-900 tracking-tight">{providerLabel}</p>
+        ) : providerUnresolved ? (
+          <p className="text-xs font-semibold text-amber-700">Provider belum terdeteksi</p>
+        ) : digits.length > 0 && digits.length < 4 ? (
+          <p className="text-xs font-medium text-gray-400">Masukkan nomor yang valid</p>
+        ) : null}
+
+        {!provider ? (
+          <div className="py-8 text-center text-gray-400">
+            <p className="text-xs font-medium">Masukkan nomor HP untuk melihat paket.</p>
+          </div>
+        ) : null}
+      </div>
+
+      {/* —— DESKTOP chrome —— */}
+      <div className="hidden md:block space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
+              Paket Data Internet
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Pilih paket terbaik untuk nomor Anda. Operator terdeteksi otomatis dari prefix.
+            </p>
+          </div>
+          <div className="bg-primary-50 px-4 py-2 rounded-2xl border border-primary-100 flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-primary-600" />
+            <span className="text-xs font-black text-primary-950">
+              Saldo: {wallet ? formatIDR(wallet.balance) : 'Loading...'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 gap-6 ${showSidePanel ? 'lg:grid-cols-12' : ''}`}>
+      {/* Shared catalog (single mount — avoids double fetch). Desktop wraps in panel. */}
+      <div className={`mt-4 md:mt-6 grid grid-cols-1 gap-6 ${showSidePanel ? 'lg:grid-cols-12' : ''}`}>
         <div
-          className={`${showSidePanel ? 'lg:col-span-8' : ''} bg-white rounded-3xl p-5 md:p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-5`}
+          className={`${showSidePanel ? 'lg:col-span-8' : ''} ${
+            provider
+              ? 'md:bg-white md:rounded-3xl md:p-6 md:border md:border-gray-100 md:shadow-xl md:shadow-gray-200/40 md:space-y-5'
+              : ''
+          }`}
         >
-          <div className="space-y-1.5">
+          {/* Desktop phone field (mobile already has its own above) */}
+          <div className="hidden md:block space-y-1.5 mb-5">
             <label className="text-xs font-black text-gray-700">Nomor Handphone</label>
             <div className="relative">
               <Smartphone className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
@@ -182,46 +237,43 @@ export const PaketDataPage = () => {
                 type="tel"
                 placeholder="081234567890"
                 value={phoneNo}
-                onChange={(e) => {
-                  setPhoneNo(e.target.value.replace(/\D/g, ''));
-                  setSelectedProduct(null);
-                  setShowCheckoutPanel(false);
-                }}
+                onChange={(e) => onPhoneChange(e.target.value)}
                 className={`w-full pl-12 py-3.5 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all tracking-wide ${
                   provider ? 'pr-28' : 'pr-4'
                 }`}
               />
               {provider && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-primary-50 text-primary-700 font-extrabold text-[11px] px-2.5 py-1 rounded-lg border border-primary-100 uppercase tracking-wide">
-                  {providerBadgeLabel}
+                  {providerLabel}
                 </span>
               )}
             </div>
           </div>
 
           {!provider && (
-            <div className="p-12 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
+            <div className="hidden md:block p-12 border border-dashed border-gray-200 rounded-3xl text-center text-gray-400 space-y-2">
               <Wifi className="w-8 h-8 mx-auto text-gray-300" />
               <p className="text-xs font-semibold">Masukkan nomor HP untuk melihat paket.</p>
             </div>
           )}
 
           {usesMasterCatalog && (
-            <TelkomselPaketDataCatalog
-              key={catalogConfig.taxonomyKey}
-              config={catalogConfig}
-              selectedProduct={selectedProduct}
-              onSelectProduct={setSelectedProduct}
-              onBuy={() => setShowCheckoutPanel(true)}
-              onRegionNeeded={(p) => setRegionDialog(p)}
-              onRegionOptionsChange={setRegionOptions}
-            />
+            <div className="max-w-lg mx-auto md:max-w-none">
+              <TelkomselPaketDataCatalog
+                key={catalogConfig.taxonomyKey}
+                config={catalogConfig}
+                selectedProduct={selectedProduct}
+                onSelectProduct={setSelectedProduct}
+                onBuy={() => setShowCheckoutPanel(true)}
+                onRegionNeeded={(p) => setRegionDialog(p)}
+                onRegionOptionsChange={setRegionOptions}
+              />
+            </div>
           )}
-
         </div>
 
         {showSidePanel && selectedProduct && (
-          <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6 h-fit lg:sticky lg:top-6">
+          <div className="hidden lg:block lg:col-span-4 bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/40 space-y-6 h-fit lg:sticky lg:top-6">
             <div className="border-b border-gray-100 pb-4 flex items-start justify-between gap-3">
               <div>
                 <h4 className="font-extrabold text-gray-900 text-base">Rincian Belanja</h4>
@@ -269,7 +321,7 @@ export const PaketDataPage = () => {
             <button
               disabled={loading || !selectedProduct}
               onClick={handleCheckout}
-              className="max-lg:hidden w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700"
+              className="w-full py-3.5 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700"
             >
               <CreditCard className="w-4 h-4" />
               Bayar Sekarang
