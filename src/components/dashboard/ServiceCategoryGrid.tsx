@@ -4,7 +4,6 @@ import {
   DASHBOARD_SERVICE_CATEGORIES,
   MOBILE_QUICK_SERVICES,
   PRODUCT_COUNT_CATEGORY_KEYS,
-  categoryTone,
   type DashboardServiceCategory,
   type MobileQuickService,
 } from '../../config/catalogCategories';
@@ -166,11 +165,10 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
         </div>
       </div>
 
-      {/* —— Mobile: 4-col icon + label (app-style) —— */}
+      {/* —— Mobile: 4-col logo + label (plain logo, no colored tile) —— */}
       <div className="grid grid-cols-4 gap-x-2 gap-y-3 lg:hidden">
         {MOBILE_QUICK_SERVICES.map((item) => {
           const Icon = item.icon;
-          const tone = categoryTone(item.toneId);
           const customIconUrl = resolveMediaUrl(
             iconMap[`hub:${item.id}`] || iconMap[`sub:telco:${item.id}`] || ''
           );
@@ -186,24 +184,17 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
                 isActive ? 'bg-primary-50/80' : 'active:bg-slate-50'
               }`}
             >
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-2xl ${tone.bg}`}
-              >
-                <div
-                  className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${tone.gradient} ${tone.shadow}`}
-                >
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
-                  {customIconUrl ? (
-                    <img
-                      src={customIconUrl}
-                      alt=""
-                      className="relative h-7 w-7 object-contain"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <Icon className="relative h-[18px] w-[18px]" />
-                  )}
-                </div>
+              <div className="flex h-12 w-12 items-center justify-center bg-transparent">
+                {customIconUrl ? (
+                  <img
+                    src={customIconUrl}
+                    alt=""
+                    className="h-10 w-10 object-contain"
+                    loading="lazy"
+                  />
+                ) : (
+                  <Icon className="h-7 w-7 text-slate-700" aria-hidden />
+                )}
               </div>
               <span className="line-clamp-2 max-w-full text-xs font-semibold leading-tight text-slate-800">
                 {item.label}
@@ -244,24 +235,18 @@ export const ServiceCategoryGrid = memo(function ServiceCategoryGrid({
                 </span>
               ) : null}
 
-              <div
-                className={`relative mb-3 flex h-14 w-14 items-center justify-center rounded-2xl transition-transform duration-200 will-change-transform group-hover:scale-105 ${categoryTone(cat.id).bg}`}
-              >
-                <div
-                  className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl text-white shadow-md ${categoryTone(cat.id).gradient} ${categoryTone(cat.id).shadow}`}
-                >
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/35 via-transparent to-transparent" />
-                  {customIconUrl ? (
-                    <img
-                      src={customIconUrl}
-                      alt={cat.label}
-                      className="relative h-9 w-9 object-contain"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <Icon className="relative h-5 w-5" />
-                  )}
-                </div>
+              {/* Plain brand logo — no colored tile / gradient / glow behind the image. */}
+              <div className="relative mb-3 flex h-14 w-14 items-center justify-center bg-transparent transition-transform duration-200 will-change-transform group-hover:scale-105">
+                {customIconUrl ? (
+                  <img
+                    src={customIconUrl}
+                    alt={cat.label}
+                    className="h-12 w-12 object-contain"
+                    loading="lazy"
+                  />
+                ) : (
+                  <Icon className="h-8 w-8 text-slate-700" aria-hidden />
+                )}
               </div>
 
               <div className="text-sm font-bold text-slate-900 group-hover:text-primary-700">
